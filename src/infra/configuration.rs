@@ -1,7 +1,6 @@
 use anyhow::Result;
 use figment::{
     providers::{Env, Format, Serialized, Toml},
-    util::map,
     Figment,
 };
 use serde::{Deserialize, Serialize};
@@ -10,32 +9,40 @@ use crate::infra::cli::CLIOpts;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Configuration {
-    pub verbose: bool,
+    pub ldap_port: u16,
+    pub ldaps_port: u16,
     pub secret_pepper: String,
     pub some_text: String,
+    pub verbose: bool,
 }
 
 impl Default for Configuration {
     fn default() -> Self {
         Configuration {
-            verbose: false,
+            ldap_port: 3890,
+            ldaps_port: 6360,
             secret_pepper: String::from("secretsecretpepper"),
             some_text: String::new(),
+            verbose: false,
         }
     }
 }
 
 impl Configuration {
-    fn from_cli(cli_opts: CLIOpts) -> Figment {
-        let mut config_opts_from_cli = map!();
-
-        // XXX only add the option if given so that the `false` value don't override a
-        // previous configuration
+    fn merge_with_cli(mut self: Configuration, cli_opts: CLIOpts) -> Configuration {
         if cli_opts.verbose {
-            config_opts_from_cli.insert("verbose", true);
+            self.verbose = true;
         }
 
-        Figment::new().join(Serialized::defaults(config_opts_from_cli))
+        if let Some(port) = cli_opts.ldap_port {
+            self.ldap_port = port;
+        }
+
+        if let Some(port) = cli_opts.ldaps_port {
+            self.ldaps_port = port;
+        }
+
+        self
     }
 }
 
@@ -45,8 +52,8 @@ pub fn init(cli_opts: CLIOpts) -> Result<Configuration> {
     let config: Configuration = Figment::from(Serialized::defaults(Configuration::default()))
         .merge(Toml::file(config_file))
         .merge(Env::prefixed("LLDAP_"))
-        .merge(Configuration::from_cli(cli_opts))
         .extract()?;
 
+    let config = config.merge_with_cli(cli_opts);
     Ok(config)
 }

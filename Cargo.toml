@@ -4,13 +4,19 @@ edition = "2018"
 name = "lldap"
 version = "0.1.0"
 [dependencies]
-actix-web = "3"
+actix = "*"
+actix-rt = "1.1.1"
+actix-server = "*"
+actix-service = "*"
+actix-web = "*"
 anyhow = "*"
 clap = "3.0.0-beta.2"
+futures-util = "*"
 http = "*"
 log = "*"
 serde = "*"
 thiserror = "*"
+tokio = "0.2.25"
 tracing = "*"
 tracing-actix-web = "*"
 tracing-log = "*"
@@ -19,6 +25,3 @@ tracing-subscriber = "*"
 [dependencies.figment]
 features = ["toml", "env"]
 version = "*"
-
-[dev-dependencies]
-actix-rt = "*"
