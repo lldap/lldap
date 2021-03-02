@@ -1,0 +1,11 @@
+[package]
+name = "lldap"
+version = "0.1.0"
+authors = [
+  "Valentin Tolmer <valentin@tolmer.fr>",
+  "Steve Barrau <steve.barrau@gmail.com>",
+  "Thomas Wickham <mackwic@gmail.com>"
+]
+edition = "2018"
+
+[dependencies]
