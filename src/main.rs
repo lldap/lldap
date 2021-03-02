@@ -8,9 +8,10 @@ fn main() -> Result<()> {
     let config = infra::configuration::init(cli_opts.clone())?;
     infra::logging::init(config.clone())?;
 
-    info!("Starting....");
-    debug!("Config: {:?}", config);
-    debug!("CLI: {:?}", cli_opts);
+    info!("Starting LLDAP....");
+
+    debug!("CLI: {:#?}", cli_opts);
+    debug!("Configuration: {:#?}", config);
     info!("End.");
     Ok(())
 }

@@ -10,7 +10,7 @@ use crate::infra::cli::CLIOpts;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Configuration {
-    pub log_level_verbose: bool,
+    pub verbose: bool,
     pub secret_pepper: String,
     pub some_text: String,
 }
@@ -18,7 +18,7 @@ pub struct Configuration {
 impl Default for Configuration {
     fn default() -> Self {
         Configuration {
-            log_level_verbose: false,
+            verbose: false,
             secret_pepper: String::from("secretsecretpepper"),
             some_text: String::new(),
         }
@@ -27,9 +27,13 @@ impl Default for Configuration {
 
 impl Configuration {
     fn from_cli(cli_opts: CLIOpts) -> Figment {
-        let config_opts_from_cli = map! {
-            "log_level_verbose" => cli_opts.verbose
-        };
+        let mut config_opts_from_cli = map!();
+
+        // XXX only add the option if given so that the `false` value don't override a
+        // previous configuration
+        if cli_opts.verbose {
+            config_opts_from_cli.insert("verbose", true);
+        }
 
         Figment::new().join(Serialized::defaults(config_opts_from_cli))
     }

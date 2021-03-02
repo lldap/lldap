@@ -17,7 +17,7 @@ pub fn init(config: Configuration) -> anyhow::Result<()> {
 }
 
 fn log_level_from_config(config: Configuration) -> tracing::Level {
-    if config.log_level_verbose {
+    if config.verbose {
         tracing::Level::DEBUG
     } else {
         tracing::Level::INFO
