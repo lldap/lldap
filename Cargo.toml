@@ -1,21 +1,16 @@
 [package]
-name = "lldap"
+authors = ["Valentin Tolmer <valentin@tolmer.fr>", "Steve Barrau <steve.barrau@gmail.com>", "Thomas Wickham <mackwic@gmail.com>"]
 edition = "2018"
+name = "lldap"
 version = "0.1.0"
-authors = [
-  "Valentin Tolmer <valentin@tolmer.fr>",
-  "Steve Barrau <steve.barrau@gmail.com>",
-  "Thomas Wickham <mackwic@gmail.com>"
-]
-
 [dependencies]
-clap = "3.0.0-beta.2"
 actix-web = "3"
 anyhow = "*"
-thiserror="*"
+clap = "3.0.0-beta.2"
 http = "*"
 passablewords = "*"
 serde = "*"
+thiserror = "*"
 tracing = "*"
 tracing-actix-web = "*"
 tracing-log = "*"
