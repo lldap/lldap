@@ -13,7 +13,8 @@ fn main() -> Result<()> {
     debug!("CLI: {:#?}", cli_opts);
     debug!("Configuration: {:#?}", config);
 
-    infra::tcp_server::init(config)?;
+    // infra::tcp_server::init(config)?;
+    infra::ldap_server::init(config)?;
 
     info!("End.");
     Ok(())
