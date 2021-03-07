@@ -7,10 +7,14 @@ use futures_util::future::ok;
 use log::*;
 use std::sync::Arc;
 
-pub fn build_tcp_server(
+pub fn build_tcp_server<DB>(
     config: &Configuration,
+    sql_pool: sqlx::Pool<DB>,
     server_builder: ServerBuilder,
-) -> Result<ServerBuilder> {
+) -> Result<ServerBuilder>
+where
+    DB: sqlx::Database,
+{
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
     use tokio::io::AsyncReadExt;

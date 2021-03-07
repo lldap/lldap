@@ -2,18 +2,29 @@ use crate::infra::configuration::Configuration;
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{fn_service, pipeline_factory};
+use anyhow::bail;
 use anyhow::Result;
 use futures_util::future::ok;
 use log::*;
+use std::rc::Rc;
+use tokio::net::tcp::WriteHalf;
+use tokio_util::codec::{FramedRead, FramedWrite};
 
 use ldap3_server::simple::*;
 use ldap3_server::LdapCodec;
 
-pub struct LdapSession {
+pub struct LdapSession<DB>
+where
+    DB: sqlx::Database,
+{
     dn: String,
+    sql_pool: Rc<sqlx::Pool<DB>>,
 }
 
-impl LdapSession {
+impl<DB> LdapSession<DB>
+where
+    DB: sqlx::Database,
+{
     pub fn do_bind(&mut self, sbr: &SimpleBindRequest) -> LdapMsg {
         if sbr.dn == "cn=Directory Manager" && sbr.pw == "password" {
             self.dn = sbr.dn.to_string();
@@ -61,51 +72,103 @@ impl LdapSession {
     pub fn do_whoami(&mut self, wr: &WhoamiRequest) -> LdapMsg {
         wr.gen_success(format!("dn: {}", self.dn).as_str())
     }
+    pub fn handle_ldap_message(&mut self, server_op: ServerOps) -> Option<Vec<LdapMsg>>
+    where
+        DB: sqlx::Database,
+    {
+        let result = match server_op {
+            ServerOps::SimpleBind(sbr) => vec![self.do_bind(&sbr)],
+            ServerOps::Search(sr) => self.do_search(&sr),
+            ServerOps::Unbind(_) => {
+                // No need to notify on unbind (per rfc4511)
+                return None;
+            }
+            ServerOps::Whoami(wr) => vec![self.do_whoami(&wr)],
+        };
+        Some(result)
+    }
 }
 
-pub fn build_ldap_server(
-    config: &Configuration,
-    server_builder: ServerBuilder,
-) -> Result<ServerBuilder> {
+async fn handle_incoming_message<DB>(
+    msg: Result<LdapMsg, std::io::Error>,
+    resp: &mut FramedWrite<WriteHalf<'_>, LdapCodec>,
+    session: &mut LdapSession<DB>,
+) -> Result<bool>
+where
+    DB: sqlx::Database,
+{
     use futures_util::SinkExt;
-    use futures_util::StreamExt;
     use std::convert::TryFrom;
-    use tokio_util::codec::{FramedRead, FramedWrite};
+    let server_op = match msg
+        .map_err(|_e| ())
+        .and_then(|msg| ServerOps::try_from(msg))
+    {
+        Ok(a_value) => a_value,
+        Err(an_error) => {
+            let _err = resp
+                .send(DisconnectionNotice::gen(
+                    LdapResultCode::Other,
+                    "Internal Server Error",
+                ))
+                .await;
+            let _err = resp.flush().await;
+            bail!("Internal server error: {:?}", an_error);
+        }
+    };
+
+    match session.handle_ldap_message(server_op) {
+        None => return Ok(false),
+        Some(result) => {
+            for rmsg in result.into_iter() {
+                if let Err(e) = resp.send(rmsg).await {
+                    bail!("Error while sending a response: {:?}", e);
+                }
+            }
+
+            if let Err(e) = resp.flush().await {
+                bail!("Error while flushing responses: {:?}", e);
+            }
+        }
+    }
+    Ok(true)
+}
+
+pub fn build_ldap_server<DB>(
+    config: &Configuration,
+    sql_pool: sqlx::Pool<DB>,
+    server_builder: ServerBuilder,
+) -> Result<ServerBuilder>
+where
+    DB: sqlx::Database,
+{
+    use futures_util::StreamExt;
 
     Ok(
         server_builder.bind("ldap", ("0.0.0.0", config.ldap_port), move || {
-            pipeline_factory(fn_service(move |mut stream: TcpStream| async {
-                // Configure the codec etc.
-                let (r, w) = stream.split();
-                let mut reqs = FramedRead::new(r, LdapCodec);
-                let mut resp = FramedWrite::new(w, LdapCodec);
+            let sql_pool = std::rc::Rc::new(sql_pool.clone());
+            pipeline_factory(fn_service(move |mut stream: TcpStream| {
+                let sql_pool = sql_pool.clone();
+                async move {
+                    // Configure the codec etc.
+                    let (r, w) = stream.split();
+                    let mut requests = FramedRead::new(r, LdapCodec);
+                    let mut resp = FramedWrite::new(w, LdapCodec);
 
-                let mut session = LdapSession {
-                    dn: "Anonymous".to_string(),
-                };
-
-                while let Some(msg) = reqs.next().await {
-                    let server_op = match msg
-                        .map_err(|_e| ())
-                        .and_then(|msg| ServerOps::try_from(msg))
-                    {
-                        Ok(a_value) => a_value,
-                        Err(an_error) => {
-                            let _err = resp
-                                .send(DisconnectionNotice::gen(
-                                    LdapResultCode::Other,
-                                    "Internal Server Error",
-                                ))
-                                .await;
-                            let _err = resp.flush().await;
-                            return Err(format!("Internal server error: {:?}", an_error));
-                        }
+                    let mut session = LdapSession {
+                        dn: "Anonymous".to_string(),
+                        sql_pool,
                     };
-                }
 
-                Ok(stream)
+                    while let Some(msg) = requests.next().await {
+                        if !handle_incoming_message(msg, &mut resp, &mut session).await? {
+                            break;
+                        }
+                    }
+
+                    Ok(stream)
+                }
             }))
-            .map_err(|err| error!("Service Error: {:?}", err))
+            .map_err(|err: anyhow::Error| error!("Service Error: {:?}", err))
             // catch
             .and_then(move |_| {
                 // finally
