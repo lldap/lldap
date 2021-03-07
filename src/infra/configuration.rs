@@ -11,6 +11,7 @@ use crate::infra::cli::CLIOpts;
 pub struct Configuration {
     pub ldap_port: u16,
     pub ldaps_port: u16,
+    pub http_port: u16,
     pub secret_pepper: String,
     pub some_text: String,
     pub verbose: bool,
@@ -21,6 +22,7 @@ impl Default for Configuration {
         Configuration {
             ldap_port: 3890,
             ldaps_port: 6360,
+            http_port: 17170,
             secret_pepper: String::from("secretsecretpepper"),
             some_text: String::new(),
             verbose: false,

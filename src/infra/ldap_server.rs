@@ -1,9 +1,9 @@
 use crate::infra::configuration::Configuration;
 use actix_rt::net::TcpStream;
-use actix_server::Server;
-use actix_service::pipeline_factory;
+use actix_server::ServerBuilder;
+use actix_service::{fn_service, pipeline_factory};
 use anyhow::Result;
-use futures_util::future::{err, ok};
+use futures_util::future::ok;
 use log::*;
 
 use ldap3_server::simple::*;
@@ -11,13 +11,6 @@ use ldap3_server::LdapCodec;
 
 pub struct LdapSession {
     dn: String,
-}
-
-pub fn init(config: Configuration) -> Result<()> {
-    debug!("LDAP: init");
-    actix::run(run_ldap_server(config))?;
-
-    Ok(())
 }
 
 impl LdapSession {
@@ -70,15 +63,18 @@ impl LdapSession {
     }
 }
 
-async fn run_ldap_server(config: Configuration) {
+pub fn build_ldap_server(
+    config: &Configuration,
+    server_builder: ServerBuilder,
+) -> Result<ServerBuilder> {
     use futures_util::SinkExt;
     use futures_util::StreamExt;
     use std::convert::TryFrom;
     use tokio_util::codec::{FramedRead, FramedWrite};
 
-    Server::build()
-        .bind("test-tcp", ("0.0.0.0", config.ldap_port), move || {
-            pipeline_factory(move |mut stream: TcpStream| async {
+    Ok(
+        server_builder.bind("ldap", ("0.0.0.0", config.ldap_port), move || {
+            pipeline_factory(fn_service(move |mut stream: TcpStream| async {
                 // Configure the codec etc.
                 let (r, w) = stream.split();
                 let mut reqs = FramedRead::new(r, LdapCodec);
@@ -93,8 +89,8 @@ async fn run_ldap_server(config: Configuration) {
                         .map_err(|_e| ())
                         .and_then(|msg| ServerOps::try_from(msg))
                     {
-                        Ok(aValue) => aValue,
-                        Err(anError) => {
+                        Ok(a_value) => a_value,
+                        Err(an_error) => {
                             let _err = resp
                                 .send(DisconnectionNotice::gen(
                                     LdapResultCode::Other,
@@ -102,23 +98,19 @@ async fn run_ldap_server(config: Configuration) {
                                 ))
                                 .await;
                             let _err = resp.flush().await;
-                            break;
+                            return Err(format!("Internal server error: {:?}", an_error));
                         }
                     };
                 }
 
-                ok::<TcpStream, ()>(stream)
-            })
+                Ok(stream)
+            }))
             .map_err(|err| error!("Service Error: {:?}", err))
             // catch
             .and_then(move |_| {
                 // finally
                 ok(())
             })
-        })
-        .unwrap()
-        .workers(1)
-        .run()
-        .await
-        .unwrap();
+        })?,
+    )
 }

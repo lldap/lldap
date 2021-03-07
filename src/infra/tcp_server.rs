@@ -1,20 +1,16 @@
 use crate::infra::configuration::Configuration;
 use actix_rt::net::TcpStream;
-use actix_server::Server;
+use actix_server::ServerBuilder;
 use actix_service::pipeline_factory;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures_util::future::ok;
 use log::*;
 use std::sync::Arc;
 
-pub fn init(config: Configuration) -> Result<()> {
-    debug!("TCP: init");
-    actix::run(run_tcp_server(config))?;
-
-    Ok(())
-}
-
-async fn run_tcp_server(config: Configuration) {
+pub fn build_tcp_server(
+    config: &Configuration,
+    server_builder: ServerBuilder,
+) -> Result<ServerBuilder> {
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
     use tokio::io::AsyncReadExt;
@@ -22,8 +18,8 @@ async fn run_tcp_server(config: Configuration) {
 
     let count = Arc::new(AtomicUsize::new(0));
 
-    Server::build()
-        .bind("test-tcp", ("0.0.0.0", config.ldap_port), move || {
+    Ok(server_builder
+        .bind("http", ("0.0.0.0", config.http_port), move || {
             let count = Arc::clone(&count);
             let num2 = Arc::clone(&count);
 
@@ -67,9 +63,10 @@ async fn run_tcp_server(config: Configuration) {
                 ok(size)
             })
         })
-        .unwrap()
-        .workers(1)
-        .run()
-        .await
-        .unwrap();
+        .with_context(|| {
+            format!(
+                "While bringing up the TCP server with port {}",
+                config.http_port
+            )
+        })?)
 }
