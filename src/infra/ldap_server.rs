@@ -6,25 +6,19 @@ use anyhow::bail;
 use anyhow::Result;
 use futures_util::future::ok;
 use log::*;
-use std::rc::Rc;
+use sqlx::any::AnyPool;
 use tokio::net::tcp::WriteHalf;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 use ldap3_server::simple::*;
 use ldap3_server::LdapCodec;
 
-pub struct LdapSession<DB>
-where
-    DB: sqlx::Database,
-{
+pub struct LdapSession {
     dn: String,
-    sql_pool: Rc<sqlx::Pool<DB>>,
+    sql_pool: AnyPool,
 }
 
-impl<DB> LdapSession<DB>
-where
-    DB: sqlx::Database,
-{
+impl LdapSession {
     pub fn do_bind(&mut self, sbr: &SimpleBindRequest) -> LdapMsg {
         if sbr.dn == "cn=Directory Manager" && sbr.pw == "password" {
             self.dn = sbr.dn.to_string();
@@ -72,10 +66,8 @@ where
     pub fn do_whoami(&mut self, wr: &WhoamiRequest) -> LdapMsg {
         wr.gen_success(format!("dn: {}", self.dn).as_str())
     }
-    pub fn handle_ldap_message(&mut self, server_op: ServerOps) -> Option<Vec<LdapMsg>>
-    where
-        DB: sqlx::Database,
-    {
+
+    pub fn handle_ldap_message(&mut self, server_op: ServerOps) -> Option<Vec<LdapMsg>> {
         let result = match server_op {
             ServerOps::SimpleBind(sbr) => vec![self.do_bind(&sbr)],
             ServerOps::Search(sr) => self.do_search(&sr),
@@ -89,14 +81,11 @@ where
     }
 }
 
-async fn handle_incoming_message<DB>(
+async fn handle_incoming_message(
     msg: Result<LdapMsg, std::io::Error>,
     resp: &mut FramedWrite<WriteHalf<'_>, LdapCodec>,
-    session: &mut LdapSession<DB>,
-) -> Result<bool>
-where
-    DB: sqlx::Database,
-{
+    session: &mut LdapSession,
+) -> Result<bool> {
     use futures_util::SinkExt;
     use std::convert::TryFrom;
     let server_op = match msg
@@ -133,19 +122,16 @@ where
     Ok(true)
 }
 
-pub fn build_ldap_server<DB>(
+pub fn build_ldap_server(
     config: &Configuration,
-    sql_pool: sqlx::Pool<DB>,
+    sql_pool: AnyPool,
     server_builder: ServerBuilder,
-) -> Result<ServerBuilder>
-where
-    DB: sqlx::Database,
-{
+) -> Result<ServerBuilder> {
     use futures_util::StreamExt;
 
     Ok(
         server_builder.bind("ldap", ("0.0.0.0", config.ldap_port), move || {
-            let sql_pool = std::rc::Rc::new(sql_pool.clone());
+            let sql_pool = sql_pool.clone();
             pipeline_factory(fn_service(move |mut stream: TcpStream| {
                 let sql_pool = sql_pool.clone();
                 async move {

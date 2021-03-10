@@ -2,15 +2,14 @@ use crate::infra::configuration::Configuration;
 use anyhow::Result;
 use futures_util::TryFutureExt;
 use log::*;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use std::str::FromStr;
+use sqlx::any::AnyPoolOptions;
 
 mod infra;
 
 async fn run_server(config: Configuration) -> Result<()> {
-    let sql_pool = SqlitePoolOptions::new()
+    let sql_pool = AnyPoolOptions::new()
         .max_connections(5)
-        .connect_with(SqliteConnectOptions::from_str("sqlite://users.db")?.create_if_missing(true))
+        .connect("sqlite://users.db?mode=rwc")
         .await?;
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,

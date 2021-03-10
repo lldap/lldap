@@ -5,16 +5,14 @@ use actix_service::pipeline_factory;
 use anyhow::{Context, Result};
 use futures_util::future::ok;
 use log::*;
+use sqlx::any::AnyPool;
 use std::sync::Arc;
 
-pub fn build_tcp_server<DB>(
+pub fn build_tcp_server(
     config: &Configuration,
-    sql_pool: sqlx::Pool<DB>,
+    sql_pool: AnyPool,
     server_builder: ServerBuilder,
-) -> Result<ServerBuilder>
-where
-    DB: sqlx::Database,
-{
+) -> Result<ServerBuilder> {
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
     use tokio::io::AsyncReadExt;

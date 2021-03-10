@@ -17,7 +17,7 @@ http = "*"
 ldap3_server = "*"
 log = "*"
 serde = "*"
-sqlx = { version = "0.5", features = [ "runtime-actix-native-tls", "sqlite", "macros" ] }
+sqlx = { version = "0.5", features = [ "runtime-actix-native-tls", "any", "sqlite", "mysql", "postgres", "macros" ] }
 thiserror = "*"
 tokio = { version = "1.2.0", features = ["full"] }
 tokio-util = "0.6.3"
