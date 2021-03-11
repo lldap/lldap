@@ -2,13 +2,16 @@ use crate::infra::configuration::Configuration;
 use anyhow::{bail, Result};
 use sqlx::any::AnyPool;
 
+#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct BindRequest {
     pub name: String,
     pub password: String,
 }
 
+#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct SearchRequest {}
 
+#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct SearchResponse {}
 
 pub trait BackendHandler: Clone + Send {
@@ -45,5 +48,17 @@ impl BackendHandler for SqlBackendHandler {
 
     fn search(&mut self, request: SearchRequest) -> Result<SearchResponse> {
         Ok(SearchResponse {})
+    }
+}
+
+#[cfg(test)]
+mockall::mock! {
+    pub TestBackendHandler{}
+    impl Clone for TestBackendHandler {
+        fn clone(&self) -> Self;
+    }
+    impl BackendHandler for TestBackendHandler {
+        fn bind(&mut self, request: BindRequest) -> Result<()>;
+        fn search(&mut self, request: SearchRequest) -> Result<SearchResponse>;
     }
 }

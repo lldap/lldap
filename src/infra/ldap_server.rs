@@ -1,88 +1,17 @@
 use crate::domain::handler::BackendHandler;
 use crate::infra::configuration::Configuration;
+use crate::infra::ldap_handler::LdapHandler;
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{fn_service, pipeline_factory};
 use anyhow::bail;
 use anyhow::Result;
 use futures_util::future::ok;
+use ldap3_server::simple::*;
+use ldap3_server::LdapCodec;
 use log::*;
 use tokio::net::tcp::WriteHalf;
 use tokio_util::codec::{FramedRead, FramedWrite};
-
-use ldap3_server::simple::*;
-use ldap3_server::LdapCodec;
-
-pub struct LdapHandler<Backend: BackendHandler> {
-    dn: String,
-    backend_handler: Backend,
-}
-
-impl<Backend: BackendHandler> LdapHandler<Backend> {
-    pub fn do_bind(&mut self, sbr: &SimpleBindRequest) -> LdapMsg {
-        match self
-            .backend_handler
-            .bind(crate::domain::handler::BindRequest {
-                name: sbr.dn.clone(),
-                password: sbr.pw.clone(),
-            }) {
-            Ok(()) => {
-                self.dn = sbr.dn.clone();
-                sbr.gen_success()
-            }
-            Err(_) => sbr.gen_invalid_cred(),
-        }
-    }
-
-    pub fn do_search(&mut self, lsr: &SearchRequest) -> Vec<LdapMsg> {
-        vec![
-            lsr.gen_result_entry(LdapSearchResultEntry {
-                dn: "cn=hello,dc=example,dc=com".to_string(),
-                attributes: vec![
-                    LdapPartialAttribute {
-                        atype: "objectClass".to_string(),
-                        vals: vec!["cursed".to_string()],
-                    },
-                    LdapPartialAttribute {
-                        atype: "cn".to_string(),
-                        vals: vec!["hello".to_string()],
-                    },
-                ],
-            }),
-            lsr.gen_result_entry(LdapSearchResultEntry {
-                dn: "cn=world,dc=example,dc=com".to_string(),
-                attributes: vec![
-                    LdapPartialAttribute {
-                        atype: "objectClass".to_string(),
-                        vals: vec!["cursed".to_string()],
-                    },
-                    LdapPartialAttribute {
-                        atype: "cn".to_string(),
-                        vals: vec!["world".to_string()],
-                    },
-                ],
-            }),
-            lsr.gen_success(),
-        ]
-    }
-
-    pub fn do_whoami(&mut self, wr: &WhoamiRequest) -> LdapMsg {
-        wr.gen_success(format!("dn: {}", self.dn).as_str())
-    }
-
-    pub fn handle_ldap_message(&mut self, server_op: ServerOps) -> Option<Vec<LdapMsg>> {
-        let result = match server_op {
-            ServerOps::SimpleBind(sbr) => vec![self.do_bind(&sbr)],
-            ServerOps::Search(sr) => self.do_search(&sr),
-            ServerOps::Unbind(_) => {
-                // No need to notify on unbind (per rfc4511)
-                return None;
-            }
-            ServerOps::Whoami(wr) => vec![self.do_whoami(&wr)],
-        };
-        Some(result)
-    }
-}
 
 async fn handle_incoming_message<Backend: BackendHandler>(
     msg: Result<LdapMsg, std::io::Error>,
@@ -146,10 +75,7 @@ where
                     let mut requests = FramedRead::new(r, LdapCodec);
                     let mut resp = FramedWrite::new(w, LdapCodec);
 
-                    let mut session = LdapHandler {
-                        dn: "Unauthenticated".to_string(),
-                        backend_handler,
-                    };
+                    let mut session = LdapHandler::new(backend_handler);
 
                     while let Some(msg) = requests.next().await {
                         if !handle_incoming_message(msg, &mut resp, &mut session).await? {
