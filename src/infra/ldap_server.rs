@@ -1,3 +1,4 @@
+use crate::domain::handler::BackendHandler;
 use crate::infra::configuration::Configuration;
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
@@ -6,28 +7,30 @@ use anyhow::bail;
 use anyhow::Result;
 use futures_util::future::ok;
 use log::*;
-use sqlx::any::AnyPool;
 use tokio::net::tcp::WriteHalf;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 use ldap3_server::simple::*;
 use ldap3_server::LdapCodec;
 
-pub struct LdapSession {
+pub struct LdapHandler<Backend: BackendHandler> {
     dn: String,
-    sql_pool: AnyPool,
+    backend_handler: Backend,
 }
 
-impl LdapSession {
+impl<Backend: BackendHandler> LdapHandler<Backend> {
     pub fn do_bind(&mut self, sbr: &SimpleBindRequest) -> LdapMsg {
-        if sbr.dn == "cn=Directory Manager" && sbr.pw == "password" {
-            self.dn = sbr.dn.to_string();
-            sbr.gen_success()
-        } else if sbr.dn == "" && sbr.pw == "" {
-            self.dn = "Anonymous".to_string();
-            sbr.gen_success()
-        } else {
-            sbr.gen_invalid_cred()
+        match self
+            .backend_handler
+            .bind(crate::domain::handler::BindRequest {
+                name: sbr.dn.clone(),
+                password: sbr.pw.clone(),
+            }) {
+            Ok(()) => {
+                self.dn = sbr.dn.clone();
+                sbr.gen_success()
+            }
+            Err(_) => sbr.gen_invalid_cred(),
         }
     }
 
@@ -81,10 +84,10 @@ impl LdapSession {
     }
 }
 
-async fn handle_incoming_message(
+async fn handle_incoming_message<Backend: BackendHandler>(
     msg: Result<LdapMsg, std::io::Error>,
     resp: &mut FramedWrite<WriteHalf<'_>, LdapCodec>,
-    session: &mut LdapSession,
+    session: &mut LdapHandler<Backend>,
 ) -> Result<bool> {
     use futures_util::SinkExt;
     use std::convert::TryFrom;
@@ -122,27 +125,30 @@ async fn handle_incoming_message(
     Ok(true)
 }
 
-pub fn build_ldap_server(
+pub fn build_ldap_server<Backend>(
     config: &Configuration,
-    sql_pool: AnyPool,
+    backend_handler: Backend,
     server_builder: ServerBuilder,
-) -> Result<ServerBuilder> {
+) -> Result<ServerBuilder>
+where
+    Backend: BackendHandler + 'static,
+{
     use futures_util::StreamExt;
 
     Ok(
         server_builder.bind("ldap", ("0.0.0.0", config.ldap_port), move || {
-            let sql_pool = sql_pool.clone();
+            let backend_handler = backend_handler.clone();
             pipeline_factory(fn_service(move |mut stream: TcpStream| {
-                let sql_pool = sql_pool.clone();
+                let backend_handler = backend_handler.clone();
                 async move {
                     // Configure the codec etc.
                     let (r, w) = stream.split();
                     let mut requests = FramedRead::new(r, LdapCodec);
                     let mut resp = FramedWrite::new(w, LdapCodec);
 
-                    let mut session = LdapSession {
-                        dn: "Anonymous".to_string(),
-                        sql_pool,
+                    let mut session = LdapHandler {
+                        dn: "Unauthenticated".to_string(),
+                        backend_handler,
                     };
 
                     while let Some(msg) = requests.next().await {

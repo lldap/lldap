@@ -1,3 +1,4 @@
+use crate::domain::handler::*;
 use crate::infra::configuration::Configuration;
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
@@ -5,14 +6,16 @@ use actix_service::pipeline_factory;
 use anyhow::{Context, Result};
 use futures_util::future::ok;
 use log::*;
-use sqlx::any::AnyPool;
 use std::sync::Arc;
 
-pub fn build_tcp_server(
+pub fn build_tcp_server<Backend>(
     config: &Configuration,
-    sql_pool: AnyPool,
+    backend_handler: Backend,
     server_builder: ServerBuilder,
-) -> Result<ServerBuilder> {
+) -> Result<ServerBuilder>
+where
+    Backend: BackendHandler + 'static,
+{
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
     use tokio::io::AsyncReadExt;

@@ -13,7 +13,8 @@ pub struct Configuration {
     pub ldaps_port: u16,
     pub http_port: u16,
     pub secret_pepper: String,
-    pub some_text: String,
+    pub admin_dn: String,
+    pub admin_password: String,
     pub verbose: bool,
 }
 
@@ -24,7 +25,8 @@ impl Default for Configuration {
             ldaps_port: 6360,
             http_port: 17170,
             secret_pepper: String::from("secretsecretpepper"),
-            some_text: String::new(),
+            admin_dn: String::new(),
+            admin_password: String::new(),
             verbose: false,
         }
     }

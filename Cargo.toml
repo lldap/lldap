@@ -3,6 +3,7 @@ authors = ["Valentin Tolmer <valentin@tolmer.fr>", "Steve Barrau <steve.barrau@g
 edition = "2018"
 name = "lldap"
 version = "0.1.0"
+
 [dependencies]
 actix = "0.11.0-beta.3"
 actix-rt = "2.1.0"
@@ -29,3 +30,6 @@ tracing-subscriber = "*"
 [dependencies.figment]
 features = ["toml", "env"]
 version = "*"
+
+[dev-dependencies]
+mockall = "0.9.1"

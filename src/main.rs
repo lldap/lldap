@@ -4,6 +4,7 @@ use futures_util::TryFutureExt;
 use log::*;
 use sqlx::any::AnyPoolOptions;
 
+mod domain;
 mod infra;
 
 async fn run_server(config: Configuration) -> Result<()> {
@@ -11,12 +12,14 @@ async fn run_server(config: Configuration) -> Result<()> {
         .max_connections(5)
         .connect("sqlite://users.db?mode=rwc")
         .await?;
+    let backend_handler = domain::handler::SqlBackendHandler::new(config.clone(), sql_pool.clone());
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,
-        sql_pool.clone(),
+        backend_handler.clone(),
         actix_server::Server::build(),
     )?;
-    let server_builder = infra::tcp_server::build_tcp_server(&config, sql_pool, server_builder)?;
+    let server_builder =
+        infra::tcp_server::build_tcp_server(&config, backend_handler, server_builder)?;
     server_builder.workers(1).run().await?;
     Ok(())
 }
