@@ -13,8 +13,9 @@ pub struct Configuration {
     pub ldaps_port: u16,
     pub http_port: u16,
     pub secret_pepper: String,
-    pub admin_dn: String,
-    pub admin_password: String,
+    pub ldap_user_dn: String,
+    pub ldap_user_pass: String,
+    pub database_url: String,
     pub verbose: bool,
 }
 
@@ -25,8 +26,9 @@ impl Default for Configuration {
             ldaps_port: 6360,
             http_port: 17170,
             secret_pepper: String::from("secretsecretpepper"),
-            admin_dn: String::new(),
-            admin_password: String::new(),
+            ldap_user_dn: String::new(),
+            ldap_user_pass: String::new(),
+            database_url: String::from("sqlite://users.db?mode=rwc"),
             verbose: false,
         }
     }

@@ -38,7 +38,9 @@ impl SqlBackendHandler {
 
 impl BackendHandler for SqlBackendHandler {
     fn bind(&mut self, request: BindRequest) -> Result<()> {
-        if request.name == self.config.admin_dn && request.password == self.config.admin_password {
+        if request.name == self.config.ldap_user_dn
+            && request.password == self.config.ldap_user_pass
+        {
             self.authenticated = true;
             Ok(())
         } else {

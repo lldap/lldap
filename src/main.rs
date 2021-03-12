@@ -10,7 +10,7 @@ mod infra;
 async fn run_server(config: Configuration) -> Result<()> {
     let sql_pool = AnyPoolOptions::new()
         .max_connections(5)
-        .connect("sqlite://users.db?mode=rwc")
+        .connect(&config.database_url)
         .await?;
     let backend_handler = domain::handler::SqlBackendHandler::new(config.clone(), sql_pool.clone());
     let server_builder = infra::ldap_server::build_ldap_server(

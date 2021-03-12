@@ -87,7 +87,7 @@ impl<Backend: BackendHandler> LdapHandler<Backend> {
 mod tests {
     use super::*;
     use crate::domain::handler::MockTestBackendHandler;
-    use mockall::{mock, predicate::*};
+    use mockall::predicate::eq;
 
     #[test]
     fn test_bind() {
