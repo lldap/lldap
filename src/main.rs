@@ -12,6 +12,7 @@ async fn run_server(config: Configuration) -> Result<()> {
         .max_connections(5)
         .connect(&config.database_url)
         .await?;
+    domain::sql_tables::init_table(&sql_pool).await?;
     let backend_handler = domain::handler::SqlBackendHandler::new(config.clone(), sql_pool.clone());
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,
