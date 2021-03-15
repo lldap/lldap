@@ -49,9 +49,6 @@ mod tests {
     use super::*;
     use sqlx::{Column, Row};
 
-    #[derive(sqlx::FromRow)]
-    struct UserName(String);
-
     #[actix_rt::test]
     async fn test_init_table() {
         let sql_pool = sqlx::any::AnyPoolOptions::new()
