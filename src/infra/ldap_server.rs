@@ -64,18 +64,21 @@ where
 {
     use futures_util::StreamExt;
 
+    let ldap_base_dn = config.ldap_base_dn.clone();
     Ok(
         server_builder.bind("ldap", ("0.0.0.0", config.ldap_port), move || {
             let backend_handler = backend_handler.clone();
+            let ldap_base_dn = ldap_base_dn.clone();
             pipeline_factory(fn_service(move |mut stream: TcpStream| {
                 let backend_handler = backend_handler.clone();
+                let ldap_base_dn = ldap_base_dn.clone();
                 async move {
                     // Configure the codec etc.
                     let (r, w) = stream.split();
                     let mut requests = FramedRead::new(r, LdapCodec);
                     let mut resp = FramedWrite::new(w, LdapCodec);
 
-                    let mut session = LdapHandler::new(backend_handler);
+                    let mut session = LdapHandler::new(backend_handler, ldap_base_dn);
 
                     while let Some(msg) = requests.next().await {
                         if !handle_incoming_message(msg, &mut resp, &mut session).await? {

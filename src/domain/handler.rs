@@ -9,14 +9,25 @@ pub struct BindRequest {
 }
 
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
-pub struct SearchRequest {}
+pub struct ListUsersRequest {
+    // filters
+    pub attrs: Vec<String>,
+}
 
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
-pub struct SearchResponse {}
+pub struct User {
+    pub user_id: String,
+    pub email: String,
+    pub display_name: String,
+    pub first_name: String,
+    pub last_name: String,
+    // pub avatar: ?,
+    pub creation_date: chrono::NaiveDateTime,
+}
 
 pub trait BackendHandler: Clone + Send {
     fn bind(&mut self, request: BindRequest) -> Result<()>;
-    fn search(&mut self, request: SearchRequest) -> Result<SearchResponse>;
+    fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>>;
 }
 
 #[derive(Debug, Clone)]
@@ -48,8 +59,8 @@ impl BackendHandler for SqlBackendHandler {
         }
     }
 
-    fn search(&mut self, request: SearchRequest) -> Result<SearchResponse> {
-        Ok(SearchResponse {})
+    fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>> {
+        Ok(Vec::new())
     }
 }
 
@@ -61,6 +72,6 @@ mockall::mock! {
     }
     impl BackendHandler for TestBackendHandler {
         fn bind(&mut self, request: BindRequest) -> Result<()>;
-        fn search(&mut self, request: SearchRequest) -> Result<SearchResponse>;
+        fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>>;
     }
 }
