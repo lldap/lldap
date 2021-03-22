@@ -11,7 +11,6 @@ pub struct BindRequest {
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct ListUsersRequest {
     // filters
-    pub attrs: Vec<String>,
 }
 
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]

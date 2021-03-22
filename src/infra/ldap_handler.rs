@@ -2,17 +2,15 @@ use crate::domain::handler::{BackendHandler, ListUsersRequest, User};
 use anyhow::{bail, Result};
 use ldap3_server::simple::*;
 
-fn make_dn_pair<'a, I>(mut iter: I) -> Result<(String, String)>
+fn make_dn_pair<I>(mut iter: I) -> Result<(String, String)>
 where
     I: Iterator<Item = String>,
 {
     let pair = (
         iter.next()
-            .ok_or(anyhow::Error::msg("Empty DN element"))?
-            .clone(),
+            .ok_or_else(|| anyhow::Error::msg("Empty DN element"))?,
         iter.next()
-            .ok_or(anyhow::Error::msg("Missing DN value"))?
-            .clone(),
+            .ok_or_else(|| anyhow::Error::msg("Missing DN value"))?,
     );
     if let Some(e) = iter.next() {
         bail!(
@@ -26,48 +24,47 @@ where
 }
 
 fn parse_distinguished_name(dn: &str) -> Result<Vec<(String, String)>> {
-    dn.split(",")
-        .map(|s| make_dn_pair(s.split("=").map(String::from)))
+    dn.split(',')
+        .map(|s| make_dn_pair(s.split('=').map(String::from)))
         .collect()
 }
 
-fn make_ldap_search_result_entry(user: User, base_dn_str: &str) -> LdapSearchResultEntry {
-    LdapSearchResultEntry {
-        dn: format!("cn={},{}", user.user_id, base_dn_str),
-        attributes: vec![
-            LdapPartialAttribute {
-                atype: "objectClass".to_string(),
-                vals: vec![
-                    "inetOrgPerson".to_string(),
-                    "posixAccount".to_string(),
-                    "mailAccount".to_string(),
-                ],
-            },
-            LdapPartialAttribute {
-                atype: "uid".to_string(),
-                vals: vec![user.user_id],
-            },
-            LdapPartialAttribute {
-                atype: "mail".to_string(),
-                vals: vec![user.email],
-            },
-            LdapPartialAttribute {
-                atype: "givenName".to_string(),
-                vals: vec![user.first_name],
-            },
-            LdapPartialAttribute {
-                atype: "sn".to_string(),
-                vals: vec![user.last_name],
-            },
-            LdapPartialAttribute {
-                atype: "cn".to_string(),
-                vals: vec![user.display_name],
-            },
-        ],
+fn get_attribute(user: &User, attribute: &str) -> Result<Vec<String>> {
+    match attribute {
+        "objectClass" => Ok(vec![
+            "inetOrgPerson".to_string(),
+            "posixAccount".to_string(),
+            "mailAccount".to_string(),
+        ]),
+        "uid" => Ok(vec![user.user_id.to_string()]),
+        "mail" => Ok(vec![user.email.to_string()]),
+        "givenName" => Ok(vec![user.first_name.to_string()]),
+        "sn" => Ok(vec![user.last_name.to_string()]),
+        "cn" => Ok(vec![user.display_name.to_string()]),
+        _ => bail!("Unsupported attribute: {}", attribute),
     }
 }
 
-fn is_subtree(subtree: &Vec<(String, String)>, base_tree: &Vec<(String, String)>) -> bool {
+fn make_ldap_search_result_entry(
+    user: User,
+    base_dn_str: &str,
+    attributes: &[String],
+) -> Result<LdapSearchResultEntry> {
+    Ok(LdapSearchResultEntry {
+        dn: format!("cn={},{}", user.user_id, base_dn_str),
+        attributes: attributes
+            .iter()
+            .map(|a| {
+                Ok(LdapPartialAttribute {
+                    atype: a.to_string(),
+                    vals: get_attribute(&user, a)?,
+                })
+            })
+            .collect::<Result<Vec<LdapPartialAttribute>>>()?,
+    })
+}
+
+fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) -> bool {
     if subtree.len() < base_tree.len() {
         return false;
     }
@@ -92,10 +89,12 @@ impl<Backend: BackendHandler> LdapHandler<Backend> {
         Self {
             dn: "Unauthenticated".to_string(),
             backend_handler,
-            base_dn: parse_distinguished_name(&ldap_base_dn).expect(&format!(
-                "Invalid value for ldap_base_dn in configuration: {}",
-                ldap_base_dn
-            )),
+            base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
+                panic!(
+                    "Invalid value for ldap_base_dn in configuration: {}",
+                    ldap_base_dn
+                )
+            }),
             base_dn_str: ldap_base_dn,
         }
     }
@@ -126,11 +125,10 @@ impl<Backend: BackendHandler> LdapHandler<Backend> {
             }
         };
         if !is_subtree(&dn_parts, &self.base_dn) {
+            // Search path is not in our tree, just return an empty success.
             return vec![lsr.gen_success()];
         }
-        let users = match self.backend_handler.list_users(ListUsersRequest {
-            attrs: lsr.attrs.clone(),
-        }) {
+        let users = match self.backend_handler.list_users(ListUsersRequest {}) {
             Ok(users) => users,
             Err(e) => {
                 return vec![lsr.gen_error(
@@ -139,12 +137,15 @@ impl<Backend: BackendHandler> LdapHandler<Backend> {
                 )]
             }
         };
-        let mut res = users
+
+        users
             .into_iter()
-            .map(|u| lsr.gen_result_entry(make_ldap_search_result_entry(u, &self.base_dn_str)))
-            .collect::<Vec<_>>();
-        res.push(lsr.gen_success());
-        res
+            .map(|u| make_ldap_search_result_entry(u, &self.base_dn_str, &lsr.attrs))
+            .map(|entry| Ok(lsr.gen_result_entry(entry?)))
+            // If the processing succeeds, add a success message at the end.
+            .chain(std::iter::once(Ok(lsr.gen_success())))
+            .collect::<Result<Vec<_>>>()
+            .unwrap_or_else(|e| vec![lsr.gen_error(LdapResultCode::NoSuchAttribute, e.to_string())])
     }
 
     pub fn do_whoami(&mut self, wr: &WhoamiRequest) -> LdapMsg {
@@ -210,22 +211,22 @@ mod tests {
 
     #[test]
     fn test_is_subtree() {
-        let subtree1 = vec![
+        let subtree1 = &[
             ("ou".to_string(), "people".to_string()),
             ("dc".to_string(), "example".to_string()),
             ("dc".to_string(), "com".to_string()),
         ];
-        let root = vec![
+        let root = &[
             ("dc".to_string(), "example".to_string()),
             ("dc".to_string(), "com".to_string()),
         ];
-        assert!(is_subtree(&subtree1, &root));
-        assert!(!is_subtree(&vec![], &root));
+        assert!(is_subtree(subtree1, root));
+        assert!(!is_subtree(&[], root));
     }
 
     #[test]
     fn test_parse_distinguished_name() {
-        let parsed_dn = vec![
+        let parsed_dn = &[
             ("ou".to_string(), "people".to_string()),
             ("dc".to_string(), "example".to_string()),
             ("dc".to_string(), "com".to_string()),
@@ -241,7 +242,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_bind().return_once(|_| Ok(()));
         mock.expect_list_users()
-            .with(eq(ListUsersRequest { attrs: vec![] }))
+            .with(eq(ListUsersRequest {}))
             .times(1)
             .return_once(|_| {
                 Ok(vec![
@@ -275,7 +276,14 @@ mod tests {
             base: "ou=people,dc=example,dc=com".to_string(),
             scope: LdapSearchScope::Base,
             filter: LdapFilter::And(vec![]),
-            attrs: vec![],
+            attrs: vec![
+                "objectClass".to_string(),
+                "uid".to_string(),
+                "mail".to_string(),
+                "givenName".to_string(),
+                "sn".to_string(),
+                "cn".to_string(),
+            ],
         };
         assert_eq!(
             ldap_handler.do_search(&request),
@@ -285,7 +293,11 @@ mod tests {
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec!["inetOrgPerson".to_string(), "posixAccount".to_string(), "mailAccount".to_string()]
+                            vals: vec![
+                                "inetOrgPerson".to_string(),
+                                "posixAccount".to_string(),
+                                "mailAccount".to_string()
+                            ]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),
@@ -314,7 +326,11 @@ mod tests {
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec!["inetOrgPerson".to_string(), "posixAccount".to_string(), "mailAccount".to_string()]
+                            vals: vec![
+                                "inetOrgPerson".to_string(),
+                                "posixAccount".to_string(),
+                                "mailAccount".to_string()
+                            ]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),

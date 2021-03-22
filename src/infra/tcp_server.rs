@@ -23,7 +23,7 @@ where
 
     let count = Arc::new(AtomicUsize::new(0));
 
-    Ok(server_builder
+    server_builder
         .bind("http", ("0.0.0.0", config.http_port), move || {
             let count = Arc::clone(&count);
             let num2 = Arc::clone(&count);
@@ -73,5 +73,5 @@ where
                 "While bringing up the TCP server with port {}",
                 config.http_port
             )
-        })?)
+        })
 }
