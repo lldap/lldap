@@ -1,4 +1,4 @@
-use crate::domain::handler::{BackendHandler, ListUsersRequest, User};
+use crate::domain::handler::{BackendHandler, ListUsersRequest, RequestFilter, User};
 use anyhow::{bail, Result};
 use ldap3_server::simple::*;
 
@@ -77,6 +77,28 @@ fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) -> b
     true
 }
 
+fn convert_filter(filter: &LdapFilter) -> Result<RequestFilter> {
+    match filter {
+        LdapFilter::And(filters) => Ok(RequestFilter::And(
+            filters
+                .into_iter()
+                .map(convert_filter)
+                .collect::<Result<_>>()?,
+        )),
+        LdapFilter::Or(filters) => Ok(RequestFilter::Or(
+            filters
+                .into_iter()
+                .map(convert_filter)
+                .collect::<Result<_>>()?,
+        )),
+        LdapFilter::Not(filter) => Ok(RequestFilter::Not(Box::new(convert_filter(&*filter)?))),
+        LdapFilter::Equality(field, value) => {
+            Ok(RequestFilter::Equality(field.clone(), value.clone()))
+        }
+        _ => bail!("Unsupported filter"),
+    }
+}
+
 pub struct LdapHandler<Backend: BackendHandler> {
     dn: String,
     backend_handler: Backend,
@@ -138,7 +160,20 @@ impl<Backend: BackendHandler> LdapHandler<Backend> {
             // Search path is not in our tree, just return an empty success.
             return vec![lsr.gen_success()];
         }
-        let users = match self.backend_handler.list_users(ListUsersRequest {}).await {
+        let filters = match convert_filter(&lsr.filter) {
+            Ok(f) => Some(f),
+            Err(_) => {
+                return vec![lsr.gen_error(
+                    LdapResultCode::UnwillingToPerform,
+                    "Unsupported filter".to_string(),
+                )]
+            }
+        };
+        let users = match self
+            .backend_handler
+            .list_users(ListUsersRequest { filters })
+            .await
+        {
             Ok(users) => users,
             Err(e) => {
                 return vec![lsr.gen_error(
@@ -187,6 +222,21 @@ mod tests {
     use chrono::NaiveDateTime;
     use mockall::predicate::eq;
     use tokio;
+
+    async fn setup_bound_handler(
+        mut mock: MockTestBackendHandler,
+    ) -> LdapHandler<MockTestBackendHandler> {
+        mock.expect_bind().return_once(|_| Ok(()));
+        let mut ldap_handler =
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
+        let request = SimpleBindRequest {
+            msgid: 1,
+            dn: "test".to_string(),
+            pw: "pass".to_string(),
+        };
+        ldap_handler.do_bind(&request).await;
+        ldap_handler
+    }
 
     #[tokio::test]
     async fn test_bind() {
@@ -300,38 +350,27 @@ mod tests {
     #[tokio::test]
     async fn test_search() {
         let mut mock = MockTestBackendHandler::new();
-        mock.expect_bind().return_once(|_| Ok(()));
-        mock.expect_list_users()
-            .with(eq(ListUsersRequest {}))
-            .times(1)
-            .return_once(|_| {
-                Ok(vec![
-                    User {
-                        user_id: "bob_1".to_string(),
-                        email: "bob@bobmail.bob".to_string(),
-                        display_name: "Bôb Böbberson".to_string(),
-                        first_name: "Bôb".to_string(),
-                        last_name: "Böbberson".to_string(),
-                        creation_date: NaiveDateTime::from_timestamp(1_000_000_000, 0),
-                    },
-                    User {
-                        user_id: "jim".to_string(),
-                        email: "jim@cricket.jim".to_string(),
-                        display_name: "Jimminy Cricket".to_string(),
-                        first_name: "Jim".to_string(),
-                        last_name: "Cricket".to_string(),
-                        creation_date: NaiveDateTime::from_timestamp(1_003_000_000, 0),
-                    },
-                ])
-            });
-        let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
-        let request = SimpleBindRequest {
-            msgid: 1,
-            dn: "test".to_string(),
-            pw: "pass".to_string(),
-        };
-        assert_eq!(ldap_handler.do_bind(&request).await, request.gen_success());
+        mock.expect_list_users().times(1).return_once(|_| {
+            Ok(vec![
+                User {
+                    user_id: "bob_1".to_string(),
+                    email: "bob@bobmail.bob".to_string(),
+                    display_name: "Bôb Böbberson".to_string(),
+                    first_name: "Bôb".to_string(),
+                    last_name: "Böbberson".to_string(),
+                    creation_date: NaiveDateTime::from_timestamp(1_000_000_000, 0),
+                },
+                User {
+                    user_id: "jim".to_string(),
+                    email: "jim@cricket.jim".to_string(),
+                    display_name: "Jimminy Cricket".to_string(),
+                    first_name: "Jim".to_string(),
+                    last_name: "Cricket".to_string(),
+                    creation_date: NaiveDateTime::from_timestamp(1_003_000_000, 0),
+                },
+            ])
+        });
+        let mut ldap_handler = setup_bound_handler(mock).await;
         let request = SearchRequest {
             msgid: 2,
             base: "ou=people,dc=example,dc=com".to_string(),
@@ -417,6 +456,56 @@ mod tests {
                 }),
                 request.gen_success()
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_filters() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(ListUsersRequest {
+                filters: Some(RequestFilter::And(vec![RequestFilter::Or(vec![
+                    RequestFilter::Not(Box::new(RequestFilter::Equality(
+                        "uid".to_string(),
+                        "bob".to_string(),
+                    ))),
+                ])])),
+            }))
+            .times(1)
+            .return_once(|_| Ok(vec![]));
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = SearchRequest {
+            msgid: 2,
+            base: "ou=people,dc=example,dc=com".to_string(),
+            scope: LdapSearchScope::Base,
+            filter: LdapFilter::And(vec![LdapFilter::Or(vec![LdapFilter::Not(Box::new(
+                LdapFilter::Equality("uid".to_string(), "bob".to_string()),
+            ))])]),
+            attrs: vec!["objectClass".to_string()],
+        };
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![request.gen_success()]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_unsupported_filters() {
+        let mut mock = MockTestBackendHandler::new();
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = SearchRequest {
+            msgid: 2,
+            base: "ou=people,dc=example,dc=com".to_string(),
+            scope: LdapSearchScope::Base,
+            filter: LdapFilter::Present("uid".to_string()),
+            attrs: vec!["objectClass".to_string()],
+        };
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![request.gen_error(
+                LdapResultCode::UnwillingToPerform,
+                "Unsupported filter".to_string()
+            )]
         );
     }
 }

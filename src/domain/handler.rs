@@ -11,8 +11,16 @@ pub struct BindRequest {
 }
 
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
+pub enum RequestFilter {
+    And(Vec<RequestFilter>),
+    Or(Vec<RequestFilter>),
+    Not(Box<RequestFilter>),
+    Equality(String, String),
+}
+
+#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct ListUsersRequest {
-    // filters
+    pub filters: Option<RequestFilter>,
 }
 
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
