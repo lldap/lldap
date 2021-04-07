@@ -27,6 +27,7 @@ tracing = "*"
 tracing-actix-web = "0.3.0-beta.2"
 tracing-log = "*"
 tracing-subscriber = "*"
+async-trait = "0.1.48"
 
 [dependencies.figment]
 features = ["toml", "env"]

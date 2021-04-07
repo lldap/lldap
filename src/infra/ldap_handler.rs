@@ -82,10 +82,11 @@ pub struct LdapHandler<Backend: BackendHandler> {
     backend_handler: Backend,
     pub base_dn: Vec<(String, String)>,
     base_dn_str: String,
+    ldap_user_dn: String,
 }
 
 impl<Backend: BackendHandler> LdapHandler<Backend> {
-    pub fn new(backend_handler: Backend, ldap_base_dn: String) -> Self {
+    pub fn new(backend_handler: Backend, ldap_base_dn: String, ldap_user_dn: String) -> Self {
         Self {
             dn: "Unauthenticated".to_string(),
             backend_handler,
@@ -96,16 +97,19 @@ impl<Backend: BackendHandler> LdapHandler<Backend> {
                 )
             }),
             base_dn_str: ldap_base_dn,
+            ldap_user_dn,
         }
     }
 
-    pub fn do_bind(&mut self, sbr: &SimpleBindRequest) -> LdapMsg {
+    pub async fn do_bind(&mut self, sbr: &SimpleBindRequest) -> LdapMsg {
         match self
             .backend_handler
             .bind(crate::domain::handler::BindRequest {
                 name: sbr.dn.clone(),
                 password: sbr.pw.clone(),
-            }) {
+            })
+            .await
+        {
             Ok(()) => {
                 self.dn = sbr.dn.clone();
                 sbr.gen_success()
@@ -114,7 +118,13 @@ impl<Backend: BackendHandler> LdapHandler<Backend> {
         }
     }
 
-    pub fn do_search(&mut self, lsr: &SearchRequest) -> Vec<LdapMsg> {
+    pub async fn do_search(&mut self, lsr: &SearchRequest) -> Vec<LdapMsg> {
+        if self.dn != self.ldap_user_dn {
+            return vec![lsr.gen_error(
+                LdapResultCode::InsufficentAccessRights,
+                r#"Current user is not allowed to query LDAP"#.to_string(),
+            )];
+        }
         let dn_parts = match parse_distinguished_name(&lsr.base) {
             Ok(dn) => dn,
             Err(_) => {
@@ -128,7 +138,7 @@ impl<Backend: BackendHandler> LdapHandler<Backend> {
             // Search path is not in our tree, just return an empty success.
             return vec![lsr.gen_success()];
         }
-        let users = match self.backend_handler.list_users(ListUsersRequest {}) {
+        let users = match self.backend_handler.list_users(ListUsersRequest {}).await {
             Ok(users) => users,
             Err(e) => {
                 return vec![lsr.gen_error(
@@ -156,10 +166,10 @@ impl<Backend: BackendHandler> LdapHandler<Backend> {
         }
     }
 
-    pub fn handle_ldap_message(&mut self, server_op: ServerOps) -> Option<Vec<LdapMsg>> {
+    pub async fn handle_ldap_message(&mut self, server_op: ServerOps) -> Option<Vec<LdapMsg>> {
         let result = match server_op {
-            ServerOps::SimpleBind(sbr) => vec![self.do_bind(&sbr)],
-            ServerOps::Search(sr) => self.do_search(&sr),
+            ServerOps::SimpleBind(sbr) => vec![self.do_bind(&sbr).await],
+            ServerOps::Search(sr) => self.do_search(&sr).await,
             ServerOps::Unbind(_) => {
                 // No need to notify on unbind (per rfc4511)
                 return None;
@@ -176,9 +186,10 @@ mod tests {
     use crate::domain::handler::MockTestBackendHandler;
     use chrono::NaiveDateTime;
     use mockall::predicate::eq;
+    use tokio;
 
-    #[test]
-    fn test_bind() {
+    #[tokio::test]
+    async fn test_bind() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_bind()
             .with(eq(crate::domain::handler::BindRequest {
@@ -187,7 +198,8 @@ mod tests {
             }))
             .times(1)
             .return_once(|_| Ok(()));
-        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
+        let mut ldap_handler =
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
 
         let request = WhoamiRequest { msgid: 1 };
         assert_eq!(
@@ -200,12 +212,60 @@ mod tests {
             dn: "test".to_string(),
             pw: "pass".to_string(),
         };
-        assert_eq!(ldap_handler.do_bind(&request), request.gen_success());
+        assert_eq!(ldap_handler.do_bind(&request).await, request.gen_success());
 
         let request = WhoamiRequest { msgid: 3 };
         assert_eq!(
             ldap_handler.do_whoami(&request),
             request.gen_success("dn: test")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_bind_invalid_credentials() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_bind()
+            .with(eq(crate::domain::handler::BindRequest {
+                name: "test".to_string(),
+                password: "pass".to_string(),
+            }))
+            .times(1)
+            .return_once(|_| Ok(()));
+        let mut ldap_handler =
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), "admin".to_string());
+
+        let request = WhoamiRequest { msgid: 1 };
+        assert_eq!(
+            ldap_handler.do_whoami(&request),
+            request.gen_operror("Unauthenticated")
+        );
+
+        let request = SimpleBindRequest {
+            msgid: 2,
+            dn: "test".to_string(),
+            pw: "pass".to_string(),
+        };
+        assert_eq!(ldap_handler.do_bind(&request).await, request.gen_success());
+
+        let request = WhoamiRequest { msgid: 3 };
+        assert_eq!(
+            ldap_handler.do_whoami(&request),
+            request.gen_success("dn: test")
+        );
+
+        let request = SearchRequest {
+            msgid: 2,
+            base: "ou=people,dc=example,dc=com".to_string(),
+            scope: LdapSearchScope::Base,
+            filter: LdapFilter::And(vec![]),
+            attrs: vec![],
+        };
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![request.gen_error(
+                LdapResultCode::InsufficentAccessRights,
+                r#"Current user is not allowed to query LDAP"#.to_string()
+            )]
         );
     }
 
@@ -237,8 +297,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_search() {
+    #[tokio::test]
+    async fn test_search() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_bind().return_once(|_| Ok(()));
         mock.expect_list_users()
@@ -264,13 +324,14 @@ mod tests {
                     },
                 ])
             });
-        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
+        let mut ldap_handler =
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
         let request = SimpleBindRequest {
             msgid: 1,
             dn: "test".to_string(),
             pw: "pass".to_string(),
         };
-        assert_eq!(ldap_handler.do_bind(&request), request.gen_success());
+        assert_eq!(ldap_handler.do_bind(&request).await, request.gen_success());
         let request = SearchRequest {
             msgid: 2,
             base: "ou=people,dc=example,dc=com".to_string(),
@@ -286,7 +347,7 @@ mod tests {
             ],
         };
         assert_eq!(
-            ldap_handler.do_search(&request),
+            ldap_handler.do_search(&request).await,
             vec![
                 request.gen_result_entry(LdapSearchResultEntry {
                     dn: "cn=bob_1,dc=example,dc=com".to_string(),

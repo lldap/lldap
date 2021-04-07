@@ -34,7 +34,7 @@ async fn handle_incoming_message<Backend: BackendHandler>(
         }
     };
 
-    match session.handle_ldap_message(server_op) {
+    match session.handle_ldap_message(server_op).await {
         None => return Ok(false),
         Some(result) => {
             for rmsg in result.into_iter() {
@@ -62,20 +62,23 @@ where
     use futures_util::StreamExt;
 
     let ldap_base_dn = config.ldap_base_dn.clone();
+    let ldap_user_dn = config.ldap_user_dn.clone();
     Ok(
         server_builder.bind("ldap", ("0.0.0.0", config.ldap_port), move || {
             let backend_handler = backend_handler.clone();
             let ldap_base_dn = ldap_base_dn.clone();
+            let ldap_user_dn = ldap_user_dn.clone();
             pipeline_factory(fn_service(move |mut stream: TcpStream| {
                 let backend_handler = backend_handler.clone();
                 let ldap_base_dn = ldap_base_dn.clone();
+                let ldap_user_dn = ldap_user_dn.clone();
                 async move {
                     // Configure the codec etc.
                     let (r, w) = stream.split();
                     let mut requests = FramedRead::new(r, LdapCodec);
                     let mut resp = FramedWrite::new(w, LdapCodec);
 
-                    let mut session = LdapHandler::new(backend_handler, ldap_base_dn);
+                    let mut session = LdapHandler::new(backend_handler, ldap_base_dn, ldap_user_dn);
 
                     while let Some(msg) = requests.next().await {
                         if !handle_incoming_message(msg, &mut resp, &mut session).await? {

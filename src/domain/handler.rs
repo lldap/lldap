@@ -1,6 +1,8 @@
 use crate::infra::configuration::Configuration;
 use anyhow::{bail, Result};
+use async_trait::async_trait;
 use sqlx::any::AnyPool;
+use sqlx::Row;
 
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct BindRequest {
@@ -24,9 +26,10 @@ pub struct User {
     pub creation_date: chrono::NaiveDateTime,
 }
 
+#[async_trait]
 pub trait BackendHandler: Clone + Send {
-    fn bind(&mut self, request: BindRequest) -> Result<()>;
-    fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>>;
+    async fn bind(&mut self, request: BindRequest) -> Result<()>;
+    async fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>>;
 }
 
 #[derive(Debug, Clone)]
@@ -46,19 +49,34 @@ impl SqlBackendHandler {
     }
 }
 
+fn passwords_match(encrypted_password: &str, clear_password: &str) -> bool {
+    encrypted_password == clear_password
+}
+
+#[async_trait]
 impl BackendHandler for SqlBackendHandler {
-    fn bind(&mut self, request: BindRequest) -> Result<()> {
-        if request.name == self.config.ldap_user_dn
-            && request.password == self.config.ldap_user_pass
-        {
-            self.authenticated = true;
-            Ok(())
-        } else {
-            bail!(r#"Authentication error for "{}""#, request.name)
+    async fn bind(&mut self, request: BindRequest) -> Result<()> {
+        if request.name == self.config.ldap_user_dn {
+            if request.password == self.config.ldap_user_pass {
+                self.authenticated = true;
+                return Ok(());
+            } else {
+                bail!(r#"Authentication error for "{}""#, request.name)
+            }
         }
+        if let Ok(row) = sqlx::query("SELECT password FROM users WHERE user_id = ?")
+            .bind(&request.name)
+            .fetch_one(&self.sql_pool)
+            .await
+        {
+            if passwords_match(&request.password, &row.get::<String, _>("password")) {
+                return Ok(());
+            }
+        }
+        bail!(r#"Authentication error for "{}""#, request.name)
     }
 
-    fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>> {
+    async fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>> {
         Ok(Vec::new())
     }
 }
@@ -69,8 +87,9 @@ mockall::mock! {
     impl Clone for TestBackendHandler {
         fn clone(&self) -> Self;
     }
+    #[async_trait]
     impl BackendHandler for TestBackendHandler {
-        fn bind(&mut self, request: BindRequest) -> Result<()>;
-        fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>>;
+        async fn bind(&mut self, request: BindRequest) -> Result<()>;
+        async fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>>;
     }
 }
