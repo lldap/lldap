@@ -491,8 +491,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_unsupported_filters() {
-        let mut mock = MockTestBackendHandler::new();
-        let mut ldap_handler = setup_bound_handler(mock).await;
+        let mut ldap_handler = setup_bound_handler(MockTestBackendHandler::new()).await;
         let request = SearchRequest {
             msgid: 2,
             base: "ou=people,dc=example,dc=com".to_string(),

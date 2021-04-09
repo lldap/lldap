@@ -1,42 +1,119 @@
+use sea_query::*;
 use sqlx::any::AnyPool;
+
+#[derive(Iden)]
+enum Users {
+    Table,
+    UserId,
+    Email,
+    DisplayName,
+    FirstName,
+    LastName,
+    Avatar,
+    CreationDate,
+    Password,
+    TotpSecret,
+    MfaType,
+}
+
+#[derive(Iden)]
+enum Groups {
+    Table,
+    GroupId,
+    DisplayName,
+}
+
+#[derive(Iden)]
+enum Memberships {
+    Table,
+    UserId,
+    GroupId,
+}
 
 pub async fn init_table(pool: &AnyPool) -> sqlx::Result<()> {
     // SQLite needs this pragma to be turned on. Other DB might not understand this, so ignore the
     // error.
     let _ = sqlx::query("PRAGMA foreign_keys = ON").execute(pool).await;
     sqlx::query(
-        "CREATE TABLE IF NOT EXISTS users (
-      user_id NVARCHAR(255) PRIMARY KEY,
-      email NVARCHAR(255) NOT NULL,
-      display_name NVARCHAR(255) NOT NULL,
-      first_name NVARCHAR(255) NOT NULL,
-      last_name NVARCHAR(255) NOT NULL,
-      avatar Blob,
-      creation_date DateTime NOT NULL,
-      password NVARCHAR(255) NOT NULL,
-      totp_secret VARCHAR(64),
-      mfa_type Text
-      )",
+        &Table::create()
+            .table(Users::Table)
+            .create_if_not_exists()
+            .col(
+                ColumnDef::new(Users::UserId)
+                    .string_len(255)
+                    .not_null()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new(Users::Email).string_len(255).not_null())
+            .col(
+                ColumnDef::new(Users::DisplayName)
+                    .string_len(255)
+                    .not_null(),
+            )
+            .col(ColumnDef::new(Users::FirstName).string_len(255).not_null())
+            .col(ColumnDef::new(Users::LastName).string_len(255).not_null())
+            .col(ColumnDef::new(Users::Avatar).binary())
+            .col(ColumnDef::new(Users::CreationDate).date_time().not_null())
+            .col(ColumnDef::new(Users::Password).string_len(255).not_null())
+            .col(ColumnDef::new(Users::TotpSecret).string_len(64))
+            .col(ColumnDef::new(Users::MfaType).string_len(64))
+            .to_string(MysqlQueryBuilder),
     )
     .execute(pool)
     .await?;
     sqlx::query(
-        "CREATE TABLE IF NOT EXISTS groups (
-      group_id integer PRIMARY KEY AUTOINCREMENT,
-      display_name NVARCHAR(255) NOT NULL
-      )",
+        &Table::create()
+            .table(Groups::Table)
+            .create_if_not_exists()
+            .col(
+                ColumnDef::new(Groups::GroupId)
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(
+                ColumnDef::new(Groups::DisplayName)
+                    .string_len(255)
+                    .not_null(),
+            )
+            .to_string(MysqlQueryBuilder),
     )
     .execute(pool)
     .await?;
     sqlx::query(
-        "CREATE TABLE IF NOT EXISTS membership (
-      user_id NVARCHAR(255) PRIMARY KEY,
-      group_id integer NOT NULL,
-      FOREIGN KEY (user_id)
-        REFERENCES users (user_id),
-      FOREIGN KEY (group_id)
-        REFERENCES groups (group_id)
-      )",
+        &Table::create()
+            .table(Memberships::Table)
+            .create_if_not_exists()
+            .col(
+                ColumnDef::new(Memberships::UserId)
+                    .string_len(255)
+                    .not_null()
+                    .primary_key(),
+            )
+            .col(
+                ColumnDef::new(Memberships::GroupId)
+                    .integer()
+                    .not_null()
+                    .auto_increment(),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("MembershipUserForeignKey")
+                    .table(Memberships::Table, Users::Table)
+                    .col(Memberships::UserId, Users::UserId)
+                    .on_delete(ForeignKeyAction::Cascade)
+                    .on_update(ForeignKeyAction::Cascade),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("MembershipGroupForeignKey")
+                    .table(Memberships::Table, Groups::Table)
+                    .col(Memberships::GroupId, Groups::GroupId)
+                    .on_delete(ForeignKeyAction::Cascade)
+                    .on_update(ForeignKeyAction::Cascade),
+            )
+            .to_string(MysqlQueryBuilder),
     )
     .execute(pool)
     .await?;
