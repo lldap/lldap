@@ -1,5 +1,7 @@
 use sea_query::*;
-use sqlx::any::AnyPool;
+
+pub type Pool = sqlx::any::AnyPool;
+pub type PoolOptions = sqlx::any::AnyPoolOptions;
 
 #[derive(Iden)]
 pub enum Users {
@@ -30,7 +32,7 @@ pub enum Memberships {
     GroupId,
 }
 
-pub async fn init_table(pool: &AnyPool) -> sqlx::Result<()> {
+pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
     // SQLite needs this pragma to be turned on. Other DB might not understand this, so ignore the
     // error.
     let _ = sqlx::query("PRAGMA foreign_keys = ON").execute(pool).await;
@@ -126,7 +128,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_init_table() {
-        let sql_pool = sqlx::any::AnyPoolOptions::new()
+        let sql_pool = PoolOptions::new()
             .connect("sqlite::memory:")
             .await
             .unwrap();
@@ -144,7 +146,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_already_init_table() {
-        let sql_pool = sqlx::any::AnyPoolOptions::new()
+        let sql_pool = PoolOptions::new()
             .connect("sqlite::memory:")
             .await
             .unwrap();

@@ -4,8 +4,8 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use sea_query::{Expr, MysqlQueryBuilder, Query, SimpleExpr};
-use sqlx::any::AnyPool;
 use sqlx::Row;
+use crate::domain::sql_tables::Pool;
 
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct BindRequest {
@@ -49,11 +49,11 @@ pub trait BackendHandler: Clone + Send {
 #[derive(Debug, Clone)]
 pub struct SqlBackendHandler {
     config: Configuration,
-    sql_pool: AnyPool,
+    sql_pool: Pool,
 }
 
 impl SqlBackendHandler {
-    pub fn new(config: Configuration, sql_pool: AnyPool) -> Self {
+    pub fn new(config: Configuration, sql_pool: Pool) -> Self {
         SqlBackendHandler { config, sql_pool }
     }
 }
@@ -157,7 +157,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_bind_admin() {
-        let sql_pool = sqlx::any::AnyPoolOptions::new()
+        let sql_pool = PoolOptions::new()
             .connect("sqlite::memory:")
             .await
             .unwrap();

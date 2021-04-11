@@ -2,13 +2,13 @@ use crate::infra::configuration::Configuration;
 use anyhow::Result;
 use futures_util::TryFutureExt;
 use log::*;
-use sqlx::any::AnyPoolOptions;
+use crate::domain::sql_tables::PoolOptions;
 
 mod domain;
 mod infra;
 
 async fn run_server(config: Configuration) -> Result<()> {
-    let sql_pool = AnyPoolOptions::new()
+    let sql_pool = PoolOptions::new()
         .max_connections(5)
         .connect(&config.database_url)
         .await?;
