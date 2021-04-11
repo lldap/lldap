@@ -3,7 +3,7 @@ use crate::infra::configuration::Configuration;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use sea_query::{Expr, MysqlQueryBuilder, Query, SimpleExpr};
+use sea_query::{Expr, SqliteQueryBuilder, Query, SimpleExpr};
 use sqlx::Row;
 use crate::domain::sql_tables::Pool;
 
@@ -36,8 +36,7 @@ pub struct User {
     pub first_name: String,
     pub last_name: String,
     // pub avatar: ?,
-    // TODO: wait until supported for Any
-    // pub creation_date: chrono::NaiveDateTime,
+    pub creation_date: chrono::NaiveDateTime,
 }
 
 #[async_trait]
@@ -97,7 +96,7 @@ impl BackendHandler for SqlBackendHandler {
             .column(Users::Password)
             .from(Users::Table)
             .and_where(Expr::col(Users::UserId).eq(request.name.as_str()))
-            .to_string(MysqlQueryBuilder);
+            .to_string(SqliteQueryBuilder);
         if let Ok(row) = sqlx::query(&query).fetch_one(&self.sql_pool).await {
             if passwords_match(&request.password, &row.get::<String, _>("password")) {
                 return Ok(());
@@ -126,7 +125,7 @@ impl BackendHandler for SqlBackendHandler {
                 }
             }
 
-            query_builder.to_string(MysqlQueryBuilder)
+            query_builder.to_string(SqliteQueryBuilder)
         };
 
         let results = sqlx::query_as::<_, User>(&query)

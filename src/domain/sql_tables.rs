@@ -1,7 +1,7 @@
 use sea_query::*;
 
-pub type Pool = sqlx::any::AnyPool;
-pub type PoolOptions = sqlx::any::AnyPoolOptions;
+pub type Pool = sqlx::sqlite::SqlitePool;
+pub type PoolOptions = sqlx::sqlite::SqlitePoolOptions;
 
 #[derive(Iden)]
 pub enum Users {
