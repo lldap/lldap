@@ -1,6 +1,9 @@
+use super::sql_tables::*;
 use crate::infra::configuration::Configuration;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
+use futures_util::StreamExt;
+use sea_query::{Expr, MysqlQueryBuilder, Query, SimpleExpr};
 use sqlx::any::AnyPool;
 use sqlx::Row;
 
@@ -10,7 +13,8 @@ pub struct BindRequest {
     pub password: String,
 }
 
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
+#[derive(PartialEq, Eq)]
+#[cfg_attr(test, derive(Debug))]
 pub enum RequestFilter {
     And(Vec<RequestFilter>),
     Or(Vec<RequestFilter>),
@@ -61,6 +65,27 @@ fn passwords_match(encrypted_password: &str, clear_password: &str) -> bool {
     encrypted_password == clear_password
 }
 
+fn get_filter_expr(filter: RequestFilter) -> SimpleExpr {
+    use RequestFilter::*;
+    fn get_repeated_filter(
+        fs: Vec<RequestFilter>,
+        field: &dyn Fn(SimpleExpr, SimpleExpr) -> SimpleExpr,
+    ) -> SimpleExpr {
+        let mut it = fs.into_iter();
+        let first_expr = match it.next() {
+            None => return Expr::value(true),
+            Some(f) => get_filter_expr(f),
+        };
+        it.fold(first_expr, |e, f| field(e, get_filter_expr(f)))
+    }
+    match filter {
+        And(fs) => get_repeated_filter(fs, &SimpleExpr::and),
+        Or(fs) => get_repeated_filter(fs, &SimpleExpr::or),
+        Not(f) => Expr::not(Expr::expr(get_filter_expr(*f))),
+        Equality(s1, s2) => Expr::expr(Expr::cust(&s1)).eq(s2),
+    }
+}
+
 #[async_trait]
 impl BackendHandler for SqlBackendHandler {
     async fn bind(&mut self, request: BindRequest) -> Result<()> {
@@ -72,11 +97,12 @@ impl BackendHandler for SqlBackendHandler {
                 bail!(r#"Authentication error for "{}""#, request.name)
             }
         }
-        if let Ok(row) = sqlx::query("SELECT password FROM users WHERE user_id = ?")
-            .bind(&request.name)
-            .fetch_one(&self.sql_pool)
-            .await
-        {
+        let query = Query::select()
+            .column(Users::Password)
+            .from(Users::Table)
+            .and_where(Expr::col(Users::UserId).eq(request.name.as_str()))
+            .to_string(MysqlQueryBuilder);
+        if let Ok(row) = sqlx::query(&query).fetch_one(&self.sql_pool).await {
             if passwords_match(&request.password, &row.get::<String, _>("password")) {
                 return Ok(());
             }
@@ -85,7 +111,42 @@ impl BackendHandler for SqlBackendHandler {
     }
 
     async fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>> {
-        Ok(Vec::new())
+        let query = {
+            let mut query_builder = Query::select()
+                .column(Users::UserId)
+                .column(Users::Email)
+                .column(Users::DisplayName)
+                .column(Users::FirstName)
+                .column(Users::LastName)
+                .column(Users::Avatar)
+                .column(Users::CreationDate)
+                .from(Users::Table)
+                .to_owned();
+            if let Some(filter) = request.filters {
+                if filter != RequestFilter::And(Vec::new())
+                    && filter != RequestFilter::Or(Vec::new())
+                {
+                    query_builder.and_where(get_filter_expr(filter));
+                }
+            }
+
+            query_builder.to_string(MysqlQueryBuilder)
+        };
+
+        let results = sqlx::query(&query)
+            .map(|row: sqlx::any::AnyRow| User {
+                user_id: row.get::<String, _>("user_id"),
+                email: row.get::<String, _>("email"),
+                display_name: row.get::<String, _>("display_name"),
+                first_name: row.get::<String, _>("first_name"),
+                last_name: row.get::<String, _>("last_name"),
+                creation_date: chrono::NaiveDateTime::from_timestamp(0, 0), // TODO: wait until datetime is supported for Any.
+            })
+            .fetch(&self.sql_pool)
+            .collect::<Vec<sqlx::Result<User>>>()
+            .await;
+
+        Ok(results.into_iter().collect::<sqlx::Result<Vec<User>>>()?)
     }
 }
 

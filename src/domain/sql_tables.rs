@@ -2,7 +2,7 @@ use sea_query::*;
 use sqlx::any::AnyPool;
 
 #[derive(Iden)]
-enum Users {
+pub enum Users {
     Table,
     UserId,
     Email,
@@ -17,14 +17,14 @@ enum Users {
 }
 
 #[derive(Iden)]
-enum Groups {
+pub enum Groups {
     Table,
     GroupId,
     DisplayName,
 }
 
 #[derive(Iden)]
-enum Memberships {
+pub enum Memberships {
     Table,
     UserId,
     GroupId,
