@@ -27,6 +27,7 @@ pub struct ListUsersRequest {
     pub filters: Option<RequestFilter>,
 }
 
+#[derive(sqlx::FromRow)]
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct User {
     pub user_id: String,
@@ -35,29 +36,25 @@ pub struct User {
     pub first_name: String,
     pub last_name: String,
     // pub avatar: ?,
-    pub creation_date: chrono::NaiveDateTime,
+    // TODO: wait until supported for Any
+    // pub creation_date: chrono::NaiveDateTime,
 }
 
 #[async_trait]
 pub trait BackendHandler: Clone + Send {
-    async fn bind(&mut self, request: BindRequest) -> Result<()>;
-    async fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>>;
+    async fn bind(&self, request: BindRequest) -> Result<()>;
+    async fn list_users(&self, request: ListUsersRequest) -> Result<Vec<User>>;
 }
 
 #[derive(Debug, Clone)]
 pub struct SqlBackendHandler {
     config: Configuration,
     sql_pool: AnyPool,
-    authenticated: bool,
 }
 
 impl SqlBackendHandler {
     pub fn new(config: Configuration, sql_pool: AnyPool) -> Self {
-        SqlBackendHandler {
-            config,
-            sql_pool,
-            authenticated: false,
-        }
+        SqlBackendHandler { config, sql_pool }
     }
 }
 
@@ -88,10 +85,9 @@ fn get_filter_expr(filter: RequestFilter) -> SimpleExpr {
 
 #[async_trait]
 impl BackendHandler for SqlBackendHandler {
-    async fn bind(&mut self, request: BindRequest) -> Result<()> {
+    async fn bind(&self, request: BindRequest) -> Result<()> {
         if request.name == self.config.ldap_user_dn {
             if request.password == self.config.ldap_user_pass {
-                self.authenticated = true;
                 return Ok(());
             } else {
                 bail!(r#"Authentication error for "{}""#, request.name)
@@ -110,7 +106,7 @@ impl BackendHandler for SqlBackendHandler {
         bail!(r#"Authentication error for "{}""#, request.name)
     }
 
-    async fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>> {
+    async fn list_users(&self, request: ListUsersRequest) -> Result<Vec<User>> {
         let query = {
             let mut query_builder = Query::select()
                 .column(Users::UserId)
@@ -133,15 +129,7 @@ impl BackendHandler for SqlBackendHandler {
             query_builder.to_string(MysqlQueryBuilder)
         };
 
-        let results = sqlx::query(&query)
-            .map(|row: sqlx::any::AnyRow| User {
-                user_id: row.get::<String, _>("user_id"),
-                email: row.get::<String, _>("email"),
-                display_name: row.get::<String, _>("display_name"),
-                first_name: row.get::<String, _>("first_name"),
-                last_name: row.get::<String, _>("last_name"),
-                creation_date: chrono::NaiveDateTime::from_timestamp(0, 0), // TODO: wait until datetime is supported for Any.
-            })
+        let results = sqlx::query_as::<_, User>(&query)
             .fetch(&self.sql_pool)
             .collect::<Vec<sqlx::Result<User>>>()
             .await;
@@ -158,7 +146,32 @@ mockall::mock! {
     }
     #[async_trait]
     impl BackendHandler for TestBackendHandler {
-        async fn bind(&mut self, request: BindRequest) -> Result<()>;
-        async fn list_users(&mut self, request: ListUsersRequest) -> Result<Vec<User>>;
+        async fn bind(&self, request: BindRequest) -> Result<()>;
+        async fn list_users(&self, request: ListUsersRequest) -> Result<Vec<User>>;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_bind_admin() {
+        let sql_pool = sqlx::any::AnyPoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        let mut config = Configuration::default();
+        config.ldap_user_dn = "admin".to_string();
+        config.ldap_user_pass = "test".to_string();
+        let handler = SqlBackendHandler::new(config, sql_pool);
+        assert!(true);
+        assert!(handler
+            .bind(BindRequest {
+                name: "admin".to_string(),
+                password: "test".to_string()
+            })
+            .await
+            .is_ok());
     }
 }

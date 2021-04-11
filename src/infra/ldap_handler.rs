@@ -358,7 +358,6 @@ mod tests {
                     display_name: "Bôb Böbberson".to_string(),
                     first_name: "Bôb".to_string(),
                     last_name: "Böbberson".to_string(),
-                    creation_date: NaiveDateTime::from_timestamp(1_000_000_000, 0),
                 },
                 User {
                     user_id: "jim".to_string(),
@@ -366,7 +365,6 @@ mod tests {
                     display_name: "Jimminy Cricket".to_string(),
                     first_name: "Jim".to_string(),
                     last_name: "Cricket".to_string(),
-                    creation_date: NaiveDateTime::from_timestamp(1_003_000_000, 0),
                 },
             ])
         });

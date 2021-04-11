@@ -57,7 +57,7 @@ pub async fn init_table(pool: &AnyPool) -> sqlx::Result<()> {
             .col(ColumnDef::new(Users::Password).string_len(255).not_null())
             .col(ColumnDef::new(Users::TotpSecret).string_len(64))
             .col(ColumnDef::new(Users::MfaType).string_len(64))
-            .to_string(MysqlQueryBuilder),
+            .to_string(SqliteQueryBuilder),
     )
     .execute(pool)
     .await?;
@@ -69,7 +69,6 @@ pub async fn init_table(pool: &AnyPool) -> sqlx::Result<()> {
                 ColumnDef::new(Groups::GroupId)
                     .integer()
                     .not_null()
-                    .auto_increment()
                     .primary_key(),
             )
             .col(
@@ -77,7 +76,7 @@ pub async fn init_table(pool: &AnyPool) -> sqlx::Result<()> {
                     .string_len(255)
                     .not_null(),
             )
-            .to_string(MysqlQueryBuilder),
+            .to_string(SqliteQueryBuilder),
     )
     .execute(pool)
     .await?;
@@ -94,8 +93,7 @@ pub async fn init_table(pool: &AnyPool) -> sqlx::Result<()> {
             .col(
                 ColumnDef::new(Memberships::GroupId)
                     .integer()
-                    .not_null()
-                    .auto_increment(),
+                    .not_null(),
             )
             .foreign_key(
                 ForeignKey::create()
@@ -113,7 +111,7 @@ pub async fn init_table(pool: &AnyPool) -> sqlx::Result<()> {
                     .on_delete(ForeignKeyAction::Cascade)
                     .on_update(ForeignKeyAction::Cascade),
             )
-            .to_string(MysqlQueryBuilder),
+            .to_string(SqliteQueryBuilder),
     )
     .execute(pool)
     .await?;
