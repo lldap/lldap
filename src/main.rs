@@ -1,8 +1,8 @@
+use crate::domain::sql_tables::PoolOptions;
 use crate::infra::configuration::Configuration;
 use anyhow::Result;
 use futures_util::TryFutureExt;
 use log::*;
-use crate::domain::sql_tables::PoolOptions;
 
 mod domain;
 mod infra;

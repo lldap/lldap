@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use sea_query::*;
 
 pub type Pool = sqlx::sqlite::SqlitePool;
@@ -92,11 +93,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
                     .not_null()
                     .primary_key(),
             )
-            .col(
-                ColumnDef::new(Memberships::GroupId)
-                    .integer()
-                    .not_null(),
-            )
+            .col(ColumnDef::new(Memberships::GroupId).integer().not_null())
             .foreign_key(
                 ForeignKey::create()
                     .name("MembershipUserForeignKey")
@@ -128,28 +125,27 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_init_table() {
-        let sql_pool = PoolOptions::new()
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
+        let sql_pool = PoolOptions::new().connect("sqlite::memory:").await.unwrap();
         init_table(&sql_pool).await.unwrap();
         sqlx::query(r#"INSERT INTO users
       (user_id, email, display_name, first_name, last_name, creation_date, password)
-      VALUES ("bôb", "böb@bob.bob", "Bob Bobbersön", "Bob", "Bobberson", CURRENT_TIMESTAMP, "bob00")"#).execute(&sql_pool).await.unwrap();
-        let row = sqlx::query(r#"SELECT display_name FROM users WHERE user_id = "bôb""#)
-            .fetch_one(&sql_pool)
-            .await
-            .unwrap();
+      VALUES ("bôb", "böb@bob.bob", "Bob Bobbersön", "Bob", "Bobberson", "1970-01-01 00:00:00", "bob00")"#).execute(&sql_pool).await.unwrap();
+        let row =
+            sqlx::query(r#"SELECT display_name, creation_date FROM users WHERE user_id = "bôb""#)
+                .fetch_one(&sql_pool)
+                .await
+                .unwrap();
         assert_eq!(row.column(0).name(), "display_name");
         assert_eq!(row.get::<String, _>("display_name"), "Bob Bobbersön");
+        assert_eq!(
+            row.get::<NaiveDateTime, _>("creation_date"),
+            NaiveDateTime::from_timestamp(0, 0)
+        );
     }
 
     #[actix_rt::test]
     async fn test_already_init_table() {
-        let sql_pool = PoolOptions::new()
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
+        let sql_pool = PoolOptions::new().connect("sqlite::memory:").await.unwrap();
         init_table(&sql_pool).await.unwrap();
         init_table(&sql_pool).await.unwrap();
     }

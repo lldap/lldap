@@ -1,11 +1,12 @@
 use super::sql_tables::*;
+use crate::domain::sql_tables::Pool;
 use crate::infra::configuration::Configuration;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use sea_query::{Expr, SqliteQueryBuilder, Query, SimpleExpr};
+use log::*;
+use sea_query::{Expr, Order, Query, SimpleExpr, SqliteQueryBuilder};
 use sqlx::Row;
-use crate::domain::sql_tables::Pool;
 
 #[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct BindRequest {
@@ -100,7 +101,11 @@ impl BackendHandler for SqlBackendHandler {
         if let Ok(row) = sqlx::query(&query).fetch_one(&self.sql_pool).await {
             if passwords_match(&request.password, &row.get::<String, _>("password")) {
                 return Ok(());
+            } else {
+                debug!(r#"Invalid password for "{}""#, request.name);
             }
+        } else {
+            debug!(r#"No user found for "{}""#, request.name);
         }
         bail!(r#"Authentication error for "{}""#, request.name)
     }
@@ -116,6 +121,7 @@ impl BackendHandler for SqlBackendHandler {
                 .column(Users::Avatar)
                 .column(Users::CreationDate)
                 .from(Users::Table)
+                .order_by(Users::UserId, Order::Asc)
                 .to_owned();
             if let Some(filter) = request.filters {
                 if filter != RequestFilter::And(Vec::new())
@@ -153,24 +159,162 @@ mockall::mock! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::sql_tables::init_table;
+
+    async fn get_in_memory_db() -> Pool {
+        PoolOptions::new().connect("sqlite::memory:").await.unwrap()
+    }
+
+    async fn get_initialized_db() -> Pool {
+        let sql_pool = get_in_memory_db().await;
+        init_table(&sql_pool).await.unwrap();
+        sql_pool
+    }
+
+    async fn insert_user(sql_pool: &Pool, name: &str, pass: &str) {
+        /*
+        let query = Query::insert()
+            .into_table(Users::Table)
+            .columns(vec![
+                Users::UserId,
+                Users::Email,
+                Users::DisplayName,
+                Users::FirstName,
+                Users::LastName,
+                Users::CreationDate,
+                Users::Password,
+            ])
+            .values_panic(vec![
+                "bob".into(),
+                "bob@bob".into(),
+                "Bob Böbberson".into(),
+                "Bob".into(),
+                "Böbberson".into(),
+                chrono::NaiveDateTime::from_timestamp(0, 0).into(),
+                "bob00".into(),
+            ])
+            .to_string(SqliteQueryBuilder);
+        sqlx::query(&query).execute(&sql_pool).await.unwrap();
+        */
+        sqlx::query(
+            r#"INSERT INTO users
+      (user_id, email, display_name, first_name, last_name, creation_date, password)
+      VALUES (?, "em@ai.l", "Display Name", "Firstname", "Lastname", "1970-01-01 00:00:00", ?)"#,
+        )
+        .bind(name.to_string())
+        .bind(pass.to_string())
+        .execute(sql_pool)
+        .await
+        .unwrap();
+    }
 
     #[tokio::test]
     async fn test_bind_admin() {
-        let sql_pool = PoolOptions::new()
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
+        let sql_pool = get_in_memory_db().await;
         let mut config = Configuration::default();
         config.ldap_user_dn = "admin".to_string();
         config.ldap_user_pass = "test".to_string();
         let handler = SqlBackendHandler::new(config, sql_pool);
-        assert!(true);
-        assert!(handler
+        handler
             .bind(BindRequest {
                 name: "admin".to_string(),
-                password: "test".to_string()
+                password: "test".to_string(),
             })
             .await
-            .is_ok());
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_bind_user() {
+        let sql_pool = get_initialized_db().await;
+        insert_user(&sql_pool, "bob", "bob00").await;
+        let config = Configuration::default();
+        let handler = SqlBackendHandler::new(config, sql_pool);
+        handler
+            .bind(BindRequest {
+                name: "bob".to_string(),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap();
+        handler
+            .bind(BindRequest {
+                name: "andrew".to_string(),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap_err();
+        handler
+            .bind(BindRequest {
+                name: "bob".to_string(),
+                password: "wrong_password".to_string(),
+            })
+            .await
+            .unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn test_list_users() {
+        let sql_pool = get_initialized_db().await;
+        insert_user(&sql_pool, "bob", "bob00").await;
+        insert_user(&sql_pool, "patrick", "pass").await;
+        insert_user(&sql_pool, "John", "Pa33w0rd!").await;
+        let config = Configuration::default();
+        let handler = SqlBackendHandler::new(config, sql_pool);
+        {
+            let users = handler
+                .list_users(ListUsersRequest { filters: None })
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|u| u.user_id)
+                .collect::<Vec<_>>();
+            assert_eq!(users, vec!["John", "bob", "patrick"]);
+        }
+        {
+            let users = handler
+                .list_users(ListUsersRequest {
+                    filters: Some(RequestFilter::Equality(
+                        "user_id".to_string(),
+                        "bob".to_string(),
+                    )),
+                })
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|u| u.user_id)
+                .collect::<Vec<_>>();
+            assert_eq!(users, vec!["bob"]);
+        }
+        {
+            let users = handler
+                .list_users(ListUsersRequest {
+                    filters: Some(RequestFilter::Or(vec![
+                        RequestFilter::Equality("user_id".to_string(), "bob".to_string()),
+                        RequestFilter::Equality("user_id".to_string(), "John".to_string()),
+                    ])),
+                })
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|u| u.user_id)
+                .collect::<Vec<_>>();
+            assert_eq!(users, vec!["John", "bob"]);
+        }
+        {
+            let users = handler
+                .list_users(ListUsersRequest {
+                    filters: Some(RequestFilter::Not(Box::new(RequestFilter::Equality(
+                        "user_id".to_string(),
+                        "bob".to_string(),
+                    )))),
+                })
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|u| u.user_id)
+                .collect::<Vec<_>>();
+            assert_eq!(users, vec!["John", "patrick"]);
+        }
     }
 }
