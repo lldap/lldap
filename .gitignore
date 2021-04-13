@@ -11,3 +11,5 @@ Cargo.lock
 
 # Created databases
 *.db
+*.db-shm
+*.db-wal
