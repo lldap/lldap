@@ -28,8 +28,8 @@ impl Default for Configuration {
             http_port: 17170,
             secret_pepper: String::from("secretsecretpepper"),
             ldap_base_dn: String::from("dc=example,dc=com"),
-            ldap_user_dn: String::new(),
-            ldap_user_pass: String::new(),
+            ldap_user_dn: String::from("cn=admin,dc=example,dc=com"),
+            ldap_user_pass: String::from("password"),
             database_url: String::from("sqlite://users.db?mode=rwc"),
             verbose: false,
         }

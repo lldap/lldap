@@ -77,6 +77,26 @@ fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) -> b
     true
 }
 
+fn map_field(field: &str) -> Result<String> {
+    Ok(if field == "uid" {
+        "user_id".to_string()
+    } else if field == "mail" {
+        "email".to_string()
+    } else if field == "cn" {
+        "display_name".to_string()
+    } else if field == "givenName" {
+        "first_name".to_string()
+    } else if field == "sn" {
+        "last_name".to_string()
+    } else if field == "avatar" {
+        "avatar".to_string()
+    } else if field == "creationDate" {
+        "creation_date".to_string()
+    } else {
+        bail!("Unknown field: {}", field);
+    })
+}
+
 fn convert_filter(filter: &LdapFilter) -> Result<RequestFilter> {
     match filter {
         LdapFilter::And(filters) => Ok(RequestFilter::And(
@@ -93,7 +113,7 @@ fn convert_filter(filter: &LdapFilter) -> Result<RequestFilter> {
         )),
         LdapFilter::Not(filter) => Ok(RequestFilter::Not(Box::new(convert_filter(&*filter)?))),
         LdapFilter::Equality(field, value) => {
-            Ok(RequestFilter::Equality(field.clone(), value.clone()))
+            Ok(RequestFilter::Equality(map_field(field)?, value.clone()))
         }
         _ => bail!("Unsupported filter"),
     }
