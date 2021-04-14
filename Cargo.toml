@@ -28,7 +28,7 @@ tracing-actix-web = "0.3.0-beta.2"
 tracing-log = "*"
 tracing-subscriber = "*"
 async-trait = "0.1.48"
-sea-query = { version = "0.9.2", features = [ "with-chrono" ] }
+sea-query = { version = "0.9.4", features = [ "with-chrono" ] }
 
 [dependencies.figment]
 features = ["toml", "env"]

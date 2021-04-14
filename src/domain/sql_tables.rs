@@ -1,4 +1,3 @@
-use chrono::NaiveDateTime;
 use sea_query::*;
 
 pub type Pool = sqlx::sqlite::SqlitePool;
@@ -90,8 +89,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
             .col(
                 ColumnDef::new(Memberships::UserId)
                     .string_len(255)
-                    .not_null()
-                    .primary_key(),
+                    .not_null(),
             )
             .col(ColumnDef::new(Memberships::GroupId).integer().not_null())
             .foreign_key(
@@ -121,6 +119,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveDateTime;
     use sqlx::{Column, Row};
 
     #[actix_rt::test]
