@@ -40,7 +40,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
     sqlx::query(
         &Table::create()
             .table(Users::Table)
-            .create_if_not_exists()
+            .if_not_exists()
             .col(
                 ColumnDef::new(Users::UserId)
                     .string_len(255)
@@ -67,7 +67,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
     sqlx::query(
         &Table::create()
             .table(Groups::Table)
-            .create_if_not_exists()
+            .if_not_exists()
             .col(
                 ColumnDef::new(Groups::GroupId)
                     .integer()
@@ -86,7 +86,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
     sqlx::query(
         &Table::create()
             .table(Memberships::Table)
-            .create_if_not_exists()
+            .if_not_exists()
             .col(
                 ColumnDef::new(Memberships::UserId)
                     .string_len(255)
