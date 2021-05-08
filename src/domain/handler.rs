@@ -5,47 +5,10 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
+pub use lldap_model::*;
 use log::*;
 use sea_query::{Expr, Order, Query, SimpleExpr, SqliteQueryBuilder};
 use sqlx::Row;
-
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
-pub struct BindRequest {
-    pub name: String,
-    pub password: String,
-}
-
-#[derive(PartialEq, Eq)]
-#[cfg_attr(test, derive(Debug))]
-pub enum RequestFilter {
-    And(Vec<RequestFilter>),
-    Or(Vec<RequestFilter>),
-    Not(Box<RequestFilter>),
-    Equality(String, String),
-}
-
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
-pub struct ListUsersRequest {
-    pub filters: Option<RequestFilter>,
-}
-
-#[derive(sqlx::FromRow)]
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
-pub struct User {
-    pub user_id: String,
-    pub email: String,
-    pub display_name: String,
-    pub first_name: String,
-    pub last_name: String,
-    // pub avatar: ?,
-    pub creation_date: chrono::NaiveDateTime,
-}
-
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
-pub struct Group {
-    pub display_name: String,
-    pub users: Vec<String>,
-}
 
 #[async_trait]
 pub trait BackendHandler: Clone + Send {
@@ -142,7 +105,15 @@ impl BackendHandler for SqlBackendHandler {
             query_builder.to_string(SqliteQueryBuilder)
         };
 
-        let results = sqlx::query_as::<_, User>(&query)
+        let results = sqlx::query(&query)
+            .map(|row: DbRow| User {
+                user_id: row.get::<String, _>("user_id"),
+                email: row.get::<String, _>("email"),
+                display_name: row.get::<String, _>("display_name"),
+                first_name: row.get::<String, _>("first_name"),
+                last_name: row.get::<String, _>("last_name"),
+                creation_date: row.get::<chrono::NaiveDateTime, _>("creation_date"),
+            })
             .fetch(&self.sql_pool)
             .collect::<Vec<sqlx::Result<User>>>()
             .await;

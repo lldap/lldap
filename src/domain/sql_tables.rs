@@ -2,6 +2,7 @@ use sea_query::*;
 
 pub type Pool = sqlx::sqlite::SqlitePool;
 pub type PoolOptions = sqlx::sqlite::SqlitePoolOptions;
+pub type DbRow = sqlx::sqlite::SqliteRow;
 
 #[derive(Iden)]
 pub enum Users {
