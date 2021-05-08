@@ -3,9 +3,8 @@ use crate::infra::configuration::Configuration;
 use crate::infra::ldap_handler::LdapHandler;
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
-use actix_service::{fn_service, pipeline_factory};
-use anyhow::bail;
-use anyhow::Result;
+use actix_service::{fn_service, ServiceFactoryExt};
+use anyhow::{bail, Result};
 use futures_util::future::ok;
 use ldap3_server::simple::*;
 use ldap3_server::LdapCodec;
@@ -68,7 +67,7 @@ where
             let backend_handler = backend_handler.clone();
             let ldap_base_dn = ldap_base_dn.clone();
             let ldap_user_dn = ldap_user_dn.clone();
-            pipeline_factory(fn_service(move |mut stream: TcpStream| {
+            fn_service(move |mut stream: TcpStream| {
                 let backend_handler = backend_handler.clone();
                 let ldap_base_dn = ldap_base_dn.clone();
                 let ldap_user_dn = ldap_user_dn.clone();
@@ -88,7 +87,7 @@ where
 
                     Ok(stream)
                 }
-            }))
+            })
             .map_err(|err: anyhow::Error| error!("Service Error: {:?}", err))
             // catch
             .and_then(move |_| {
