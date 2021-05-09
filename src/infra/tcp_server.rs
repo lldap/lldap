@@ -18,15 +18,24 @@ async fn index(req: HttpRequest) -> actix_web::Result<NamedFile> {
 
 type ApiResult<M> = actix_web::Either<web::Json<M>, HttpResponse>;
 
-async fn user_list_handler(_info: web::Json<ListUsersRequest>) -> ApiResult<Vec<User>> {
-    if true {
-        ApiResult::Right(HttpResponse::Conflict().finish())
-    } else {
-        ApiResult::Left(web::Json(Vec::<User>::new()))
+async fn user_list_handler<Backend>(
+    data: web::Data<AppState<Backend>>,
+    info: web::Json<ListUsersRequest>,
+) -> ApiResult<Vec<User>>
+where
+    Backend: BackendHandler + 'static,
+{
+    let req : ListUsersRequest = info.clone();
+    match data.backend_handler.list_users(req).await {
+        Ok(res) => ApiResult::Left(web::Json(res)),
+        Err(_) => ApiResult::Right(HttpResponse::InternalServerError().finish())
     }
 }
 
-fn api_config(cfg: &mut web::ServiceConfig) {
+fn api_config<Backend>(cfg: &mut web::ServiceConfig)
+where
+    Backend: BackendHandler + 'static,
+{
     let json_config = web::JsonConfig::default()
         .limit(4096)
         .error_handler(|err, _req| {
@@ -40,13 +49,20 @@ fn api_config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("/users")
             .app_data(json_config)
-            .route(web::post().to(user_list_handler)),
+            .route(web::post().to(user_list_handler::<Backend>)),
     );
+}
+
+struct AppState<Backend>
+where
+    Backend: BackendHandler + 'static,
+{
+    pub backend_handler: Backend,
 }
 
 pub fn build_tcp_server<Backend>(
     config: &Configuration,
-    _backend_handler: Backend,
+    backend_handler: Backend,
     server_builder: ServerBuilder,
 ) -> Result<ServerBuilder>
 where
@@ -57,13 +73,16 @@ where
             HttpServiceBuilder::new()
                 .finish(map_config(
                     App::new()
+                        .data(AppState::<Backend> {
+                            backend_handler: backend_handler.clone(),
+                        })
                         // Serve index.html and main.js, and default to index.html.
                         .route(
                             "/{filename:(index\\.html|main\\.js)?}",
                             web::get().to(index),
                         )
                         // API endpoint.
-                        .service(web::scope("/api").configure(api_config))
+                        .service(web::scope("/api").configure(api_config::<Backend>))
                         // Serve the /pkg path with the compiled WASM app.
                         .service(Files::new("/pkg", "./app/pkg")),
                     |_| AppConfig::default(),

@@ -1,12 +1,12 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct BindRequest {
     pub name: String,
     pub password: String,
 }
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum RequestFilter {
     And(Vec<RequestFilter>),
     Or(Vec<RequestFilter>),
@@ -14,7 +14,7 @@ pub enum RequestFilter {
     Equality(String, String),
 }
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct ListUsersRequest {
     pub filters: Option<RequestFilter>,
 }
