@@ -40,6 +40,7 @@ where
         .limit(4096)
         .error_handler(|err, _req| {
             // create custom error response
+            log::error!("API error: {}", err);
             actix_web::error::InternalError::from_response(
                 err,
                 HttpResponse::Conflict().finish().into(),
