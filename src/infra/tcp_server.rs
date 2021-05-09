@@ -25,10 +25,10 @@ async fn user_list_handler<Backend>(
 where
     Backend: BackendHandler + 'static,
 {
-    let req : ListUsersRequest = info.clone();
+    let req: ListUsersRequest = info.clone();
     match data.backend_handler.list_users(req).await {
         Ok(res) => ApiResult::Left(web::Json(res)),
-        Err(_) => ApiResult::Right(HttpResponse::InternalServerError().finish())
+        Err(_) => ApiResult::Right(HttpResponse::InternalServerError().finish()),
     }
 }
 
