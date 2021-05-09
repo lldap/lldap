@@ -1,6 +1,8 @@
+#![recursion_limit = "256"]
+mod api;
 mod app;
 
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::prelude::{wasm_bindgen, JsValue};
 
 #[wasm_bindgen]
 pub fn run_app() -> Result<(), JsValue> {
