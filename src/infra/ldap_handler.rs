@@ -486,7 +486,7 @@ mod tests {
             .with(eq(ListUsersRequest {
                 filters: Some(RequestFilter::And(vec![RequestFilter::Or(vec![
                     RequestFilter::Not(Box::new(RequestFilter::Equality(
-                        "uid".to_string(),
+                        "user_id".to_string(),
                         "bob".to_string(),
                     ))),
                 ])])),
