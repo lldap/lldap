@@ -10,3 +10,6 @@ js = []
 [dependencies]
 chrono = "*"
 serde = "*"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+sqlx = { version = "0.5", features = [ "runtime-actix-native-tls", "any", "sqlite", "mysql", "postgres", "macros" , "chrono"] }

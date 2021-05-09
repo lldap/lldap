@@ -105,15 +105,7 @@ impl BackendHandler for SqlBackendHandler {
             query_builder.to_string(SqliteQueryBuilder)
         };
 
-        let results = sqlx::query(&query)
-            .map(|row: DbRow| User {
-                user_id: row.get::<String, _>("user_id"),
-                email: row.get::<String, _>("email"),
-                display_name: row.get::<String, _>("display_name"),
-                first_name: row.get::<String, _>("first_name"),
-                last_name: row.get::<String, _>("last_name"),
-                creation_date: row.get::<chrono::NaiveDateTime, _>("creation_date"),
-            })
+        let results = sqlx::query_as::<_, User>(&query)
             .fetch(&self.sql_pool)
             .collect::<Vec<sqlx::Result<User>>>()
             .await;

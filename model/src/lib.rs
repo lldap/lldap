@@ -1,11 +1,10 @@
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
+#[derive(PartialEq, Eq, Debug)]
 pub struct BindRequest {
     pub name: String,
     pub password: String,
 }
 
-#[derive(PartialEq, Eq)]
-#[cfg_attr(test, derive(Debug))]
+#[derive(PartialEq, Eq, Debug)]
 pub enum RequestFilter {
     And(Vec<RequestFilter>),
     Or(Vec<RequestFilter>),
@@ -13,12 +12,13 @@ pub enum RequestFilter {
     Equality(String, String),
 }
 
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
+#[derive(PartialEq, Eq, Debug)]
 pub struct ListUsersRequest {
     pub filters: Option<RequestFilter>,
 }
 
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
+#[derive(PartialEq, Eq, Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(sqlx::FromRow))]
 pub struct User {
     pub user_id: String,
     pub email: String,
@@ -29,7 +29,7 @@ pub struct User {
     pub creation_date: chrono::NaiveDateTime,
 }
 
-#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
+#[derive(PartialEq, Eq, Debug)]
 pub struct Group {
     pub display_name: String,
     pub users: Vec<String>,
