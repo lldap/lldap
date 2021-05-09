@@ -8,7 +8,7 @@ edition = "2018"
 js = []
 
 [dependencies]
-chrono = "*"
+chrono = { version = "*", features = [ "serde" ]}
 serde = "*"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

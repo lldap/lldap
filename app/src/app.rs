@@ -8,6 +8,7 @@ pub enum Msg {
     ListUsersRequest(ListUsersRequest),
 }
 
+
 impl Component for App {
     type Message = Msg;
     type Properties = ();

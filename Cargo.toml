@@ -19,7 +19,7 @@ actix-service = "2.0.0"
 actix-web = "4.0.0-beta.6"
 anyhow = "*"
 clap = "3.0.0-beta.2"
-chrono = "*"
+chrono = { version = "*", features = [ "serde" ]}
 futures = "*"
 futures-util = "*"
 http = "*"
@@ -38,6 +38,7 @@ async-trait = "0.1.48"
 sea-query = { version = "0.9.4", features = [ "with-chrono" ] }
 lldap_model = { path = "model" }
 lldap_app = { path = "app" }
+serde_json = "1.0.64"
 
 [dependencies.figment]
 features = ["toml", "env"]
