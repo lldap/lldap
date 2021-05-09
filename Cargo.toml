@@ -4,8 +4,14 @@ edition = "2018"
 name = "lldap"
 version = "0.1.0"
 
+[patch.crates-io]
+actix-files = { git = "https://github.com/actix/actix-web", rev = "a9dc1586a0935c48c3f841761bf81c43ca9e2651" }
+actix-http = { git = "https://github.com/actix/actix-web", rev = "a9dc1586a0935c48c3f841761bf81c43ca9e2651" }
+actix-web = { git = "https://github.com/actix/actix-web", rev = "a9dc1586a0935c48c3f841761bf81c43ca9e2651" }
+
 [dependencies]
 actix = "0.11.1"
+actix-files = "0.6.0-beta.4"
 actix-http = "3.0.0-beta.6"
 actix-rt = "2.2"
 actix-server = "2.0.0-beta.5"
