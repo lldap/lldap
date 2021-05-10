@@ -1,4 +1,4 @@
-use crate::domain::handler::*;
+use crate::domain::{error::Error, handler::*};
 use crate::infra::configuration::Configuration;
 use actix_files::{Files, NamedFile};
 use actix_http::HttpServiceBuilder;
@@ -16,6 +16,16 @@ async fn index(req: HttpRequest) -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open(path)?)
 }
 
+fn error_to_http_response<T>(error: Error) -> ApiResult<T> {
+    ApiResult::Right(
+        match error {
+            Error::AuthenticationError(_) => HttpResponse::Unauthorized(),
+            Error::DatabaseError(_) => HttpResponse::InternalServerError(),
+        }
+        .body(error.to_string()),
+    )
+}
+
 type ApiResult<M> = actix_web::Either<web::Json<M>, HttpResponse>;
 
 async fn user_list_handler<Backend>(
@@ -26,10 +36,11 @@ where
     Backend: BackendHandler + 'static,
 {
     let req: ListUsersRequest = info.clone();
-    match data.backend_handler.list_users(req).await {
-        Ok(res) => ApiResult::Left(web::Json(res)),
-        Err(_) => ApiResult::Right(HttpResponse::InternalServerError().finish()),
-    }
+    data.backend_handler
+        .list_users(req)
+        .await
+        .map(|res| ApiResult::Left(web::Json(res)))
+        .unwrap_or_else(error_to_http_response)
 }
 
 fn api_config<Backend>(cfg: &mut web::ServiceConfig)
@@ -41,9 +52,10 @@ where
         .error_handler(|err, _req| {
             // create custom error response
             log::error!("API error: {}", err);
+            let msg = err.to_string();
             actix_web::error::InternalError::from_response(
                 err,
-                HttpResponse::Conflict().finish().into(),
+                HttpResponse::BadRequest().body(msg).into(),
             )
             .into()
         });

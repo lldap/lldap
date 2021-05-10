@@ -41,9 +41,7 @@ impl Component for App {
                     Ok(task) => self.task = Some(task),
                     Err(e) => {
                         self.task = None;
-                        ConsoleService::log(
-                            format!("Error trying to fetch users: {:?}", e).as_str(),
-                        )
+                        ConsoleService::log(format!("Error trying to fetch users: {}", e).as_str())
                     }
                 }
             }
@@ -53,7 +51,7 @@ impl Component for App {
             }
             Msg::ListUsersResponse(Err(e)) => {
                 self.task = None;
-                ConsoleService::log(format!("Error listing users: {:?}", e).as_str())
+                ConsoleService::log(format!("Error listing users: {}", e).as_str())
             }
         }
         true

@@ -100,16 +100,10 @@ fn map_field(field: &str) -> Result<String> {
 fn convert_filter(filter: &LdapFilter) -> Result<RequestFilter> {
     match filter {
         LdapFilter::And(filters) => Ok(RequestFilter::And(
-            filters
-                .iter()
-                .map(convert_filter)
-                .collect::<Result<_>>()?,
+            filters.iter().map(convert_filter).collect::<Result<_>>()?,
         )),
         LdapFilter::Or(filters) => Ok(RequestFilter::Or(
-            filters
-                .iter()
-                .map(convert_filter)
-                .collect::<Result<_>>()?,
+            filters.iter().map(convert_filter).collect::<Result<_>>()?,
         )),
         LdapFilter::Not(filter) => Ok(RequestFilter::Not(Box::new(convert_filter(&*filter)?))),
         LdapFilter::Equality(field, value) => {
