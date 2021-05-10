@@ -101,13 +101,13 @@ fn convert_filter(filter: &LdapFilter) -> Result<RequestFilter> {
     match filter {
         LdapFilter::And(filters) => Ok(RequestFilter::And(
             filters
-                .into_iter()
+                .iter()
                 .map(convert_filter)
                 .collect::<Result<_>>()?,
         )),
         LdapFilter::Or(filters) => Ok(RequestFilter::Or(
             filters
-                .into_iter()
+                .iter()
                 .map(convert_filter)
                 .collect::<Result<_>>()?,
         )),

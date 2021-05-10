@@ -136,7 +136,7 @@ impl BackendHandler for SqlBackendHandler {
             while let Some(row) = results.try_next().await? {
                 let display_name = row.get::<String, _>("display_name");
                 if display_name != current_group {
-                    if current_group != "" {
+                    if !current_group.is_empty() {
                         groups.push(Group {
                             display_name: current_group,
                             users: current_users,
@@ -232,9 +232,11 @@ mod tests {
     #[tokio::test]
     async fn test_bind_admin() {
         let sql_pool = get_in_memory_db().await;
-        let mut config = Configuration::default();
-        config.ldap_user_dn = "admin".to_string();
-        config.ldap_user_pass = "test".to_string();
+        let config = Configuration {
+            ldap_user_dn: "admin".to_string(),
+            ldap_user_pass: "test".to_string(),
+            ..Default::default()
+        };
         let handler = SqlBackendHandler::new(config, sql_pool);
         handler
             .bind(BindRequest {
