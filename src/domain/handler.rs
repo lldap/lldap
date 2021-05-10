@@ -1,7 +1,6 @@
 use super::sql_tables::*;
-use crate::domain::sql_tables::Pool;
+use crate::domain::{error::*, sql_tables::Pool};
 use crate::infra::configuration::Configuration;
-use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
@@ -61,7 +60,8 @@ impl BackendHandler for SqlBackendHandler {
             if request.password == self.config.ldap_user_pass {
                 return Ok(());
             } else {
-                bail!(r#"Authentication error for "{}""#, request.name)
+                debug!(r#"Invalid password for LDAP bind user"#);
+                return Err(Error::AuthenticationError(request.name));
             }
         }
         let query = Query::select()
@@ -78,7 +78,7 @@ impl BackendHandler for SqlBackendHandler {
         } else {
             debug!(r#"No user found for "{}""#, request.name);
         }
-        bail!(r#"Authentication error for "{}""#, request.name)
+        Err(Error::AuthenticationError(request.name))
     }
 
     async fn list_users(&self, request: ListUsersRequest) -> Result<Vec<User>> {
