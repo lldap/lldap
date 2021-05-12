@@ -8,6 +8,7 @@ version = "0.1.0"
 actix-files = { git = "https://github.com/actix/actix-web", rev = "a9dc1586a0935c48c3f841761bf81c43ca9e2651" }
 actix-http = { git = "https://github.com/actix/actix-web", rev = "a9dc1586a0935c48c3f841761bf81c43ca9e2651" }
 actix-web = { git = "https://github.com/actix/actix-web", rev = "a9dc1586a0935c48c3f841761bf81c43ca9e2651" }
+actix-web-httpauth = { git = "https://github.com/nhruo123/actix-extras", rev = "b4e8db446843a99b06c7ec40f18ef7b59ee7e955" }
 
 [dependencies]
 actix = "0.11.1"
@@ -17,6 +18,7 @@ actix-rt = "2.2"
 actix-server = "2.0.0-beta.5"
 actix-service = "2.0.0"
 actix-web = "4.0.0-beta.6"
+actix-web-httpauth = "0.6.0-beta.1"
 anyhow = "*"
 clap = "3.0.0-beta.2"
 chrono = { version = "*", features = [ "serde" ]}
@@ -39,6 +41,10 @@ sea-query = { version = "0.9.4", features = [ "with-chrono" ] }
 lldap_model = { path = "model" }
 lldap_app = { path = "app" }
 serde_json = "1.0.64"
+jwt = "0.13.0"
+hmac = "0.10"
+sha2 = "0.9.5"
+time = "0.2.26"
 
 [dependencies.figment]
 features = ["toml", "env"]
