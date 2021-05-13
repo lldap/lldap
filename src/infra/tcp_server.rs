@@ -99,11 +99,6 @@ where
                             .http_only(true)
                             .finish(),
                     )
-                    .cookie(
-                        Cookie::build("user_id", &request.name)
-                            .max_age(1.days())
-                            .finish(),
-                    )
                     .body(token.as_str().to_owned()),
             )
         })
@@ -172,7 +167,7 @@ where
         "/{filename:(index\\.html|main\\.js)?}",
         web::get().to(index),
     )
-    .service(web::resource("/authorize").route(web::post().to(post_authorize::<Backend>)))
+    .service(web::resource("/api/authorize").route(web::post().to(post_authorize::<Backend>)))
     // API endpoint.
     .service(
         web::scope("/api")
