@@ -18,7 +18,6 @@ use futures_util::TryFutureExt;
 use hmac::{Hmac, NewMac};
 use jwt::{SignWithKey, VerifyWithKey};
 use log::*;
-use serde::{Deserialize, Serialize};
 use sha2::Sha512;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -26,13 +25,6 @@ use time::ext::NumericalDuration;
 
 type Token<S> = jwt::Token<jwt::Header, JWTClaims, S>;
 type SignedToken = Token<jwt::token::Signed>;
-
-#[derive(Serialize, Deserialize)]
-struct JWTClaims {
-    exp: DateTime<Utc>,
-    user: String,
-    groups: HashSet<String>,
-}
 
 async fn index(req: HttpRequest) -> actix_web::Result<NamedFile> {
     let mut path = PathBuf::new();

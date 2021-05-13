@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use chrono::prelude::*;
+use std::collections::HashSet;
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct BindRequest {
@@ -35,4 +37,11 @@ pub struct User {
 pub struct Group {
     pub display_name: String,
     pub users: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct JWTClaims {
+    pub exp: DateTime<Utc>,
+    pub user: String,
+    pub groups: HashSet<String>,
 }
