@@ -7,7 +7,6 @@ use yew::services::{fetch::FetchTask, ConsoleService};
 
 pub struct UserTable {
     link: ComponentLink<Self>,
-    ipservice: HostService,
     task: Option<FetchTask>,
     users: Option<Result<Vec<User>>>,
 }
@@ -18,10 +17,7 @@ pub enum Msg {
 
 impl UserTable {
     fn get_users(&mut self, req: ListUsersRequest) {
-        match self
-            .ipservice
-            .list_users(req, self.link.callback(Msg::ListUsersResponse))
-        {
+        match HostService::list_users(req, self.link.callback(Msg::ListUsersResponse)) {
             Ok(task) => self.task = Some(task),
             Err(e) => {
                 self.task = None;
@@ -38,7 +34,6 @@ impl Component for UserTable {
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut table = UserTable {
             link: link.clone(),
-            ipservice: HostService::default(),
             task: None,
             users: None,
         };
@@ -54,7 +49,6 @@ impl Component for UserTable {
                 true
             }
             Msg::ListUsersResponse(Err(e)) => {
-                self.task = None;
                 self.users = Some(Err(anyhow!("Error listing users: {}", e)));
                 true
             }

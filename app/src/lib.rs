@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 mod api;
 mod app;
+mod login;
 mod user_table;
 
 use wasm_bindgen::prelude::{wasm_bindgen, JsValue};
