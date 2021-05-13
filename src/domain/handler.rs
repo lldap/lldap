@@ -160,6 +160,11 @@ impl BackendHandler for SqlBackendHandler {
     }
 
     async fn get_user_groups(&self, user: String) -> Result<HashSet<String>> {
+        if user == self.config.ldap_user_dn {
+            let mut groups = HashSet::new();
+            groups.insert("lldap_admin".to_string());
+            return Ok(groups);
+        }
         let query: String = Query::select()
             .column(Groups::DisplayName)
             .from(Groups::Table)

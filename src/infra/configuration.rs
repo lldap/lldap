@@ -30,7 +30,8 @@ impl Default for Configuration {
             secret_pepper: String::from("secretsecretpepper"),
             jwt_secret: String::from("secretjwtsecret"),
             ldap_base_dn: String::from("dc=example,dc=com"),
-            ldap_user_dn: String::from("cn=admin,dc=example,dc=com"),
+            // cn=admin,dc=example,dc=com
+            ldap_user_dn: String::from("admin"),
             ldap_user_pass: String::from("password"),
             database_url: String::from("sqlite://users.db?mode=rwc"),
             verbose: false,
