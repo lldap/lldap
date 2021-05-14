@@ -232,3 +232,65 @@ where
             )
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::test::TestRequest;
+    use std::path::Path;
+
+    fn get_data(handler: MockTestBackendHandler) -> web::Data<AppState<MockTestBackendHandler>> {
+        let app_state = AppState::<MockTestBackendHandler> {
+            backend_handler: handler,
+            jwt_key: Hmac::new_varkey(b"jwt_secret").unwrap(),
+        };
+        web::Data::<AppState<MockTestBackendHandler>>::new(app_state)
+    }
+
+    fn expect_json<T: std::fmt::Debug>(result: ApiResult<T>) -> T {
+        if let ApiResult::Left(res) = result {
+            res.0
+        } else {
+            panic!("Expected Json result, got: {:?}", result);
+        }
+    }
+
+    #[actix_rt::test]
+    async fn test_index_ok() {
+        let req = TestRequest::default().to_http_request();
+        let resp = index(req).await.unwrap();
+        assert_eq!(resp.path(), Path::new("app/index.html"));
+    }
+
+    #[actix_rt::test]
+    async fn test_index_main_js() {
+        let req = TestRequest::default()
+            .param("filename", "main.js")
+            .to_http_request();
+        let resp = index(req).await.unwrap();
+        assert_eq!(resp.path(), Path::new("app/main.js"));
+    }
+
+    #[actix_rt::test]
+    async fn test_user_list_ok() {
+        let mut backend_handler = MockTestBackendHandler::new();
+        backend_handler
+            .expect_list_users()
+            .times(1)
+            .return_once(|_| {
+                Ok(vec![User {
+                    user_id: "bob".to_string(),
+                    ..Default::default()
+                }])
+            });
+        let json = web::Json(ListUsersRequest { filters: None });
+        let resp = user_list_handler(get_data(backend_handler), json).await;
+        assert_eq!(
+            expect_json(resp),
+            vec![User {
+                user_id: "bob".to_string(),
+                ..Default::default()
+            }]
+        );
+    }
+}
