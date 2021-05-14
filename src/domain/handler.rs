@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
 use log::*;
+use sea_query::Iden;
 use sea_query::{Expr, Order, Query, SimpleExpr, SqliteQueryBuilder};
 use sqlx::Row;
 use std::collections::HashSet;
@@ -73,7 +74,10 @@ impl BackendHandler for SqlBackendHandler {
             .and_where(Expr::col(Users::UserId).eq(request.name.as_str()))
             .to_string(SqliteQueryBuilder);
         if let Ok(row) = sqlx::query(&query).fetch_one(&self.sql_pool).await {
-            if passwords_match(&request.password, &row.get::<String, _>("password")) {
+            if passwords_match(
+                &request.password,
+                &row.get::<String, _>(&*Users::Password.to_string()),
+            ) {
                 return Ok(());
             } else {
                 debug!(r#"Invalid password for "{}""#, request.name);
@@ -137,7 +141,7 @@ impl BackendHandler for SqlBackendHandler {
             let mut current_group = String::new();
             let mut current_users = Vec::new();
             while let Some(row) = results.try_next().await? {
-                let display_name = row.get::<String, _>("display_name");
+                let display_name = row.get::<String, _>(&*Groups::DisplayName.to_string());
                 if display_name != current_group {
                     if !current_group.is_empty() {
                         groups.push(Group {
@@ -148,7 +152,7 @@ impl BackendHandler for SqlBackendHandler {
                     }
                     current_group = display_name.clone();
                 }
-                current_users.push(row.get::<String, _>("user_id"));
+                current_users.push(row.get::<String, _>(&*Memberships::UserId.to_string()));
             }
             groups.push(Group {
                 display_name: current_group,
@@ -178,7 +182,7 @@ impl BackendHandler for SqlBackendHandler {
 
         sqlx::query(&query)
             // Extract the group id from the row.
-            .map(|row: DbRow| row.get::<String, _>("display_name"))
+            .map(|row: DbRow| row.get::<String, _>(&*Groups::DisplayName.to_string()))
             .fetch(&self.sql_pool)
             // Collect the vector of rows, each potentially an error.
             .collect::<Vec<sqlx::Result<String>>>()
