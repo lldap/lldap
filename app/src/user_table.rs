@@ -7,8 +7,9 @@ use yew::services::{fetch::FetchTask, ConsoleService};
 
 pub struct UserTable {
     link: ComponentLink<Self>,
-    task: Option<FetchTask>,
     users: Option<Result<Vec<User>>>,
+    // Used to keep the request alive long enough.
+    _task: Option<FetchTask>,
 }
 
 pub enum Msg {
@@ -18,9 +19,9 @@ pub enum Msg {
 impl UserTable {
     fn get_users(&mut self, req: ListUsersRequest) {
         match HostService::list_users(req, self.link.callback(Msg::ListUsersResponse)) {
-            Ok(task) => self.task = Some(task),
+            Ok(task) => self._task = Some(task),
             Err(e) => {
-                self.task = None;
+                self._task = None;
                 ConsoleService::log(format!("Error trying to fetch users: {}", e).as_str())
             }
         };
@@ -34,7 +35,7 @@ impl Component for UserTable {
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut table = UserTable {
             link: link.clone(),
-            task: None,
+            _task: None,
             users: None,
         };
         table.get_users(ListUsersRequest { filters: None });

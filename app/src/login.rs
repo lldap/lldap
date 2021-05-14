@@ -10,7 +10,8 @@ pub struct LoginForm {
     on_logged_in: Callback<String>,
     error: Option<anyhow::Error>,
     node_ref: NodeRef,
-    task: Option<FetchTask>,
+    // Used to keep the request alive long enough.
+    _task: Option<FetchTask>,
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -33,7 +34,7 @@ impl Component for LoginForm {
             on_logged_in: props.on_logged_in,
             error: None,
             node_ref: NodeRef::default(),
-            task: None,
+            _task: None,
         }
     }
 
@@ -61,7 +62,7 @@ impl Component for LoginForm {
                     req,
                     self.link.callback(Msg::AuthenticationResponse),
                 ) {
-                    Ok(task) => self.task = Some(task),
+                    Ok(task) => self._task = Some(task),
                     Err(e) => self.error = Some(e),
                 }
             }

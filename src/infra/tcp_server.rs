@@ -211,7 +211,6 @@ pub fn build_tcp_server<Backend>(
 where
     Backend: BackendHandler + 'static,
 {
-    let http_port = config.http_port.clone();
     let jwt_secret = config.jwt_secret.clone();
     server_builder
         .bind("http", ("0.0.0.0", config.http_port), move || {
@@ -224,5 +223,10 @@ where
                 ))
                 .tcp()
         })
-        .with_context(|| format!("While bringing up the TCP server with port {}", http_port))
+        .with_context(|| {
+            format!(
+                "While bringing up the TCP server with port {}",
+                config.http_port
+            )
+        })
 }
