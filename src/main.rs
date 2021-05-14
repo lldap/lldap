@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use crate::domain::sql_tables::PoolOptions;
 use crate::infra::configuration::Configuration;
 use anyhow::Result;
