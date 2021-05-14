@@ -5,16 +5,24 @@ authors = ["Valentin Tolmer <valentin@tolmer.fr>", "Steve Barrau <steve.barrau@g
 edition = "2018"
 
 [dependencies]
-yew = "0.17"
-wasm-bindgen = "0.2"
-lldap_model = { path = "../model" }
 anyhow = "1"
-web-sys = { version = "0.3", features = [ "console", "Document", "Element", "HtmlDocument" ] }
-serde_json = "1"
-serde = "1"
+chrono = "*"
 http = "0.2.4"
 jwt = "0.13"
-chrono = "*"
+lldap_model = { path = "../model" }
+serde = "1"
+serde_json = "1"
+wasm-bindgen = "0.2"
+yew = "0.17"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  "Document",
+  "Element",
+  "HtmlDocument",
+  "console",
+]
 
 [lib]
 crate-type = ["cdylib"]

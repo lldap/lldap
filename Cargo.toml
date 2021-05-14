@@ -20,34 +20,48 @@ actix-service = "2.0.0"
 actix-web = "4.0.0-beta.6"
 actix-web-httpauth = "0.6.0-beta.1"
 anyhow = "*"
-clap = "3.0.0-beta.2"
+async-trait = "0.1"
 chrono = { version = "*", features = [ "serde" ]}
+clap = "3.0.0-beta.2"
 futures = "*"
 futures-util = "*"
+hmac = "0.10"
 http = "*"
+jwt = "0.13"
 ldap3_server = "*"
+lldap_app = { path = "app" }
+lldap_model = { path = "model" }
 log = "*"
 serde = "*"
-sqlx = { version = "0.5", features = [ "runtime-actix-native-tls", "any", "sqlite", "mysql", "postgres", "macros" , "chrono"] }
+serde_json = "1"
+sha2 = "0.9"
 thiserror = "*"
+time = "0.2"
 tokio = { version = "1.2.0", features = ["full"] }
 tokio-util = "0.6.3"
 tracing = "*"
 tracing-actix-web = "0.3.0-beta.2"
 tracing-log = "*"
 tracing-subscriber = "*"
-async-trait = "0.1.48"
-sea-query = { version = "0.9.4", features = [ "with-chrono" ] }
-lldap_model = { path = "model" }
-lldap_app = { path = "app" }
-serde_json = "1.0.64"
-jwt = "0.13.0"
-hmac = "0.10"
-sha2 = "0.9.5"
-time = "0.2.26"
+
+[dependencies.sqlx]
+version = "0.5"
+features = [
+  "any",
+  "chrono",
+  "macros",
+  "mysql",
+  "postgres",
+  "runtime-actix-native-tls",
+  "sqlite",
+]
+
+[dependencies.sea-query]
+version = "0.9.4"
+features = ["with-chrono"]
 
 [dependencies.figment]
-features = ["toml", "env"]
+features = ["env", "toml"]
 version = "*"
 
 [dev-dependencies]
