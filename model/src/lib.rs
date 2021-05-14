@@ -33,6 +33,19 @@ pub struct User {
     pub creation_date: chrono::NaiveDateTime,
 }
 
+impl Default for User {
+    fn default() -> Self {
+        User {
+            user_id: String::new(),
+            email: String::new(),
+            display_name: String::new(),
+            first_name: String::new(),
+            last_name: String::new(),
+            creation_date: chrono::NaiveDateTime::from_timestamp(0, 0),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Group {
     pub display_name: String,
