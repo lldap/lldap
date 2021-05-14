@@ -192,7 +192,9 @@ where
             .configure(api_config::<Backend>),
     )
     // Serve the /pkg path with the compiled WASM app.
-    .service(Files::new("/pkg", "./app/pkg"));
+    .service(Files::new("/pkg", "./app/pkg"))
+    // Default to serve index.html for unknown routes, to support routing.
+    .service(web::scope("/").route("/.*", web::get().to(index)));
 }
 
 struct AppState<Backend>
