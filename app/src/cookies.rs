@@ -1,0 +1,52 @@
+use anyhow::{anyhow, Result};
+use chrono::prelude::*;
+use wasm_bindgen::JsCast;
+use web_sys::HtmlDocument;
+
+fn get_document() -> Result<HtmlDocument> {
+    web_sys::window()
+        .map(|w| w.document())
+        .flatten()
+        .ok_or(anyhow!("Could not get window document"))
+        .and_then(|d| {
+            d.dyn_into::<web_sys::HtmlDocument>()
+                .map_err(|_| anyhow!("Document is not an HTMLDocument"))
+        })
+}
+
+pub fn set_cookie(cookie_name: &str, value: &str, expiration: &DateTime<Utc>) -> Result<()> {
+    let doc = web_sys::window()
+        .map(|w| w.document())
+        .flatten()
+        .ok_or(anyhow!("Could not get window document"))
+        .and_then(|d| {
+            d.dyn_into::<web_sys::HtmlDocument>()
+                .map_err(|_| anyhow!("Document is not an HTMLDocument"))
+        })?;
+    doc.set_cookie(&format!("{}={};expires={}", cookie_name, value, expiration))
+        .map_err(|_| anyhow!("Could not set cookie"))
+}
+
+pub fn get_cookie(cookie_name: &str) -> Result<Option<String>> {
+    let cookies = get_document()?
+        .cookie()
+        .map_err(|_| anyhow!("Could not access cookies"))?;
+    Ok(cookies
+        .split(";")
+        .filter_map(|c| c.split_once('='))
+        .find_map(|(name, value)| {
+            if name == cookie_name {
+                Some(value.to_string())
+            } else {
+                None
+            }
+        }))
+}
+
+pub fn delete_cookie(cookie_name: &str) -> Result<()> {
+    if let Some(_) = get_cookie(cookie_name)? {
+        set_cookie(cookie_name, "", &Utc.ymd(1970, 1, 1).and_hms(0, 0, 0))
+    } else {
+        Ok(())
+    }
+}

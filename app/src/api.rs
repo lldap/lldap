@@ -1,6 +1,6 @@
+use crate::cookies::set_cookie;
 use anyhow::{anyhow, Result};
 use lldap_model::*;
-use wasm_bindgen::JsCast;
 
 use yew::callback::Callback;
 use yew::format::Json;
@@ -30,19 +30,17 @@ impl HostService {
         let url = "/api/users";
         let handler = move |response: Response<Result<String>>| {
             let (meta, maybe_data) = response.into_parts();
-            match maybe_data {
-                Ok(data) => {
+            let message = maybe_data
+                .map_err(|e| anyhow!("Could not fetch: {}", e))
+                .and_then(|data| {
                     if meta.status.is_success() {
-                        callback.emit(
-                            serde_json::from_str(&data)
-                                .map_err(|e| anyhow!("Could not parse response: {}", e)),
-                        )
+                        serde_json::from_str(&data)
+                            .map_err(|e| anyhow!("Could not parse response: {}", e))
                     } else {
-                        callback.emit(Err(anyhow!("[{}]: {}", meta.status, data)))
+                        Err(anyhow!("[{}]: {}", meta.status, data))
                     }
-                }
-                Err(e) => callback.emit(Err(anyhow!("Could not fetch: {}", e))),
-            }
+                });
+            callback.emit(message)
         };
         let request = Request::post(url)
             .header("Content-Type", "application/json")
@@ -57,43 +55,28 @@ impl HostService {
         let url = "/api/authorize";
         let handler = move |response: Response<Result<String>>| {
             let (meta, maybe_data) = response.into_parts();
-            match maybe_data {
-                Ok(data) => {
+            let message = maybe_data
+                .map_err(|e| anyhow!("Could not reach authentication server: {}", e))
+                .and_then(|data| {
                     if meta.status.is_success() {
-                        match get_claims_from_jwt(&data) {
-                            Ok(jwt_claims) => {
-                                let document = web_sys::window()
-                                    .unwrap()
-                                    .document()
-                                    .unwrap()
-                                    .dyn_into::<web_sys::HtmlDocument>()
-                                    .unwrap();
-                                document
-                                    .set_cookie(&format!(
-                                        "user_id={}; expires={}",
-                                        &jwt_claims.user, &jwt_claims.exp
-                                    ))
-                                    .unwrap();
-                                callback.emit(Ok(jwt_claims.user.clone()))
-                            }
-                            Err(e) => {
-                                callback.emit(Err(anyhow!("Could not parse response: {}", e)))
-                            }
-                        }
+                        get_claims_from_jwt(&data)
+                            .map_err(|e| anyhow!("Could not parse response: {}", e))
+                            .and_then(|jwt_claims| {
+                                set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
+                                    .map(|_| jwt_claims.user.clone())
+                                    .map_err(|e| anyhow!("Error clearing cookie: {}", e))
+                            })
                     } else if meta.status == 401 {
-                        callback.emit(Err(anyhow!("Invalid username or password")))
+                        Err(anyhow!("Invalid username or password"))
                     } else {
-                        callback.emit(Err(anyhow!(
+                        Err(anyhow!(
                             "Could not authenticate: [{}]: {}",
                             meta.status,
                             data
-                        )))
+                        ))
                     }
-                }
-                Err(e) => {
-                    callback.emit(Err(anyhow!("Could not reach authentication server: {}", e)))
-                }
-            }
+                });
+            callback.emit(message)
         };
         let request = Request::post(url)
             .header("Content-Type", "application/json")
