@@ -3,7 +3,8 @@ use anyhow::{anyhow, Result};
 use lldap_model::*;
 use wasm_bindgen::JsCast;
 use yew::prelude::*;
-use yew::services::fetch::FetchTask;
+use yew::services::{fetch::FetchTask, ConsoleService};
+use yew::FocusEvent;
 
 pub struct LoginForm {
     link: ComponentLink<Self>,
@@ -22,6 +23,13 @@ pub struct Props {
 pub enum Msg {
     Submit,
     AuthenticationResponse(Result<String>),
+}
+
+impl LoginForm {
+    fn set_error(&mut self, error: anyhow::Error) {
+        ConsoleService::error(&error.to_string());
+        self.error = Some(error);
+    }
 }
 
 impl Component for LoginForm {
@@ -63,14 +71,14 @@ impl Component for LoginForm {
                     self.link.callback(Msg::AuthenticationResponse),
                 ) {
                     Ok(task) => self._task = Some(task),
-                    Err(e) => self.error = Some(e),
+                    Err(e) => self.set_error(e),
                 }
             }
             Msg::AuthenticationResponse(Ok(user_id)) => {
                 self.on_logged_in.emit(user_id);
             }
             Msg::AuthenticationResponse(Err(e)) => {
-                self.error = Some(anyhow!("Could not log in: {}", e));
+                self.set_error(anyhow!("Could not log in: {}", e));
             }
         };
         true
@@ -82,7 +90,7 @@ impl Component for LoginForm {
 
     fn view(&self) -> Html {
         html! {
-            <form ref=self.node_ref.clone()>
+            <form ref=self.node_ref.clone() onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::Submit })>
                 <div>
                     <label for="username">{"User name:"}</label>
                     <input type="text" id="username" />
@@ -91,7 +99,7 @@ impl Component for LoginForm {
                     <label for="password">{"Password:"}</label>
                     <input type="password" id="password" />
                 </div>
-                <button type="button" onclick=self.link.callback(|_| { Msg::Submit })>{"Login"}</button>
+                <button type="submit">{"Login"}</button>
                 <div>
                 { if let Some(e) = &self.error {
                     html! { e.to_string() }
