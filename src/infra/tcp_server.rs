@@ -5,7 +5,7 @@ use actix_http::HttpServiceBuilder;
 use actix_server::ServerBuilder;
 use actix_service::{map_config, Service};
 use actix_web::{
-    cookie::Cookie,
+    cookie::{Cookie, SameSite},
     dev::{AppConfig, ServiceRequest},
     error::{ErrorBadRequest, ErrorUnauthorized},
     web, App, HttpRequest, HttpResponse,
@@ -97,6 +97,7 @@ where
                             .max_age(1.days())
                             .path("/api")
                             .http_only(true)
+                            .same_site(SameSite::Strict)
                             .finish(),
                     )
                     .body(token.as_str().to_owned()),
