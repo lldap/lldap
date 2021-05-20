@@ -46,13 +46,17 @@ async fn index(req: HttpRequest) -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open(path)?)
 }
 
-fn error_to_http_response<T>(error: DomainError) -> ApiResult<T> {
-    ApiResult::Right(
+fn error_to_http_response(error: DomainError) -> HttpResponse {
         match error {
             DomainError::AuthenticationError(_) => HttpResponse::Unauthorized(),
             DomainError::DatabaseError(_) => HttpResponse::InternalServerError(),
         }
-        .body(error.to_string()),
+        .body(error.to_string())
+}
+
+fn error_to_api_response<T>(error: DomainError) -> ApiResult<T> {
+    ApiResult::Right(
+        error_to_http_response(error)
     )
 }
 
@@ -70,7 +74,7 @@ where
         .list_users(req)
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
-        .unwrap_or_else(error_to_http_response)
+        .unwrap_or_else(error_to_api_response)
 }
 
 fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<String>) -> SignedToken {
@@ -90,7 +94,7 @@ fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<String>) -> Sign
 async fn get_refresh<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
-) -> ApiResult<String>
+) -> HttpResponse
 where
     Backend: TcpBackendHandler + 'static,
 {
@@ -98,11 +102,11 @@ where
     let jwt_key = &data.jwt_key;
     let (refresh_token, user) = match request.cookie("refresh_token") {
         None => {
-            return ApiResult::Right(HttpResponse::Unauthorized().body("Missing refresh token"))
+            return HttpResponse::Unauthorized().body("Missing refresh token")
         }
         Some(t) => match t.value().split_once("+") {
             None => {
-                return ApiResult::Right(HttpResponse::Unauthorized().body("Invalid refresh token"))
+                return HttpResponse::Unauthorized().body("Invalid refresh token")
             }
             Some((t, u)) => (t.to_string(), u.to_string()),
         },
@@ -123,7 +127,6 @@ where
     }
     .map(|groups| create_jwt(jwt_key, user.to_string(), groups))
     .map(|token| {
-        ApiResult::Right(
             HttpResponse::Ok()
                 .cookie(
                     Cookie::build("token", token.as_str())
@@ -133,8 +136,7 @@ where
                         .same_site(SameSite::Strict)
                         .finish(),
                 )
-                .body(token.as_str().to_owned()),
-        )
+                .body(token.as_str().to_owned())
     })
     .unwrap_or_else(error_to_http_response)
 }
@@ -142,7 +144,7 @@ where
 async fn post_authorize<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<BindRequest>,
-) -> ApiResult<String>
+) -> HttpResponse
 where
     Backend: TcpBackendHandler + 'static,
 {
@@ -163,7 +165,6 @@ where
         .await
         .map(|(groups, (refresh_token, max_age))| {
             let token = create_jwt(&data.jwt_key, request.name.clone(), groups);
-            ApiResult::Right(
                 HttpResponse::Ok()
                     .cookie(
                         Cookie::build("token", token.as_str())
@@ -181,8 +182,7 @@ where
                             .same_site(SameSite::Strict)
                             .finish(),
                     )
-                    .body(token.as_str().to_owned()),
-            )
+                    .body(token.as_str().to_owned())
         })
         .unwrap_or_else(error_to_http_response)
 }
