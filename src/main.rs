@@ -20,8 +20,9 @@ async fn run_server(config: Configuration) -> Result<()> {
         backend_handler.clone(),
         actix_server::Server::build(),
     )?;
+    infra::jwt_sql_tables::init_table(&sql_pool).await?;
     let server_builder =
-        infra::tcp_server::build_tcp_server(&config, backend_handler, server_builder)?;
+        infra::tcp_server::build_tcp_server(&config, backend_handler, server_builder).await?;
     server_builder.workers(1).run().await?;
     Ok(())
 }

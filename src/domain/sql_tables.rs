@@ -3,6 +3,7 @@ use sea_query::*;
 pub type Pool = sqlx::sqlite::SqlitePool;
 pub type PoolOptions = sqlx::sqlite::SqlitePoolOptions;
 pub type DbRow = sqlx::sqlite::SqliteRow;
+pub type DbQueryBuilder = SqliteQueryBuilder;
 
 #[derive(Iden)]
 pub enum Users {
@@ -60,7 +61,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
             .col(ColumnDef::new(Users::Password).string_len(255).not_null())
             .col(ColumnDef::new(Users::TotpSecret).string_len(64))
             .col(ColumnDef::new(Users::MfaType).string_len(64))
-            .to_string(SqliteQueryBuilder),
+            .to_string(DbQueryBuilder {}),
     )
     .execute(pool)
     .await?;
@@ -79,7 +80,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
                     .string_len(255)
                     .not_null(),
             )
-            .to_string(SqliteQueryBuilder),
+            .to_string(DbQueryBuilder {}),
     )
     .execute(pool)
     .await?;
@@ -109,7 +110,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
                     .on_delete(ForeignKeyAction::Cascade)
                     .on_update(ForeignKeyAction::Cascade),
             )
-            .to_string(SqliteQueryBuilder),
+            .to_string(DbQueryBuilder {}),
     )
     .execute(pool)
     .await?;

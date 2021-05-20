@@ -55,6 +55,7 @@ pub struct Group {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JWTClaims {
     pub exp: DateTime<Utc>,
+    pub iat: DateTime<Utc>,
     pub user: String,
     pub groups: HashSet<String>,
 }

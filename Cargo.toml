@@ -43,6 +43,7 @@ tracing = "*"
 tracing-actix-web = "0.3.0-beta.2"
 tracing-log = "*"
 tracing-subscriber = "*"
+rand = { version = "0.8", features = ["small_rng", "getrandom"] }
 
 [dependencies.sqlx]
 version = "0.5"
