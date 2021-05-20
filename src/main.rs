@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
-use crate::domain::sql_tables::PoolOptions;
-use crate::infra::configuration::Configuration;
+use crate::{
+    domain::{sql_backend_handler::SqlBackendHandler, sql_tables::PoolOptions},
+    infra::configuration::Configuration,
+};
 use anyhow::Result;
 use futures_util::TryFutureExt;
 use log::*;
@@ -14,7 +16,7 @@ async fn run_server(config: Configuration) -> Result<()> {
         .connect(&config.database_url)
         .await?;
     domain::sql_tables::init_table(&sql_pool).await?;
-    let backend_handler = domain::handler::SqlBackendHandler::new(config.clone(), sql_pool.clone());
+    let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,
         backend_handler.clone(),
