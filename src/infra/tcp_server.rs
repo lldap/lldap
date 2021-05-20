@@ -262,8 +262,8 @@ fn http_config<Backend>(
         "/{filename:(index\\.html|main\\.js)?}",
         web::get().to(index),
     )
-    .service(web::resource("/api/authorize").route(web::post().to(post_authorize::<Backend>)))
-    .service(web::resource("/api/authorize/refresh").route(web::get().to(get_refresh::<Backend>)))
+    .service(web::resource("/auth").route(web::post().to(post_authorize::<Backend>)))
+    .service(web::resource("/auth/refresh").route(web::get().to(get_refresh::<Backend>)))
     // API endpoint.
     .service(
         web::scope("/api")

@@ -52,7 +52,7 @@ impl HostService {
         request: BindRequest,
         callback: Callback<Result<String>>,
     ) -> Result<FetchTask> {
-        let url = "/api/authorize";
+        let url = "/auth";
         let handler = move |response: Response<Result<String>>| {
             let (meta, maybe_data) = response.into_parts();
             let message = maybe_data
