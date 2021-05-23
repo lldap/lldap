@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use async_trait::async_trait;
+use std::collections::HashSet;
 
 pub type DomainError = crate::domain::error::Error;
 pub type DomainResult<T> = crate::domain::error::Result<T>;
@@ -9,6 +9,8 @@ pub trait TcpBackendHandler {
     async fn get_jwt_blacklist(&self) -> anyhow::Result<HashSet<u64>>;
     async fn create_refresh_token(&self, user: &str) -> DomainResult<(String, chrono::Duration)>;
     async fn check_token(&self, token: &str, user: &str) -> DomainResult<bool>;
+    async fn blacklist_jwts(&self, user: &str) -> DomainResult<HashSet<u64>>;
+    async fn delete_refresh_token(&self, token: &str) -> DomainResult<()>;
 }
 
 #[cfg(test)]
@@ -31,5 +33,7 @@ mockall::mock! {
         async fn get_jwt_blacklist(&self) -> anyhow::Result<HashSet<u64>>;
         async fn create_refresh_token(&self, user: &str) -> DomainResult<(String, chrono::Duration)>;
         async fn check_token(&self, token: &str, user: &str) -> DomainResult<bool>;
+        async fn blacklist_jwts(&self, user: &str) -> DomainResult<HashSet<u64>>;
+        async fn delete_refresh_token(&self, token: &str) -> DomainResult<()>;
     }
 }

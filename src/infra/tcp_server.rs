@@ -1,6 +1,6 @@
 use crate::{
     domain::handler::*,
-    infra::{auth_service, tcp_api, configuration::Configuration, tcp_backend_handler::*},
+    infra::{auth_service, configuration::Configuration, tcp_api, tcp_backend_handler::*},
 };
 use actix_files::{Files, NamedFile};
 use actix_http::HttpServiceBuilder;
@@ -13,6 +13,7 @@ use hmac::{Hmac, NewMac};
 use sha2::Sha512;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::RwLock;
 
 async fn index(req: HttpRequest) -> actix_web::Result<NamedFile> {
     let mut path = PathBuf::new();
@@ -41,7 +42,7 @@ fn http_config<Backend>(
     cfg.data(AppState::<Backend> {
         backend_handler,
         jwt_key: Hmac::new_varkey(&jwt_secret.as_bytes()).unwrap(),
-        jwt_blacklist,
+        jwt_blacklist: RwLock::new(jwt_blacklist),
     })
     // Serve index.html and main.js, and default to index.html.
     .route(
@@ -70,7 +71,7 @@ where
 {
     pub backend_handler: Backend,
     pub jwt_key: Hmac<Sha512>,
-    pub jwt_blacklist: HashSet<u64>,
+    pub jwt_blacklist: RwLock<HashSet<u64>>,
 }
 
 pub async fn build_tcp_server<Backend>(

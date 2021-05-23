@@ -13,11 +13,12 @@ pub enum JwtRefreshStorage {
 
 /// Contains the blacklisted JWT that haven't expired yet.
 #[derive(Iden)]
-pub enum JwtBlacklist {
+pub enum JwtStorage {
     Table,
     JwtHash,
     UserId,
     ExpiryDate,
+    Blacklisted,
 }
 
 /// This needs to be initialized after the domain tables are.
@@ -57,29 +58,35 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
 
     sqlx::query(
         &Table::create()
-            .table(JwtBlacklist::Table)
+            .table(JwtStorage::Table)
             .if_not_exists()
             .col(
-                ColumnDef::new(JwtBlacklist::JwtHash)
+                ColumnDef::new(JwtStorage::JwtHash)
                     .big_integer()
                     .not_null()
                     .primary_key(),
             )
             .col(
-                ColumnDef::new(JwtBlacklist::UserId)
+                ColumnDef::new(JwtStorage::UserId)
                     .string_len(255)
                     .not_null(),
             )
             .col(
-                ColumnDef::new(JwtBlacklist::ExpiryDate)
+                ColumnDef::new(JwtStorage::ExpiryDate)
                     .date_time()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(JwtStorage::Blacklisted)
+                    .boolean()
+                    .default(false)
                     .not_null(),
             )
             .foreign_key(
                 ForeignKey::create()
-                    .name("JwtBlacklistUserForeignKey")
-                    .table(JwtBlacklist::Table, Users::Table)
-                    .col(JwtBlacklist::UserId, Users::UserId)
+                    .name("JwtStorageUserForeignKey")
+                    .table(JwtStorage::Table, Users::Table)
+                    .col(JwtStorage::UserId, Users::UserId)
                     .on_delete(ForeignKeyAction::Cascade)
                     .on_update(ForeignKeyAction::Cascade),
             )

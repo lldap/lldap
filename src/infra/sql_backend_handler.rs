@@ -4,19 +4,21 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use sea_query::{Expr, Iden, Query, SimpleExpr};
 use sqlx::Row;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 
 #[async_trait]
 impl TcpBackendHandler for SqlBackendHandler {
     async fn get_jwt_blacklist(&self) -> anyhow::Result<HashSet<u64>> {
         use sqlx::Result;
         let query = Query::select()
-            .column(JwtBlacklist::JwtHash)
-            .from(JwtBlacklist::Table)
+            .column(JwtStorage::JwtHash)
+            .from(JwtStorage::Table)
             .to_string(DbQueryBuilder {});
 
         sqlx::query(&query)
-            .map(|row: DbRow| row.get::<i64, _>(&*JwtBlacklist::JwtHash.to_string()) as u64)
+            .map(|row: DbRow| row.get::<i64, _>(&*JwtStorage::JwtHash.to_string()) as u64)
             .fetch(&self.sql_pool)
             .collect::<Vec<sqlx::Result<u64>>>()
             .await
@@ -60,8 +62,6 @@ impl TcpBackendHandler for SqlBackendHandler {
     }
 
     async fn check_token(&self, token: &str, user: &str) -> Result<bool> {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
         let refresh_token_hash = {
             let mut s = DefaultHasher::new();
             token.hash(&mut s);
@@ -77,5 +77,41 @@ impl TcpBackendHandler for SqlBackendHandler {
             .fetch_optional(&self.sql_pool)
             .await?
             .is_some())
+    }
+    async fn blacklist_jwts(&self, user: &str) -> DomainResult<HashSet<u64>> {
+        use sqlx::Result;
+        let query = Query::select()
+            .column(JwtStorage::JwtHash)
+            .from(JwtStorage::Table)
+            .and_where(Expr::col(JwtStorage::UserId).eq(user))
+            .and_where(Expr::col(JwtStorage::Blacklisted).eq(true))
+            .to_string(DbQueryBuilder {});
+        let result = sqlx::query(&query)
+            .map(|row: DbRow| row.get::<i64, _>(&*JwtStorage::JwtHash.to_string()) as u64)
+            .fetch(&self.sql_pool)
+            .collect::<Vec<sqlx::Result<u64>>>()
+            .await
+            .into_iter()
+            .collect::<Result<HashSet<u64>>>();
+        let query = Query::update()
+            .table(JwtStorage::Table)
+            .values(vec![(JwtStorage::Blacklisted, true.into())])
+            .and_where(Expr::col(JwtStorage::UserId).eq(user))
+            .to_string(DbQueryBuilder {});
+        sqlx::query(&query).execute(&self.sql_pool).await?;
+        Ok(result?)
+    }
+    async fn delete_refresh_token(&self, token: &str) -> DomainResult<()> {
+        let refresh_token_hash = {
+            let mut s = DefaultHasher::new();
+            token.hash(&mut s);
+            s.finish()
+        };
+        let query = Query::delete()
+            .from_table(JwtRefreshStorage::Table)
+            .and_where(Expr::col(JwtRefreshStorage::RefreshTokenHash).eq(refresh_token_hash))
+            .to_string(DbQueryBuilder {});
+        sqlx::query(&query).execute(&self.sql_pool).await?;
+        Ok(())
     }
 }

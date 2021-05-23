@@ -1,24 +1,30 @@
-use crate::{domain::handler::*, infra::{tcp_backend_handler::*, tcp_server::{AppState, error_to_http_response}}};
+use crate::{
+    domain::handler::*,
+    infra::{
+        tcp_backend_handler::*,
+        tcp_server::{error_to_http_response, AppState},
+    },
+};
+use actix_web::{
+    cookie::{Cookie, SameSite},
+    dev::{Service, ServiceRequest, ServiceResponse, Transform},
+    error::{ErrorBadRequest, ErrorUnauthorized},
+    web, HttpRequest, HttpResponse,
+};
+use actix_web_httpauth::extractors::bearer::BearerAuth;
+use anyhow::Result;
+use chrono::prelude::*;
+use futures::future::{ok, Ready};
+use futures_util::{FutureExt, TryFutureExt};
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
 use log::*;
+use sha2::Sha512;
 use std::collections::{hash_map::DefaultHasher, HashSet};
 use std::hash::{Hash, Hasher};
-use time::ext::NumericalDuration;
-use actix_web_httpauth::extractors::bearer::BearerAuth;
-use anyhow::Result;
-use std::task::{Context, Poll};
 use std::pin::Pin;
-use actix_web::{
-    cookie::{Cookie, SameSite},
-    dev::{ServiceRequest, Service, Transform, ServiceResponse},
-    error::{ErrorBadRequest, ErrorUnauthorized},
-    web, HttpRequest, HttpResponse
-};
-use futures_util::{FutureExt, TryFutureExt};
-use futures::future::{ok, Ready};
-use chrono::prelude::*;
-use sha2::Sha512;
+use std::task::{Context, Poll};
+use time::ext::NumericalDuration;
 
 type Token<S> = jwt::Token<jwt::Header, JWTClaims, S>;
 type SignedToken = Token<jwt::token::Signed>;
@@ -37,6 +43,18 @@ fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<String>) -> Sign
     jwt::Token::new(header, claims).sign_with_key(key).unwrap()
 }
 
+fn get_refresh_token_from_cookie(
+    request: HttpRequest,
+) -> std::result::Result<(String, String), HttpResponse> {
+    match request.cookie("refresh_token") {
+        None => Err(HttpResponse::Unauthorized().body("Missing refresh token")),
+        Some(t) => match t.value().split_once("+") {
+            None => Err(HttpResponse::Unauthorized().body("Invalid refresh token")),
+            Some((t, u)) => Ok((t.to_string(), u.to_string())),
+        },
+    }
+}
+
 async fn get_refresh<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
@@ -46,18 +64,14 @@ where
 {
     let backend_handler = &data.backend_handler;
     let jwt_key = &data.jwt_key;
-    let (refresh_token, user) = match request.cookie("refresh_token") {
-        None => {
-            return HttpResponse::Unauthorized().body("Missing refresh token")
-        }
-        Some(t) => match t.value().split_once("+") {
-            None => {
-                return HttpResponse::Unauthorized().body("Invalid refresh token")
-            }
-            Some((t, u)) => (t.to_string(), u.to_string()),
-        },
+    let (refresh_token, user) = match get_refresh_token_from_cookie(request) {
+        Ok(t) => t,
+        Err(http_response) => return http_response,
     };
-    let res_found = data.backend_handler.check_token(&refresh_token, &user).await;
+    let res_found = data
+        .backend_handler
+        .check_token(&refresh_token, &user)
+        .await;
     // Async closures are not supported yet.
     match res_found {
         Ok(found) => {
@@ -73,18 +87,71 @@ where
     }
     .map(|groups| create_jwt(jwt_key, user.to_string(), groups))
     .map(|token| {
-            HttpResponse::Ok()
-                .cookie(
-                    Cookie::build("token", token.as_str())
-                        .max_age(1.days())
-                        .path("/api")
-                        .http_only(true)
-                        .same_site(SameSite::Strict)
-                        .finish(),
-                )
-                .body(token.as_str().to_owned())
+        HttpResponse::Ok()
+            .cookie(
+                Cookie::build("token", token.as_str())
+                    .max_age(1.days())
+                    .path("/api")
+                    .http_only(true)
+                    .same_site(SameSite::Strict)
+                    .finish(),
+            )
+            .body(token.as_str().to_owned())
     })
     .unwrap_or_else(error_to_http_response)
+}
+
+async fn get_logout<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: HttpRequest,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    let (refresh_token, user) = match get_refresh_token_from_cookie(request) {
+        Ok(t) => t,
+        Err(http_response) => return http_response,
+    };
+    if let Err(response) = data
+        .backend_handler
+        .delete_refresh_token(&refresh_token)
+        .map_err(error_to_http_response)
+        .await
+    {
+        return response;
+    };
+    match data
+        .backend_handler
+        .blacklist_jwts(&user)
+        .map_err(error_to_http_response)
+        .await
+    {
+        Ok(new_blacklisted_jwts) => {
+            let mut jwt_blacklist = data.jwt_blacklist.write().unwrap();
+            for jwt in new_blacklisted_jwts {
+                jwt_blacklist.insert(jwt);
+        }
+        },
+        Err(response) => return response,
+    };
+    HttpResponse::Ok()
+        .cookie(
+            Cookie::build("token", "")
+                .max_age(0.days())
+                .path("/api")
+                .http_only(true)
+                .same_site(SameSite::Strict)
+                .finish(),
+        )
+        .cookie(
+            Cookie::build("refresh_token", "")
+                .max_age(0.days())
+                .path("/api/authorize/refresh")
+                .http_only(true)
+                .same_site(SameSite::Strict)
+                .finish(),
+        )
+        .finish()
 }
 
 async fn post_authorize<Backend>(
@@ -111,24 +178,24 @@ where
         .await
         .map(|(groups, (refresh_token, max_age))| {
             let token = create_jwt(&data.jwt_key, request.name.clone(), groups);
-                HttpResponse::Ok()
-                    .cookie(
-                        Cookie::build("token", token.as_str())
-                            .max_age(1.days())
-                            .path("/api")
-                            .http_only(true)
-                            .same_site(SameSite::Strict)
-                            .finish(),
-                    )
-                    .cookie(
-                        Cookie::build("refresh_token", refresh_token + "+" + &request.name)
-                            .max_age(max_age.num_days().days())
-                            .path("/api/authorize/refresh")
-                            .http_only(true)
-                            .same_site(SameSite::Strict)
-                            .finish(),
-                    )
-                    .body(token.as_str().to_owned())
+            HttpResponse::Ok()
+                .cookie(
+                    Cookie::build("token", token.as_str())
+                        .max_age(1.days())
+                        .path("/api")
+                        .http_only(true)
+                        .same_site(SameSite::Strict)
+                        .finish(),
+                )
+                .cookie(
+                    Cookie::build("refresh_token", refresh_token + "+" + &request.name)
+                        .max_age(max_age.num_days().days())
+                        .path("/api/authorize/refresh")
+                        .http_only(true)
+                        .same_site(SameSite::Strict)
+                        .finish(),
+                )
+                .body(token.as_str().to_owned())
         })
         .unwrap_or_else(error_to_http_response)
 }
@@ -137,9 +204,9 @@ pub struct CookieToHeaderTranslatorFactory;
 
 impl<S, B> Transform<S, ServiceRequest> for CookieToHeaderTranslatorFactory
 where
-  S: Service<ServiceRequest, Response = ServiceResponse<B>, Error=actix_web::Error>,
-  S::Future: 'static,
-  B: 'static,
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error>,
+    S::Future: 'static,
+    B: 'static,
 {
     type Response = ServiceResponse<B>;
     type Error = actix_web::Error;
@@ -211,7 +278,7 @@ where
         credentials.token().hash(&mut s);
         s.finish()
     };
-    if state.jwt_blacklist.contains(&jwt_hash) {
+    if state.jwt_blacklist.read().unwrap().contains(&jwt_hash) {
         return Err(ErrorUnauthorized("JWT was logged out"));
     }
     let groups = &token.claims().groups;
@@ -225,13 +292,11 @@ where
     }
 }
 
-
-pub fn configure_server<Backend>(
-    cfg: &mut web::ServiceConfig,
-) where
+pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig)
+where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    cfg
-    .service(web::resource("").route(web::post().to(post_authorize::<Backend>)))
-    .service(web::resource("/refresh").route(web::get().to(get_refresh::<Backend>)));
+    cfg.service(web::resource("").route(web::post().to(post_authorize::<Backend>)))
+        .service(web::resource("/refresh").route(web::get().to(get_refresh::<Backend>)))
+        .service(web::resource("/logout").route(web::get().to(get_logout::<Backend>)));
 }

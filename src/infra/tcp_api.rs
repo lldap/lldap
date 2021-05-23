@@ -1,9 +1,11 @@
 use crate::{
     domain::handler::*,
-    infra::{tcp_server::{AppState, error_to_http_response}, tcp_backend_handler::*},
+    infra::{
+        tcp_backend_handler::*,
+        tcp_server::{error_to_http_response, AppState},
+    },
 };
 use actix_web::{web, HttpResponse};
-
 
 fn error_to_api_response<T>(error: DomainError) -> ApiResult<T> {
     ApiResult::Right(error_to_http_response(error))
@@ -54,12 +56,15 @@ mod tests {
     use super::*;
     use hmac::{Hmac, NewMac};
     use std::collections::HashSet;
+    use std::sync::RwLock;
 
-    fn get_data(handler: MockTestTcpBackendHandler) -> web::Data<AppState<MockTestTcpBackendHandler>> {
+    fn get_data(
+        handler: MockTestTcpBackendHandler,
+    ) -> web::Data<AppState<MockTestTcpBackendHandler>> {
         let app_state = AppState::<MockTestTcpBackendHandler> {
             backend_handler: handler,
             jwt_key: Hmac::new_varkey(b"jwt_secret").unwrap(),
-            jwt_blacklist: HashSet::new(),
+            jwt_blacklist: RwLock::new(HashSet::new()),
         };
         web::Data::<AppState<MockTestTcpBackendHandler>>::new(app_state)
     }
