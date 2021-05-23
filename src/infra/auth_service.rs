@@ -108,7 +108,7 @@ where
     .unwrap_or_else(error_to_http_response)
 }
 
-async fn get_logout<Backend>(
+async fn post_logout<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
 ) -> HttpResponse
@@ -153,7 +153,7 @@ where
         .cookie(
             Cookie::build("refresh_token", "")
                 .max_age(0.days())
-                .path("/api/authorize/refresh")
+                .path("/auth")
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -197,7 +197,7 @@ where
                 .cookie(
                     Cookie::build("refresh_token", refresh_token + "+" + &request.name)
                         .max_age(max_age.num_days().days())
-                        .path("/api/authorize/refresh")
+                        .path("/auth")
                         .http_only(true)
                         .same_site(SameSite::Strict)
                         .finish(),
@@ -305,5 +305,5 @@ where
 {
     cfg.service(web::resource("").route(web::post().to(post_authorize::<Backend>)))
         .service(web::resource("/refresh").route(web::get().to(get_refresh::<Backend>)))
-        .service(web::resource("/logout").route(web::get().to(get_logout::<Backend>)));
+        .service(web::resource("/logout").route(web::post().to(post_logout::<Backend>)));
 }
