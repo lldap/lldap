@@ -45,12 +45,19 @@ fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<String>) -> Sign
 
 fn get_refresh_token_from_cookie(
     request: HttpRequest,
-) -> std::result::Result<(String, String), HttpResponse> {
+) -> std::result::Result<(u64, String), HttpResponse> {
     match request.cookie("refresh_token") {
         None => Err(HttpResponse::Unauthorized().body("Missing refresh token")),
         Some(t) => match t.value().split_once("+") {
             None => Err(HttpResponse::Unauthorized().body("Invalid refresh token")),
-            Some((t, u)) => Ok((t.to_string(), u.to_string())),
+            Some((token, u)) => {
+                let refresh_token_hash = {
+                    let mut s = DefaultHasher::new();
+                    token.hash(&mut s);
+                    s.finish()
+                };
+                Ok((refresh_token_hash, u.to_string()))
+            }
         },
     }
 }
@@ -64,13 +71,13 @@ where
 {
     let backend_handler = &data.backend_handler;
     let jwt_key = &data.jwt_key;
-    let (refresh_token, user) = match get_refresh_token_from_cookie(request) {
+    let (refresh_token_hash, user) = match get_refresh_token_from_cookie(request) {
         Ok(t) => t,
         Err(http_response) => return http_response,
     };
     let res_found = data
         .backend_handler
-        .check_token(&refresh_token, &user)
+        .check_token(refresh_token_hash, &user)
         .await;
     // Async closures are not supported yet.
     match res_found {
@@ -108,13 +115,13 @@ async fn get_logout<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    let (refresh_token, user) = match get_refresh_token_from_cookie(request) {
+    let (refresh_token_hash, user) = match get_refresh_token_from_cookie(request) {
         Ok(t) => t,
         Err(http_response) => return http_response,
     };
     if let Err(response) = data
         .backend_handler
-        .delete_refresh_token(&refresh_token)
+        .delete_refresh_token(refresh_token_hash)
         .map_err(error_to_http_response)
         .await
     {
@@ -130,8 +137,8 @@ where
             let mut jwt_blacklist = data.jwt_blacklist.write().unwrap();
             for jwt in new_blacklisted_jwts {
                 jwt_blacklist.insert(jwt);
+            }
         }
-        },
         Err(response) => return response,
     };
     HttpResponse::Ok()

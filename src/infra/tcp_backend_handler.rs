@@ -8,9 +8,9 @@ pub type DomainResult<T> = crate::domain::error::Result<T>;
 pub trait TcpBackendHandler {
     async fn get_jwt_blacklist(&self) -> anyhow::Result<HashSet<u64>>;
     async fn create_refresh_token(&self, user: &str) -> DomainResult<(String, chrono::Duration)>;
-    async fn check_token(&self, token: &str, user: &str) -> DomainResult<bool>;
+    async fn check_token(&self, refresh_token_hash: u64, user: &str) -> DomainResult<bool>;
     async fn blacklist_jwts(&self, user: &str) -> DomainResult<HashSet<u64>>;
-    async fn delete_refresh_token(&self, token: &str) -> DomainResult<()>;
+    async fn delete_refresh_token(&self, refresh_token_hash: u64) -> DomainResult<()>;
 }
 
 #[cfg(test)]
@@ -32,8 +32,8 @@ mockall::mock! {
     impl TcpBackendHandler for TestTcpBackendHandler {
         async fn get_jwt_blacklist(&self) -> anyhow::Result<HashSet<u64>>;
         async fn create_refresh_token(&self, user: &str) -> DomainResult<(String, chrono::Duration)>;
-        async fn check_token(&self, token: &str, user: &str) -> DomainResult<bool>;
+        async fn check_token(&self, refresh_token_hash: u64, user: &str) -> DomainResult<bool>;
         async fn blacklist_jwts(&self, user: &str) -> DomainResult<HashSet<u64>>;
-        async fn delete_refresh_token(&self, token: &str) -> DomainResult<()>;
+        async fn delete_refresh_token(&self, refresh_token_hash: u64) -> DomainResult<()>;
     }
 }

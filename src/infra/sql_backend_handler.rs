@@ -4,9 +4,7 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use sea_query::{Expr, Iden, Query, SimpleExpr};
 use sqlx::Row;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
-use std::hash::{Hash, Hasher};
 
 #[async_trait]
 impl TcpBackendHandler for SqlBackendHandler {
@@ -61,12 +59,7 @@ impl TcpBackendHandler for SqlBackendHandler {
         Ok((refresh_token, duration))
     }
 
-    async fn check_token(&self, token: &str, user: &str) -> Result<bool> {
-        let refresh_token_hash = {
-            let mut s = DefaultHasher::new();
-            token.hash(&mut s);
-            s.finish()
-        };
+    async fn check_token(&self, refresh_token_hash: u64, user: &str) -> Result<bool> {
         let query = Query::select()
             .expr(SimpleExpr::Value(1.into()))
             .from(JwtRefreshStorage::Table)
@@ -101,12 +94,7 @@ impl TcpBackendHandler for SqlBackendHandler {
         sqlx::query(&query).execute(&self.sql_pool).await?;
         Ok(result?)
     }
-    async fn delete_refresh_token(&self, token: &str) -> DomainResult<()> {
-        let refresh_token_hash = {
-            let mut s = DefaultHasher::new();
-            token.hash(&mut s);
-            s.finish()
-        };
+    async fn delete_refresh_token(&self, refresh_token_hash: u64) -> DomainResult<()> {
         let query = Query::delete()
             .from_table(JwtRefreshStorage::Table)
             .and_where(Expr::col(JwtRefreshStorage::RefreshTokenHash).eq(refresh_token_hash))
