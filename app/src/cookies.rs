@@ -23,8 +23,11 @@ pub fn set_cookie(cookie_name: &str, value: &str, expiration: &DateTime<Utc>) ->
             d.dyn_into::<web_sys::HtmlDocument>()
                 .map_err(|_| anyhow!("Document is not an HTMLDocument"))
         })?;
-    doc.set_cookie(&format!("{}={};expires={};sameSite=Strict", cookie_name, value, expiration))
-        .map_err(|_| anyhow!("Could not set cookie"))
+    doc.set_cookie(&format!(
+        "{}={};expires={};sameSite=Strict",
+        cookie_name, value, expiration
+    ))
+    .map_err(|_| anyhow!("Could not set cookie"))
 }
 
 pub fn get_cookie(cookie_name: &str) -> Result<Option<String>> {

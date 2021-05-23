@@ -1,10 +1,13 @@
-use crate::cookies::delete_cookie;
+use crate::{api::HostService, cookies::delete_cookie};
+use anyhow::Result;
 use yew::prelude::*;
-use yew::services::ConsoleService;
+use yew::services::{fetch::FetchTask, ConsoleService};
 
 pub struct LogoutButton {
     link: ComponentLink<Self>,
     on_logged_out: Callback<()>,
+    // Used to keep the request alive long enough.
+    _task: Option<FetchTask>,
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -13,7 +16,8 @@ pub struct Props {
 }
 
 pub enum Msg {
-    Logout,
+    LogoutRequested,
+    LogoutCompleted(Result<()>),
 }
 
 impl Component for LogoutButton {
@@ -24,21 +28,34 @@ impl Component for LogoutButton {
         LogoutButton {
             link: link.clone(),
             on_logged_out: props.on_logged_out,
+            _task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
-            Msg::Logout => match delete_cookie("user_id") {
-                Err(e) => {
+            Msg::LogoutRequested => {
+                match HostService::logout(self.link.callback(Msg::LogoutCompleted)) {
+                    Ok(task) => self._task = Some(task),
+                    Err(e) => ConsoleService::error(&e.to_string()),
+                };
+                false
+            }
+            Msg::LogoutCompleted(res) => {
+                if let Err(e) = res {
                     ConsoleService::error(&e.to_string());
-                    false
                 }
-                Ok(()) => {
-                    self.on_logged_out.emit(());
-                    true
+                match delete_cookie("user_id") {
+                    Err(e) => {
+                        ConsoleService::error(&e.to_string());
+                        false
+                    }
+                    Ok(()) => {
+                        self.on_logged_out.emit(());
+                        true
+                    }
                 }
-            },
+            }
         }
     }
 
@@ -48,7 +65,7 @@ impl Component for LogoutButton {
 
     fn view(&self) -> Html {
         html! {
-            <button onclick=self.link.callback(|_| { Msg::Logout })>{"Logout"}</button>
+            <button onclick=self.link.callback(|_| { Msg::LogoutRequested })>{"Logout"}</button>
         }
     }
 }

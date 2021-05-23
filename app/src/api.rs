@@ -83,4 +83,23 @@ impl HostService {
             .body(Json(&request))?;
         FetchService::fetch_with_options(request, get_default_options(), handler.into())
     }
+
+    pub fn logout(callback: Callback<Result<()>>) -> Result<FetchTask> {
+        let url = "/auth/logout";
+        let handler = move |response: Response<Result<String>>| {
+            let (meta, maybe_data) = response.into_parts();
+            let message = maybe_data
+                .map_err(|e| anyhow!("Could not reach authentication server: {}", e))
+                .and_then(|data| {
+                    if meta.status.is_success() {
+                        Ok(())
+                    } else {
+                        Err(anyhow!("Could not logout: [{}]: {}", meta.status, data))
+                    }
+                });
+            callback.emit(message)
+        };
+        let request = Request::post(url).body(yew::format::Nothing)?;
+        FetchService::fetch_with_options(request, get_default_options(), handler.into())
+    }
 }
