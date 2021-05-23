@@ -4,7 +4,7 @@ use thiserror::Error;
 pub enum Error {
     #[error("Authentication error for `{0}`")]
     AuthenticationError(String),
-    #[error("Database error")]
+    #[error("Database error: `{0}`")]
     DatabaseError(#[from] sqlx::Error),
 }
 
