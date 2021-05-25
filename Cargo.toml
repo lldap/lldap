@@ -23,6 +23,7 @@ anyhow = "*"
 async-trait = "0.1"
 chrono = { version = "*", features = [ "serde" ]}
 clap = "3.0.0-beta.2"
+cron = "*"
 futures = "*"
 futures-util = "*"
 hmac = "0.10"

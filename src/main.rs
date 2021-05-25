@@ -1,8 +1,9 @@
 #![forbid(unsafe_code)]
 use crate::{
     domain::{sql_backend_handler::SqlBackendHandler, sql_tables::PoolOptions},
-    infra::configuration::Configuration,
+    infra::{configuration::Configuration, db_cleaner::Scheduler},
 };
+use actix::Actor;
 use anyhow::Result;
 use futures_util::TryFutureExt;
 use log::*;
@@ -25,6 +26,9 @@ async fn run_server(config: Configuration) -> Result<()> {
     infra::jwt_sql_tables::init_table(&sql_pool).await?;
     let server_builder =
         infra::tcp_server::build_tcp_server(&config, backend_handler, server_builder).await?;
+    // Run every hour.
+    let scheduler = Scheduler::new("0 0 * * * * *", sql_pool);
+    scheduler.start();
     server_builder.workers(1).run().await?;
     Ok(())
 }
