@@ -30,7 +30,6 @@ hmac = "0.10"
 http = "*"
 jwt = "0.13"
 ldap3_server = "*"
-lldap_app = { path = "app" }
 lldap_model = { path = "model" }
 log = "*"
 serde = "*"
