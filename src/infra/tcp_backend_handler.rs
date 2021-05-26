@@ -29,6 +29,7 @@ mockall::mock! {
         async fn get_user_groups(&self, user: String) -> DomainResult<HashSet<String>>;
         async fn create_user(&self, request: CreateUserRequest) -> DomainResult<()>;
         async fn create_group(&self, request: CreateGroupRequest) -> DomainResult<i32>;
+        async fn add_user_to_group(&self, request: AddUserToGroupRequest) -> DomainResult<()>;
     }
     #[async_trait]
     impl TcpBackendHandler for TestTcpBackendHandler {
