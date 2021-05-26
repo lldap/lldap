@@ -10,6 +10,7 @@ pub trait BackendHandler: Clone + Send {
     async fn list_users(&self, request: ListUsersRequest) -> Result<Vec<User>>;
     async fn list_groups(&self) -> Result<Vec<Group>>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
+    async fn create_group(&self, request: CreateGroupRequest) -> Result<i32>;
     async fn get_user_groups(&self, user: String) -> Result<HashSet<String>>;
 }
 
@@ -25,6 +26,7 @@ mockall::mock! {
         async fn list_users(&self, request: ListUsersRequest) -> Result<Vec<User>>;
         async fn list_groups(&self) -> Result<Vec<Group>>;
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
+        async fn create_group(&self, request: CreateGroupRequest) -> Result<i32>;
         async fn get_user_groups(&self, user: String) -> Result<HashSet<String>>;
     }
 }

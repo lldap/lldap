@@ -242,6 +242,22 @@ impl BackendHandler for SqlBackendHandler {
         sqlx::query(&query).execute(&self.sql_pool).await?;
         Ok(())
     }
+    async fn create_group(&self, request: CreateGroupRequest) -> Result<i32> {
+        let query = Query::insert()
+            .into_table(Groups::Table)
+            .columns(vec![Groups::DisplayName])
+            .values_panic(vec![request.display_name.as_str().into()])
+            .to_string(DbQueryBuilder {});
+        sqlx::query(&query).execute(&self.sql_pool).await?;
+        let query = Query::select()
+            .column(Groups::GroupId)
+            .from(Groups::Table)
+            .and_where(Expr::col(Groups::DisplayName).eq(request.display_name.as_str()))
+            .to_string(DbQueryBuilder {});
+        let row = sqlx::query(&query).fetch_one(&self.sql_pool).await?;
+        Ok(
+            row.get::<i32, _>(&*Groups::GroupId.to_string()))
+    }
 }
 
 #[cfg(test)]
@@ -271,16 +287,11 @@ mod tests {
             .unwrap();
     }
 
-    async fn insert_group(sql_pool: &Pool, id: u32, name: &str) {
-        let query = Query::insert()
-            .into_table(Groups::Table)
-            .columns(vec![Groups::GroupId, Groups::DisplayName])
-            .values_panic(vec![id.into(), name.into()])
-            .to_string(DbQueryBuilder {});
-        sqlx::query(&query).execute(sql_pool).await.unwrap();
+    async fn insert_group(handler: &SqlBackendHandler, name: &str) -> i32 {
+        handler.create_group(CreateGroupRequest{display_name: name.to_string()}).await.unwrap()
     }
 
-    async fn insert_membership(sql_pool: &Pool, group_id: u32, user_id: &str) {
+    async fn insert_membership(sql_pool: &Pool, group_id: i32, user_id: &str) {
         let query = Query::insert()
             .into_table(Memberships::Table)
             .columns(vec![Memberships::UserId, Memberships::GroupId])
@@ -424,12 +435,12 @@ mod tests {
         insert_user(&handler, "bob", "bob00").await;
         insert_user(&handler, "patrick", "pass").await;
         insert_user(&handler, "John", "Pa33w0rd!").await;
-        insert_group(&sql_pool, 1, "Best Group").await;
-        insert_group(&sql_pool, 2, "Worst Group").await;
-        insert_membership(&sql_pool, 1, "bob").await;
-        insert_membership(&sql_pool, 1, "patrick").await;
-        insert_membership(&sql_pool, 2, "patrick").await;
-        insert_membership(&sql_pool, 2, "John").await;
+        let group_1 = insert_group(&handler, "Best Group").await;
+        let group_2 = insert_group(&handler, "Worst Group").await;
+        insert_membership(&sql_pool, group_1, "bob").await;
+        insert_membership(&sql_pool, group_1, "patrick").await;
+        insert_membership(&sql_pool, group_2, "patrick").await;
+        insert_membership(&sql_pool, group_2, "John").await;
         assert_eq!(
             handler.list_groups().await.unwrap(),
             vec![
@@ -453,11 +464,11 @@ mod tests {
         insert_user(&handler, "bob", "bob00").await;
         insert_user(&handler, "patrick", "pass").await;
         insert_user(&handler, "John", "Pa33w0rd!").await;
-        insert_group(&sql_pool, 1, "Group1").await;
-        insert_group(&sql_pool, 2, "Group2").await;
-        insert_membership(&sql_pool, 1, "bob").await;
-        insert_membership(&sql_pool, 1, "patrick").await;
-        insert_membership(&sql_pool, 2, "patrick").await;
+        let group_1 = insert_group(&handler, "Group1").await;
+        let group_2 = insert_group(&handler, "Group2").await;
+        insert_membership(&sql_pool, group_1, "bob").await;
+        insert_membership(&sql_pool, group_1, "patrick").await;
+        insert_membership(&sql_pool, group_2, "patrick").await;
         let mut bob_groups = HashSet::new();
         bob_groups.insert("Group1".to_string());
         let mut patrick_groups = HashSet::new();

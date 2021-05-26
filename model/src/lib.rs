@@ -63,6 +63,11 @@ pub struct Group {
     pub users: Vec<String>,
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct CreateGroupRequest {
+    pub display_name: String,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JWTClaims {
     pub exp: DateTime<Utc>,

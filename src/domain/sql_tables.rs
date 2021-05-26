@@ -78,6 +78,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
             .col(
                 ColumnDef::new(Groups::DisplayName)
                     .string_len(255)
+                    .unique_key()
                     .not_null(),
             )
             .to_string(DbQueryBuilder {}),
