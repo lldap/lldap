@@ -27,6 +27,7 @@ mockall::mock! {
         async fn list_users(&self, request: ListUsersRequest) -> DomainResult<Vec<User>>;
         async fn list_groups(&self) -> DomainResult<Vec<Group>>;
         async fn get_user_groups(&self, user: String) -> DomainResult<HashSet<String>>;
+        async fn create_user(&self, request: CreateUserRequest) -> DomainResult<()>;
     }
     #[async_trait]
     impl TcpBackendHandler for TestTcpBackendHandler {

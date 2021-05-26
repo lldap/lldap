@@ -15,7 +15,7 @@ pub enum Users {
     LastName,
     Avatar,
     CreationDate,
-    Password,
+    PasswordHash,
     TotpSecret,
     MfaType,
 }
@@ -49,16 +49,16 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
                     .primary_key(),
             )
             .col(ColumnDef::new(Users::Email).string_len(255).not_null())
+            .col(ColumnDef::new(Users::DisplayName).string_len(255))
+            .col(ColumnDef::new(Users::FirstName).string_len(255))
+            .col(ColumnDef::new(Users::LastName).string_len(255))
+            .col(ColumnDef::new(Users::Avatar).binary())
+            .col(ColumnDef::new(Users::CreationDate).date_time().not_null())
             .col(
-                ColumnDef::new(Users::DisplayName)
+                ColumnDef::new(Users::PasswordHash)
                     .string_len(255)
                     .not_null(),
             )
-            .col(ColumnDef::new(Users::FirstName).string_len(255).not_null())
-            .col(ColumnDef::new(Users::LastName).string_len(255).not_null())
-            .col(ColumnDef::new(Users::Avatar).binary())
-            .col(ColumnDef::new(Users::CreationDate).date_time().not_null())
-            .col(ColumnDef::new(Users::Password).string_len(255).not_null())
             .col(ColumnDef::new(Users::TotpSecret).string_len(64))
             .col(ColumnDef::new(Users::MfaType).string_len(64))
             .to_string(DbQueryBuilder {}),
@@ -129,7 +129,7 @@ mod tests {
         let sql_pool = PoolOptions::new().connect("sqlite::memory:").await.unwrap();
         init_table(&sql_pool).await.unwrap();
         sqlx::query(r#"INSERT INTO users
-      (user_id, email, display_name, first_name, last_name, creation_date, password)
+      (user_id, email, display_name, first_name, last_name, creation_date, password_hash)
       VALUES ("bôb", "böb@bob.bob", "Bob Bobbersön", "Bob", "Bobberson", "1970-01-01 00:00:00", "bob00")"#).execute(&sql_pool).await.unwrap();
         let row =
             sqlx::query(r#"SELECT display_name, creation_date FROM users WHERE user_id = "bôb""#)

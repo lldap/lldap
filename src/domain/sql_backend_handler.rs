@@ -20,8 +20,31 @@ impl SqlBackendHandler {
     }
 }
 
-fn passwords_match(encrypted_password: &str, clear_password: &str) -> bool {
-    encrypted_password == clear_password
+fn get_password_config(pepper: &str) -> argon2::Config {
+    argon2::Config {
+        secret: pepper.as_bytes(),
+        ..Default::default()
+    }
+}
+
+fn hash_password(clear_password: &str, salt: &str, pepper: &str) -> String {
+    let config = get_password_config(pepper);
+    argon2::hash_encoded(clear_password.as_bytes(), salt.as_bytes(), &config)
+        .map_err(|e| anyhow::anyhow!("Error encoding password: {}", e))
+        .unwrap()
+}
+
+fn passwords_match(encrypted_password: &str, clear_password: &str, pepper: &str) -> bool {
+    argon2::verify_encoded_ext(
+        encrypted_password,
+        clear_password.as_bytes(),
+        pepper.as_bytes(),
+        /*additional_data=*/b"",
+    )
+    .unwrap_or_else(|e| {
+        log::error!("Error checking password: {}", e);
+        false
+    })
 }
 
 fn get_filter_expr(filter: RequestFilter) -> SimpleExpr {
@@ -57,14 +80,15 @@ impl BackendHandler for SqlBackendHandler {
             }
         }
         let query = Query::select()
-            .column(Users::Password)
+            .column(Users::PasswordHash)
             .from(Users::Table)
             .and_where(Expr::col(Users::UserId).eq(request.name.as_str()))
             .to_string(DbQueryBuilder {});
         if let Ok(row) = sqlx::query(&query).fetch_one(&self.sql_pool).await {
             if passwords_match(
+                &row.get::<String, _>(&*Users::PasswordHash.to_string()),
                 &request.password,
-                &row.get::<String, _>(&*Users::Password.to_string()),
+                &self.config.secret_pepper,
             ) {
                 return Ok(());
             } else {
@@ -182,6 +206,42 @@ impl BackendHandler for SqlBackendHandler {
             // Map the sqlx::Error into a domain::Error.
             .map_err(Error::DatabaseError)
     }
+
+    async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
+        use rand::{distributions::Alphanumeric, rngs::SmallRng, Rng, SeedableRng};
+        // TODO: Initialize the rng only once. Maybe Arc<Cell>?
+        let mut rng = SmallRng::from_entropy();
+        let salt: String = std::iter::repeat(())
+            .map(|()| rng.sample(Alphanumeric))
+            .map(char::from)
+            .take(32)
+            .collect();
+        // The salt is included in the password hash.
+        let password_hash = hash_password(&request.password, &salt, &self.config.secret_pepper);
+        let query = Query::insert()
+            .into_table(Users::Table)
+            .columns(vec![
+                Users::UserId,
+                Users::Email,
+                Users::DisplayName,
+                Users::FirstName,
+                Users::LastName,
+                Users::CreationDate,
+                Users::PasswordHash,
+            ])
+            .values_panic(vec![
+                request.user_id.into(),
+                request.email.into(),
+                request.display_name.map(Into::into).unwrap_or(Value::Null),
+                request.first_name.map(Into::into).unwrap_or(Value::Null),
+                request.last_name.map(Into::into).unwrap_or(Value::Null),
+                chrono::Utc::now().naive_utc().into(),
+                password_hash.into(),
+            ])
+            .to_string(DbQueryBuilder {});
+        sqlx::query(&query).execute(&self.sql_pool).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -199,23 +259,16 @@ mod tests {
         sql_pool
     }
 
-    async fn insert_user(sql_pool: &Pool, name: &str, pass: &str) {
-        let query = Query::insert()
-            .into_table(Users::Table)
-            .columns(vec![
-                Users::UserId,
-                Users::Email,
-                Users::CreationDate,
-                Users::Password,
-            ])
-            .values_panic(vec![
-                name.into(),
-                "bob@bob".into(),
-                chrono::NaiveDateTime::from_timestamp(0, 0).into(),
-                pass.into(),
-            ])
-            .to_string(DbQueryBuilder {});
-        sqlx::query(&query).execute(sql_pool).await.unwrap();
+    async fn insert_user(handler: &SqlBackendHandler, name: &str, pass: &str) {
+        handler
+            .create_user(CreateUserRequest {
+                user_id: name.to_string(),
+                email: "bob@bob.bob".to_string(),
+                password: pass.to_string(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
     }
 
     async fn insert_group(sql_pool: &Pool, id: u32, name: &str) {
@@ -254,12 +307,27 @@ mod tests {
             .unwrap();
     }
 
+    #[test]
+    fn test_argon() {
+        let password = b"password";
+        let salt = b"randomsalt";
+        let pepper = b"pepper";
+        let config = argon2::Config {
+            secret: pepper,
+            ..Default::default()
+        };
+        let hash = argon2::hash_encoded(password, salt, &config).unwrap();
+        let matches = argon2::verify_encoded_ext(&hash, password, pepper, b"").unwrap();
+        assert!(matches);
+    }
+
     #[tokio::test]
     async fn test_bind_user() {
         let sql_pool = get_initialized_db().await;
-        insert_user(&sql_pool, "bob", "bob00").await;
         let config = Configuration::default();
-        let handler = SqlBackendHandler::new(config, sql_pool);
+        let handler = SqlBackendHandler::new(config, sql_pool.clone());
+        insert_user(&handler, "bob", "bob00").await;
+
         handler
             .bind(BindRequest {
                 name: "bob".to_string(),
@@ -286,11 +354,11 @@ mod tests {
     #[tokio::test]
     async fn test_list_users() {
         let sql_pool = get_initialized_db().await;
-        insert_user(&sql_pool, "bob", "bob00").await;
-        insert_user(&sql_pool, "patrick", "pass").await;
-        insert_user(&sql_pool, "John", "Pa33w0rd!").await;
         let config = Configuration::default();
         let handler = SqlBackendHandler::new(config, sql_pool);
+        insert_user(&handler, "bob", "bob00").await;
+        insert_user(&handler, "patrick", "pass").await;
+        insert_user(&handler, "John", "Pa33w0rd!").await;
         {
             let users = handler
                 .list_users(ListUsersRequest { filters: None })
@@ -351,17 +419,17 @@ mod tests {
     #[tokio::test]
     async fn test_list_groups() {
         let sql_pool = get_initialized_db().await;
-        insert_user(&sql_pool, "bob", "bob00").await;
-        insert_user(&sql_pool, "patrick", "pass").await;
-        insert_user(&sql_pool, "John", "Pa33w0rd!").await;
+        let config = Configuration::default();
+        let handler = SqlBackendHandler::new(config, sql_pool.clone());
+        insert_user(&handler, "bob", "bob00").await;
+        insert_user(&handler, "patrick", "pass").await;
+        insert_user(&handler, "John", "Pa33w0rd!").await;
         insert_group(&sql_pool, 1, "Best Group").await;
         insert_group(&sql_pool, 2, "Worst Group").await;
         insert_membership(&sql_pool, 1, "bob").await;
         insert_membership(&sql_pool, 1, "patrick").await;
         insert_membership(&sql_pool, 2, "patrick").await;
         insert_membership(&sql_pool, 2, "John").await;
-        let config = Configuration::default();
-        let handler = SqlBackendHandler::new(config, sql_pool);
         assert_eq!(
             handler.list_groups().await.unwrap(),
             vec![
@@ -380,16 +448,16 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_groups() {
         let sql_pool = get_initialized_db().await;
-        insert_user(&sql_pool, "bob", "bob00").await;
-        insert_user(&sql_pool, "patrick", "pass").await;
-        insert_user(&sql_pool, "John", "Pa33w0rd!").await;
+        let config = Configuration::default();
+        let handler = SqlBackendHandler::new(config, sql_pool.clone());
+        insert_user(&handler, "bob", "bob00").await;
+        insert_user(&handler, "patrick", "pass").await;
+        insert_user(&handler, "John", "Pa33w0rd!").await;
         insert_group(&sql_pool, 1, "Group1").await;
         insert_group(&sql_pool, 2, "Group2").await;
         insert_membership(&sql_pool, 1, "bob").await;
         insert_membership(&sql_pool, 1, "patrick").await;
         insert_membership(&sql_pool, 2, "patrick").await;
-        let config = Configuration::default();
-        let handler = SqlBackendHandler::new(config, sql_pool);
         let mut bob_groups = HashSet::new();
         bob_groups.insert("Group1".to_string());
         let mut patrick_groups = HashSet::new();

@@ -46,6 +46,17 @@ impl Default for User {
     }
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
+pub struct CreateUserRequest {
+    // Same fields as User, but no creation_date, and with password.
+    pub user_id: String,
+    pub email: String,
+    pub display_name: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub password: String,
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Group {
     pub display_name: String,
