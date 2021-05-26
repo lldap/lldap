@@ -6,14 +6,14 @@ use crate::{
     infra::{configuration::Configuration, db_cleaner::Scheduler},
 };
 use actix::Actor;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use futures_util::TryFutureExt;
 use log::*;
 
 mod domain;
 mod infra;
 
-async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) {
+async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) -> Result<()> {
     handler
         .create_user(lldap_model::CreateUserRequest {
             user_id: config.ldap_user_dn.clone(),
@@ -21,8 +21,20 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
             ..Default::default()
         })
         .await
-        .unwrap_or_else(|e| warn!("Error creating admin user: {}", e))
-    // TODO: create admin group, add it to the group
+        .map_err(|e| anyhow!("Error creating admin user: {}", e))?;
+    let admin_group_id = handler
+        .create_group(lldap_model::CreateGroupRequest {
+            display_name: "lldap_admin".to_string(),
+        })
+        .await
+        .map_err(|e| anyhow!("Error creating admin group: {}", e))?;
+    handler
+        .add_user_to_group(lldap_model::AddUserToGroupRequest {
+            user_id: config.ldap_user_dn.clone(),
+            group_id: admin_group_id,
+        })
+        .await
+        .map_err(|e| anyhow!("Error adding admin user to group: {}", e))
 }
 
 async fn run_server(config: Configuration) -> Result<()> {
@@ -32,7 +44,9 @@ async fn run_server(config: Configuration) -> Result<()> {
         .await?;
     domain::sql_tables::init_table(&sql_pool).await?;
     let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
-    create_admin_user(&backend_handler, &config).await;
+    create_admin_user(&backend_handler, &config)
+        .await
+        .unwrap_or_else(|e| warn!("Error setting up admin login/account: {}", e));
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,
         backend_handler.clone(),
