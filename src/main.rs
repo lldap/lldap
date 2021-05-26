@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 use crate::{
-    domain::{sql_backend_handler::SqlBackendHandler, sql_tables::PoolOptions},
+    domain::{
+        handler::BackendHandler, sql_backend_handler::SqlBackendHandler, sql_tables::PoolOptions,
+    },
     infra::{configuration::Configuration, db_cleaner::Scheduler},
 };
 use actix::Actor;
@@ -11,6 +13,18 @@ use log::*;
 mod domain;
 mod infra;
 
+async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) {
+    handler
+        .create_user(lldap_model::CreateUserRequest {
+            user_id: config.ldap_user_dn.clone(),
+            password: config.ldap_user_pass.clone(),
+            ..Default::default()
+        })
+        .await
+        .unwrap_or_else(|e| warn!("Error creating admin user: {}", e))
+    // TODO: create admin group, add it to the group
+}
+
 async fn run_server(config: Configuration) -> Result<()> {
     let sql_pool = PoolOptions::new()
         .max_connections(5)
@@ -18,6 +32,7 @@ async fn run_server(config: Configuration) -> Result<()> {
         .await?;
     domain::sql_tables::init_table(&sql_pool).await?;
     let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
+    create_admin_user(&backend_handler, &config).await;
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,
         backend_handler.clone(),

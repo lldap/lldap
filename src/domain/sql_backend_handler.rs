@@ -39,7 +39,7 @@ fn passwords_match(encrypted_password: &str, clear_password: &str, pepper: &str)
         encrypted_password,
         clear_password.as_bytes(),
         pepper.as_bytes(),
-        /*additional_data=*/b"",
+        /*additional_data=*/ b"",
     )
     .unwrap_or_else(|e| {
         log::error!("Error checking password: {}", e);
