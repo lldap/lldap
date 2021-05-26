@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
 use log::*;
-use sea_query::{Expr, Iden, Order, Query, SimpleExpr};
+use sea_query::{Expr, Iden, Order, Query, SimpleExpr, Value};
 use sqlx::Row;
 use std::collections::HashSet;
 
@@ -205,18 +205,12 @@ mod tests {
             .columns(vec![
                 Users::UserId,
                 Users::Email,
-                Users::DisplayName,
-                Users::FirstName,
-                Users::LastName,
                 Users::CreationDate,
                 Users::Password,
             ])
             .values_panic(vec![
                 name.into(),
                 "bob@bob".into(),
-                "Bob Böbberson".into(),
-                "Bob".into(),
-                "Böbberson".into(),
                 chrono::NaiveDateTime::from_timestamp(0, 0).into(),
                 pass.into(),
             ])
