@@ -47,7 +47,7 @@ tracing-subscriber = "*"
 rand = { version = "0.8", features = ["small_rng", "getrandom"] }
 
 [dependencies.sqlx]
-version = "0.5"
+version = "0.5.1"
 features = [
   "any",
   "chrono",
