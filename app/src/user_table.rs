@@ -61,14 +61,39 @@ impl Component for UserTable {
     }
 
     fn view(&self) -> Html {
-        html! {
-            <p>{
-                match &self.users {
-                     None => "Loading...".to_string(),
-                     Some(Ok(users)) => format!("Users: {:?}", &users),
-                     Some(Err(e)) => e.to_string(),
+        match &self.users {
+            None => html! {{"Loading..."}},
+            Some(Err(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
+            Some(Ok(users)) => {
+                let table_content: Vec<_> = users
+                    .iter()
+                    .map(|u| {
+                        html! {
+                            <tr>
+                                <td>{&u.user_id}</td>
+                                <td>{&u.email}</td>
+                                <td>{&u.display_name.as_ref().unwrap_or(&String::new())}</td>
+                                <td>{&u.first_name.as_ref().unwrap_or(&String::new())}</td>
+                                <td>{&u.last_name.as_ref().unwrap_or(&String::new())}</td>
+                                <td>{&u.creation_date}</td>
+                            </tr>
+                        }
+                    })
+                    .collect();
+                html! {
+                    <table>
+                      <tr>
+                        <th>{"User ID"}</th>
+                        <th>{"Email"}</th>
+                        <th>{"Display name"}</th>
+                        <th>{"First name"}</th>
+                        <th>{"Last name"}</th>
+                        <th>{"Creation date"}</th>
+                      </tr>
+                      {table_content}
+                    </table>
                 }
-            }</p>
+            }
         }
     }
 }
