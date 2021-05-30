@@ -38,7 +38,7 @@ impl Component for LoginForm {
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         LoginForm {
-            link: link.clone(),
+            link,
             on_logged_in: props.on_logged_in,
             error: None,
             node_ref: NodeRef::default(),
@@ -63,8 +63,8 @@ impl Component for LoginForm {
                     .unwrap()
                     .value();
                 let req = BindRequest {
-                    name: username.to_string(),
-                    password: password.to_string(),
+                    name: username,
+                    password,
                 };
                 match HostService::authenticate(
                     req,

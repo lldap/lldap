@@ -40,7 +40,7 @@ impl Component for App {
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut app = Self {
-            link: link.clone(),
+            link,
             user_name: get_cookie("user_id").unwrap_or_else(|e| {
                 ConsoleService::error(&e.to_string());
                 None
@@ -89,7 +89,7 @@ impl Component for App {
                   render = Router::render(move |switch: AppRoute| {
                       match switch {
                           AppRoute::Login => html! {
-                              <LoginForm on_logged_in=link.callback(|u| Msg::Login(u))/>
+                              <LoginForm on_logged_in=link.callback(Msg::Login)/>
                           },
                           AppRoute::Index | AppRoute::ListUsers => html! {
                               <div>
@@ -112,7 +112,7 @@ impl App {
         if current_route.is_empty() || current_route.contains("login") {
             String::from("/")
         } else {
-            current_route.into()
+            current_route
         }
     }
 }

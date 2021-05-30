@@ -26,7 +26,7 @@ impl Component for LogoutButton {
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         LogoutButton {
-            link: link.clone(),
+            link,
             on_logged_out: props.on_logged_out,
             _task: None,
         }

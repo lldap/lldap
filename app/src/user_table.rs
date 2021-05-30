@@ -34,7 +34,7 @@ impl Component for UserTable {
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut table = UserTable {
-            link: link.clone(),
+            link,
             _task: None,
             users: None,
         };

@@ -7,7 +7,7 @@ fn get_document() -> Result<HtmlDocument> {
     web_sys::window()
         .map(|w| w.document())
         .flatten()
-        .ok_or(anyhow!("Could not get window document"))
+        .ok_or_else(|| anyhow!("Could not get window document"))
         .and_then(|d| {
             d.dyn_into::<web_sys::HtmlDocument>()
                 .map_err(|_| anyhow!("Document is not an HTMLDocument"))
@@ -18,7 +18,7 @@ pub fn set_cookie(cookie_name: &str, value: &str, expiration: &DateTime<Utc>) ->
     let doc = web_sys::window()
         .map(|w| w.document())
         .flatten()
-        .ok_or(anyhow!("Could not get window document"))
+        .ok_or_else(|| anyhow!("Could not get window document"))
         .and_then(|d| {
             d.dyn_into::<web_sys::HtmlDocument>()
                 .map_err(|_| anyhow!("Document is not an HTMLDocument"))
@@ -35,7 +35,7 @@ pub fn get_cookie(cookie_name: &str) -> Result<Option<String>> {
         .cookie()
         .map_err(|_| anyhow!("Could not access cookies"))?;
     Ok(cookies
-        .split(";")
+        .split(';')
         .filter_map(|c| c.split_once('='))
         .find_map(|(name, value)| {
             if name == cookie_name {
@@ -51,7 +51,7 @@ pub fn get_cookie(cookie_name: &str) -> Result<Option<String>> {
 }
 
 pub fn delete_cookie(cookie_name: &str) -> Result<()> {
-    if let Some(_) = get_cookie(cookie_name)? {
+    if get_cookie(cookie_name)?.is_some() {
         set_cookie(cookie_name, "", &Utc.ymd(1970, 1, 1).and_hms(0, 0, 0))
     } else {
         Ok(())
