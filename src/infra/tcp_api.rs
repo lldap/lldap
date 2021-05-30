@@ -28,6 +28,20 @@ where
         .unwrap_or_else(error_to_api_response)
 }
 
+async fn create_user_handler<Backend>(
+    data: web::Data<AppState<Backend>>,
+    info: web::Json<CreateUserRequest>,
+) -> ApiResult<()>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    data.backend_handler
+        .create_user(info.clone())
+        .await
+        .map(|res| ApiResult::Left(web::Json(res)))
+        .unwrap_or_else(error_to_api_response)
+}
+
 pub fn api_config<Backend>(cfg: &mut web::ServiceConfig)
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
@@ -44,10 +58,10 @@ where
             )
             .into()
         });
+    cfg.app_data(json_config);
+    cfg.service(web::resource("/users").route(web::post().to(user_list_handler::<Backend>)));
     cfg.service(
-        web::resource("/users")
-            .app_data(json_config)
-            .route(web::post().to(user_list_handler::<Backend>)),
+        web::resource("/users/create").route(web::post().to(create_user_handler::<Backend>)),
     );
 }
 
