@@ -243,6 +243,15 @@ impl BackendHandler for SqlBackendHandler {
         Ok(())
     }
 
+    async fn delete_user(&self, request: DeleteUserRequest) -> Result<()> {
+        let delete_query = Query::delete()
+            .from_table(Users::Table)
+            .and_where(Expr::col(Users::UserId).eq(request.user_id))
+            .to_string(DbQueryBuilder {});
+        sqlx::query(&delete_query).execute(&self.sql_pool).await?;
+        Ok(())
+    }
+
     async fn create_group(&self, request: CreateGroupRequest) -> Result<i32> {
         let query = Query::insert()
             .into_table(Groups::Table)
@@ -505,5 +514,59 @@ mod tests {
             handler.get_user_groups("John".to_string()).await.unwrap(),
             HashSet::new()
         );
+    }
+
+    #[tokio::test]
+    async fn test_delete_user() {
+        let sql_pool = get_initialized_db().await;
+        let config = Configuration::default();
+        let handler = SqlBackendHandler::new(config, sql_pool.clone());
+
+        insert_user(&handler, "val", "s3np4i").await;
+        insert_user(&handler, "Hector", "Be$t").await;
+        insert_user(&handler, "Jennz", "boupBoup").await;
+
+        // Remove a user
+        let _request_result = handler
+            .delete_user(DeleteUserRequest {
+                user_id: "Jennz".to_owned(),
+            })
+            .await
+            .unwrap();
+
+        let users = handler
+            .list_users(ListUsersRequest { filters: None })
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|u| u.user_id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(users, vec!["Hector", "val"]);
+
+        // Insert new user and remove two
+        insert_user(&handler, "NewBoi", "Joni").await;
+        let _request_result = handler
+            .delete_user(DeleteUserRequest {
+                user_id: "Hector".to_owned(),
+            })
+            .await
+            .unwrap();
+        let _request_result = handler
+            .delete_user(DeleteUserRequest {
+                user_id: "NewBoi".to_owned(),
+            })
+            .await
+            .unwrap();
+
+        let users = handler
+            .list_users(ListUsersRequest { filters: None })
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|u| u.user_id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(users, vec!["val"]);
     }
 }

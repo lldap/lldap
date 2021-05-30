@@ -57,6 +57,11 @@ pub struct CreateUserRequest {
     pub password: String,
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
+pub struct DeleteUserRequest {
+    pub user_id: String,
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Group {
     pub display_name: String,
