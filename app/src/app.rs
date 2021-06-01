@@ -1,11 +1,12 @@
-use crate::cookies::get_cookie;
-use crate::login::LoginForm;
-use crate::logout::LogoutButton;
-use crate::user_table::UserTable;
+use crate::{
+    cookies::get_cookie, create_user::CreateUserForm, login::LoginForm, logout::LogoutButton,
+    user_table::UserTable,
+};
 use yew::prelude::*;
 use yew::services::ConsoleService;
 use yew_router::{
     agent::{RouteAgentDispatcher, RouteRequest},
+    components::RouterAnchor,
     route::Route,
     router::Router,
     service::RouteService,
@@ -30,9 +31,13 @@ pub enum AppRoute {
     Login,
     #[to = "/users"]
     ListUsers,
+    #[to = "/create_user"]
+    CreateUser,
     #[to = "/"]
     Index,
 }
+
+type Link = RouterAnchor<AppRoute>;
 
 impl Component for App {
     type Message = Msg;
@@ -91,10 +96,17 @@ impl Component for App {
                           AppRoute::Login => html! {
                               <LoginForm on_logged_in=link.callback(Msg::Login)/>
                           },
+                          AppRoute::CreateUser => html! {
+                              <div>
+                                <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
+                                <CreateUserForm/>
+                              </div>
+                          },
                           AppRoute::Index | AppRoute::ListUsers => html! {
                               <div>
                                 <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
                                 <UserTable />
+                                <Link route=AppRoute::CreateUser>{"Create a user"}</Link>
                               </div>
                           }
                       }

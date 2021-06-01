@@ -97,4 +97,22 @@ impl HostService {
         });
         FetchService::fetch_with_options(request, get_default_options(), handler)
     }
+
+    pub fn create_user(
+        request: CreateUserRequest,
+        callback: Callback<Result<()>>,
+    ) -> Result<FetchTask> {
+        let url = "/api/users/create";
+        let request = Request::post(url)
+            .header("Content-Type", "application/json")
+            .body(Json(&request))?;
+        let handler = create_handler(callback, |status, data: String| {
+            if status.is_success() {
+                Ok(())
+            } else {
+                Err(anyhow!("Could not create a user: [{}]: {}", status, data))
+            }
+        });
+        FetchService::fetch_with_options(request, get_default_options(), handler)
+    }
 }

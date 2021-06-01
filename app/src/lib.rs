@@ -2,6 +2,7 @@
 mod api;
 mod app;
 mod cookies;
+mod create_user;
 mod login;
 mod logout;
 mod user_table;
