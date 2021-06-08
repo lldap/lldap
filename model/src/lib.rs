@@ -1,6 +1,8 @@
-use serde::{Deserialize, Serialize};
 use chrono::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+
+pub mod opaque;
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct BindRequest {
