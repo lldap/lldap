@@ -5,10 +5,18 @@ authors = ["Valentin Tolmer <valentin@tolmer.fr>", "Steve Barrau <steve.barrau@g
 edition = "2018"
 
 [features]
+default = ["opaque_server", "opaque_client"]
+opaque_server = []
+opaque_client = []
 js = []
 
 [dependencies]
+curve25519-dalek = "3"
+opaque-ke = "0.5"
+rand = "0.8"
 serde = "*"
+sha2 = "0.9"
+thiserror = "*"
 
 [dependencies.chrono]
 version = "*"
@@ -25,3 +33,11 @@ features = [
   "runtime-actix-native-tls",
   "sqlite",
 ]
+
+# For WASM targets, use the JS getrandom.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]
+version = "0.2"
+features = ["js"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.getrandom]
+version = "0.2"
