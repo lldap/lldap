@@ -9,6 +9,36 @@ pub enum AuthenticationError {
 
 pub type AuthenticationResult<T> = std::result::Result<T, AuthenticationError>;
 
+/// A wrapper around argon2 to provide the [`opaque_ke::slow_hash::SlowHash`] trait.
+pub struct ArgonHasher;
+
+impl ArgonHasher {
+    /// Fixed salt, doesn't affect the security. It is only used to make attacks more
+    /// computationally intensive, it doesn't serve any security purpose.
+    const SALT: &'static [u8] = b"lldap_opaque_salt";
+    /// Config for the argon hasher. Security enthusiasts may want to tweak this for their system.
+    const CONFIG: &'static argon2::Config<'static> = &argon2::Config {
+        ad: &[],
+        hash_length: 128,
+        lanes: 1,
+        mem_cost: 50 * 1024, // 50 MB, in KB
+        secret: &[],
+        thread_mode: argon2::ThreadMode::Sequential,
+        time_cost: 5,
+        variant: argon2::Variant::Argon2id,
+        version: argon2::Version::Version13,
+    };
+}
+
+impl<D: opaque_ke::hash::Hash> opaque_ke::slow_hash::SlowHash<D> for ArgonHasher {
+    fn hash(
+        input: generic_array::GenericArray<u8, <D as digest::Digest>::OutputSize>,
+    ) -> Result<Vec<u8>, opaque_ke::errors::InternalPakeError> {
+        argon2::hash_raw(&input, Self::SALT, Self::CONFIG)
+            .map_err(|_| opaque_ke::errors::InternalPakeError::HashingFailure)
+    }
+}
+
 /// The ciphersuite trait allows to specify the underlying primitives
 /// that will be used in the OPAQUE protocol
 #[allow(dead_code)]
@@ -17,7 +47,8 @@ impl CipherSuite for DefaultSuite {
     type Group = curve25519_dalek::ristretto::RistrettoPoint;
     type KeyExchange = opaque_ke::key_exchange::tripledh::TripleDH;
     type Hash = sha2::Sha512;
-    type SlowHash = opaque_ke::slow_hash::NoOpHash;
+    /// Use argon2 as the slow hashing algorithm for our CipherSuite.
+    type SlowHash = ArgonHasher;
 }
 
 /// Client-side code for OPAQUE protocol handling, to register a new user and login.  All methods'
