@@ -1287,9 +1287,12 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "curve25519-dalek",
+ "digest",
+ "generic-array",
  "getrandom 0.2.3",
  "opaque-ke",
  "rand 0.8.3",
+ "rust-argon2",
  "serde",
  "sha2",
  "sqlx",

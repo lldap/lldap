@@ -11,7 +11,10 @@ opaque_client = []
 js = []
 
 [dependencies]
+rust-argon2 = "0.8"
 curve25519-dalek = "3"
+digest = "*"
+generic-array = "*"
 opaque-ke = "0.5"
 rand = "0.8"
 serde = "*"
