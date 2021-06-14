@@ -110,14 +110,20 @@ impl BackendHandler for SqlBackendHandler {
             .and_where(Expr::col(Users::UserId).eq(request.name.as_str()))
             .to_string(DbQueryBuilder {});
         if let Ok(row) = sqlx::query(&query).fetch_one(&self.sql_pool).await {
-            if let Err(e) = passwords_match(
-                &row.get::<Vec<u8>, _>(&*Users::PasswordHash.to_string()),
-                &request.password,
-                self.config.get_server_keys().private(),
-            ) {
-                debug!(r#"Invalid password for "{}": {}"#, request.name, e);
+            if let Some(password_hash) =
+                row.get::<Option<Vec<u8>>, _>(&*Users::PasswordHash.to_string())
+            {
+                if let Err(e) = passwords_match(
+                    &&password_hash,
+                    &request.password,
+                    self.config.get_server_keys().private(),
+                ) {
+                    debug!(r#"Invalid password for "{}": {}"#, request.name, e);
+                } else {
+                    return Ok(());
+                }
             } else {
-                return Ok(());
+                debug!(r#"User "{}" has no password"#, request.name);
             }
         } else {
             debug!(r#"No user found for "{}""#, request.name);
@@ -233,29 +239,34 @@ impl BackendHandler for SqlBackendHandler {
     }
 
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
-        let password_hash =
-            get_password_file(&request.password, self.config.get_server_keys().public())?
-                .serialize();
+        let mut columns = vec![
+            Users::UserId,
+            Users::Email,
+            Users::DisplayName,
+            Users::FirstName,
+            Users::LastName,
+            Users::CreationDate,
+        ];
+        let mut values = vec![
+            request.user_id.into(),
+            request.email.into(),
+            request.display_name.map(Into::into).unwrap_or(Value::Null),
+            request.first_name.map(Into::into).unwrap_or(Value::Null),
+            request.last_name.map(Into::into).unwrap_or(Value::Null),
+            chrono::Utc::now().naive_utc().into(),
+        ];
+        if let Some(pass) = request.password {
+            columns.push(Users::PasswordHash);
+            values.push(
+                get_password_file(&pass, self.config.get_server_keys().public())?
+                    .serialize()
+                    .into(),
+            );
+        }
         let query = Query::insert()
             .into_table(Users::Table)
-            .columns(vec![
-                Users::UserId,
-                Users::Email,
-                Users::DisplayName,
-                Users::FirstName,
-                Users::LastName,
-                Users::CreationDate,
-                Users::PasswordHash,
-            ])
-            .values_panic(vec![
-                request.user_id.into(),
-                request.email.into(),
-                request.display_name.map(Into::into).unwrap_or(Value::Null),
-                request.first_name.map(Into::into).unwrap_or(Value::Null),
-                request.last_name.map(Into::into).unwrap_or(Value::Null),
-                chrono::Utc::now().naive_utc().into(),
-                password_hash.into(),
-            ])
+            .columns(columns)
+            .values_panic(values)
             .to_string(DbQueryBuilder {});
         sqlx::query(&query).execute(&self.sql_pool).await?;
         Ok(())
@@ -325,7 +336,18 @@ mod tests {
             .create_user(CreateUserRequest {
                 user_id: name.to_string(),
                 email: "bob@bob.bob".to_string(),
-                password: pass.to_string(),
+                password: Some(pass.to_string()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+    }
+
+    async fn insert_user_no_password(handler: &SqlBackendHandler, name: &str) {
+        handler
+            .create_user(CreateUserRequest {
+                user_id: name.to_string(),
+                email: "bob@bob.bob".to_string(),
                 ..Default::default()
             })
             .await
@@ -394,6 +416,22 @@ mod tests {
             .bind(BindRequest {
                 name: "bob".to_string(),
                 password: "wrong_password".to_string(),
+            })
+            .await
+            .unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn test_user_no_password() {
+        let sql_pool = get_initialized_db().await;
+        let config = get_default_config();
+        let handler = SqlBackendHandler::new(config, sql_pool.clone());
+        insert_user_no_password(&handler, "bob").await;
+
+        handler
+            .bind(BindRequest {
+                name: "bob".to_string(),
+                password: "bob00".to_string(),
             })
             .await
             .unwrap_err();

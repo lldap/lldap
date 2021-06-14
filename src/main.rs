@@ -17,7 +17,7 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
     handler
         .create_user(lldap_model::CreateUserRequest {
             user_id: config.ldap_user_dn.clone(),
-            password: config.ldap_user_pass.clone(),
+            password: Some(config.ldap_user_pass.clone()),
             ..Default::default()
         })
         .await

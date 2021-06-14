@@ -67,7 +67,7 @@ impl Component for CreateUserForm {
                     display_name: Some(get_element("displayname")),
                     first_name: Some(get_element("firstname")),
                     last_name: Some(get_element("lastname")),
-                    password: get_element("password"),
+                    password: Some(get_element("password")),
                 };
                 self.create_user(req);
             }
