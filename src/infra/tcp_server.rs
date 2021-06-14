@@ -25,7 +25,9 @@ async fn index(req: HttpRequest) -> actix_web::Result<NamedFile> {
 
 pub(crate) fn error_to_http_response(error: DomainError) -> HttpResponse {
     match error {
-        DomainError::AuthenticationError(_) => HttpResponse::Unauthorized(),
+        DomainError::AuthenticationError(_) | DomainError::AuthenticationProtocolError(_) => {
+            HttpResponse::Unauthorized()
+        }
         DomainError::DatabaseError(_) => HttpResponse::InternalServerError(),
     }
     .body(error.to_string())

@@ -3,6 +3,7 @@ use crate::infra::configuration::Configuration;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
+use lldap_model::opaque;
 use log::*;
 use sea_query::{Expr, Iden, Order, Query, SimpleExpr, Value};
 use sqlx::Row;
@@ -20,31 +21,55 @@ impl SqlBackendHandler {
     }
 }
 
-fn get_password_config(pepper: &str) -> argon2::Config {
-    argon2::Config {
-        secret: pepper.as_bytes(),
-        ..Default::default()
-    }
+fn get_password_file(
+    clear_password: &str,
+    server_public_key: opaque::PublicKey<'_>,
+) -> Result<opaque::server::ServerRegistration<opaque::DefaultSuite>> {
+    use opaque::{client, server};
+    let mut rng = rand::rngs::OsRng;
+    let client_register_start_result =
+        client::registration::start_registration(clear_password, &mut rng)?;
+
+    let server_register_start_result = server::registration::start_registration(
+        &mut rng,
+        client_register_start_result.message,
+        server_public_key,
+    )?;
+
+    let client_registration_result = client::registration::finish_registration(
+        client_register_start_result.state,
+        server_register_start_result.message,
+        &mut rng,
+    )?;
+
+    Ok(server::registration::get_password_file(
+        server_register_start_result.state,
+        client_registration_result.message,
+    )?)
 }
 
-fn hash_password(clear_password: &str, salt: &str, pepper: &str) -> String {
-    let config = get_password_config(pepper);
-    argon2::hash_encoded(clear_password.as_bytes(), salt.as_bytes(), &config)
-        .map_err(|e| anyhow::anyhow!("Error encoding password: {}", e))
-        .unwrap()
-}
+fn passwords_match(
+    password_file_bytes: &[u8],
+    clear_password: &str,
+    server_private_key: opaque::PrivateKey<'_>,
+) -> Result<()> {
+    use opaque::{client, client::login::*, server, server::login::*, DefaultSuite};
+    let mut rng = rand::rngs::OsRng;
+    let client_login_start_result = client::login::start_login(clear_password, &mut rng)?;
 
-fn passwords_match(encrypted_password: &str, clear_password: &str, pepper: &str) -> bool {
-    argon2::verify_encoded_ext(
-        encrypted_password,
-        clear_password.as_bytes(),
-        pepper.as_bytes(),
-        /*additional_data=*/ b"",
-    )
-    .unwrap_or_else(|e| {
-        log::error!("Error checking password: {}", e);
-        false
-    })
+    let password_file = ServerRegistration::<DefaultSuite>::deserialize(password_file_bytes)
+        .map_err(opaque::AuthenticationError::ProtocolError)?;
+    let server_login_start_result = server::login::start_login(
+        &mut rng,
+        password_file,
+        server_private_key,
+        client_login_start_result.message,
+    )?;
+    finish_login(
+        client_login_start_result.state,
+        server_login_start_result.message,
+    )?;
+    Ok(())
 }
 
 fn get_filter_expr(filter: RequestFilter) -> SimpleExpr {
@@ -85,14 +110,14 @@ impl BackendHandler for SqlBackendHandler {
             .and_where(Expr::col(Users::UserId).eq(request.name.as_str()))
             .to_string(DbQueryBuilder {});
         if let Ok(row) = sqlx::query(&query).fetch_one(&self.sql_pool).await {
-            if passwords_match(
-                &row.get::<String, _>(&*Users::PasswordHash.to_string()),
+            if let Err(e) = passwords_match(
+                &row.get::<Vec<u8>, _>(&*Users::PasswordHash.to_string()),
                 &request.password,
-                &self.config.secret_pepper,
+                self.config.get_server_keys().private(),
             ) {
-                return Ok(());
+                debug!(r#"Invalid password for "{}": {}"#, request.name, e);
             } else {
-                debug!(r#"Invalid password for "{}""#, request.name);
+                return Ok(());
             }
         } else {
             debug!(r#"No user found for "{}""#, request.name);
@@ -208,16 +233,9 @@ impl BackendHandler for SqlBackendHandler {
     }
 
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
-        use rand::{distributions::Alphanumeric, rngs::SmallRng, Rng, SeedableRng};
-        // TODO: Initialize the rng only once. Maybe Arc<Cell>?
-        let mut rng = SmallRng::from_entropy();
-        let salt: String = std::iter::repeat(())
-            .map(|()| rng.sample(Alphanumeric))
-            .map(char::from)
-            .take(32)
-            .collect();
-        // The salt is included in the password hash.
-        let password_hash = hash_password(&request.password, &salt, &self.config.secret_pepper);
+        let password_hash =
+            get_password_file(&request.password, self.config.get_server_keys().public())?
+                .serialize();
         let query = Query::insert()
             .into_table(Users::Table)
             .columns(vec![
@@ -283,6 +301,14 @@ impl BackendHandler for SqlBackendHandler {
 mod tests {
     use super::*;
     use crate::domain::sql_tables::init_table;
+    use crate::infra::configuration::ConfigurationBuilder;
+
+    fn get_default_config() -> Configuration {
+        ConfigurationBuilder::default()
+            .verbose(true)
+            .build()
+            .unwrap()
+    }
 
     async fn get_in_memory_db() -> Pool {
         PoolOptions::new().connect("sqlite::memory:").await.unwrap()
@@ -328,11 +354,11 @@ mod tests {
     #[tokio::test]
     async fn test_bind_admin() {
         let sql_pool = get_in_memory_db().await;
-        let config = Configuration {
-            ldap_user_dn: "admin".to_string(),
-            ldap_user_pass: "test".to_string(),
-            ..Default::default()
-        };
+        let config = ConfigurationBuilder::default()
+            .ldap_user_dn("admin".to_string())
+            .ldap_user_pass("test".to_string())
+            .build()
+            .unwrap();
         let handler = SqlBackendHandler::new(config, sql_pool);
         handler
             .bind(BindRequest {
@@ -343,24 +369,10 @@ mod tests {
             .unwrap();
     }
 
-    #[test]
-    fn test_argon() {
-        let password = b"password";
-        let salt = b"randomsalt";
-        let pepper = b"pepper";
-        let config = argon2::Config {
-            secret: pepper,
-            ..Default::default()
-        };
-        let hash = argon2::hash_encoded(password, salt, &config).unwrap();
-        let matches = argon2::verify_encoded_ext(&hash, password, pepper, b"").unwrap();
-        assert!(matches);
-    }
-
     #[tokio::test]
     async fn test_bind_user() {
         let sql_pool = get_initialized_db().await;
-        let config = Configuration::default();
+        let config = get_default_config();
         let handler = SqlBackendHandler::new(config, sql_pool.clone());
         insert_user(&handler, "bob", "bob00").await;
 
@@ -390,7 +402,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_users() {
         let sql_pool = get_initialized_db().await;
-        let config = Configuration::default();
+        let config = get_default_config();
         let handler = SqlBackendHandler::new(config, sql_pool);
         insert_user(&handler, "bob", "bob00").await;
         insert_user(&handler, "patrick", "pass").await;
@@ -455,7 +467,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_groups() {
         let sql_pool = get_initialized_db().await;
-        let config = Configuration::default();
+        let config = get_default_config();
         let handler = SqlBackendHandler::new(config, sql_pool.clone());
         insert_user(&handler, "bob", "bob00").await;
         insert_user(&handler, "patrick", "pass").await;
@@ -484,7 +496,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_groups() {
         let sql_pool = get_initialized_db().await;
-        let config = Configuration::default();
+        let config = get_default_config();
         let handler = SqlBackendHandler::new(config, sql_pool.clone());
         insert_user(&handler, "bob", "bob00").await;
         insert_user(&handler, "patrick", "pass").await;
@@ -519,7 +531,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_user() {
         let sql_pool = get_initialized_db().await;
-        let config = Configuration::default();
+        let config = get_default_config();
         let handler = SqlBackendHandler::new(config, sql_pool.clone());
 
         insert_user(&handler, "val", "s3np4i").await;

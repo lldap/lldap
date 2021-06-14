@@ -12,3 +12,6 @@
 *.db
 *.db-shm
 *.db-wal
+
+# Server private key
+server_key
