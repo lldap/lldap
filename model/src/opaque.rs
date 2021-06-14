@@ -9,6 +9,41 @@ pub enum AuthenticationError {
 
 pub type AuthenticationResult<T> = std::result::Result<T, AuthenticationError>;
 
+/// Wrapper around an opaque KeyPair to have type-checked public and private keys.
+#[derive(Debug, Clone)]
+pub struct KeyPair(pub opaque_ke::keypair::KeyPair<<DefaultSuite as CipherSuite>::Group>);
+
+pub struct PublicKey<'a>(&'a opaque_ke::keypair::Key);
+pub struct PrivateKey<'a>(&'a opaque_ke::keypair::Key);
+
+impl <'a> std::ops::Deref for PublicKey<'a> {
+    type Target = &'a opaque_ke::keypair::Key;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl <'a> std::ops::Deref for PrivateKey<'a> {
+    type Target = &'a opaque_ke::keypair::Key;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl KeyPair {
+    pub fn private(&self) -> PrivateKey<'_> {
+        PrivateKey(self.0.private())
+    }
+
+    pub fn public(&self) -> PublicKey<'_> {
+        PublicKey(self.0.public())
+    }
+
+    pub fn from_private_key_slice(input: &[u8]) -> std::result::Result<Self, opaque_ke::errors::InternalPakeError> {
+        opaque_ke::keypair::KeyPair::<<DefaultSuite as CipherSuite>::Group>::from_private_key_slice(input).map(Self)
+    }
+}
+
 /// A wrapper around argon2 to provide the [`opaque_ke::slow_hash::SlowHash`] trait.
 pub struct ArgonHasher;
 
@@ -56,11 +91,11 @@ impl CipherSuite for DefaultSuite {
 /// deserialized using the type's `deserialize` method.
 #[cfg(feature = "opaque_client")]
 pub mod client {
-    use super::*;
+    pub use super::*;
     /// Methods to register a new user, from the client side.
     pub mod registration {
-        use super::*;
-        use opaque_ke::{
+        pub use super::*;
+        pub use opaque_ke::{
             ClientRegistration, ClientRegistrationFinishParameters, ClientRegistrationFinishResult,
             ClientRegistrationStartResult, RegistrationResponse,
         };
@@ -91,8 +126,8 @@ pub mod client {
 
     /// Methods to login, from the client side.
     pub mod login {
-        use super::*;
-        use opaque_ke::{
+        pub use super::*;
+        pub use opaque_ke::{
             ClientLogin, ClientLoginFinishParameters, ClientLoginFinishResult,
             ClientLoginStartParameters, ClientLoginStartResult, CredentialResponse,
         };
@@ -123,24 +158,24 @@ pub mod client {
 /// intermediate results must be sent to the client using the serialized `.message`.
 #[cfg(feature = "opaque_server")]
 pub mod server {
-    use super::*;
-    use opaque_ke::{keypair::Key, ServerRegistration};
+    pub use super::*;
+    pub use opaque_ke::ServerRegistration;
     /// Methods to register a new user, from the server side.
     pub mod registration {
-        use super::*;
-        use opaque_ke::{RegistrationRequest, RegistrationUpload, ServerRegistrationStartResult};
+        pub use super::*;
+        pub use opaque_ke::{RegistrationRequest, RegistrationUpload, ServerRegistrationStartResult};
         /// Start a registration process, from a request sent by the client.
         ///
         /// The result must be kept for the next step.
         pub fn start_registration<R: RngCore + CryptoRng>(
             rng: &mut R,
             registration_request: RegistrationRequest<DefaultSuite>,
-            server_public_key: &Key,
+            server_public_key: PublicKey<'_>,
         ) -> AuthenticationResult<ServerRegistrationStartResult<DefaultSuite>> {
             Ok(ServerRegistration::<DefaultSuite>::start(
                 rng,
                 registration_request,
-                server_public_key,
+                *server_public_key,
             )?)
         }
 
@@ -155,8 +190,8 @@ pub mod server {
 
     /// Methods to handle user login, from the server-side.
     pub mod login {
-        use super::*;
-        use opaque_ke::{
+        pub use super::*;
+        pub use opaque_ke::{
             CredentialFinalization, CredentialRequest, ServerLogin, ServerLoginFinishResult,
             ServerLoginStartParameters, ServerLoginStartResult,
         };
@@ -167,13 +202,13 @@ pub mod server {
         pub fn start_login<R: RngCore + CryptoRng>(
             rng: &mut R,
             password_file: ServerRegistration<DefaultSuite>,
-            server_private_key: &Key,
+            server_private_key: PrivateKey<'_>,
             credential_request: CredentialRequest<DefaultSuite>,
         ) -> AuthenticationResult<ServerLoginStartResult<DefaultSuite>> {
             Ok(ServerLogin::start(
                 rng,
                 password_file,
-                server_private_key,
+                *server_private_key,
                 credential_request,
                 ServerLoginStartParameters::default(),
             )?)

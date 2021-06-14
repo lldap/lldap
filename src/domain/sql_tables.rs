@@ -54,11 +54,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
             .col(ColumnDef::new(Users::LastName).string_len(255))
             .col(ColumnDef::new(Users::Avatar).binary())
             .col(ColumnDef::new(Users::CreationDate).date_time().not_null())
-            .col(
-                ColumnDef::new(Users::PasswordHash)
-                    .string_len(255)
-                    .not_null(),
-            )
+            .col(ColumnDef::new(Users::PasswordHash).binary().not_null())
             .col(ColumnDef::new(Users::TotpSecret).string_len(64))
             .col(ColumnDef::new(Users::MfaType).string_len(64))
             .to_string(DbQueryBuilder {}),
