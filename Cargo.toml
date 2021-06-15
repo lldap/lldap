@@ -42,7 +42,7 @@ rand = { version = "0.8", features = ["small_rng", "getrandom"] }
 # TODO: update to 0.6 when out.
 [dependencies.opaque-ke]
 git = "https://github.com/novifinancial/opaque-ke"
-rev = "cd85efc603f5d98ed794cdd56a6e59236cce3d32"
+rev = "98f1821897cd2800e5bffb2a70541056145e99cc"
 
 [dependencies.sqlx]
 version = "0.5.1"

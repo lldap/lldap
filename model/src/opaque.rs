@@ -9,40 +9,8 @@ pub enum AuthenticationError {
 
 pub type AuthenticationResult<T> = std::result::Result<T, AuthenticationError>;
 
-/// Wrapper around an opaque KeyPair to have type-checked public and private keys.
-#[derive(Debug, Clone)]
-pub struct KeyPair(pub opaque_ke::keypair::KeyPair<<DefaultSuite as CipherSuite>::Group>);
-
-pub struct PublicKey<'a>(&'a opaque_ke::keypair::Key);
-pub struct PrivateKey<'a>(&'a opaque_ke::keypair::Key);
-
-impl <'a> std::ops::Deref for PublicKey<'a> {
-    type Target = &'a opaque_ke::keypair::Key;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl <'a> std::ops::Deref for PrivateKey<'a> {
-    type Target = &'a opaque_ke::keypair::Key;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl KeyPair {
-    pub fn private(&self) -> PrivateKey<'_> {
-        PrivateKey(self.0.private())
-    }
-
-    pub fn public(&self) -> PublicKey<'_> {
-        PublicKey(self.0.public())
-    }
-
-    pub fn from_private_key_slice(input: &[u8]) -> std::result::Result<Self, opaque_ke::errors::InternalPakeError> {
-        opaque_ke::keypair::KeyPair::<<DefaultSuite as CipherSuite>::Group>::from_private_key_slice(input).map(Self)
-    }
-}
+pub use opaque_ke::keypair::{PublicKey, PrivateKey};
+pub type KeyPair = opaque_ke::keypair::KeyPair<<DefaultSuite as CipherSuite>::Group>;
 
 /// A wrapper around argon2 to provide the [`opaque_ke::slow_hash::SlowHash`] trait.
 pub struct ArgonHasher;
@@ -177,12 +145,12 @@ pub mod server {
         pub fn start_registration<R: RngCore + CryptoRng>(
             rng: &mut R,
             registration_request: RegistrationRequest,
-            server_public_key: PublicKey<'_>,
+            server_public_key: &PublicKey,
         ) -> AuthenticationResult<ServerRegistrationStartResult> {
             Ok(ServerRegistration::start(
                 rng,
                 registration_request,
-                *server_public_key,
+                server_public_key,
             )?)
         }
 
@@ -211,13 +179,13 @@ pub mod server {
         pub fn start_login<R: RngCore + CryptoRng>(
             rng: &mut R,
             password_file: ServerRegistration,
-            server_private_key: PrivateKey<'_>,
+            server_private_key: &PrivateKey,
             credential_request: CredentialRequest,
         ) -> AuthenticationResult<ServerLoginStartResult> {
             Ok(ServerLogin::start(
                 rng,
                 password_file,
-                *server_private_key,
+                server_private_key,
                 credential_request,
                 ServerLoginStartParameters::default(),
             )?)

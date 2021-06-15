@@ -23,7 +23,7 @@ impl SqlBackendHandler {
 
 fn get_password_file(
     clear_password: &str,
-    server_public_key: opaque::PublicKey<'_>,
+    server_public_key: &opaque::PublicKey,
 ) -> Result<opaque::server::ServerRegistration> {
     use opaque::{client, server};
     let mut rng = rand::rngs::OsRng;
@@ -51,7 +51,7 @@ fn get_password_file(
 fn passwords_match(
     password_file_bytes: &[u8],
     clear_password: &str,
-    server_private_key: opaque::PrivateKey<'_>,
+    server_private_key: &opaque::PrivateKey,
 ) -> Result<()> {
     use opaque::{client, server};
     let mut rng = rand::rngs::OsRng;

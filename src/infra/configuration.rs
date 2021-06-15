@@ -103,7 +103,7 @@ fn get_server_keys(file_path: &str) -> Result<KeyPair> {
                 e
             )
         })?;
-        Ok(KeyPair(keypair))
+        Ok(keypair)
     }
 }
 
