@@ -825,7 +825,7 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 [[package]]
 name = "opaque-ke"
 version = "0.5.1-pre.1"
-source = "git+https://github.com/novifinancial/opaque-ke?rev=cd85efc603f5d98ed794cdd56a6e59236cce3d32#cd85efc603f5d98ed794cdd56a6e59236cce3d32"
+source = "git+https://github.com/novifinancial/opaque-ke?rev=98f1821897cd2800e5bffb2a70541056145e99cc#98f1821897cd2800e5bffb2a70541056145e99cc"
 dependencies = [
  "base64",
  "curve25519-dalek",
