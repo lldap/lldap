@@ -24,7 +24,7 @@ impl SqlBackendHandler {
 fn get_password_file(
     clear_password: &str,
     server_public_key: opaque::PublicKey<'_>,
-) -> Result<opaque::server::ServerRegistration<opaque::DefaultSuite>> {
+) -> Result<opaque::server::ServerRegistration> {
     use opaque::{client, server};
     let mut rng = rand::rngs::OsRng;
     let client_register_start_result =
@@ -53,11 +53,11 @@ fn passwords_match(
     clear_password: &str,
     server_private_key: opaque::PrivateKey<'_>,
 ) -> Result<()> {
-    use opaque::{client, client::login::*, server, server::login::*, DefaultSuite};
+    use opaque::{client, server};
     let mut rng = rand::rngs::OsRng;
     let client_login_start_result = client::login::start_login(clear_password, &mut rng)?;
 
-    let password_file = ServerRegistration::<DefaultSuite>::deserialize(password_file_bytes)
+    let password_file = server::ServerRegistration::deserialize(password_file_bytes)
         .map_err(opaque::AuthenticationError::ProtocolError)?;
     let server_login_start_result = server::login::start_login(
         &mut rng,
@@ -65,7 +65,7 @@ fn passwords_match(
         server_private_key,
         client_login_start_result.message,
     )?;
-    finish_login(
+    client::login::finish_login(
         client_login_start_result.state,
         server_login_start_result.message,
     )?;

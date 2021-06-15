@@ -15,11 +15,15 @@ rust-argon2 = "0.8"
 curve25519-dalek = "3"
 digest = "*"
 generic-array = "*"
-opaque-ke = "0.5"
 rand = "0.8"
 serde = "*"
 sha2 = "0.9"
 thiserror = "*"
+
+# TODO: update to 0.6 when out.
+[dependencies.opaque-ke]
+git = "https://github.com/novifinancial/opaque-ke"
+rev = "cd85efc603f5d98ed794cdd56a6e59236cce3d32"
 
 [dependencies.chrono]
 version = "*"
@@ -36,6 +40,9 @@ features = [
   "runtime-actix-native-tls",
   "sqlite",
 ]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.sqlx-core]
+version = "=0.5.1"
 
 # For WASM targets, use the JS getrandom.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]

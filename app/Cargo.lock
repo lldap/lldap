@@ -777,6 +777,7 @@ dependencies = [
  "serde",
  "sha2",
  "sqlx",
+ "sqlx-core",
  "thiserror",
 ]
 
@@ -995,10 +996,10 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "opaque-ke"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c5e93081243e35cb270a2812883dcba34121c8d4054f6869149f2c3f7db10e3"
+version = "0.5.1-pre.1"
+source = "git+https://github.com/novifinancial/opaque-ke?rev=cd85efc603f5d98ed794cdd56a6e59236cce3d32#cd85efc603f5d98ed794cdd56a6e59236cce3d32"
 dependencies = [
+ "base64",
  "curve25519-dalek",
  "digest",
  "displaydoc",
@@ -1007,6 +1008,7 @@ dependencies = [
  "hkdf",
  "hmac",
  "rand 0.8.4",
+ "serde",
  "subtle",
  "thiserror",
  "zeroize",
