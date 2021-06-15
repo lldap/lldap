@@ -69,8 +69,8 @@ fn get_attribute(user: &User, attribute: &str) -> Result<Vec<String>> {
         ]),
         "uid" => Ok(vec![user.user_id.clone()]),
         "mail" => Ok(vec![user.email.clone()]),
-        "givenName" => Ok(vec![user.first_name.clone().unwrap_or("".to_string())]),
-        "sn" => Ok(vec![user.last_name.clone().unwrap_or("".to_string())]),
+        "givenName" => Ok(vec![user.first_name.clone().unwrap_or_default()]),
+        "sn" => Ok(vec![user.last_name.clone().unwrap_or_default()]),
         "cn" => Ok(vec![user
             .display_name
             .clone()
