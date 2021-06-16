@@ -8,6 +8,8 @@ pub enum Error {
     DatabaseError(#[from] sqlx::Error),
     #[error("Authentication protocol error for `{0}`")]
     AuthenticationProtocolError(#[from] lldap_model::opaque::AuthenticationError),
+    #[error("Internal error: `{0}`")]
+    InternalError(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

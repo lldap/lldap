@@ -1,5 +1,8 @@
 use crate::{
-    domain::handler::*,
+    domain::{
+        handler::{BackendHandler, LoginHandler},
+        opaque_handler::OpaqueHandler,
+    },
     infra::{auth_service, configuration::Configuration, tcp_api, tcp_backend_handler::*},
 };
 use actix_files::{Files, NamedFile};
@@ -28,7 +31,9 @@ pub(crate) fn error_to_http_response(error: DomainError) -> HttpResponse {
         DomainError::AuthenticationError(_) | DomainError::AuthenticationProtocolError(_) => {
             HttpResponse::Unauthorized()
         }
-        DomainError::DatabaseError(_) => HttpResponse::InternalServerError(),
+        DomainError::DatabaseError(_) | DomainError::InternalError(_) => {
+            HttpResponse::InternalServerError()
+        }
     }
     .body(error.to_string())
 }
@@ -39,7 +44,7 @@ fn http_config<Backend>(
     jwt_secret: String,
     jwt_blacklist: HashSet<u64>,
 ) where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
+    Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + 'static,
 {
     cfg.data(AppState::<Backend> {
         backend_handler,
@@ -83,7 +88,7 @@ pub async fn build_tcp_server<Backend>(
     server_builder: ServerBuilder,
 ) -> Result<ServerBuilder>
 where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
+    Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + 'static,
 {
     let jwt_secret = config.jwt_secret.clone();
     let jwt_blacklist = backend_handler.get_jwt_blacklist().await?;

@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
 use lldap_model::opaque;
-use log::*;
 use sea_query::{Expr, Iden, Order, Query, SimpleExpr, Value};
 use sqlx::Row;
 use std::collections::HashSet;
@@ -21,7 +20,7 @@ impl SqlBackendHandler {
     }
 }
 
-fn get_password_file(
+pub fn get_password_file(
     clear_password: &str,
     server_public_key: &opaque::PublicKey,
 ) -> Result<opaque::server::ServerRegistration> {
@@ -48,30 +47,6 @@ fn get_password_file(
     )?)
 }
 
-fn passwords_match(
-    password_file_bytes: &[u8],
-    clear_password: &str,
-    server_private_key: &opaque::PrivateKey,
-) -> Result<()> {
-    use opaque::{client, server};
-    let mut rng = rand::rngs::OsRng;
-    let client_login_start_result = client::login::start_login(clear_password, &mut rng)?;
-
-    let password_file = server::ServerRegistration::deserialize(password_file_bytes)
-        .map_err(opaque::AuthenticationError::ProtocolError)?;
-    let server_login_start_result = server::login::start_login(
-        &mut rng,
-        password_file,
-        server_private_key,
-        client_login_start_result.message,
-    )?;
-    client::login::finish_login(
-        client_login_start_result.state,
-        server_login_start_result.message,
-    )?;
-    Ok(())
-}
-
 fn get_filter_expr(filter: RequestFilter) -> SimpleExpr {
     use RequestFilter::*;
     fn get_repeated_filter(
@@ -95,42 +70,6 @@ fn get_filter_expr(filter: RequestFilter) -> SimpleExpr {
 
 #[async_trait]
 impl BackendHandler for SqlBackendHandler {
-    async fn bind(&self, request: BindRequest) -> Result<()> {
-        if request.name == self.config.ldap_user_dn {
-            if request.password == self.config.ldap_user_pass {
-                return Ok(());
-            } else {
-                debug!(r#"Invalid password for LDAP bind user"#);
-                return Err(Error::AuthenticationError(request.name));
-            }
-        }
-        let query = Query::select()
-            .column(Users::PasswordHash)
-            .from(Users::Table)
-            .and_where(Expr::col(Users::UserId).eq(request.name.as_str()))
-            .to_string(DbQueryBuilder {});
-        if let Ok(row) = sqlx::query(&query).fetch_one(&self.sql_pool).await {
-            if let Some(password_hash) =
-                row.get::<Option<Vec<u8>>, _>(&*Users::PasswordHash.to_string())
-            {
-                if let Err(e) = passwords_match(
-                    &&password_hash,
-                    &request.password,
-                    self.config.get_server_keys().private(),
-                ) {
-                    debug!(r#"Invalid password for "{}": {}"#, request.name, e);
-                } else {
-                    return Ok(());
-                }
-            } else {
-                debug!(r#"User "{}" has no password"#, request.name);
-            }
-        } else {
-            debug!(r#"No user found for "{}""#, request.name);
-        }
-        Err(Error::AuthenticationError(request.name))
-    }
-
     async fn list_users(&self, request: ListUsersRequest) -> Result<Vec<User>> {
         let query = {
             let mut query_builder = Query::select()

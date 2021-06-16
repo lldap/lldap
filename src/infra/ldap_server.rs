@@ -1,4 +1,4 @@
-use crate::domain::handler::BackendHandler;
+use crate::domain::handler::{BackendHandler, LoginHandler};
 use crate::infra::configuration::Configuration;
 use crate::infra::ldap_handler::LdapHandler;
 use actix_rt::net::TcpStream;
@@ -12,11 +12,14 @@ use log::*;
 use tokio::net::tcp::WriteHalf;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
-async fn handle_incoming_message<Backend: BackendHandler>(
+async fn handle_incoming_message<Backend>(
     msg: Result<LdapMsg, std::io::Error>,
     resp: &mut FramedWrite<WriteHalf<'_>, LdapCodec>,
     session: &mut LdapHandler<Backend>,
-) -> Result<bool> {
+) -> Result<bool>
+where
+    Backend: BackendHandler + LoginHandler,
+{
     use futures_util::SinkExt;
     use std::convert::TryFrom;
     let server_op = match msg.map_err(|_e| ()).and_then(ServerOps::try_from) {
@@ -56,7 +59,7 @@ pub fn build_ldap_server<Backend>(
     server_builder: ServerBuilder,
 ) -> Result<ServerBuilder>
 where
-    Backend: BackendHandler + 'static,
+    Backend: BackendHandler + LoginHandler + 'static,
 {
     use futures_util::StreamExt;
 
