@@ -100,6 +100,7 @@ pub mod client {
         pub type ClientLoginFinishResult = opaque_ke::ClientLoginFinishResult<DefaultSuite>;
         pub type ClientLoginStartResult = opaque_ke::ClientLoginStartResult<DefaultSuite>;
         pub type CredentialResponse = opaque_ke::CredentialResponse<DefaultSuite>;
+        pub type CredentialFinalization = opaque_ke::CredentialFinalization<DefaultSuite>;
         pub use opaque_ke::{
             ClientLoginFinishParameters,
             ClientLoginStartParameters,
