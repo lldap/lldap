@@ -1,10 +1,14 @@
 use crate::{
-    domain::handler::*,
+    domain::{
+        handler::{BackendHandler, LoginHandler},
+        opaque_handler::OpaqueHandler,
+    },
     infra::{
         tcp_backend_handler::*,
         tcp_server::{error_to_http_response, AppState},
     },
 };
+use lldap_model::{JWTClaims, BindRequest};
 use actix_web::{
     cookie::{Cookie, SameSite},
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
@@ -166,7 +170,7 @@ async fn post_authorize<Backend>(
     request: web::Json<BindRequest>,
 ) -> HttpResponse
 where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
+    Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
 {
     let req: BindRequest = request.clone();
     data.backend_handler
@@ -299,7 +303,7 @@ where
 
 pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig)
 where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
+    Backend: TcpBackendHandler + LoginHandler + OpaqueHandler + BackendHandler + 'static,
 {
     cfg.service(web::resource("").route(web::post().to(post_authorize::<Backend>)))
         .service(web::resource("/refresh").route(web::get().to(get_refresh::<Backend>)))

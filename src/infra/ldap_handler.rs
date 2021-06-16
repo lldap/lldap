@@ -1,4 +1,4 @@
-use crate::domain::handler::{BackendHandler, ListUsersRequest, RequestFilter, User};
+use crate::domain::handler::{BackendHandler, ListUsersRequest, LoginHandler, RequestFilter, User};
 use anyhow::{bail, Result};
 use ldap3_server::simple::*;
 
@@ -147,7 +147,7 @@ fn convert_filter(filter: &LdapFilter) -> Result<RequestFilter> {
     }
 }
 
-pub struct LdapHandler<Backend: BackendHandler> {
+pub struct LdapHandler<Backend: BackendHandler + LoginHandler> {
     dn: String,
     backend_handler: Backend,
     pub base_dn: Vec<(String, String)>,
@@ -155,7 +155,7 @@ pub struct LdapHandler<Backend: BackendHandler> {
     ldap_user_dn: String,
 }
 
-impl<Backend: BackendHandler> LdapHandler<Backend> {
+impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
     pub fn new(backend_handler: Backend, ldap_base_dn: String, ldap_user_dn: String) -> Self {
         Self {
             dn: "Unauthenticated".to_string(),
