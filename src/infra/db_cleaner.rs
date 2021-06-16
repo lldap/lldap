@@ -1,5 +1,5 @@
 use crate::{
-    domain::sql_tables::{DbQueryBuilder, Pool},
+    domain::sql_tables::{DbQueryBuilder, LoginAttempts, Pool, RegistrationAttempts},
     infra::jwt_sql_tables::{JwtRefreshStorage, JwtStorage},
 };
 use actix::prelude::*;
@@ -57,7 +57,7 @@ impl Scheduler {
         .execute(&sql_pool)
         .await
         {
-            log::error!("DB cleanup error: {}", e);
+            log::error!("DB error while cleaning up JWT refresh tokens: {}", e);
         };
         if let Err(e) = sqlx::query(
             &Query::delete()
@@ -68,7 +68,35 @@ impl Scheduler {
         .execute(&sql_pool)
         .await
         {
-            log::error!("DB cleanup error: {}", e);
+            log::error!("DB error while cleaning up JWT storage: {}", e);
+        };
+        if let Err(e) = sqlx::query(
+            &Query::delete()
+                .from_table(LoginAttempts::Table)
+                .and_where(
+                    Expr::col(LoginAttempts::Timestamp)
+                        .lt(Local::now().naive_utc() - chrono::Duration::minutes(5)),
+                )
+                .to_string(DbQueryBuilder {}),
+        )
+        .execute(&sql_pool)
+        .await
+        {
+            log::error!("DB error while cleaning up login attempts: {}", e);
+        };
+        if let Err(e) = sqlx::query(
+            &Query::delete()
+                .from_table(RegistrationAttempts::Table)
+                .and_where(
+                    Expr::col(RegistrationAttempts::Timestamp)
+                        .lt(Local::now().naive_utc() - chrono::Duration::minutes(5)),
+                )
+                .to_string(DbQueryBuilder {}),
+        )
+        .execute(&sql_pool)
+        .await
+        {
+            log::error!("DB error while cleaning up registration attempts: {}", e);
         };
         log::info!("DB cleaned!");
     }
