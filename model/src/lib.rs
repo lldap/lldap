@@ -10,6 +10,56 @@ pub struct BindRequest {
     pub password: String,
 }
 
+/// The messages for the 3-step OPAQUE login process.
+pub mod login {
+    use super::*;
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientLoginStartRequest {
+        pub username: String,
+        pub login_start_request: opaque::server::login::CredentialRequest,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerLoginStartResponse {
+        /// A randomly-generated temporary key that corresponds to this login attempt.
+        pub login_key: String,
+        pub credential_response: opaque::client::login::CredentialResponse,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientLoginFinishRequest {
+        /// The key returned by the server in the previous step.
+        pub login_key: String,
+        pub credential_finalization: opaque::client::login::CredentialFinalization,
+    }
+}
+
+/// The messages for the 3-step OPAQUE registration process.
+pub mod registration {
+    use super::*;
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientRegistrationStartRequest {
+        pub username: String,
+        pub registration_start_request: opaque::server::registration::RegistrationRequest,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerRegistrationStartResponse {
+        /// A randomly-generated temporary key that corresponds to this registration attempt.
+        pub registration_key: String,
+        pub registration_response: opaque::client::registration::RegistrationResponse,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientRegistrationFinishRequest {
+        /// The key returned by the server in the previous step.
+        pub registration_key: String,
+        pub registration_upload: opaque::server::registration::RegistrationUpload,
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum RequestFilter {
     And(Vec<RequestFilter>),
