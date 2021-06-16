@@ -34,6 +34,27 @@ pub enum Memberships {
     GroupId,
 }
 
+/// Contains the temporary data that needs to be kept between the first and second message when
+/// logging in with the OPAQUE protocol.
+#[derive(Iden)]
+pub enum LoginAttempts {
+    Table,
+    RandomId,
+    UserId,
+    ServerLoginData,
+    Timestamp,
+}
+
+/// Same for registration.
+#[derive(Iden)]
+pub enum RegistrationAttempts {
+    Table,
+    RandomId,
+    UserId,
+    ServerRegistrationData,
+    Timestamp,
+}
+
 pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
     // SQLite needs this pragma to be turned on. Other DB might not understand this, so ignore the
     // error.
@@ -61,6 +82,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
     )
     .execute(pool)
     .await?;
+
     sqlx::query(
         &Table::create()
             .table(Groups::Table)
@@ -81,6 +103,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
     )
     .execute(pool)
     .await?;
+
     sqlx::query(
         &Table::create()
             .table(Memberships::Table)
@@ -104,6 +127,80 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
                     .name("MembershipGroupForeignKey")
                     .table(Memberships::Table, Groups::Table)
                     .col(Memberships::GroupId, Groups::GroupId)
+                    .on_delete(ForeignKeyAction::Cascade)
+                    .on_update(ForeignKeyAction::Cascade),
+            )
+            .to_string(DbQueryBuilder {}),
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        &Table::create()
+            .table(LoginAttempts::Table)
+            .if_not_exists()
+            .col(
+                ColumnDef::new(LoginAttempts::RandomId)
+                    .string_len(32)
+                    .primary_key(),
+            )
+            .col(
+                ColumnDef::new(LoginAttempts::UserId)
+                    .string_len(255)
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(LoginAttempts::ServerLoginData)
+                    .binary()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(LoginAttempts::Timestamp)
+                    .date_time()
+                    .not_null(),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("LoginAttemptsUserIdForeignKey")
+                    .table(LoginAttempts::Table, Users::Table)
+                    .col(LoginAttempts::UserId, Users::UserId)
+                    .on_delete(ForeignKeyAction::Cascade)
+                    .on_update(ForeignKeyAction::Cascade),
+            )
+            .to_string(DbQueryBuilder {}),
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        &Table::create()
+            .table(RegistrationAttempts::Table)
+            .if_not_exists()
+            .col(
+                ColumnDef::new(RegistrationAttempts::RandomId)
+                    .string_len(32)
+                    .primary_key(),
+            )
+            .col(
+                ColumnDef::new(RegistrationAttempts::UserId)
+                    .string_len(255)
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(RegistrationAttempts::ServerRegistrationData)
+                    .binary()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(RegistrationAttempts::Timestamp)
+                    .date_time()
+                    .not_null(),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("RegistrationAttemptsUserIdForeignKey")
+                    .table(RegistrationAttempts::Table, Users::Table)
+                    .col(RegistrationAttempts::UserId, Users::UserId)
                     .on_delete(ForeignKeyAction::Cascade)
                     .on_update(ForeignKeyAction::Cascade),
             )
