@@ -30,7 +30,10 @@ pub struct User {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     // pub avatar: ?,
+    pub ssh_pub_key: Option<String>,
+    pub wireguard_pub_key: Option<String>,
     pub creation_date: chrono::NaiveDateTime,
+
 }
 
 impl Default for User {
@@ -41,6 +44,8 @@ impl Default for User {
             display_name: None,
             first_name: None,
             last_name: None,
+            ssh_pub_key: None,
+            wireguard_pub_key: None,
             creation_date: chrono::NaiveDateTime::from_timestamp(0, 0),
         }
     }
@@ -54,6 +59,8 @@ pub struct CreateUserRequest {
     pub display_name: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
+    pub ssh_pub_key: Option<String>,
+    pub wireguard_pub_key: Option<String>,
     pub password: String,
 }
 
