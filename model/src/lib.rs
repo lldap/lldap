@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
@@ -33,7 +33,6 @@ pub struct User {
     pub ssh_pub_key: Option<String>,
     pub wireguard_pub_key: Option<String>,
     pub creation_date: chrono::NaiveDateTime,
-
 }
 
 impl Default for User {

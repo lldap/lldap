@@ -76,7 +76,10 @@ fn get_attribute(user: &User, attribute: &str) -> Result<Vec<String>> {
             .clone()
             .unwrap_or_else(|| user.user_id.clone())]),
         "sshPubKey" => Ok(vec![user.ssh_pub_key.clone().unwrap_or("".to_string())]),
-        "wireguardPubKey" => Ok(vec![user.wireguard_pub_key.clone().unwrap_or("".to_string())]),
+        "wireguardPubKey" => Ok(vec![user
+            .wireguard_pub_key
+            .clone()
+            .unwrap_or("".to_string())]),
         _ => bail!("Unsupported attribute: {}", attribute),
     }
 }

@@ -240,7 +240,10 @@ impl BackendHandler for SqlBackendHandler {
                 request.first_name.map(Into::into).unwrap_or(Value::Null),
                 request.last_name.map(Into::into).unwrap_or(Value::Null),
                 request.ssh_pub_key.map(Into::into).unwrap_or(Value::Null),
-                request.wireguard_pub_key.map(Into::into).unwrap_or(Value::Null),
+                request
+                    .wireguard_pub_key
+                    .map(Into::into)
+                    .unwrap_or(Value::Null),
                 chrono::Utc::now().naive_utc().into(),
                 password_hash.into(),
             ])
