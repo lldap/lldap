@@ -7,11 +7,11 @@ use crate::{
 };
 use actix_web::{web, HttpResponse};
 
-fn error_to_api_response<T>(error: DomainError) -> ApiResult<T> {
+pub(crate) fn error_to_api_response<T>(error: DomainError) -> ApiResult<T> {
     ApiResult::Right(error_to_http_response(error))
 }
 
-type ApiResult<M> = actix_web::Either<web::Json<M>, HttpResponse>;
+pub type ApiResult<M> = actix_web::Either<web::Json<M>, HttpResponse>;
 
 async fn user_list_handler<Backend>(
     data: web::Data<AppState<Backend>>,
