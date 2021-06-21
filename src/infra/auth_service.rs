@@ -4,11 +4,11 @@ use crate::{
         opaque_handler::OpaqueHandler,
     },
     infra::{
+        tcp_api::{error_to_api_response, ApiResult},
         tcp_backend_handler::*,
         tcp_server::{error_to_http_response, AppState},
     },
 };
-use lldap_model::{JWTClaims, BindRequest};
 use actix_web::{
     cookie::{Cookie, SameSite},
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
@@ -22,6 +22,7 @@ use futures::future::{ok, Ready};
 use futures_util::{FutureExt, TryFutureExt};
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
+use lldap_model::{login, registration, BindRequest, JWTClaims};
 use log::*;
 use sha2::Sha512;
 use std::collections::{hash_map::DefaultHasher, HashSet};
@@ -165,30 +166,35 @@ where
         .finish()
 }
 
-async fn post_authorize<Backend>(
+async fn opaque_login_start<Backend>(
     data: web::Data<AppState<Backend>>,
-    request: web::Json<BindRequest>,
+    request: web::Json<login::ClientLoginStartRequest>,
+) -> ApiResult<login::ServerLoginStartResponse>
+where
+    Backend: OpaqueHandler + 'static,
+{
+    data.backend_handler
+        .login_start(request.clone())
+        .await
+        .map(|res| ApiResult::Left(web::Json(res)))
+        .unwrap_or_else(error_to_api_response)
+}
+
+async fn get_login_successful_response<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    name: &str,
 ) -> HttpResponse
 where
-    Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
+    Backend: TcpBackendHandler + BackendHandler,
 {
-    let req: BindRequest = request.clone();
+    // The authentication was successful, we need to fetch the groups to create the JWT
+    // token.
     data.backend_handler
-        .bind(req)
-        // If the authentication was successful, we need to fetch the groups to create the JWT
-        // token.
-        .and_then(|_| data.backend_handler.get_user_groups(request.name.clone()))
-        .and_then(|g| async {
-            Ok((
-                g,
-                data.backend_handler
-                    .create_refresh_token(&request.name)
-                    .await?,
-            ))
-        })
+        .get_user_groups(name.to_string())
+        .and_then(|g| async { Ok((g, data.backend_handler.create_refresh_token(&name).await?)) })
         .await
         .map(|(groups, (refresh_token, max_age))| {
-            let token = create_jwt(&data.jwt_key, request.name.clone(), groups);
+            let token = create_jwt(&data.jwt_key, name.to_string(), groups);
             HttpResponse::Ok()
                 .cookie(
                     Cookie::build("token", token.as_str())
@@ -199,7 +205,7 @@ where
                         .finish(),
                 )
                 .cookie(
-                    Cookie::build("refresh_token", refresh_token + "+" + &request.name)
+                    Cookie::build("refresh_token", refresh_token + "+" + &name)
                         .max_age(max_age.num_days().days())
                         .path("/auth")
                         .http_only(true)
@@ -209,6 +215,64 @@ where
                 .body(token.as_str().to_owned())
         })
         .unwrap_or_else(error_to_http_response)
+}
+
+async fn opaque_login_finish<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login::ClientLoginFinishRequest>,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    let name = match data.backend_handler.login_finish(request.clone()).await {
+        Ok(n) => n,
+        Err(e) => return error_to_http_response(e),
+    };
+    get_login_successful_response(&data, &name).await
+}
+
+async fn post_authorize<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<BindRequest>,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
+{
+    if let Err(e) = data.backend_handler.bind(request.clone()).await {
+        return error_to_http_response(e);
+    }
+    get_login_successful_response(&data, &request.name).await
+}
+
+async fn opaque_register_start<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<registration::ClientRegistrationStartRequest>,
+) -> ApiResult<registration::ServerRegistrationStartResponse>
+where
+    Backend: OpaqueHandler + 'static,
+{
+    data.backend_handler
+        .registration_start(request.clone())
+        .await
+        .map(|res| ApiResult::Left(web::Json(res)))
+        .unwrap_or_else(error_to_api_response)
+}
+
+async fn opaque_register_finish<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<registration::ClientRegistrationFinishRequest>,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    if let Err(e) = data
+        .backend_handler
+        .registration_finish(request.clone())
+        .await
+    {
+        return error_to_http_response(e);
+    }
+    HttpResponse::Ok().finish()
 }
 
 pub struct CookieToHeaderTranslatorFactory;
@@ -306,6 +370,22 @@ where
     Backend: TcpBackendHandler + LoginHandler + OpaqueHandler + BackendHandler + 'static,
 {
     cfg.service(web::resource("").route(web::post().to(post_authorize::<Backend>)))
+        .service(
+            web::resource("/opaque/login/start")
+                .route(web::post().to(opaque_login_start::<Backend>)),
+        )
+        .service(
+            web::resource("/opaque/login/finish")
+                .route(web::post().to(opaque_login_finish::<Backend>)),
+        )
+        .service(
+            web::resource("/opaque/register/start")
+                .route(web::post().to(opaque_register_start::<Backend>)),
+        )
+        .service(
+            web::resource("/opaque/register/finish")
+                .route(web::post().to(opaque_register_finish::<Backend>)),
+        )
         .service(web::resource("/refresh").route(web::get().to(get_refresh::<Backend>)))
         .service(web::resource("/logout").route(web::post().to(post_logout::<Backend>)));
 }

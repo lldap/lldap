@@ -73,10 +73,7 @@ fn http_config<Backend>(
     .service(web::scope("/").route("/.*", web::get().to(index)));
 }
 
-pub(crate) struct AppState<Backend>
-where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
-{
+pub(crate) struct AppState<Backend> {
     pub backend_handler: Backend,
     pub jwt_key: Hmac<Sha512>,
     pub jwt_blacklist: RwLock<HashSet<u64>>,
