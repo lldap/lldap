@@ -209,13 +209,12 @@ where
 
 pub struct CookieToHeaderTranslatorFactory;
 
-impl<S, B> Transform<S, ServiceRequest> for CookieToHeaderTranslatorFactory
+impl<S> Transform<S, ServiceRequest> for CookieToHeaderTranslatorFactory
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error>,
+    S: Service<ServiceRequest, Response = ServiceResponse, Error = actix_web::Error>,
     S::Future: 'static,
-    B: 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse;
     type Error = actix_web::Error;
     type InitError = ();
     type Transform = CookieToHeaderTranslator<S>;
@@ -230,13 +229,12 @@ pub struct CookieToHeaderTranslator<S> {
     service: S,
 }
 
-impl<S, B> Service<ServiceRequest> for CookieToHeaderTranslator<S>
+impl<S> Service<ServiceRequest> for CookieToHeaderTranslator<S>
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error>,
+    S: Service<ServiceRequest, Response = ServiceResponse, Error = actix_web::Error>,
     S::Future: 'static,
-    B: 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse;
     type Error = actix_web::Error;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn core::future::Future<Output = Result<Self::Response, Self::Error>>>>;

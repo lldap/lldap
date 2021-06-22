@@ -4,21 +4,13 @@ edition = "2018"
 name = "lldap"
 version = "0.1.0"
 
-[patch.crates-io]
-actix-files = { git = "https://github.com/actix/actix-web", rev = "a9dc1586a0935c48c3f841761bf81c43ca9e2651" }
-actix-http = { git = "https://github.com/actix/actix-web", rev = "a9dc1586a0935c48c3f841761bf81c43ca9e2651" }
-actix-web = { git = "https://github.com/actix/actix-web", rev = "a9dc1586a0935c48c3f841761bf81c43ca9e2651" }
-actix-web-httpauth = { git = "https://github.com/nhruo123/actix-extras", rev = "b4e8db446843a99b06c7ec40f18ef7b59ee7e955" }
-
 [dependencies]
-actix = "0.11.1"
-actix-files = "0.6.0-beta.4"
+actix = "0.11.0-beta.3"
 actix-http = "3.0.0-beta.6"
-actix-rt = "2.2"
-actix-server = "2.0.0-beta.5"
+actix-rt = "2.1.0"
+actix-server = "2.0.0-beta.3"
 actix-service = "2.0.0"
-actix-web = "4.0.0-beta.6"
-actix-web-httpauth = "0.6.0-beta.1"
+actix-web = "4.0.0-beta.3"
 anyhow = "*"
 rust-argon2 = "0.8"
 async-trait = "0.1"
@@ -42,7 +34,7 @@ time = "0.2"
 tokio = { version = "1.2.0", features = ["full"] }
 tokio-util = "0.6.3"
 tracing = "*"
-tracing-actix-web = "0.3.0-beta.2"
+tracing-actix-web = "0.4.0-beta.7"
 tracing-log = "*"
 tracing-subscriber = "*"
 rand = { version = "0.8", features = ["small_rng", "getrandom"] }
@@ -66,6 +58,18 @@ features = ["with-chrono"]
 [dependencies.figment]
 features = ["env", "toml"]
 version = "*"
+
+[dependencies.actix-files]
+git = "https://github.com/actix/actix-web"
+rev = "2d8530feb37447a1dd2e58700b31b987ae8163ef"
+
+#[dependencies.actix-cors]
+#git = "https://github.com/nitnelave/actix-extras"
+#rev = "39b03cb5d2734482328722219c528cb0a6d375d7"
+
+[dependencies.actix-web-httpauth]
+git = "https://github.com/nitnelave/actix-extras"
+rev = "39b03cb5d2734482328722219c528cb0a6d375d7"
 
 [dev-dependencies]
 mockall = "0.9.1"
