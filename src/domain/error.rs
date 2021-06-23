@@ -9,6 +9,12 @@ pub enum DomainError {
     DatabaseError(#[from] sqlx::Error),
     #[error("Authentication protocol error for `{0}`")]
     AuthenticationProtocolError(#[from] lldap_model::opaque::AuthenticationError),
+    #[error("Unknown crypto error: `{0}`")]
+    UnknownCryptoError(#[from] orion::errors::UnknownCryptoError),
+    #[error("Binary serialization error: `{0}`")]
+    BinarySerializationError(#[from] bincode::Error),
+    #[error("Invalid base64: `{0}`")]
+    Base64DecodeError(#[from] base64::DecodeError),
     #[error("Internal error: `{0}`")]
     InternalError(String),
 }

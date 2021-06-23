@@ -32,8 +32,11 @@ pub(crate) fn error_to_http_response(error: DomainError) -> HttpResponse {
         DomainError::AuthenticationError(_) | DomainError::AuthenticationProtocolError(_) => {
             HttpResponse::Unauthorized()
         }
-        DomainError::DatabaseError(_) | DomainError::InternalError(_) => {
-            HttpResponse::InternalServerError()
+        DomainError::DatabaseError(_)
+        | DomainError::InternalError(_)
+        | DomainError::UnknownCryptoError(_) => HttpResponse::InternalServerError(),
+        DomainError::Base64DecodeError(_) | DomainError::BinarySerializationError(_) => {
+            HttpResponse::BadRequest()
         }
     }
     .body(error.to_string())

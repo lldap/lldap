@@ -5,25 +5,16 @@ use super::{
 use async_trait::async_trait;
 use lldap_model::{opaque, BindRequest};
 use log::*;
-use rand::{CryptoRng, RngCore};
 use sea_query::{Expr, Iden, Query};
 use sqlx::Row;
 
 type SqlOpaqueHandler = SqlBackendHandler;
 
-fn generate_random_id<R: RngCore + CryptoRng>(rng: &mut R) -> String {
-    use rand::{distributions::Alphanumeric, Rng};
-    std::iter::repeat(())
-        .map(|()| rng.sample(Alphanumeric))
-        .map(char::from)
-        .take(32)
-        .collect()
-}
-
 fn passwords_match(
     password_file_bytes: &[u8],
     clear_password: &str,
-    server_private_key: &opaque::PrivateKey,
+    server_setup: &opaque::server::ServerSetup,
+    username: &str,
 ) -> Result<()> {
     use opaque::{client, server};
     let mut rng = rand::rngs::OsRng;
@@ -33,15 +24,50 @@ fn passwords_match(
         .map_err(opaque::AuthenticationError::ProtocolError)?;
     let server_login_start_result = server::login::start_login(
         &mut rng,
-        password_file,
-        server_private_key,
+        server_setup,
+        Some(password_file),
         client_login_start_result.message,
+        username,
     )?;
     client::login::finish_login(
         client_login_start_result.state,
         server_login_start_result.message,
     )?;
     Ok(())
+}
+
+impl SqlBackendHandler {
+    fn get_orion_secret_key(&self) -> Result<orion::aead::SecretKey> {
+        Ok(orion::aead::SecretKey::from_slice(
+            self.config.get_server_keys().private(),
+        )?)
+    }
+
+    async fn get_password_file_for_user(
+        &self,
+        username: &str,
+    ) -> Result<Option<opaque::server::ServerRegistration>> {
+        // Fetch the previously registered password file from the DB.
+        let password_file_bytes = {
+            let query = Query::select()
+                .column(Users::PasswordHash)
+                .from(Users::Table)
+                .and_where(Expr::col(Users::UserId).eq(username))
+                .to_string(DbQueryBuilder {});
+            if let Some(row) = sqlx::query(&query).fetch_optional(&self.sql_pool).await? {
+                row.get::<Option<Vec<u8>>, _>(&*Users::PasswordHash.to_string())
+                    // If no password, always fail.
+                    .ok_or_else(|| DomainError::AuthenticationError(username.to_string()))?
+            } else {
+                return Ok(None);
+            }
+        };
+        opaque::server::ServerRegistration::deserialize(&password_file_bytes)
+            .map(Option::Some)
+            .map_err(|_| {
+                DomainError::InternalError(format!("Corrupted password file for {}", username))
+            })
+    }
 }
 
 #[async_trait]
@@ -67,7 +93,8 @@ impl LoginHandler for SqlBackendHandler {
                 if let Err(e) = passwords_match(
                     &password_hash,
                     &request.password,
-                    self.config.get_server_keys().private(),
+                    self.config.get_server_setup(),
+                    &request.name,
                 ) {
                     debug!(r#"Invalid password for "{}": {}"#, request.name, e);
                 } else {
@@ -89,99 +116,44 @@ impl OpaqueHandler for SqlOpaqueHandler {
         &self,
         request: login::ClientLoginStartRequest,
     ) -> Result<login::ServerLoginStartResponse> {
-        // Fetch the previously registered password file from the DB.
-        let password_file_bytes = {
-            let query = Query::select()
-                .column(Users::PasswordHash)
-                .from(Users::Table)
-                .and_where(Expr::col(Users::UserId).eq(request.username.as_str()))
-                .to_string(DbQueryBuilder {});
-            sqlx::query(&query)
-                .fetch_one(&self.sql_pool)
-                .await?
-                .get::<Option<Vec<u8>>, _>(&*Users::PasswordHash.to_string())
-                // If no password, always fail.
-                .ok_or_else(|| DomainError::AuthenticationError(request.username.clone()))?
-        };
-        let password_file = opaque::server::ServerRegistration::deserialize(&password_file_bytes)
-            .map_err(|_| {
-            DomainError::InternalError(format!("Corrupted password file for {}", request.username))
-        })?;
+        let maybe_password_file = self.get_password_file_for_user(&request.username).await?;
 
         let mut rng = rand::rngs::OsRng;
         let start_response = opaque::server::login::start_login(
             &mut rng,
-            password_file,
-            self.config.get_server_keys().private(),
+            self.config.get_server_setup(),
+            maybe_password_file,
             request.login_start_request,
+            &request.username,
         )?;
-        let login_attempt_id = generate_random_id(&mut rng);
-
-        {
-            // Insert the current login attempt in the DB.
-            let query = Query::insert()
-                .into_table(LoginAttempts::Table)
-                .columns(vec![
-                    LoginAttempts::RandomId,
-                    LoginAttempts::UserId,
-                    LoginAttempts::ServerLoginData,
-                    LoginAttempts::Timestamp,
-                ])
-                .values_panic(vec![
-                    login_attempt_id.as_str().into(),
-                    request.username.as_str().into(),
-                    start_response.state.serialize().into(),
-                    chrono::Utc::now().naive_utc().into(),
-                ])
-                .to_string(DbQueryBuilder {});
-            sqlx::query(&query).execute(&self.sql_pool).await?;
-        }
+        let secret_key = self.get_orion_secret_key()?;
+        let server_data = login::ServerData {
+            username: request.username,
+            server_login: start_response.state,
+        };
+        let encrypted_state = orion::aead::seal(&secret_key, &bincode::serialize(&server_data)?)?;
 
         Ok(login::ServerLoginStartResponse {
-            login_key: login_attempt_id,
+            server_data: base64::encode(&encrypted_state),
             credential_response: start_response.message,
         })
     }
 
     async fn login_finish(&self, request: login::ClientLoginFinishRequest) -> Result<String> {
-        // Fetch the previous data from this login attempt.
-        let row = {
-            let query = Query::select()
-                .column(LoginAttempts::UserId)
-                .column(LoginAttempts::ServerLoginData)
-                .from(LoginAttempts::Table)
-                .and_where(Expr::col(LoginAttempts::RandomId).eq(request.login_key.as_str()))
-                .and_where(
-                    Expr::col(LoginAttempts::Timestamp)
-                        .gt(chrono::Utc::now().naive_utc() - chrono::Duration::minutes(5)),
-                )
-                .to_string(DbQueryBuilder {});
-            sqlx::query(&query).fetch_one(&self.sql_pool).await?
-        };
-        let username = row.get::<String, _>(&*LoginAttempts::UserId.to_string());
-        let login_data = opaque::server::login::ServerLogin::deserialize(
-            &row.get::<Vec<u8>, _>(&*LoginAttempts::ServerLoginData.to_string()),
-        )
-        .map_err(|_| {
-            DomainError::InternalError(format!(
-                "Corrupted login data for user `{}` [id `{}`]",
-                username, request.login_key
-            ))
-        })?;
+        let secret_key = self.get_orion_secret_key()?;
+        let login::ServerData {
+            username,
+            server_login,
+        } = bincode::deserialize(&orion::aead::open(
+            &secret_key,
+            &base64::decode(&request.server_data)?,
+        )?)?;
         // Finish the login: this makes sure the client data is correct, and gives a session key we
         // don't need.
         let _session_key =
-            opaque::server::login::finish_login(login_data, request.credential_finalization)?
+            opaque::server::login::finish_login(server_login, request.credential_finalization)?
                 .session_key;
 
-        {
-            // Login was successful, we can delete the login attempt from the table.
-            let delete_query = Query::delete()
-                .from_table(LoginAttempts::Table)
-                .and_where(Expr::col(LoginAttempts::RandomId).eq(request.login_key))
-                .to_string(DbQueryBuilder {});
-            sqlx::query(&delete_query).execute(&self.sql_pool).await?;
-        }
         Ok(username)
     }
 
@@ -189,36 +161,19 @@ impl OpaqueHandler for SqlOpaqueHandler {
         &self,
         request: registration::ClientRegistrationStartRequest,
     ) -> Result<registration::ServerRegistrationStartResponse> {
-        let mut rng = rand::rngs::OsRng;
         // Generate the server-side key and derive the data to send back.
         let start_response = opaque::server::registration::start_registration(
-            &mut rng,
+            self.config.get_server_setup(),
             request.registration_start_request,
-            self.config.get_server_keys().public(),
+            &request.username,
         )?;
-        // Unique ID to identify the registration attempt.
-        let registration_attempt_id = generate_random_id(&mut rng);
-        {
-            // Write the registration attempt to the DB for the later turn.
-            let query = Query::insert()
-                .into_table(RegistrationAttempts::Table)
-                .columns(vec![
-                    RegistrationAttempts::RandomId,
-                    RegistrationAttempts::UserId,
-                    RegistrationAttempts::ServerRegistrationData,
-                    RegistrationAttempts::Timestamp,
-                ])
-                .values_panic(vec![
-                    registration_attempt_id.as_str().into(),
-                    request.username.as_str().into(),
-                    start_response.state.serialize().into(),
-                    chrono::Utc::now().naive_utc().into(),
-                ])
-                .to_string(DbQueryBuilder {});
-            sqlx::query(&query).execute(&self.sql_pool).await?;
-        }
+        let secret_key = self.get_orion_secret_key()?;
+        let server_data = registration::ServerData {
+            username: request.username,
+        };
+        let encrypted_state = orion::aead::seal(&secret_key, &bincode::serialize(&server_data)?)?;
         Ok(registration::ServerRegistrationStartResponse {
-            registration_key: registration_attempt_id,
+            server_data: base64::encode(encrypted_state),
             registration_response: start_response.message,
         })
     }
@@ -227,37 +182,14 @@ impl OpaqueHandler for SqlOpaqueHandler {
         &self,
         request: registration::ClientRegistrationFinishRequest,
     ) -> Result<()> {
-        // Fetch the previous state.
-        let row = {
-            let query = Query::select()
-                .column(RegistrationAttempts::UserId)
-                .column(RegistrationAttempts::ServerRegistrationData)
-                .from(RegistrationAttempts::Table)
-                .and_where(
-                    Expr::col(RegistrationAttempts::RandomId).eq(request.registration_key.as_str()),
-                )
-                .and_where(
-                    Expr::col(RegistrationAttempts::Timestamp)
-                        .gt(chrono::Utc::now().naive_utc() - chrono::Duration::minutes(5)),
-                )
-                .to_string(DbQueryBuilder {});
-            sqlx::query(&query).fetch_one(&self.sql_pool).await?
-        };
-        let username = row.get::<String, _>(&*RegistrationAttempts::UserId.to_string());
-        let registration_data = opaque::server::registration::ServerRegistration::deserialize(
-            &row.get::<Vec<u8>, _>(&*RegistrationAttempts::ServerRegistrationData.to_string()),
-        )
-        .map_err(|_| {
-            DomainError::InternalError(format!(
-                "Corrupted registration data for user `{}` [id `{}`]",
-                username, request.registration_key
-            ))
-        })?;
+        let secret_key = self.get_orion_secret_key()?;
+        let registration::ServerData { username } = bincode::deserialize(&orion::aead::open(
+            &secret_key,
+            &base64::decode(&request.server_data)?,
+        )?)?;
 
-        let password_file = opaque::server::registration::get_password_file(
-            registration_data,
-            request.registration_upload,
-        )?;
+        let password_file =
+            opaque::server::registration::get_password_file(request.registration_upload);
         {
             // Set the user password to the new password.
             let update_query = Query::update()
@@ -269,14 +201,6 @@ impl OpaqueHandler for SqlOpaqueHandler {
                 .and_where(Expr::col(Users::UserId).eq(username))
                 .to_string(DbQueryBuilder {});
             sqlx::query(&update_query).execute(&self.sql_pool).await?;
-        }
-        {
-            // Delete the registration attempt.
-            let delete_query = Query::delete()
-                .from_table(RegistrationAttempts::Table)
-                .and_where(Expr::col(RegistrationAttempts::RandomId).eq(request.registration_key))
-                .to_string(DbQueryBuilder {});
-            sqlx::query(&delete_query).execute(&self.sql_pool).await?;
         }
         Ok(())
     }
@@ -341,7 +265,7 @@ mod tests {
         )?;
         opaque_handler
             .login_finish(ClientLoginFinishRequest {
-                login_key: start_response.login_key,
+                server_data: start_response.server_data,
                 credential_finalization: login_finish.message,
             })
             .await?;
@@ -370,7 +294,7 @@ mod tests {
         )?;
         opaque_handler
             .registration_finish(ClientRegistrationFinishRequest {
-                registration_key: start_response.registration_key,
+                server_data: start_response.server_data,
                 registration_upload: registration_finish.message,
             })
             .await

@@ -15,6 +15,12 @@ pub mod login {
     use super::*;
 
     #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerData {
+        pub username: String,
+        pub server_login: opaque::server::login::ServerLogin,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
     pub struct ClientLoginStartRequest {
         pub username: String,
         pub login_start_request: opaque::server::login::CredentialRequest,
@@ -22,15 +28,15 @@ pub mod login {
 
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ServerLoginStartResponse {
-        /// A randomly-generated temporary key that corresponds to this login attempt.
-        pub login_key: String,
+        /// Base64, encrypted ServerData to be passed back to the server.
+        pub server_data: String,
         pub credential_response: opaque::client::login::CredentialResponse,
     }
 
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ClientLoginFinishRequest {
-        /// The key returned by the server in the previous step.
-        pub login_key: String,
+        /// Encrypted ServerData from the previous step.
+        pub server_data: String,
         pub credential_finalization: opaque::client::login::CredentialFinalization,
     }
 }
@@ -40,6 +46,11 @@ pub mod registration {
     use super::*;
 
     #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerData {
+        pub username: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
     pub struct ClientRegistrationStartRequest {
         pub username: String,
         pub registration_start_request: opaque::server::registration::RegistrationRequest,
@@ -47,15 +58,15 @@ pub mod registration {
 
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ServerRegistrationStartResponse {
-        /// A randomly-generated temporary key that corresponds to this registration attempt.
-        pub registration_key: String,
+        /// Base64, encrypted ServerData to be passed back to the server.
+        pub server_data: String,
         pub registration_response: opaque::client::registration::RegistrationResponse,
     }
 
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ClientRegistrationFinishRequest {
-        /// The key returned by the server in the previous step.
-        pub registration_key: String,
+        /// Encrypted ServerData from the previous step.
+        pub server_data: String,
         pub registration_upload: opaque::server::registration::RegistrationUpload,
     }
 }

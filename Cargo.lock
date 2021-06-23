@@ -729,6 +729,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "crypto-mac"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25fab6889090c8133f3deb8f73ba3c65a7f456f66436fc012a1b1e272b1e103e"
+dependencies = [
+ "generic-array",
+ "subtle",
+]
+
+[[package]]
+name = "ct-codecs"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3b7eb4404b8195a9abb6356f4ac07d8ba267045c8d6d220ac4dc992e6cc75df"
+
+[[package]]
 name = "curve25519-dalek"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -737,6 +753,7 @@ dependencies = [
  "byteorder",
  "digest",
  "rand_core 0.5.1",
+ "serde",
  "subtle",
  "zeroize",
 ]
@@ -1056,6 +1073,7 @@ version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "501466ecc8a30d1d3b7fc9229b122b2ce8ed6e9d9223f1138d4babb253e51817"
 dependencies = [
+ "serde",
  "typenum",
  "version_check",
 ]
@@ -1210,12 +1228,12 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hkdf"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51ab2f639c231793c5f6114bdb9bbe50a7dbbfcd7c7c6bd8475dec2d991e964f"
+checksum = "01706d578d5c281058480e673ae4086a9f4710d8df1ad80a5b03e39ece5f886b"
 dependencies = [
  "digest",
- "hmac",
+ "hmac 0.11.0",
 ]
 
 [[package]]
@@ -1224,7 +1242,17 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1441c6b1e930e2817404b5046f1f989899143a12bf92de603b69f4e0aee1e15"
 dependencies = [
- "crypto-mac",
+ "crypto-mac 0.10.0",
+ "digest",
+]
+
+[[package]]
+name = "hmac"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a2a2320eb7ec0ebe8da8f744d7812d9fc4cb4d09344ac01898dbcb6a20ae69b"
+dependencies = [
+ "crypto-mac 0.11.0",
  "digest",
 ]
 
@@ -1324,9 +1352,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86e46349d67dc03bdbdb28da0337a355a53ca1d5156452722c36fe21d0e6389b"
 dependencies = [
  "base64",
- "crypto-mac",
+ "crypto-mac 0.10.0",
  "digest",
- "hmac",
+ "hmac 0.10.1",
  "serde",
  "serde_json",
  "sha2",
@@ -1419,6 +1447,8 @@ dependencies = [
  "actix-web-httpauth",
  "anyhow",
  "async-trait",
+ "base64",
+ "bincode",
  "chrono",
  "clap",
  "cron",
@@ -1426,7 +1456,7 @@ dependencies = [
  "figment",
  "futures",
  "futures-util",
- "hmac",
+ "hmac 0.10.1",
  "http",
  "jwt",
  "ldap3_server",
@@ -1434,6 +1464,7 @@ dependencies = [
  "log",
  "mockall",
  "opaque-ke",
+ "orion",
  "rand 0.8.3",
  "sea-query",
  "serde",
@@ -1804,8 +1835,8 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "opaque-ke"
-version = "0.5.1-pre.1"
-source = "git+https://github.com/novifinancial/opaque-ke?rev=98f1821897cd2800e5bffb2a70541056145e99cc#98f1821897cd2800e5bffb2a70541056145e99cc"
+version = "0.6.0-pre.1"
+source = "git+https://github.com/novifinancial/opaque-ke?rev=eb59676a940b15f77871aefe1e46d7b5bf85f40a#eb59676a940b15f77871aefe1e46d7b5bf85f40a"
 dependencies = [
  "base64",
  "curve25519-dalek",
@@ -1814,7 +1845,7 @@ dependencies = [
  "generic-array",
  "generic-bytes",
  "hkdf",
- "hmac",
+ "hmac 0.11.0",
  "rand 0.8.3",
  "serde",
  "subtle",
@@ -1869,6 +1900,18 @@ dependencies = [
  "pin-project",
  "rand 0.8.3",
  "thiserror",
+]
+
+[[package]]
+name = "orion"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "118f94b4ca56d1eb99466a26a216b87fad822a51af8b308264c88a9337eb0a15"
+dependencies = [
+ "ct-codecs",
+ "getrandom 0.2.3",
+ "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -2525,7 +2568,7 @@ dependencies = [
  "generic-array",
  "hashlink",
  "hex",
- "hmac",
+ "hmac 0.10.1",
  "itoa",
  "libc",
  "libsqlite3-sys",

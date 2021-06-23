@@ -3,7 +3,7 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
-use lldap_model::{opaque, opaque::KeyPair};
+use lldap_model::opaque::{server::ServerSetup, KeyPair};
 use serde::{Deserialize, Serialize};
 
 use crate::infra::cli::CLIOpts;
@@ -27,18 +27,18 @@ pub struct Configuration {
     pub key_file: String,
     #[serde(skip)]
     #[builder(field(private), setter(strip_option))]
-    server_keys: Option<KeyPair>,
+    server_setup: Option<ServerSetup>,
 }
 
 impl ConfigurationBuilder {
     #[cfg(test)]
     pub fn build(self) -> Result<Configuration> {
-        let server_keys = get_server_keys(self.key_file.as_deref().unwrap_or("server_key"))?;
-        Ok(self.server_keys(server_keys).private_build()?)
+        let server_setup = get_server_setup(self.key_file.as_deref().unwrap_or("server_key"))?;
+        Ok(self.server_setup(server_setup).private_build()?)
     }
 
     fn validate(&self) -> Result<(), String> {
-        if self.server_keys.is_none() {
+        if self.server_setup.is_none() {
             Err("Don't use `private_build`, use `build` instead".to_string())
         } else {
             Ok(())
@@ -47,8 +47,12 @@ impl ConfigurationBuilder {
 }
 
 impl Configuration {
+    pub fn get_server_setup(&self) -> &ServerSetup {
+        self.server_setup.as_ref().unwrap()
+    }
+
     pub fn get_server_keys(&self) -> &KeyPair {
-        self.server_keys.as_ref().unwrap()
+        self.get_server_setup().keypair()
     }
 
     fn merge_with_cli(mut self: Configuration, cli_opts: CLIOpts) -> Configuration {
@@ -80,30 +84,29 @@ impl Configuration {
             database_url: String::from("sqlite://users.db?mode=rwc"),
             verbose: false,
             key_file: String::from("server_key"),
-            server_keys: None,
+            server_setup: None,
         }
     }
 }
 
-fn get_server_keys(file_path: &str) -> Result<KeyPair> {
-    use opaque_ke::ciphersuite::CipherSuite;
+fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
     use std::path::Path;
     let path = Path::new(file_path);
     if path.exists() {
         let bytes = std::fs::read(file_path)
             .map_err(|e| anyhow!("Could not read key file `{}`: {}", file_path, e))?;
-        Ok(KeyPair::from_private_key_slice(&bytes)?)
+        Ok(ServerSetup::deserialize(&bytes)?)
     } else {
         let mut rng = rand::rngs::OsRng;
-        let keypair = opaque::DefaultSuite::generate_random_keypair(&mut rng);
-        std::fs::write(path, keypair.private().as_slice()).map_err(|e| {
+        let server_setup = ServerSetup::new(&mut rng);
+        std::fs::write(path, server_setup.serialize()).map_err(|e| {
             anyhow!(
-                "Could not write the generated server keys to file `{}`: {}",
+                "Could not write the generated server setup to file `{}`: {}",
                 file_path,
                 e
             )
         })?;
-        Ok(keypair)
+        Ok(server_setup)
     }
 }
 
@@ -116,6 +119,6 @@ pub fn init(cli_opts: CLIOpts) -> Result<Configuration> {
         .extract()?;
 
     let mut config = config.merge_with_cli(cli_opts);
-    config.server_keys = Some(get_server_keys(&config.key_file)?);
+    config.server_setup = Some(get_server_setup(&config.key_file)?);
     Ok(config)
 }

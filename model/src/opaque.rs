@@ -100,18 +100,14 @@ pub mod client {
         pub type ClientLoginStartResult = opaque_ke::ClientLoginStartResult<DefaultSuite>;
         pub type CredentialResponse = opaque_ke::CredentialResponse<DefaultSuite>;
         pub type CredentialFinalization = opaque_ke::CredentialFinalization<DefaultSuite>;
-        pub use opaque_ke::{ClientLoginFinishParameters, ClientLoginStartParameters};
+        pub use opaque_ke::ClientLoginFinishParameters;
 
         /// Initiate the login negotiation.
         pub fn start_login<R: RngCore + CryptoRng>(
             password: &str,
             rng: &mut R,
         ) -> AuthenticationResult<ClientLoginStartResult> {
-            Ok(ClientLogin::start(
-                rng,
-                password.as_bytes(),
-                ClientLoginStartParameters::default(),
-            )?)
+            Ok(ClientLogin::start(rng, password.as_bytes())?)
         }
 
         /// Finalize the client login negotiation.
@@ -130,6 +126,7 @@ pub mod client {
 pub mod server {
     pub use super::*;
     pub type ServerRegistration = opaque_ke::ServerRegistration<DefaultSuite>;
+    pub type ServerSetup = opaque_ke::ServerSetup<DefaultSuite>;
     /// Methods to register a new user, from the server side.
     pub mod registration {
         pub use super::*;
@@ -140,24 +137,21 @@ pub mod server {
         /// Start a registration process, from a request sent by the client.
         ///
         /// The result must be kept for the next step.
-        pub fn start_registration<R: RngCore + CryptoRng>(
-            rng: &mut R,
+        pub fn start_registration(
+            server_setup: &ServerSetup,
             registration_request: RegistrationRequest,
-            server_public_key: &PublicKey,
+            username: &str,
         ) -> AuthenticationResult<ServerRegistrationStartResult> {
             Ok(ServerRegistration::start(
-                rng,
+                server_setup,
                 registration_request,
-                server_public_key,
+                username.as_bytes(),
             )?)
         }
 
         /// Finish to register a new user, and get the data to store in the database.
-        pub fn get_password_file(
-            registration_start: ServerRegistration,
-            registration_upload: RegistrationUpload,
-        ) -> AuthenticationResult<ServerRegistration> {
-            Ok(registration_start.finish(registration_upload)?)
+        pub fn get_password_file(registration_upload: RegistrationUpload) -> ServerRegistration {
+            ServerRegistration::finish(registration_upload)
         }
     }
 
@@ -176,15 +170,17 @@ pub mod server {
         /// The result must be kept for the next step.
         pub fn start_login<R: RngCore + CryptoRng>(
             rng: &mut R,
-            password_file: ServerRegistration,
-            server_private_key: &PrivateKey,
+            server_setup: &ServerSetup,
+            password_file: Option<ServerRegistration>,
             credential_request: CredentialRequest,
+            username: &str,
         ) -> AuthenticationResult<ServerLoginStartResult> {
             Ok(ServerLogin::start(
                 rng,
+                server_setup,
                 password_file,
-                server_private_key,
                 credential_request,
+                username.as_bytes(),
                 ServerLoginStartParameters::default(),
             )?)
         }
