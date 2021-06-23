@@ -9,7 +9,7 @@ pub enum AuthenticationError {
 
 pub type AuthenticationResult<T> = std::result::Result<T, AuthenticationError>;
 
-pub use opaque_ke::keypair::{PublicKey, PrivateKey};
+pub use opaque_ke::keypair::{PrivateKey, PublicKey};
 pub type KeyPair = opaque_ke::keypair::KeyPair<<DefaultSuite as CipherSuite>::Group>;
 
 /// A wrapper around argon2 to provide the [`opaque_ke::slow_hash::SlowHash`] trait.
@@ -64,8 +64,10 @@ pub mod client {
     pub mod registration {
         pub use super::*;
         pub type ClientRegistration = opaque_ke::ClientRegistration<DefaultSuite>;
-        pub type ClientRegistrationStartResult = opaque_ke::ClientRegistrationStartResult<DefaultSuite>;
-        pub type ClientRegistrationFinishResult = opaque_ke::ClientRegistrationFinishResult<DefaultSuite>;
+        pub type ClientRegistrationStartResult =
+            opaque_ke::ClientRegistrationStartResult<DefaultSuite>;
+        pub type ClientRegistrationFinishResult =
+            opaque_ke::ClientRegistrationFinishResult<DefaultSuite>;
         pub type RegistrationResponse = opaque_ke::RegistrationResponse<DefaultSuite>;
         pub use opaque_ke::ClientRegistrationFinishParameters;
         /// Initiate the registration negotiation.
@@ -73,10 +75,7 @@ pub mod client {
             password: &str,
             rng: &mut R,
         ) -> AuthenticationResult<ClientRegistrationStartResult> {
-            Ok(ClientRegistration::start(
-                rng,
-                password.as_bytes(),
-            )?)
+            Ok(ClientRegistration::start(rng, password.as_bytes())?)
         }
 
         /// Finalize the registration negotiation.
@@ -101,10 +100,7 @@ pub mod client {
         pub type ClientLoginStartResult = opaque_ke::ClientLoginStartResult<DefaultSuite>;
         pub type CredentialResponse = opaque_ke::CredentialResponse<DefaultSuite>;
         pub type CredentialFinalization = opaque_ke::CredentialFinalization<DefaultSuite>;
-        pub use opaque_ke::{
-            ClientLoginFinishParameters,
-            ClientLoginStartParameters,
-        };
+        pub use opaque_ke::{ClientLoginFinishParameters, ClientLoginStartParameters};
 
         /// Initiate the login negotiation.
         pub fn start_login<R: RngCore + CryptoRng>(
@@ -139,7 +135,8 @@ pub mod server {
         pub use super::*;
         pub type RegistrationRequest = opaque_ke::RegistrationRequest<DefaultSuite>;
         pub type RegistrationUpload = opaque_ke::RegistrationUpload<DefaultSuite>;
-        pub type ServerRegistrationStartResult = opaque_ke::ServerRegistrationStartResult<DefaultSuite>;
+        pub type ServerRegistrationStartResult =
+            opaque_ke::ServerRegistrationStartResult<DefaultSuite>;
         /// Start a registration process, from a request sent by the client.
         ///
         /// The result must be kept for the next step.

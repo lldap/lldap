@@ -1,5 +1,6 @@
 use crate::{
     domain::{
+        error::DomainError,
         handler::{BackendHandler, LoginHandler},
         opaque_handler::OpaqueHandler,
     },
@@ -48,7 +49,7 @@ fn http_config<Backend>(
 {
     cfg.data(AppState::<Backend> {
         backend_handler,
-        jwt_key: Hmac::new_varkey(&jwt_secret.as_bytes()).unwrap(),
+        jwt_key: Hmac::new_varkey(jwt_secret.as_bytes()).unwrap(),
         jwt_blacklist: RwLock::new(jwt_blacklist),
     })
     // Serve index.html and main.js, and default to index.html.

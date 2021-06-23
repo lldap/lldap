@@ -1,5 +1,5 @@
 use crate::{
-    domain::handler::*,
+    domain::{error::DomainError, handler::*},
     infra::{
         tcp_backend_handler::*,
         tcp_server::{error_to_http_response, AppState},
@@ -54,7 +54,7 @@ where
             let msg = err.to_string();
             actix_web::error::InternalError::from_response(
                 err,
-                HttpResponse::BadRequest().body(msg).into(),
+                HttpResponse::BadRequest().body(msg),
             )
             .into()
         });

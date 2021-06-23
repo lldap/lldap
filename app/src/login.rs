@@ -23,7 +23,7 @@ pub struct Props {
 
 pub enum Msg {
     Submit,
-    AuthenticationStartResponse(Result<login::ServerLoginStartResponse>),
+    AuthenticationStartResponse(Result<Box<login::ServerLoginStartResponse>>),
     AuthenticationFinishResponse(Result<String>),
 }
 
@@ -57,9 +57,9 @@ impl LoginForm {
         match msg {
             Msg::Submit => {
                 let username = get_form_field("username")
-                    .ok_or(anyhow!("Could not get username from form"))?;
+                    .ok_or_else(|| anyhow!("Could not get username from form"))?;
                 let password = get_form_field("password")
-                    .ok_or(anyhow!("Could not get password from form"))?;
+                    .ok_or_else(|| anyhow!("Could not get password from form"))?;
                 let mut rng = rand::rngs::OsRng;
                 let login_start_request =
                     opaque::client::login::start_login(&password, &mut rng)

@@ -173,8 +173,8 @@ impl BackendHandler for SqlBackendHandler {
             // Transform it into a single result (the first error if any), and group the group_ids
             // into a HashSet.
             .collect::<sqlx::Result<HashSet<_>>>()
-            // Map the sqlx::Error into a domain::Error.
-            .map_err(Error::DatabaseError)
+            // Map the sqlx::Error into a DomainError.
+            .map_err(DomainError::DatabaseError)
     }
 
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {

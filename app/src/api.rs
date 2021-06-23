@@ -46,7 +46,7 @@ where
     R: serde::ser::Serialize,
 {
     fn from(request: &'a R) -> Self {
-        Self(Json(&request))
+        Self(Json(request))
     }
 }
 
@@ -92,7 +92,7 @@ impl HostService {
 
     pub fn login_start(
         request: login::ClientLoginStartRequest,
-        callback: Callback<Result<login::ServerLoginStartResponse>>,
+        callback: Callback<Result<Box<login::ServerLoginStartResponse>>>,
     ) -> Result<FetchTask> {
         call_server(
             "/auth/opaque/login/start",

@@ -52,7 +52,7 @@ impl LoginHandler for SqlBackendHandler {
                 return Ok(());
             } else {
                 debug!(r#"Invalid password for LDAP bind user"#);
-                return Err(Error::AuthenticationError(request.name));
+                return Err(DomainError::AuthenticationError(request.name));
             }
         }
         let query = Query::select()
@@ -65,7 +65,7 @@ impl LoginHandler for SqlBackendHandler {
                 row.get::<Option<Vec<u8>>, _>(&*Users::PasswordHash.to_string())
             {
                 if let Err(e) = passwords_match(
-                    &&password_hash,
+                    &password_hash,
                     &request.password,
                     self.config.get_server_keys().private(),
                 ) {
@@ -79,7 +79,7 @@ impl LoginHandler for SqlBackendHandler {
         } else {
             debug!(r#"No user found for "{}""#, request.name);
         }
-        Err(Error::AuthenticationError(request.name))
+        Err(DomainError::AuthenticationError(request.name))
     }
 }
 
@@ -101,11 +101,11 @@ impl OpaqueHandler for SqlOpaqueHandler {
                 .await?
                 .get::<Option<Vec<u8>>, _>(&*Users::PasswordHash.to_string())
                 // If no password, always fail.
-                .ok_or_else(|| Error::AuthenticationError(request.username.clone()))?
+                .ok_or_else(|| DomainError::AuthenticationError(request.username.clone()))?
         };
         let password_file = opaque::server::ServerRegistration::deserialize(&password_file_bytes)
             .map_err(|_| {
-            Error::InternalError(format!("Corrupted password file for {}", request.username))
+            DomainError::InternalError(format!("Corrupted password file for {}", request.username))
         })?;
 
         let mut rng = rand::rngs::OsRng;
@@ -163,7 +163,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
             &row.get::<Vec<u8>, _>(&*LoginAttempts::ServerLoginData.to_string()),
         )
         .map_err(|_| {
-            Error::InternalError(format!(
+            DomainError::InternalError(format!(
                 "Corrupted login data for user `{}` [id `{}`]",
                 username, request.login_key
             ))
@@ -248,7 +248,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
             &row.get::<Vec<u8>, _>(&*RegistrationAttempts::ServerRegistrationData.to_string()),
         )
         .map_err(|_| {
-            Error::InternalError(format!(
+            DomainError::InternalError(format!(
                 "Corrupted registration data for user `{}` [id `{}`]",
                 username, request.registration_key
             ))

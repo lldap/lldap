@@ -33,7 +33,7 @@ pub struct Configuration {
 impl ConfigurationBuilder {
     #[cfg(test)]
     pub fn build(self) -> Result<Configuration> {
-        let server_keys = get_server_keys(&self.key_file.as_deref().unwrap_or("server_key"))?;
+        let server_keys = get_server_keys(self.key_file.as_deref().unwrap_or("server_key"))?;
         Ok(self.server_keys(server_keys).private_build()?)
     }
 

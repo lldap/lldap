@@ -1,5 +1,6 @@
 use crate::{
     domain::{
+        error::DomainError,
         handler::{BackendHandler, LoginHandler},
         opaque_handler::OpaqueHandler,
     },
@@ -191,7 +192,7 @@ where
     // token.
     data.backend_handler
         .get_user_groups(name.to_string())
-        .and_then(|g| async { Ok((g, data.backend_handler.create_refresh_token(&name).await?)) })
+        .and_then(|g| async { Ok((g, data.backend_handler.create_refresh_token(name).await?)) })
         .await
         .map(|(groups, (refresh_token, max_age))| {
             let token = create_jwt(&data.jwt_key, name.to_string(), groups);
@@ -205,7 +206,7 @@ where
                         .finish(),
                 )
                 .cookie(
-                    Cookie::build("refresh_token", refresh_token + "+" + &name)
+                    Cookie::build("refresh_token", refresh_token + "+" + name)
                         .max_age(max_age.num_days().days())
                         .path("/auth")
                         .http_only(true)

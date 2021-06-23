@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use std::collections::HashSet;
 
-pub type DomainError = crate::domain::error::Error;
 pub type DomainResult<T> = crate::domain::error::Result<T>;
 
 #[async_trait]
