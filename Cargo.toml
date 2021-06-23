@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "model", "app"]
+
 [package]
 authors = ["Valentin Tolmer <valentin@tolmer.fr>", "Steve Barrau <steve.barrau@gmail.com>", "Thomas Wickham <mackwic@gmail.com>"]
 edition = "2018"
