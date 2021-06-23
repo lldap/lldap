@@ -10,31 +10,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test_server:
-    name: cargo test server
+  test:
+    name: cargo test
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --verbose --workspace
       - name: Run tests
-        run: cargo test --verbose
-
-  test_client:
-    name: cargo test client
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-      - name: Build
-        run: cargo build --verbose
-        working-directory: ./app
-      - name: Run tests
-        run: cargo test --verbose
-        working-directory: ./app
+        run: cargo test --verbose --workspace
 
   clippy:
     name: cargo clippy
@@ -51,26 +37,11 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      - name: Run cargo clippy on server
+      - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --tests -- -D warnings
-
-      - name: Run cargo clippy on client
-        working-directory: ./app
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --tests -- -D warnings
-
-      - name: Run cargo clippy on model
-        working-directory: ./model
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --tests -- -D warnings
-
+          args: --tests --all -- -D warnings
 
   format:
     name: cargo fmt
@@ -87,21 +58,7 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      - name: Run cargo fmt on server
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-      - name: Run cargo fmt on client
-        working-directory: ./app
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-      - name: Run cargo fmt on model
-        working-directory: ./model
+      - name: Run cargo fmt
         uses: actions-rs/cargo@v1
         with:
           command: fmt
