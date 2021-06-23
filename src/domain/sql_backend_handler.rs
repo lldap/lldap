@@ -22,7 +22,8 @@ impl SqlBackendHandler {
 
 pub fn get_password_file(
     clear_password: &str,
-    server_public_key: &opaque::PublicKey,
+    server_setup: &opaque::server::ServerSetup,
+    username: &str,
 ) -> Result<opaque::server::ServerRegistration> {
     use opaque::{client, server};
     let mut rng = rand::rngs::OsRng;
@@ -30,9 +31,9 @@ pub fn get_password_file(
         client::registration::start_registration(clear_password, &mut rng)?;
 
     let server_register_start_result = server::registration::start_registration(
-        &mut rng,
+        server_setup,
         client_register_start_result.message,
-        server_public_key,
+        username,
     )?;
 
     let client_registration_result = client::registration::finish_registration(
@@ -42,9 +43,8 @@ pub fn get_password_file(
     )?;
 
     Ok(server::registration::get_password_file(
-        server_register_start_result.state,
         client_registration_result.message,
-    )?)
+    ))
 }
 
 fn get_filter_expr(filter: RequestFilter) -> SimpleExpr {
@@ -187,7 +187,7 @@ impl BackendHandler for SqlBackendHandler {
             Users::CreationDate,
         ];
         let mut values = vec![
-            request.user_id.into(),
+            request.user_id.clone().into(),
             request.email.into(),
             request.display_name.map(Into::into).unwrap_or(Value::Null),
             request.first_name.map(Into::into).unwrap_or(Value::Null),
@@ -197,7 +197,7 @@ impl BackendHandler for SqlBackendHandler {
         if let Some(pass) = request.password {
             columns.push(Users::PasswordHash);
             values.push(
-                get_password_file(&pass, self.config.get_server_keys().public())?
+                get_password_file(&pass, self.config.get_server_setup(), &request.user_id)?
                     .serialize()
                     .into(),
             );

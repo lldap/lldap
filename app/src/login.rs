@@ -92,7 +92,7 @@ impl LoginForm {
                     Ok(l) => l,
                 };
                 let req = login::ClientLoginFinishRequest {
-                    login_key: res.login_key,
+                    server_data: res.server_data,
                     credential_finalization: login_finish.message,
                 };
                 self.call_backend(
