@@ -11,6 +11,7 @@ pub struct LoginForm {
     on_logged_in: Callback<String>,
     error: Option<anyhow::Error>,
     node_ref: NodeRef,
+    login_start: Option<opaque::client::login::ClientLogin>,
     // Used to keep the request alive long enough.
     _task: Option<FetchTask>,
 }
@@ -22,13 +23,95 @@ pub struct Props {
 
 pub enum Msg {
     Submit,
-    AuthenticationResponse(Result<String>),
+    AuthenticationStartResponse(Result<login::ServerLoginStartResponse>),
+    AuthenticationFinishResponse(Result<String>),
+}
+
+fn get_form_field(field_id: &str) -> Option<String> {
+    let document = web_sys::window()?.document()?;
+    Some(
+        document
+            .get_element_by_id(field_id)?
+            .dyn_into::<web_sys::HtmlInputElement>()
+            .ok()?
+            .value(),
+    )
 }
 
 impl LoginForm {
     fn set_error(&mut self, error: anyhow::Error) {
         ConsoleService::error(&error.to_string());
         self.error = Some(error);
+    }
+
+    fn call_backend<M, Req, C, Resp>(&mut self, method: M, req: Req, callback: C) -> Result<()>
+    where
+        M: Fn(Req, Callback<Resp>) -> Result<FetchTask>,
+        C: Fn(Resp) -> <Self as Component>::Message + 'static,
+    {
+        self._task = Some(method(req, self.link.callback(callback))?);
+        Ok(())
+    }
+
+    fn handle_message(&mut self, msg: <Self as Component>::Message) -> Result<()> {
+        match msg {
+            Msg::Submit => {
+                let username = get_form_field("username")
+                    .ok_or(anyhow!("Could not get username from form"))?;
+                let password = get_form_field("password")
+                    .ok_or(anyhow!("Could not get password from form"))?;
+                let mut rng = rand::rngs::OsRng;
+                let login_start_request =
+                    opaque::client::login::start_login(&password, &mut rng)
+                        .map_err(|e| anyhow!("Could not initialize login: {}", e))?;
+                self.login_start = Some(login_start_request.state);
+                let req = login::ClientLoginStartRequest {
+                    username,
+                    login_start_request: login_start_request.message,
+                };
+                self.call_backend(
+                    HostService::login_start,
+                    req,
+                    Msg::AuthenticationStartResponse,
+                )?;
+                Ok(())
+            }
+            Msg::AuthenticationStartResponse(Ok(res)) => {
+                debug_assert!(self.login_start.is_some());
+                let login_finish = match opaque::client::login::finish_login(
+                    self.login_start.as_ref().unwrap().clone(),
+                    res.credential_response,
+                ) {
+                    Err(e) => {
+                        // Common error, we want to print a full error to the console but only a
+                        // simple one to the user.
+                        ConsoleService::error(&format!("Invalid username or password: {}", e));
+                        self.error = Some(anyhow!("Invalid username or password"));
+                        return Ok(());
+                    }
+                    Ok(l) => l,
+                };
+                let req = login::ClientLoginFinishRequest {
+                    login_key: res.login_key,
+                    credential_finalization: login_finish.message,
+                };
+                self.call_backend(
+                    HostService::login_finish,
+                    req,
+                    Msg::AuthenticationFinishResponse,
+                )?;
+                Ok(())
+            }
+            Msg::AuthenticationStartResponse(Err(e)) => Err(anyhow!(
+                "Could not log in (invalid response to login start): {}",
+                e
+            )),
+            Msg::AuthenticationFinishResponse(Ok(user_id)) => {
+                self.on_logged_in.emit(user_id);
+                Ok(())
+            }
+            Msg::AuthenticationFinishResponse(Err(e)) => Err(anyhow!("Could not log in: {}", e)),
+        }
     }
 }
 
@@ -42,45 +125,16 @@ impl Component for LoginForm {
             on_logged_in: props.on_logged_in,
             error: None,
             node_ref: NodeRef::default(),
+            login_start: None,
             _task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        match msg {
-            Msg::Submit => {
-                let document = web_sys::window().unwrap().document().unwrap();
-                let username = document
-                    .get_element_by_id("username")
-                    .unwrap()
-                    .dyn_into::<web_sys::HtmlInputElement>()
-                    .unwrap()
-                    .value();
-                let password = document
-                    .get_element_by_id("password")
-                    .unwrap()
-                    .dyn_into::<web_sys::HtmlInputElement>()
-                    .unwrap()
-                    .value();
-                let req = BindRequest {
-                    name: username,
-                    password,
-                };
-                match HostService::authenticate(
-                    req,
-                    self.link.callback(Msg::AuthenticationResponse),
-                ) {
-                    Ok(task) => self._task = Some(task),
-                    Err(e) => self.set_error(e),
-                }
-            }
-            Msg::AuthenticationResponse(Ok(user_id)) => {
-                self.on_logged_in.emit(user_id);
-            }
-            Msg::AuthenticationResponse(Err(e)) => {
-                self.set_error(anyhow!("Could not log in: {}", e));
-            }
-        };
+        self.error = None;
+        if let Err(e) = self.handle_message(msg) {
+            self.set_error(e);
+        }
         true
     }
 

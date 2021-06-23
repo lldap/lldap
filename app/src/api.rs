@@ -28,7 +28,6 @@ fn create_handler<Resp, CallbackResult, F>(
 ) -> Callback<Response<Result<Resp>>>
 where
     F: Fn(http::StatusCode, Resp) -> Result<CallbackResult> + 'static,
-    Resp: std::fmt::Display,
     CallbackResult: 'static,
 {
     Callback::once(move |response: Response<Result<Resp>>| {
@@ -59,11 +58,33 @@ impl HostService {
         FetchService::fetch_with_options(request, get_default_options(), handler)
     }
 
-    pub fn authenticate(
-        request: BindRequest,
+    pub fn login_start(
+        request: login::ClientLoginStartRequest,
+        callback: Callback<Result<login::ServerLoginStartResponse>>,
+    ) -> Result<FetchTask> {
+        let url = "/auth/opaque/login/start";
+        let request = Request::post(url)
+            .header("Content-Type", "application/json")
+            .body(Json(&request))?;
+        let handler = create_handler(callback, |status, data: String| {
+            if status.is_success() {
+                serde_json::from_str(&data).map_err(|e| anyhow!("Could not parse response: {}", e))
+            } else {
+                Err(anyhow!(
+                    "Could not start authentication: [{}]: {}",
+                    status,
+                    data
+                ))
+            }
+        });
+        FetchService::fetch_with_options(request, get_default_options(), handler)
+    }
+
+    pub fn login_finish(
+        request: login::ClientLoginFinishRequest,
         callback: Callback<Result<String>>,
     ) -> Result<FetchTask> {
-        let url = "/auth";
+        let url = "/auth/opaque/login/finish";
         let request = Request::post(url)
             .header("Content-Type", "application/json")
             .body(Json(&request))?;
@@ -76,10 +97,12 @@ impl HostService {
                             .map(|_| jwt_claims.user.clone())
                             .map_err(|e| anyhow!("Error clearing cookie: {}", e))
                     })
-            } else if status == 401 {
-                Err(anyhow!("Invalid username or password"))
             } else {
-                Err(anyhow!("Could not authenticate: [{}]: {}", status, data))
+                Err(anyhow!(
+                    "Could not finish authentication: [{}]: {}",
+                    status,
+                    data
+                ))
             }
         });
         FetchService::fetch_with_options(request, get_default_options(), handler)
