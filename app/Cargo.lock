@@ -754,6 +754,7 @@ dependencies = [
  "http",
  "jwt",
  "lldap_model",
+ "rand 0.8.4",
  "serde",
  "serde_json",
  "wasm-bindgen",
