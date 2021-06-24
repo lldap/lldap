@@ -1,5 +1,5 @@
 use crate::api::HostService;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use lldap_model::*;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
@@ -13,6 +13,7 @@ pub struct CreateUserForm {
     route_dispatcher: RouteAgentDispatcher,
     node_ref: NodeRef,
     error: Option<anyhow::Error>,
+    registration_start: Option<opaque::client::registration::ClientRegistration>,
     // Used to keep the request alive long enough.
     _task: Option<FetchTask>,
 }
@@ -20,18 +21,111 @@ pub struct CreateUserForm {
 pub enum Msg {
     CreateUserResponse(Result<()>),
     SubmitForm,
+    SuccessfulCreation,
+    RegistrationStartResponse(Result<Box<registration::ServerRegistrationStartResponse>>),
+    RegistrationFinishResponse(Result<()>),
+}
+
+#[allow(clippy::ptr_arg)]
+fn not_empty(s: &String) -> bool {
+    !s.is_empty()
 }
 
 impl CreateUserForm {
-    fn create_user(&mut self, req: CreateUserRequest) {
-        match HostService::create_user(req, self.link.callback(Msg::CreateUserResponse)) {
-            Ok(task) => self._task = Some(task),
-            Err(e) => {
-                self._task = None;
-                ConsoleService::log(format!("Error trying to create user: {}", e).as_str())
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<()> {
+        match msg {
+            Msg::SubmitForm => {
+                let req = CreateUserRequest {
+                    user_id: get_element("username")
+                        .filter(not_empty)
+                        .ok_or_else(|| anyhow!("Missing username"))?,
+                    email: get_element("email")
+                        .filter(not_empty)
+                        .ok_or_else(|| anyhow!("Missing email"))?,
+                    display_name: get_element("displayname").filter(not_empty),
+                    first_name: get_element("firstname").filter(not_empty),
+                    last_name: get_element("lastname").filter(not_empty),
+                };
+                self._task = Some(
+                    HostService::create_user(req, self.link.callback(Msg::CreateUserResponse))
+                        .map_err(|e| anyhow!("Error trying to create user: {}", e))?,
+                );
             }
-        };
+            Msg::CreateUserResponse(r) => {
+                if r.is_err() {
+                    return r;
+                }
+                let user_id = get_element("username")
+                    .filter(not_empty)
+                    .ok_or_else(|| anyhow!("Missing username"))?;
+                if let Some(password) = get_element("password").filter(not_empty) {
+                    // User was successfully created, let's register the password.
+                    let mut rng = rand::rngs::OsRng;
+                    let client_registration_start =
+                        opaque::client::registration::start_registration(&password, &mut rng)?;
+                    self.registration_start = Some(client_registration_start.state);
+                    let req = registration::ClientRegistrationStartRequest {
+                        username: user_id,
+                        registration_start_request: client_registration_start.message,
+                    };
+                    self._task = Some(
+                        HostService::register_start(
+                            req,
+                            self.link.callback(Msg::RegistrationStartResponse),
+                        )
+                        .map_err(|e| anyhow!("Error trying to create user: {}", e))?,
+                    );
+                } else {
+                    self.update(Msg::SuccessfulCreation);
+                }
+            }
+            Msg::RegistrationStartResponse(response) => {
+                debug_assert!(self.registration_start.is_some());
+                let response = response?;
+                let mut rng = rand::rngs::OsRng;
+                let registration_upload = opaque::client::registration::finish_registration(
+                    self.registration_start.take().unwrap(),
+                    response.registration_response,
+                    &mut rng,
+                )?;
+                let req = registration::ClientRegistrationFinishRequest {
+                    server_data: response.server_data,
+                    registration_upload: registration_upload.message,
+                };
+                self._task = Some(
+                    HostService::register_finish(
+                        req,
+                        self.link.callback(Msg::RegistrationFinishResponse),
+                    )
+                    .map_err(|e| anyhow!("Error trying to register user: {}", e))?,
+                );
+            }
+            Msg::RegistrationFinishResponse(response) => {
+                if response.is_err() {
+                    return response;
+                }
+                self.update(Msg::SuccessfulCreation);
+            }
+            Msg::SuccessfulCreation => {
+                self.route_dispatcher
+                    .send(RouteRequest::ChangeRoute(Route::new_no_state(
+                        "/list_users",
+                    )));
+            }
+        }
+        Ok(())
     }
+}
+fn get_element(name: &str) -> Option<String> {
+    use wasm_bindgen::JsCast;
+    Some(
+        web_sys::window()?
+            .document()?
+            .get_element_by_id(name)?
+            .dyn_into::<web_sys::HtmlInputElement>()
+            .ok()?
+            .value(),
+    )
 }
 
 impl Component for CreateUserForm {
@@ -44,42 +138,16 @@ impl Component for CreateUserForm {
             route_dispatcher: RouteAgentDispatcher::new(),
             node_ref: NodeRef::default(),
             error: None,
+            registration_start: None,
             _task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        match msg {
-            Msg::SubmitForm => {
-                use wasm_bindgen::JsCast;
-                let document = web_sys::window().unwrap().document().unwrap();
-                let get_element = |name: &str| {
-                    document
-                        .get_element_by_id(name)
-                        .unwrap()
-                        .dyn_into::<web_sys::HtmlInputElement>()
-                        .unwrap()
-                        .value()
-                };
-                let req = CreateUserRequest {
-                    user_id: get_element("username"),
-                    email: get_element("email"),
-                    display_name: Some(get_element("displayname")),
-                    first_name: Some(get_element("firstname")),
-                    last_name: Some(get_element("lastname")),
-                    password: Some(get_element("password")),
-                };
-                self.create_user(req);
-            }
-            Msg::CreateUserResponse(Ok(())) => {
-                self.route_dispatcher
-                    .send(RouteRequest::ChangeRoute(Route::new_no_state(
-                        "/list_users",
-                    )));
-            }
-            Msg::CreateUserResponse(Err(e)) => {
-                ConsoleService::warn(&format!("Error listing users: {}", e));
-            }
+        self.error = None;
+        if let Err(e) = self.handle_msg(msg) {
+            ConsoleService::error(&e.to_string());
+            self.error = Some(e);
         }
         true
     }

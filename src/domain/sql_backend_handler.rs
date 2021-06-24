@@ -3,7 +3,6 @@ use crate::infra::configuration::Configuration;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
-use lldap_model::opaque;
 use sea_query::{Expr, Iden, Order, Query, SimpleExpr, Value};
 use sqlx::Row;
 use std::collections::HashSet;
@@ -18,33 +17,6 @@ impl SqlBackendHandler {
     pub fn new(config: Configuration, sql_pool: Pool) -> Self {
         SqlBackendHandler { config, sql_pool }
     }
-}
-
-pub fn get_password_file(
-    clear_password: &str,
-    server_setup: &opaque::server::ServerSetup,
-    username: &str,
-) -> Result<opaque::server::ServerRegistration> {
-    use opaque::{client, server};
-    let mut rng = rand::rngs::OsRng;
-    let client_register_start_result =
-        client::registration::start_registration(clear_password, &mut rng)?;
-
-    let server_register_start_result = server::registration::start_registration(
-        server_setup,
-        client_register_start_result.message,
-        username,
-    )?;
-
-    let client_registration_result = client::registration::finish_registration(
-        client_register_start_result.state,
-        server_register_start_result.message,
-        &mut rng,
-    )?;
-
-    Ok(server::registration::get_password_file(
-        client_registration_result.message,
-    ))
 }
 
 fn get_filter_expr(filter: RequestFilter) -> SimpleExpr {
@@ -178,7 +150,7 @@ impl BackendHandler for SqlBackendHandler {
     }
 
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
-        let mut columns = vec![
+        let columns = vec![
             Users::UserId,
             Users::Email,
             Users::DisplayName,
@@ -186,7 +158,7 @@ impl BackendHandler for SqlBackendHandler {
             Users::LastName,
             Users::CreationDate,
         ];
-        let mut values = vec![
+        let values = vec![
             request.user_id.clone().into(),
             request.email.into(),
             request.display_name.map(Into::into).unwrap_or(Value::Null),
@@ -194,14 +166,6 @@ impl BackendHandler for SqlBackendHandler {
             request.last_name.map(Into::into).unwrap_or(Value::Null),
             chrono::Utc::now().naive_utc().into(),
         ];
-        if let Some(pass) = request.password {
-            columns.push(Users::PasswordHash);
-            values.push(
-                get_password_file(&pass, self.config.get_server_setup(), &request.user_id)?
-                    .serialize()
-                    .into(),
-            );
-        }
         let query = Query::insert()
             .into_table(Users::Table)
             .columns(columns)
@@ -271,12 +235,28 @@ mod tests {
     }
 
     async fn insert_user(handler: &SqlBackendHandler, name: &str, pass: &str) {
+        use crate::domain::opaque_handler::OpaqueHandler;
+        insert_user_no_password(handler, name).await;
+        let mut rng = rand::rngs::OsRng;
+        let client_registration_start =
+            opaque::client::registration::start_registration(pass, &mut rng).unwrap();
+        let response = handler
+            .registration_start(registration::ClientRegistrationStartRequest {
+                username: name.to_string(),
+                registration_start_request: client_registration_start.message,
+            })
+            .await
+            .unwrap();
+        let registration_upload = opaque::client::registration::finish_registration(
+            client_registration_start.state,
+            response.registration_response,
+            &mut rng,
+        )
+        .unwrap();
         handler
-            .create_user(CreateUserRequest {
-                user_id: name.to_string(),
-                email: "bob@bob.bob".to_string(),
-                password: Some(pass.to_string()),
-                ..Default::default()
+            .registration_finish(registration::ClientRegistrationFinishRequest {
+                server_data: response.server_data,
+                registration_upload: registration_upload.message,
             })
             .await
             .unwrap();

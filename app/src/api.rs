@@ -76,40 +76,48 @@ where
     FetchService::fetch_with_options(request, get_default_options(), handler)
 }
 
+fn call_server_json_with_error_message<CallbackResult, RB, Req>(
+    url: &str,
+    request: RB,
+    callback: Callback<Result<CallbackResult>>,
+    error_message: &'static str,
+) -> Result<FetchTask>
+where
+    CallbackResult: serde::de::DeserializeOwned + 'static,
+    RB: Into<RequestBody<Req>>,
+    Req: Into<yew::format::Text>,
+{
+    call_server(
+        url,
+        request,
+        callback,
+        move |status: http::StatusCode, data: String| {
+            if status.is_success() {
+                serde_json::from_str(&data).map_err(|e| anyhow!("Could not parse response: {}", e))
+            } else {
+                Err(anyhow!("{}[{}]: {}", error_message, status, data))
+            }
+        },
+    )
+}
+
 impl HostService {
     pub fn list_users(
         request: ListUsersRequest,
         callback: Callback<Result<Vec<User>>>,
     ) -> Result<FetchTask> {
-        call_server("/api/users", &request, callback, |status, data: String| {
-            if status.is_success() {
-                serde_json::from_str(&data).map_err(|e| anyhow!("Could not parse response: {}", e))
-            } else {
-                Err(anyhow!("[{}]: {}", status, data))
-            }
-        })
+        call_server_json_with_error_message("/api/users", &request, callback, "")
     }
 
     pub fn login_start(
         request: login::ClientLoginStartRequest,
         callback: Callback<Result<Box<login::ServerLoginStartResponse>>>,
     ) -> Result<FetchTask> {
-        call_server(
+        call_server_json_with_error_message(
             "/auth/opaque/login/start",
             &request,
             callback,
-            |status, data: String| {
-                if status.is_success() {
-                    serde_json::from_str(&data)
-                        .map_err(|e| anyhow!("Could not parse response: {}", e))
-                } else {
-                    Err(anyhow!(
-                        "Could not start authentication: [{}]: {}",
-                        status,
-                        data
-                    ))
-                }
-            },
+            "Could not start authentication: ",
         )
     }
 
@@ -136,6 +144,36 @@ impl HostService {
                         status,
                         data
                     ))
+                }
+            },
+        )
+    }
+
+    pub fn register_start(
+        request: registration::ClientRegistrationStartRequest,
+        callback: Callback<Result<Box<registration::ServerRegistrationStartResponse>>>,
+    ) -> Result<FetchTask> {
+        call_server_json_with_error_message(
+            "/auth/opaque/registration/start",
+            &request,
+            callback,
+            "Could not start registration: ",
+        )
+    }
+
+    pub fn register_finish(
+        request: registration::ClientRegistrationFinishRequest,
+        callback: Callback<Result<()>>,
+    ) -> Result<FetchTask> {
+        call_server(
+            "/auth/opaque/registration/finish",
+            &request,
+            callback,
+            |status, data: String| {
+                if status.is_success() {
+                    Ok(())
+                } else {
+                    Err(anyhow!("Could finish registration: [{}]: {}", status, data))
                 }
             },
         )

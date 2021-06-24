@@ -55,10 +55,16 @@ impl SqlBackendHandler {
                 .and_where(Expr::col(Users::UserId).eq(username))
                 .to_string(DbQueryBuilder {});
             if let Some(row) = sqlx::query(&query).fetch_optional(&self.sql_pool).await? {
-                row.get::<Option<Vec<u8>>, _>(&*Users::PasswordHash.to_string())
-                    // If no password, always fail.
-                    .ok_or_else(|| DomainError::AuthenticationError(username.to_string()))?
+                if let Some(bytes) =
+                    row.get::<Option<Vec<u8>>, _>(&*Users::PasswordHash.to_string())
+                {
+                    bytes
+                } else {
+                    // No password set.
+                    return Ok(None);
+                }
             } else {
+                // No such user.
                 return Ok(None);
             }
         };
@@ -119,6 +125,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         let maybe_password_file = self.get_password_file_for_user(&request.username).await?;
 
         let mut rng = rand::rngs::OsRng;
+        // Get the CredentialResponse for the user, or a dummy one if no user/no password.
         let start_response = opaque::server::login::start_login(
             &mut rng,
             self.config.get_server_setup(),
