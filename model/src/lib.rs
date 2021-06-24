@@ -42,6 +42,7 @@ pub mod login {
 }
 
 /// The messages for the 3-step OPAQUE registration process.
+/// It is used to reset a user's password.
 pub mod registration {
     use super::*;
 
@@ -117,7 +118,6 @@ pub struct CreateUserRequest {
     pub display_name: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
-    pub password: Option<String>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
