@@ -86,6 +86,11 @@ pub struct ListUsersRequest {
     pub filters: Option<RequestFilter>,
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub struct UserDetailsRequest {
+    pub user_id: String,
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(sqlx::FromRow))]
 pub struct User {
