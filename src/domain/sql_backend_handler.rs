@@ -117,6 +117,24 @@ impl BackendHandler for SqlBackendHandler {
         Ok(groups)
     }
 
+    async fn get_user_details(&self, request: UserDetailsRequest) -> Result<User> {
+        let query = Query::select()
+            .column(Users::UserId)
+            .column(Users::Email)
+            .column(Users::DisplayName)
+            .column(Users::FirstName)
+            .column(Users::LastName)
+            .column(Users::Avatar)
+            .column(Users::CreationDate)
+            .from(Users::Table)
+            .and_where(Expr::col(Users::UserId).eq(request.user_id))
+            .to_string(DbQueryBuilder {});
+
+        Ok(sqlx::query_as::<_, User>(&query)
+            .fetch_one(&self.sql_pool)
+            .await?)
+    }
+
     async fn get_user_groups(&self, user: String) -> Result<HashSet<String>> {
         if user == self.config.ldap_user_dn {
             let mut groups = HashSet::new();
@@ -450,6 +468,30 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_get_user_details() {
+        let sql_pool = get_initialized_db().await;
+        let config = get_default_config();
+        let handler = SqlBackendHandler::new(config, sql_pool);
+        insert_user(&handler, "bob", "bob00").await;
+        {
+            let user = handler
+                .get_user_details(UserDetailsRequest {
+                    user_id: String::from("bob"),
+                })
+                .await
+                .unwrap();
+            assert_eq!(user.user_id, "bob".to_string());
+        }
+        {
+            handler
+                .get_user_details(UserDetailsRequest {
+                    user_id: String::from("John"),
+                })
+                .await
+                .unwrap_err();
+        }
+    }
     #[tokio::test]
     async fn test_get_user_groups() {
         let sql_pool = get_initialized_db().await;
