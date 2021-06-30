@@ -340,6 +340,7 @@ where
 pub async fn token_validator<Backend>(
     req: ServiceRequest,
     credentials: BearerAuth,
+    admin_required: bool,
 ) -> Result<ServiceRequest, actix_web::Error>
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
@@ -360,15 +361,37 @@ where
     if state.jwt_blacklist.read().unwrap().contains(&jwt_hash) {
         return Err(ErrorUnauthorized("JWT was logged out"));
     }
-    let groups = &token.claims().groups;
-    if groups.contains("lldap_admin") {
+    let is_admin = token.claims().groups.contains("lldap_admin");
+    if is_admin
+        || (!admin_required && req.match_info().get("user_id") == Some(&token.claims().user))
+    {
         debug!("Got authorized token for user {}", &token.claims().user);
         Ok(req)
     } else {
         Err(ErrorUnauthorized(
-            "JWT error: User is not in group lldap_admin",
+            "JWT error: User is not authorized to access this resource",
         ))
     }
+}
+
+pub async fn admin_token_validator<Backend>(
+    req: ServiceRequest,
+    credentials: BearerAuth,
+) -> Result<ServiceRequest, actix_web::Error>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    token_validator::<Backend>(req, credentials, true).await
+}
+
+pub async fn user_token_validator<Backend>(
+    req: ServiceRequest,
+    credentials: BearerAuth,
+) -> Result<ServiceRequest, actix_web::Error>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    token_validator::<Backend>(req, credentials, false).await
 }
 
 pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig)

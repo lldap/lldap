@@ -1,11 +1,13 @@
 use crate::{
     domain::{error::DomainError, handler::*},
     infra::{
+        auth_service,
         tcp_backend_handler::*,
         tcp_server::{error_to_http_response, AppState},
     },
 };
 use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web_httpauth::middleware::HttpAuthentication;
 
 pub(crate) fn error_to_api_response<T>(error: DomainError) -> ApiResult<T> {
     ApiResult::Right(error_to_http_response(error))
@@ -76,10 +78,17 @@ where
         });
     cfg.app_data(json_config);
     cfg.service(
-        web::resource("/user/{user_id}").route(web::get().to(user_details_handler::<Backend>)),
+        web::resource("/user/{user_id}")
+            .route(web::get().to(user_details_handler::<Backend>))
+            .wrap(HttpAuthentication::bearer(
+                auth_service::user_token_validator::<Backend>,
+            )),
     );
     cfg.service(
         web::scope("/users")
+            .wrap(HttpAuthentication::bearer(
+                auth_service::admin_token_validator::<Backend>,
+            ))
             .guard(actix_web::guard::Header("content-type", "application/json"))
             .service(web::resource("").route(web::post().to(user_list_handler::<Backend>)))
             .service(

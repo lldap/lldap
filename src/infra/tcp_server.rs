@@ -11,7 +11,6 @@ use actix_http::HttpServiceBuilder;
 use actix_server::ServerBuilder;
 use actix_service::map_config;
 use actix_web::{dev::AppConfig, web, App, HttpRequest, HttpResponse};
-use actix_web_httpauth::middleware::HttpAuthentication;
 use anyhow::{Context, Result};
 use hmac::{Hmac, NewMac};
 use sha2::Sha512;
@@ -64,9 +63,6 @@ fn http_config<Backend>(
     // API endpoint.
     .service(
         web::scope("/api")
-            .wrap(HttpAuthentication::bearer(
-                auth_service::token_validator::<Backend>,
-            ))
             .wrap(auth_service::CookieToHeaderTranslatorFactory)
             .configure(tcp_api::api_config::<Backend>),
     )
