@@ -5,7 +5,7 @@ use crate::{
         tcp_server::{error_to_http_response, AppState},
     },
 };
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 
 pub(crate) fn error_to_api_response<T>(error: DomainError) -> ApiResult<T> {
     ApiResult::Right(error_to_http_response(error))
@@ -23,6 +23,23 @@ where
     let req: ListUsersRequest = info.clone();
     data.backend_handler
         .list_users(req)
+        .await
+        .map(|res| ApiResult::Left(web::Json(res)))
+        .unwrap_or_else(error_to_api_response)
+}
+
+async fn user_details_handler<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: HttpRequest,
+) -> ApiResult<User>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    let request = UserDetailsRequest {
+        user_id: request.match_info().get("user_id").unwrap().to_string(),
+    };
+    data.backend_handler
+        .get_user_details(request)
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
         .unwrap_or_else(error_to_api_response)
@@ -59,9 +76,16 @@ where
             .into()
         });
     cfg.app_data(json_config);
-    cfg.service(web::resource("/users").route(web::post().to(user_list_handler::<Backend>)));
     cfg.service(
-        web::resource("/users/create").route(web::post().to(create_user_handler::<Backend>)),
+        web::resource("/user/{user_id}").route(web::get().to(user_details_handler::<Backend>)),
+    );
+    cfg.service(
+        web::scope("/users")
+            .guard(actix_web::guard::Header("content-type", "application/json"))
+            .service(web::resource("").route(web::post().to(user_list_handler::<Backend>)))
+            .service(
+                web::resource("/create").route(web::post().to(create_user_handler::<Backend>)),
+            ),
     );
 }
 
