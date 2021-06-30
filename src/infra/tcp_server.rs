@@ -68,7 +68,6 @@ fn http_config<Backend>(
                 auth_service::token_validator::<Backend>,
             ))
             .wrap(auth_service::CookieToHeaderTranslatorFactory)
-            .guard(actix_web::guard::Header("content-type", "application/json"))
             .configure(tcp_api::api_config::<Backend>),
     )
     // Serve the /pkg path with the compiled WASM app.
