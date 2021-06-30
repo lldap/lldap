@@ -1,0 +1,20 @@
+# Don't track git
+.git/*
+
+# Don't track cargo generated files
+target/*
+app/target/*
+model/target/*
+
+# Don't track the generated JS
+app/pkg/*
+
+# Don't track changes to the Dockerfile, triggering a rebuild without cache
+Dockerfile
+.dockerignore
+
+# Various config files that shouldn't be tracked
+lldap_config.toml
+server_key
+users.db*
+.gitignore

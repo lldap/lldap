@@ -1,0 +1,65 @@
+## Default configuration for Docker.
+## All the values can be overridden through environment variables. For
+## instance, "ldap_port" can be overridden with the "LDAP_PORT" variable.
+
+## The port on which to have the LDAP server.
+#ldap_port = 3890
+
+## The port on which to have the HTTP server, for user login and
+## administration.
+#http_port = 17170
+
+## Random secret for JWT signature.
+## This secret should be random, and should be shared with application
+## servers that need to consume the JWTs.
+## Changing this secret will invalidate all user sessions and require
+## them to re-login.
+## You should probably set it through the JWT_SECRET environment
+## variable from a secret ".env" file.
+## You can generate it with (on linux):
+## LC_ALL=C tr -dc 'A-Za-z0-9!"#%&'\''()*+,-./:;<=>?@[\]^_{|}~' </dev/urandom | head -c 32; echo ''
+#jwt_secret = "REPLACE_WITH_RANDOM"
+
+## Base DN for LDAP.
+## This is usually your domain name, and is used as a
+## namespace for your users. The choice is arbitrary, but will be needed
+## to configure the LDAP integration with other services.
+## The sample value is for "example.com", but you can extend it with as
+## many "dc" as you want, and you don't actually need to own the domain
+## name.
+#ldap_base_dn = "dc=example,dc=com"
+
+## Admin username.
+## For the LDAP interface, a value of "admin" here will create the LDAP
+## user "cn=admin,dc=example,dc=com" (with the base DN above).
+## For the administration interface, this is the username.
+#ldap_user_dn = "admin"
+
+## Admin password.
+## Password for the admin account, both for the LDAP bind and for the
+## administration interface.
+## You can set it with the LDAP_USER_PASS environment variable.
+## Note: you can create another admin user for LDAP/administration, this
+## is just the default one.
+#ldap_user_pass = "REPLACE_WITH_PASSWORD"
+
+## Database URL.
+## This encodes the type of database (SQlite, Mysql and so
+## on), the path, the user, password, and sometimes the mode (when
+## relevant).
+## Note: Currently, only SQlite is supported. SQlite should come with
+## "?mode=rwc" to create the DB if not present.
+## Example URLs:
+##  - "postgres://postgres-user:password@postgres-server/my-database"
+##  - "mysql://mysql-user:password@mysql-server/my-database"
+##
+## This can be overridden with the DATABASE_URL env variable.
+database_url = "sqlite:///data/users.db?mode=rwc"
+
+## Private key file.
+## Contains the secret private key used to store the passwords safely.
+## Note that even with a database dump and the private key, an attacker
+## would still have to perform an (expensive) brute force attack to find
+## each password.
+## Randomly generated on first run if it doesn't exist.
+key_file = "/data/private_key"
