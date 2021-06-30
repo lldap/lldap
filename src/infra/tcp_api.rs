@@ -20,9 +20,8 @@ async fn user_list_handler<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    let req: ListUsersRequest = info.clone();
     data.backend_handler
-        .list_users(req)
+        .list_users(info.into_inner())
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
         .unwrap_or_else(error_to_api_response)
@@ -53,7 +52,7 @@ where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
     data.backend_handler
-        .create_user(info.clone())
+        .create_user(info.into_inner())
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
         .unwrap_or_else(error_to_api_response)

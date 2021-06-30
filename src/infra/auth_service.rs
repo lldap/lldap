@@ -175,7 +175,7 @@ where
     Backend: OpaqueHandler + 'static,
 {
     data.backend_handler
-        .login_start(request.clone())
+        .login_start(request.into_inner())
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
         .unwrap_or_else(error_to_api_response)
@@ -225,7 +225,11 @@ async fn opaque_login_finish<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    let name = match data.backend_handler.login_finish(request.clone()).await {
+    let name = match data
+        .backend_handler
+        .login_finish(request.into_inner())
+        .await
+    {
         Ok(n) => n,
         Err(e) => return error_to_http_response(e),
     };
@@ -239,10 +243,11 @@ async fn post_authorize<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
 {
-    if let Err(e) = data.backend_handler.bind(request.clone()).await {
+    let name = request.name.clone();
+    if let Err(e) = data.backend_handler.bind(request.into_inner()).await {
         return error_to_http_response(e);
     }
-    get_login_successful_response(&data, &request.name).await
+    get_login_successful_response(&data, &name).await
 }
 
 async fn opaque_register_start<Backend>(
@@ -253,7 +258,7 @@ where
     Backend: OpaqueHandler + 'static,
 {
     data.backend_handler
-        .registration_start(request.clone())
+        .registration_start(request.into_inner())
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
         .unwrap_or_else(error_to_api_response)
@@ -268,7 +273,7 @@ where
 {
     if let Err(e) = data
         .backend_handler
-        .registration_finish(request.clone())
+        .registration_finish(request.into_inner())
         .await
     {
         return error_to_http_response(e);
