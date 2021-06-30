@@ -100,6 +100,44 @@ Make sure that you run `cargo fmt` in each crate that you modified (top-level,
 
 ### Setup
 
+#### With Docker
+
+The image is available at `nitnelave/lldap`. You should persist the `/data`
+folder, which contains your configuration, the database and the private key
+file (unless you move them in the config).
+
+Configure the server by copying the `lldap_config.docker_template.toml` to
+`/data/lldap_config.toml` and updating the configuration values (especially the
+`jwt_secret` and `ldap_user_pass`, unless you override them with env variables).
+
+Example for docker compose:
+
+```yaml
+volumes:
+  lldap_data:
+    driver: local
+
+services:
+  lldap:
+    image: nitnelave/lldap
+    ports:
+      # For LDAP
+      - "3890:3890"
+      # For the web front-end
+      - "17170:17170"
+    volumes:
+      - "lldap_data:/data"
+    environment:
+      - JWT_SECRET=REPLACE_WITH_RANDOM
+      - LDAP_USER_PASS=REPLACE_WITH_PASSWORD
+      - LDAP_BASE_DN=dc=example,dc=com
+```
+
+Then the service will listen on two ports, one for LDAP and one for the web
+front-end.
+
+#### From source
+
 To bring up the server, you'll need to compile the frontend. In addition to
 cargo, you'll need:
 
