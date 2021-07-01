@@ -52,4 +52,4 @@ ENV HTTP_PORT=17170
 
 EXPOSE ${LDAP_PORT} ${HTTP_PORT}
 
-CMD ["/app/lldap", "--config_file", "/data/lldap_config.toml"]
+CMD ["/app/lldap", "--config-file", "/data/lldap_config.toml"]
