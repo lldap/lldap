@@ -38,7 +38,7 @@ pub fn get_cookie(cookie_name: &str) -> Result<Option<String>> {
         .split(';')
         .filter_map(|c| c.split_once('='))
         .find_map(|(name, value)| {
-            if name == cookie_name {
+            if name.trim() == cookie_name {
                 if value.is_empty() {
                     None
                 } else {

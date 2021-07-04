@@ -123,7 +123,7 @@ impl HostService {
 
     pub fn login_finish(
         request: login::ClientLoginFinishRequest,
-        callback: Callback<Result<String>>,
+        callback: Callback<Result<(String, bool)>>,
     ) -> Result<FetchTask> {
         call_server(
             "/auth/opaque/login/finish",
@@ -134,8 +134,12 @@ impl HostService {
                     get_claims_from_jwt(&data)
                         .map_err(|e| anyhow!("Could not parse response: {}", e))
                         .and_then(|jwt_claims| {
+                            let is_admin = jwt_claims.groups.contains("lldap_admin");
                             set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
-                                .map(|_| jwt_claims.user.clone())
+                                .map(|_| {
+                                    set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp)
+                                })
+                                .map(|_| (jwt_claims.user.clone(), is_admin))
                                 .map_err(|e| anyhow!("Error clearing cookie: {}", e))
                         })
                 } else {
