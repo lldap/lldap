@@ -15,13 +15,13 @@ use yew_router::{
 
 pub struct App {
     link: ComponentLink<Self>,
-    user_name: Option<String>,
-    redirect_to: String,
+    user_info: Option<(String, bool)>,
+    redirect_to: Option<String>,
     route_dispatcher: RouteAgentDispatcher,
 }
 
 pub enum Msg {
-    Login(String),
+    Login((String, bool)),
     Logout,
 }
 
@@ -33,6 +33,8 @@ pub enum AppRoute {
     ListUsers,
     #[to = "/create_user"]
     CreateUser,
+    #[to = "/details/{user_id}"]
+    UserDetails(String),
     #[to = "/"]
     Index,
 }
@@ -46,35 +48,47 @@ impl Component for App {
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut app = Self {
             link,
-            user_name: get_cookie("user_id").unwrap_or_else(|e| {
-                ConsoleService::error(&e.to_string());
-                None
-            }),
+            user_info: get_cookie("user_id")
+                .unwrap_or_else(|e| {
+                    ConsoleService::error(&e.to_string());
+                    None
+                })
+                .and_then(|u| {
+                    get_cookie("is_admin")
+                        .map(|so| so.map(|s| (u, s == "true")))
+                        .unwrap_or_else(|e| {
+                            ConsoleService::error(&e.to_string());
+                            None
+                        })
+                }),
             redirect_to: Self::get_redirect_route(),
             route_dispatcher: RouteAgentDispatcher::new(),
         };
-        if app.user_name.is_none() {
-            ConsoleService::info("Redirecting to login");
-            app.route_dispatcher
-                .send(RouteRequest::ReplaceRoute(Route::new_no_state("/login")));
-        };
+        app.apply_initial_redirections();
         app
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
-            Msg::Login(user_name) => {
-                self.user_name = Some(user_name);
+            Msg::Login((user_name, is_admin)) => {
+                self.user_info = Some((user_name.clone(), is_admin));
+                let user_route = "/details/".to_string() + &user_name;
                 self.route_dispatcher
                     .send(RouteRequest::ChangeRoute(Route::new_no_state(
-                        &self.redirect_to,
+                        self.redirect_to.as_deref().unwrap_or_else(|| {
+                            if is_admin {
+                                "/users"
+                            } else {
+                                &user_route
+                            }
+                        }),
                     )));
             }
             Msg::Logout => {
-                self.user_name = None;
+                self.user_info = None;
             }
         }
-        if self.user_name.is_none() {
+        if self.user_info.is_none() {
             self.route_dispatcher
                 .send(RouteRequest::ReplaceRoute(Route::new_no_state("/login")));
         }
@@ -108,7 +122,12 @@ impl Component for App {
                                 <UserTable />
                                 <Link route=AppRoute::CreateUser>{"Create a user"}</Link>
                               </div>
-                          }
+                          },
+                          AppRoute::UserDetails(username) => html! {
+                              <div>
+                              {"details about "} {&username}
+                              </div>
+                          },
                       }
                   })
                 />
@@ -118,13 +137,42 @@ impl Component for App {
 }
 
 impl App {
-    fn get_redirect_route() -> String {
+    fn get_redirect_route() -> Option<String> {
         let route_service = RouteService::<()>::new();
         let current_route = route_service.get_path();
         if current_route.is_empty() || current_route.contains("login") {
-            String::from("/")
+            None
         } else {
-            current_route
+            Some(current_route)
+        }
+    }
+
+    fn apply_initial_redirections(&mut self) {
+        match &self.user_info {
+            None => {
+                ConsoleService::info("Redirecting to login");
+                self.route_dispatcher
+                    .send(RouteRequest::ReplaceRoute(Route::new_no_state("/login")));
+            }
+            Some((user_name, is_admin)) => match &self.redirect_to {
+                Some(url) => {
+                    ConsoleService::info(&format!("Redirecting to specified url: {}", url));
+                    self.route_dispatcher
+                        .send(RouteRequest::ReplaceRoute(Route::new_no_state(url)));
+                }
+                None => {
+                    if *is_admin {
+                        ConsoleService::info("Redirecting to user list");
+                        self.route_dispatcher
+                            .send(RouteRequest::ReplaceRoute(Route::new_no_state("/users")));
+                    } else {
+                        ConsoleService::info("Redirecting to user view");
+                        self.route_dispatcher.send(RouteRequest::ReplaceRoute(
+                            Route::new_no_state(&("/details/".to_string() + user_name)),
+                        ));
+                    }
+                }
+            },
         }
     }
 }

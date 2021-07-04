@@ -8,7 +8,7 @@ use yew::FocusEvent;
 
 pub struct LoginForm {
     link: ComponentLink<Self>,
-    on_logged_in: Callback<String>,
+    on_logged_in: Callback<(String, bool)>,
     error: Option<anyhow::Error>,
     node_ref: NodeRef,
     login_start: Option<opaque::client::login::ClientLogin>,
@@ -18,13 +18,13 @@ pub struct LoginForm {
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct Props {
-    pub on_logged_in: Callback<String>,
+    pub on_logged_in: Callback<(String, bool)>,
 }
 
 pub enum Msg {
     Submit,
     AuthenticationStartResponse(Result<Box<login::ServerLoginStartResponse>>),
-    AuthenticationFinishResponse(Result<String>),
+    AuthenticationFinishResponse(Result<(String, bool)>),
 }
 
 fn get_form_field(field_id: &str) -> Option<String> {
@@ -106,8 +106,8 @@ impl LoginForm {
                 "Could not log in (invalid response to login start): {}",
                 e
             )),
-            Msg::AuthenticationFinishResponse(Ok(user_id)) => {
-                self.on_logged_in.emit(user_id);
+            Msg::AuthenticationFinishResponse(Ok(user_info)) => {
+                self.on_logged_in.emit(user_info);
                 Ok(())
             }
             Msg::AuthenticationFinishResponse(Err(e)) => Err(anyhow!("Could not log in: {}", e)),
