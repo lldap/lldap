@@ -3,7 +3,8 @@
 
 use crate::{
     domain::{
-        handler::BackendHandler, sql_backend_handler::SqlBackendHandler, sql_tables::PoolOptions,
+        handler::BackendHandler, sql_backend_handler::SqlBackendHandler,
+        sql_opaque_handler::register_password, sql_tables::PoolOptions,
     },
     infra::{configuration::Configuration, db_cleaner::Scheduler},
 };
@@ -21,6 +22,7 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
             user_id: config.ldap_user_dn.clone(),
             ..Default::default()
         })
+        .and_then(|_| register_password(handler, &config.ldap_user_dn, &config.ldap_user_pass))
         .await
         .map_err(|e| anyhow!("Error creating admin user: {}", e))?;
     let admin_group_id = handler

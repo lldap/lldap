@@ -213,6 +213,34 @@ impl OpaqueHandler for SqlOpaqueHandler {
     }
 }
 
+/// Convenience function to set a user's password.
+pub(crate) async fn register_password(
+    opaque_handler: &SqlOpaqueHandler,
+    username: &str,
+    password: &str,
+) -> Result<()> {
+    let mut rng = rand::rngs::OsRng;
+    use registration::*;
+    let registration_start = opaque::client::registration::start_registration(password, &mut rng)?;
+    let start_response = opaque_handler
+        .registration_start(ClientRegistrationStartRequest {
+            username: username.to_string(),
+            registration_start_request: registration_start.message,
+        })
+        .await?;
+    let registration_finish = opaque::client::registration::finish_registration(
+        registration_start.state,
+        start_response.registration_response,
+        &mut rng,
+    )?;
+    opaque_handler
+        .registration_finish(ClientRegistrationFinishRequest {
+            server_data: start_response.server_data,
+            registration_upload: registration_finish.message,
+        })
+        .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,34 +307,6 @@ mod tests {
         Ok(())
     }
 
-    async fn attempt_registration(
-        opaque_handler: &SqlOpaqueHandler,
-        username: &str,
-        password: &str,
-    ) -> Result<()> {
-        let mut rng = rand::rngs::OsRng;
-        use registration::*;
-        let registration_start =
-            opaque::client::registration::start_registration(password, &mut rng)?;
-        let start_response = opaque_handler
-            .registration_start(ClientRegistrationStartRequest {
-                username: username.to_string(),
-                registration_start_request: registration_start.message,
-            })
-            .await?;
-        let registration_finish = opaque::client::registration::finish_registration(
-            registration_start.state,
-            start_response.registration_response,
-            &mut rng,
-        )?;
-        opaque_handler
-            .registration_finish(ClientRegistrationFinishRequest {
-                server_data: start_response.server_data,
-                registration_upload: registration_finish.message,
-            })
-            .await
-    }
-
     #[tokio::test]
     async fn test_flow() -> Result<()> {
         let sql_pool = get_initialized_db().await;
@@ -317,7 +317,7 @@ mod tests {
         attempt_login(&opaque_handler, "bob", "bob00")
             .await
             .unwrap_err();
-        attempt_registration(&opaque_handler, "bob", "bob00").await?;
+        register_password(&opaque_handler, "bob", "bob00").await?;
         attempt_login(&opaque_handler, "bob", "wrong_password")
             .await
             .unwrap_err();
