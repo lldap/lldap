@@ -69,9 +69,16 @@ where
     Req: Into<yew::format::Text>,
     Result<Resp>: From<Result<String>> + 'static,
 {
-    let request = Request::post(url)
-        .header("Content-Type", "application/json")
-        .body(request.into().0)?;
+    let request = {
+        // If the request type is empty (if the size is 0), it's a get.
+        if std::mem::size_of::<RB>() == 0 {
+            Request::get(url)
+        } else {
+            Request::post(url)
+        }
+    }
+    .header("Content-Type", "application/json")
+    .body(request.into().0)?;
     let handler = create_handler(callback, handler);
     FetchService::fetch_with_options(request, get_default_options(), handler)
 }
@@ -107,6 +114,15 @@ impl HostService {
         callback: Callback<Result<Vec<User>>>,
     ) -> Result<FetchTask> {
         call_server_json_with_error_message("/api/users", &request, callback, "")
+    }
+
+    pub fn get_user_details(username: &str, callback: Callback<Result<User>>) -> Result<FetchTask> {
+        call_server_json_with_error_message(
+            &format!("/api/user/{}", username),
+            yew::format::Nothing,
+            callback,
+            "",
+        )
     }
 
     pub fn login_start(
