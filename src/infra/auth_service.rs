@@ -114,7 +114,7 @@ where
     .unwrap_or_else(error_to_http_response)
 }
 
-async fn post_logout<Backend>(
+async fn get_logout<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
 ) -> HttpResponse
@@ -416,5 +416,5 @@ where
                 .route(web::post().to(opaque_register_finish::<Backend>)),
         )
         .service(web::resource("/refresh").route(web::get().to(get_refresh::<Backend>)))
-        .service(web::resource("/logout").route(web::post().to(post_logout::<Backend>)));
+        .service(web::resource("/logout").route(web::get().to(get_logout::<Backend>)));
 }

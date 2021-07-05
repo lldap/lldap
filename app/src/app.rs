@@ -1,6 +1,6 @@
 use crate::{
     cookies::get_cookie, create_user::CreateUserForm, login::LoginForm, logout::LogoutButton,
-    user_table::UserTable,
+    user_details::UserDetails, user_table::UserTable,
 };
 use yew::prelude::*;
 use yew::services::ConsoleService;
@@ -125,7 +125,8 @@ impl Component for App {
                           },
                           AppRoute::UserDetails(username) => html! {
                               <div>
-                              {"details about "} {&username}
+                                <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
+                                <UserDetails username=username.clone() />
                               </div>
                           },
                       }

@@ -6,6 +6,7 @@ mod cookies;
 mod create_user;
 mod login;
 mod logout;
+mod user_details;
 mod user_table;
 
 use wasm_bindgen::prelude::{wasm_bindgen, JsValue};
