@@ -1,5 +1,8 @@
 # lldap - Light LDAP implementation for authentication
 
+WARNING: This project is still WIP, it's still missing core functionality. For
+updates, follow [@nitnelave1](https://twitter.com/nitnelave1).
+
 This project is an lightweight authentication server that provides an
 opinionated, simplified LDAP interface for authentication: clients that can
 only speak LDAP protocol can talk to it and use it as an authentication server.
