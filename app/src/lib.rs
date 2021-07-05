@@ -1,4 +1,5 @@
 #![recursion_limit = "256"]
+#![allow(clippy::nonstandard_macro_braces)]
 mod api;
 mod app;
 mod cookies;
