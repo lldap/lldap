@@ -1,4 +1,6 @@
 #![forbid(unsafe_code)]
+#![allow(clippy::nonstandard_macro_braces)]
+
 use crate::{
     domain::{
         handler::BackendHandler, sql_backend_handler::SqlBackendHandler, sql_tables::PoolOptions,

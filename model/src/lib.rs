@@ -1,3 +1,4 @@
+#![allow(clippy::nonstandard_macro_braces)]
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
