@@ -4,9 +4,9 @@ version = 3
 
 [[package]]
 name = "actix"
-version = "0.11.0-beta.3"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0865a034bd84c1cfb2afa66bfd22195b280650817729086268f7744a493fa292"
+checksum = "3720d0064a0ce5c0de7bd93bdb0a6caebab2a9b5668746145d7b3b0c5da02914"
 dependencies = [
  "actix-rt",
  "actix_derive",
@@ -44,8 +44,9 @@ dependencies = [
 
 [[package]]
 name = "actix-files"
-version = "0.6.0-beta.5"
-source = "git+https://github.com/actix/actix-web?rev=2d8530feb37447a1dd2e58700b31b987ae8163ef#2d8530feb37447a1dd2e58700b31b987ae8163ef"
+version = "0.6.0-beta.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89b864740ed79d26e6e3c33fd2a1e03a071daaa43c88e6900ff1f9378fca88ce"
 dependencies = [
  "actix-http",
  "actix-service",
@@ -65,9 +66,9 @@ dependencies = [
 
 [[package]]
 name = "actix-http"
-version = "3.0.0-beta.7"
+version = "3.0.0-beta.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a6b8dd8ffcb0277cebef2c4b496821c888e0320817c1862a83359d4e384797a"
+checksum = "01260589f1aafad11224002741eb37bc603b4ce55b4e3556d2b2122f9aac7c51"
 dependencies = [
  "actix-codec",
  "actix-rt",
@@ -143,11 +144,10 @@ dependencies = [
 
 [[package]]
 name = "actix-server"
-version = "2.0.0-beta.3"
+version = "2.0.0-beta.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a99198727204a48f82559c18e4b0ba3197b97d5f4576a32bdbef371f3b4599c1"
+checksum = "26369215fcc3b0176018b3b68756a8bcc275bb000e6212e454944913a1f9bf87"
 dependencies = [
- "actix-codec",
  "actix-rt",
  "actix-service",
  "actix-utils",
@@ -199,9 +199,9 @@ dependencies = [
 
 [[package]]
 name = "actix-web"
-version = "4.0.0-beta.7"
+version = "4.0.0-beta.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "944b85410c2f6e22529d25e92506491f669c3336b8dc50ad2603f4f611ffdaf3"
+checksum = "c503f726f895e55dac39adeafd14b5ee00cc956796314e9227fc7ae2e176f443"
 dependencies = [
  "actix-codec",
  "actix-http",
@@ -214,6 +214,7 @@ dependencies = [
  "actix-web-codegen",
  "ahash 0.7.4",
  "bytes",
+ "cfg-if 1.0.0",
  "cookie",
  "derive_more",
  "either",
@@ -250,8 +251,9 @@ dependencies = [
 
 [[package]]
 name = "actix-web-httpauth"
-version = "0.6.0-beta.1"
-source = "git+https://github.com/nitnelave/actix-extras?rev=39b03cb5d2734482328722219c528cb0a6d375d7#39b03cb5d2734482328722219c528cb0a6d375d7"
+version = "0.6.0-beta.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "264d0eb4698d59493cafc96554c3919837115f8c4e9040a3790c2b55400ff758"
 dependencies = [
  "actix-service",
  "actix-web",
@@ -1887,22 +1889,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "opentelemetry"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91cea1dfd50064e52db033179952d18c770cbc5dfefc8eba45d619357ba3914"
-dependencies = [
- "async-trait",
- "futures",
- "js-sys",
- "lazy_static",
- "percent-encoding",
- "pin-project",
- "rand 0.8.3",
- "thiserror",
-]
-
-[[package]]
 name = "orion"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2955,18 +2941,14 @@ dependencies = [
 
 [[package]]
 name = "tracing-actix-web"
-version = "0.4.0-beta.7"
+version = "0.4.0-beta.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e72e0d165f1cf29043169743eebaa9e565cc41131e732208e536e1e2432c039"
+checksum = "29fe304c04a237147370dd8237cdf8e8b1056e5f732cec354f6512a756b0f28a"
 dependencies = [
- "actix-http",
- "actix-service",
  "actix-web",
  "futures",
- "opentelemetry",
  "tracing",
  "tracing-futures",
- "tracing-opentelemetry",
  "uuid",
 ]
 
@@ -3009,19 +2991,6 @@ dependencies = [
  "lazy_static",
  "log",
  "tracing-core",
-]
-
-[[package]]
-name = "tracing-opentelemetry"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99003208b647dae59dcefc49c98aecaa3512fbc29351685d4b9ef23a9218458e"
-dependencies = [
- "opentelemetry",
- "tracing",
- "tracing-core",
- "tracing-log",
- "tracing-subscriber",
 ]
 
 [[package]]

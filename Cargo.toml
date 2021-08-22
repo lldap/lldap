@@ -8,12 +8,14 @@ name = "lldap"
 version = "0.1.0"
 
 [dependencies]
-actix = "0.11.0-beta.3"
-actix-http = "3.0.0-beta.6"
-actix-rt = "2.1.0"
-actix-server = "2.0.0-beta.3"
+actix = "0.12"
+actix-files = "0.6.0-beta.6"
+actix-http = "3.0.0-beta.9"
+actix-rt = "2.2.0"
+actix-server = "2.0.0-beta.5"
 actix-service = "2.0.0"
-actix-web = "4.0.0-beta.3"
+actix-web = "4.0.0-beta.8"
+actix-web-httpauth = "0.6.0-beta.2"
 anyhow = "*"
 async-trait = "0.1"
 base64 = "0.13"
@@ -69,18 +71,6 @@ features = ["with-chrono"]
 [dependencies.figment]
 features = ["env", "toml"]
 version = "*"
-
-[dependencies.actix-files]
-git = "https://github.com/actix/actix-web"
-rev = "2d8530feb37447a1dd2e58700b31b987ae8163ef"
-
-#[dependencies.actix-cors]
-#git = "https://github.com/nitnelave/actix-extras"
-#rev = "39b03cb5d2734482328722219c528cb0a6d375d7"
-
-[dependencies.actix-web-httpauth]
-git = "https://github.com/nitnelave/actix-extras"
-rev = "39b03cb5d2734482328722219c528cb0a6d375d7"
 
 [dev-dependencies]
 mockall = "0.9.1"
