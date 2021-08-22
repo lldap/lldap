@@ -49,7 +49,7 @@ fn http_config<Backend>(
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + 'static,
 {
-    cfg.data(AppState::<Backend> {
+    cfg.app_data(AppState::<Backend> {
         backend_handler,
         jwt_key: Hmac::new_varkey(jwt_secret.as_bytes()).unwrap(),
         jwt_blacklist: RwLock::new(jwt_blacklist),
