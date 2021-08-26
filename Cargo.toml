@@ -46,6 +46,8 @@ tracing-actix-web = "0.4.0-beta.7"
 tracing-log = "*"
 tracing-subscriber = "*"
 rand = { version = "0.8", features = ["small_rng", "getrandom"] }
+juniper_actix = "0.4.0"
+juniper = "0.15.6"
 
 # TODO: update to 0.6 when out.
 [dependencies.opaque-ke]

@@ -2,6 +2,7 @@ pub mod auth_service;
 pub mod cli;
 pub mod configuration;
 pub mod db_cleaner;
+pub mod graphql;
 pub mod jwt_sql_tables;
 pub mod ldap_handler;
 pub mod ldap_server;

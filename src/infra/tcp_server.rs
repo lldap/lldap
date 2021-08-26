@@ -47,7 +47,7 @@ fn http_config<Backend>(
     jwt_secret: String,
     jwt_blacklist: HashSet<u64>,
 ) where
-    Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + 'static,
+    Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Sync + 'static,
 {
     cfg.app_data(web::Data::new(AppState::<Backend> {
         backend_handler,
@@ -84,7 +84,7 @@ pub async fn build_tcp_server<Backend>(
     server_builder: ServerBuilder,
 ) -> Result<ServerBuilder>
 where
-    Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + 'static,
+    Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Sync + 'static,
 {
     let jwt_secret = config.jwt_secret.clone();
     let jwt_blacklist = backend_handler.get_jwt_blacklist().await?;
