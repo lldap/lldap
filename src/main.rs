@@ -6,7 +6,7 @@ use crate::{
         handler::BackendHandler, sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password, sql_tables::PoolOptions,
     },
-    infra::{configuration::Configuration, db_cleaner::Scheduler},
+    infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler},
 };
 use actix::Actor;
 use anyhow::{anyhow, Result};
@@ -65,14 +65,13 @@ async fn run_server(config: Configuration) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let cli_opts = infra::cli::init();
-    let config = infra::configuration::init(cli_opts.clone())?;
+fn run_server_command(opts: RunOpts) -> Result<()> {
+    let config = infra::configuration::init(opts.clone())?;
     infra::logging::init(config.clone())?;
 
     info!("Starting LLDAP....");
 
-    debug!("CLI: {:#?}", cli_opts);
+    debug!("CLI: {:#?}", opts);
     debug!("Configuration: {:#?}", config);
 
     actix::run(
@@ -81,4 +80,12 @@ fn main() -> Result<()> {
 
     info!("End.");
     Ok(())
+}
+
+fn main() -> Result<()> {
+    let cli_opts = infra::cli::init();
+    match cli_opts.command {
+        Command::ExportGraphQLSchema(opts) => infra::graphql::api::export_schema(opts),
+        Command::Run(opts) => run_server_command(opts),
+    }
 }
