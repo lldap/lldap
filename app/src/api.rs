@@ -57,18 +57,18 @@ impl From<yew::format::Nothing> for RequestBody<yew::format::Nothing> {
     }
 }
 
-fn call_server<Req, CallbackResult, Resp, F, RB>(
+fn call_server<Req, CallbackResult, F, RB>(
     url: &str,
     request: RB,
     callback: Callback<Result<CallbackResult>>,
-    handler: F,
+    error_message: &'static str,
+    parse_response: F,
 ) -> Result<FetchTask>
 where
-    F: Fn(http::StatusCode, Resp) -> Result<CallbackResult> + 'static,
+    F: Fn(String) -> Result<CallbackResult> + 'static,
     CallbackResult: 'static,
     RB: Into<RequestBody<Req>>,
     Req: Into<yew::format::Text>,
-    Result<Resp>: From<Result<String>> + 'static,
 {
     let request = {
         // If the request type is empty (if the size is 0), it's a get.
@@ -80,7 +80,13 @@ where
     }
     .header("Content-Type", "application/json")
     .body(request.into().0)?;
-    let handler = create_handler(callback, handler);
+    let handler = create_handler(callback, move |status: http::StatusCode, data: String| {
+        if status.is_success() {
+            parse_response(data)
+        } else {
+            Err(anyhow!("{}[{}]: {}", error_message, status, data))
+        }
+    });
     FetchService::fetch_with_options(request, get_default_options(), handler)
 }
 
@@ -95,17 +101,27 @@ where
     RB: Into<RequestBody<Req>>,
     Req: Into<yew::format::Text>,
 {
+    call_server(url, request, callback, error_message, |data: String| {
+        serde_json::from_str(&data).context("Could not parse response")
+    })
+}
+
+fn call_server_empty_response_with_error_message<RB, Req>(
+    url: &str,
+    request: RB,
+    callback: Callback<Result<()>>,
+    error_message: &'static str,
+) -> Result<FetchTask>
+where
+    RB: Into<RequestBody<Req>>,
+    Req: Into<yew::format::Text>,
+{
     call_server(
         url,
         request,
         callback,
-        move |status: http::StatusCode, data: String| {
-            if status.is_success() {
-                serde_json::from_str(&data).context("Could not parse response")
-            } else {
-                Err(anyhow!("{}[{}]: {}", error_message, status, data))
-            }
-        },
+        error_message,
+        |_data: String| Ok(()),
     )
 }
 
@@ -118,22 +134,31 @@ impl HostService {
     where
         QueryType: GraphQLQuery + 'static,
     {
+        let unwrap_graphql_response = |graphql_client::Response { data, errors }| {
+            data.ok_or_else(|| {
+                anyhow!(
+                    "Errors: [{}]",
+                    errors
+                        .unwrap_or_default()
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
+        };
+        let parse_graphql_response = move |data: String| {
+            serde_json::from_str(&data)
+                .context("Could not parse response")
+                .and_then(unwrap_graphql_response)
+        };
         let request_body = QueryType::build_query(variables);
         call_server(
             "/api/graphql",
             &request_body,
             callback,
-            move |status: http::StatusCode, data: String| {
-                if status.is_success() {
-                    serde_json::from_str(&data)
-                        .context("Could not parse response")
-                        .and_then(|graphql_client::Response { data, errors }| {
-                            data.ok_or_else(|| anyhow!("Errors: {:?}", errors.unwrap_or(vec![])))
-                        })
-                } else {
-                    Err(anyhow!("{}[{}]: {}", error_message, status, data))
-                }
-            },
+            error_message,
+            parse_graphql_response,
         )
     }
 
@@ -162,31 +187,24 @@ impl HostService {
         request: login::ClientLoginFinishRequest,
         callback: Callback<Result<(String, bool)>>,
     ) -> Result<FetchTask> {
+        let set_cookies = |jwt_claims: JWTClaims| {
+            let is_admin = jwt_claims.groups.contains("lldap_admin");
+            set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
+                .map(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
+                .map(|_| (jwt_claims.user.clone(), is_admin))
+                .context("Error clearing cookie")
+        };
+        let parse_token = move |data: String| {
+            get_claims_from_jwt(&data)
+                .context("Could not parse response")
+                .and_then(set_cookies)
+        };
         call_server(
             "/auth/opaque/login/finish",
             &request,
             callback,
-            |status, data: String| {
-                if status.is_success() {
-                    get_claims_from_jwt(&data)
-                        .context("Could not parse response")
-                        .and_then(|jwt_claims| {
-                            let is_admin = jwt_claims.groups.contains("lldap_admin");
-                            set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
-                                .map(|_| {
-                                    set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp)
-                                })
-                                .map(|_| (jwt_claims.user.clone(), is_admin))
-                                .context("Error clearing cookie")
-                        })
-                } else {
-                    Err(anyhow!(
-                        "Could not finish authentication: [{}]: {}",
-                        status,
-                        data
-                    ))
-                }
-            },
+            "Could not finish authentication",
+            parse_token,
         )
     }
 
@@ -206,32 +224,20 @@ impl HostService {
         request: registration::ClientRegistrationFinishRequest,
         callback: Callback<Result<()>>,
     ) -> Result<FetchTask> {
-        call_server(
+        call_server_empty_response_with_error_message(
             "/auth/opaque/registration/finish",
             &request,
             callback,
-            |status, data: String| {
-                if status.is_success() {
-                    Ok(())
-                } else {
-                    Err(anyhow!("Could finish registration: [{}]: {}", status, data))
-                }
-            },
+            "Could not finish registration",
         )
     }
 
     pub fn logout(callback: Callback<Result<()>>) -> Result<FetchTask> {
-        call_server(
+        call_server_empty_response_with_error_message(
             "/auth/logout",
             yew::format::Nothing,
             callback,
-            |status, data: String| {
-                if status.is_success() {
-                    Ok(())
-                } else {
-                    Err(anyhow!("Could not logout: [{}]: {}", status, data))
-                }
-            },
+            "Could not logout",
         )
     }
 
@@ -239,17 +245,11 @@ impl HostService {
         request: CreateUserRequest,
         callback: Callback<Result<()>>,
     ) -> Result<FetchTask> {
-        call_server(
+        call_server_empty_response_with_error_message(
             "/api/users/create",
             &request,
             callback,
-            |status, data: String| {
-                if status.is_success() {
-                    Ok(())
-                } else {
-                    Err(anyhow!("Could not create a user: [{}]: {}", status, data))
-                }
-            },
+            "Could not create a user",
         )
     }
 }

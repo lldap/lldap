@@ -24,17 +24,16 @@ pub enum Msg {
 
 impl UserTable {
     fn get_users(&mut self, req: Option<RequestFilter>) {
-        match HostService::graphql_query::<ListUsersQuery>(
+        self._task = HostService::graphql_query::<ListUsersQuery>(
             list_users_query::Variables { filters: req },
             self.link.callback(Msg::ListUsersResponse),
-            "",
-        ) {
-            Ok(task) => self._task = Some(task),
-            Err(e) => {
-                self._task = None;
-                ConsoleService::log(format!("Error trying to fetch users: {}", e).as_str())
-            }
-        };
+            "Error trying to fetch users",
+        )
+        .map_err(|e| {
+            ConsoleService::log(&e.to_string());
+            e
+        })
+        .ok();
     }
 }
 
