@@ -18,7 +18,7 @@ pub trait BackendHandler: Clone + Send {
     async fn delete_user(&self, request: DeleteUserRequest) -> Result<()>;
     async fn create_group(&self, request: CreateGroupRequest) -> Result<i32>;
     async fn add_user_to_group(&self, request: AddUserToGroupRequest) -> Result<()>;
-    async fn get_user_groups(&self, user: String) -> Result<HashSet<String>>;
+    async fn get_user_groups(&self, user: &str) -> Result<HashSet<String>>;
 }
 
 #[cfg(test)]
@@ -35,7 +35,7 @@ mockall::mock! {
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
         async fn delete_user(&self, request: DeleteUserRequest) -> Result<()>;
         async fn create_group(&self, request: CreateGroupRequest) -> Result<i32>;
-        async fn get_user_groups(&self, user: String) -> Result<HashSet<String>>;
+        async fn get_user_groups(&self, user: &str) -> Result<HashSet<String>>;
         async fn add_user_to_group(&self, request: AddUserToGroupRequest) -> Result<()>;
     }
     #[async_trait]

@@ -135,7 +135,7 @@ impl BackendHandler for SqlBackendHandler {
             .await?)
     }
 
-    async fn get_user_groups(&self, user: String) -> Result<HashSet<String>> {
+    async fn get_user_groups(&self, user: &str) -> Result<HashSet<String>> {
         if user == self.config.ldap_user_dn {
             let mut groups = HashSet::new();
             groups.insert("lldap_admin".to_string());
@@ -510,19 +510,13 @@ mod tests {
         let mut patrick_groups = HashSet::new();
         patrick_groups.insert("Group1".to_string());
         patrick_groups.insert("Group2".to_string());
+        assert_eq!(handler.get_user_groups("bob").await.unwrap(), bob_groups);
         assert_eq!(
-            handler.get_user_groups("bob".to_string()).await.unwrap(),
-            bob_groups
-        );
-        assert_eq!(
-            handler
-                .get_user_groups("patrick".to_string())
-                .await
-                .unwrap(),
+            handler.get_user_groups("patrick").await.unwrap(),
             patrick_groups
         );
         assert_eq!(
-            handler.get_user_groups("John".to_string()).await.unwrap(),
+            handler.get_user_groups("John").await.unwrap(),
             HashSet::new()
         );
     }

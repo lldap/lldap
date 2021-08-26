@@ -89,7 +89,7 @@ where
     match res_found {
         Ok(found) => {
             if found {
-                backend_handler.get_user_groups(user.to_string()).await
+                backend_handler.get_user_groups(&user).await
             } else {
                 Err(DomainError::AuthenticationError(
                     "Invalid refresh token".to_string(),
@@ -191,7 +191,7 @@ where
     // The authentication was successful, we need to fetch the groups to create the JWT
     // token.
     data.backend_handler
-        .get_user_groups(name.to_string())
+        .get_user_groups(name)
         .and_then(|g| async { Ok((g, data.backend_handler.create_refresh_token(name).await?)) })
         .await
         .map(|(groups, (refresh_token, max_age))| {

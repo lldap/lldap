@@ -149,7 +149,7 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
     async fn groups(&self, context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
         Ok(context
             .handler
-            .get_user_groups(self.user.user_id.clone())
+            .get_user_groups(&self.user.user_id)
             .await
             .map(|set| set.into_iter().map(Into::into).collect())?)
     }
@@ -243,7 +243,7 @@ mod tests {
         let mut groups = HashSet::<String>::new();
         groups.insert("Bobbersons".to_string());
         mock.expect_get_user_groups()
-            .with(eq("bob".to_string()))
+            .with(eq("bob"))
             .return_once(|_| Ok(groups));
 
         let context = Context::<MockTestBackendHandler> {
