@@ -1,5 +1,6 @@
 use crate::cookies::set_cookie;
 use anyhow::{anyhow, Context, Result};
+use graphql_client::GraphQLQuery;
 use lldap_model::*;
 
 use yew::callback::Callback;
@@ -109,11 +110,31 @@ where
 }
 
 impl HostService {
-    pub fn list_users(
-        request: ListUsersRequest,
-        callback: Callback<Result<Vec<User>>>,
-    ) -> Result<FetchTask> {
-        call_server_json_with_error_message("/api/users", &request, callback, "")
+    pub fn graphql_query<QueryType>(
+        variables: QueryType::Variables,
+        callback: Callback<Result<QueryType::ResponseData>>,
+        error_message: &'static str,
+    ) -> Result<FetchTask>
+    where
+        QueryType: GraphQLQuery + 'static,
+    {
+        let request_body = QueryType::build_query(variables);
+        call_server(
+            "/api/graphql",
+            &request_body,
+            callback,
+            move |status: http::StatusCode, data: String| {
+                if status.is_success() {
+                    serde_json::from_str(&data)
+                        .context("Could not parse response")
+                        .and_then(|graphql_client::Response { data, errors }| {
+                            data.ok_or_else(|| anyhow!("Errors: {:?}", errors.unwrap_or(vec![])))
+                        })
+                } else {
+                    Err(anyhow!("{}[{}]: {}", error_message, status, data))
+                }
+            },
+        )
     }
 
     pub fn get_user_details(username: &str, callback: Callback<Result<User>>) -> Result<FetchTask> {

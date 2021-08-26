@@ -1,4 +1,10 @@
-use crate::api::HostService;
+use crate::{
+    api::HostService,
+    graphql_api::{
+        list_users_query::{self, RequestFilter, ResponseData},
+        ListUsersQuery,
+    },
+};
 use anyhow::{anyhow, Result};
 use lldap_model::*;
 use yew::format::Json;
@@ -13,12 +19,16 @@ pub struct UserTable {
 }
 
 pub enum Msg {
-    ListUsersResponse(Result<Vec<User>>),
+    ListUsersResponse(Result<ResponseData>),
 }
 
 impl UserTable {
-    fn get_users(&mut self, req: ListUsersRequest) {
-        match HostService::list_users(req, self.link.callback(Msg::ListUsersResponse)) {
+    fn get_users(&mut self, req: Option<RequestFilter>) {
+        match HostService::graphql_query::<ListUsersQuery>(
+            list_users_query::Variables { filters: req },
+            self.link.callback(Msg::ListUsersResponse),
+            "",
+        ) {
             Ok(task) => self._task = Some(task),
             Err(e) => {
                 self._task = None;
@@ -38,14 +48,22 @@ impl Component for UserTable {
             _task: None,
             users: None,
         };
-        table.get_users(ListUsersRequest { filters: None });
+        table.get_users(None);
         table
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::ListUsersResponse(Ok(users)) => {
-                self.users = Some(Ok(users));
+                self.users = Some(Ok(users
+                    .users
+                    .into_iter()
+                    .map(|u| User {
+                        user_id: u.id,
+                        email: u.email,
+                        ..Default::default()
+                    })
+                    .collect()));
                 ConsoleService::log(format!("Response: {:?}", Json(&self.users)).as_str());
                 true
             }
