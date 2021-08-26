@@ -2,8 +2,9 @@ query ListUsersQuery($filters: RequestFilter) {
   users(filters: $filters) {
     id
     email
-    groups {
-      id
-    }
+    displayName
+    firstName
+    lastName
+    creationDate
   }
 }

@@ -1,19 +1,24 @@
-use crate::{
-    api::HostService,
-    graphql_api::{
-        list_users_query::{self, RequestFilter, ResponseData},
-        ListUsersQuery,
-    },
-};
+use crate::api::HostService;
 use anyhow::{anyhow, Result};
-use lldap_model::*;
+use graphql_client::GraphQLQuery;
 use yew::format::Json;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
 
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
+    query_path = "queries/list_users.graphql",
+    response_derives = "Debug",
+    custom_scalars_module = "chrono"
+)]
+pub struct ListUsersQuery;
+
+use list_users_query::{RequestFilter, ResponseData};
+
 pub struct UserTable {
     link: ComponentLink<Self>,
-    users: Option<Result<Vec<User>>>,
+    users: Option<Result<Vec<list_users_query::ListUsersQueryUsers>>>,
     // Used to keep the request alive long enough.
     _task: Option<FetchTask>,
 }
@@ -54,15 +59,7 @@ impl Component for UserTable {
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::ListUsersResponse(Ok(users)) => {
-                self.users = Some(Ok(users
-                    .users
-                    .into_iter()
-                    .map(|u| User {
-                        user_id: u.id,
-                        email: u.email,
-                        ..Default::default()
-                    })
-                    .collect()));
+                self.users = Some(Ok(users.users.into_iter().collect()));
                 ConsoleService::log(format!("Response: {:?}", Json(&self.users)).as_str());
                 true
             }
@@ -87,7 +84,7 @@ impl Component for UserTable {
                     .map(|u| {
                         html! {
                             <tr>
-                                <td>{&u.user_id}</td>
+                                <td>{&u.id}</td>
                                 <td>{&u.email}</td>
                                 <td>{&u.display_name.as_ref().unwrap_or(&String::new())}</td>
                                 <td>{&u.first_name.as_ref().unwrap_or(&String::new())}</td>

@@ -26,9 +26,16 @@ type Query {
   users(filters: RequestFilter): [User!]!
 }
 
+"NaiveDateTime"
+scalar NaiveDateTime
+
 type User {
   id: String!
   email: String!
+  displayName: String
+  firstName: String
+  lastName: String
+  creationDate: NaiveDateTime!
   "The groups to which this user belongs."
   groups: [Group!]!
 }

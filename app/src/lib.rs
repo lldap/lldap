@@ -4,7 +4,6 @@ mod api;
 mod app;
 mod cookies;
 mod create_user;
-mod graphql_api;
 mod login;
 mod logout;
 mod user_details;
