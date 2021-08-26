@@ -1,0 +1,38 @@
+input EqualityConstraint {
+  field: String!
+  value: String!
+}
+
+type Group {
+  id: String!
+  "The groups to which this user belongs."
+  users: [User!]!
+}
+
+"""
+  A filter for requests, specifying a boolean expression based on field constraints. Only one of
+  the fields can be set at a time.
+"""
+input RequestFilter {
+  any: [RequestFilter!]
+  all: [RequestFilter!]
+  not: RequestFilter
+  eq: EqualityConstraint
+}
+
+type Query {
+  apiVersion: String!
+  user(userId: String!): User!
+  users(filters: RequestFilter): [User!]!
+}
+
+type User {
+  id: String!
+  email: String!
+  "The groups to which this user belongs."
+  groups: [Group!]!
+}
+
+schema {
+  query: Query
+}

@@ -21,6 +21,11 @@ jobs:
         run: cargo build --verbose --workspace
       - name: Run tests
         run: cargo test --verbose --workspace
+      - name: Generate GraphQL schema
+        run: cargo run -- export_graphql_schema -o generated_schema.graphql
+      - name: Check schema
+        run: diff schema.graphql generated_schema.graphql
+
 
   clippy:
     name: cargo clippy

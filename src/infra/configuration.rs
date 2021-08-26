@@ -6,7 +6,7 @@ use figment::{
 use lldap_model::opaque::{server::ServerSetup, KeyPair};
 use serde::{Deserialize, Serialize};
 
-use crate::infra::cli::CLIOpts;
+use crate::infra::cli::RunOpts;
 
 #[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
 #[builder(
@@ -55,7 +55,7 @@ impl Configuration {
         self.get_server_setup().keypair()
     }
 
-    fn merge_with_cli(mut self: Configuration, cli_opts: CLIOpts) -> Configuration {
+    fn merge_with_cli(mut self: Configuration, cli_opts: RunOpts) -> Configuration {
         if cli_opts.verbose {
             self.verbose = true;
         }
@@ -110,7 +110,7 @@ fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
     }
 }
 
-pub fn init(cli_opts: CLIOpts) -> Result<Configuration> {
+pub fn init(cli_opts: RunOpts) -> Result<Configuration> {
     let config_file = cli_opts.config_file.clone();
 
     let config: Configuration = Figment::from(Serialized::defaults(Configuration::default()))

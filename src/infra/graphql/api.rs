@@ -2,6 +2,7 @@ use crate::{
     domain::handler::BackendHandler,
     infra::{
         auth_service::{check_if_token_is_valid, ValidationResults},
+        cli::ExportGraphQLSchemaOpts,
         tcp_server::AppState,
     },
 };
@@ -32,6 +33,26 @@ fn schema<Handler: BackendHandler + Sync>() -> Schema<Handler> {
         EmptyMutation::<Context<Handler>>::new(),
         EmptySubscription::<Context<Handler>>::new(),
     )
+}
+
+pub fn export_schema(opts: ExportGraphQLSchemaOpts) -> anyhow::Result<()> {
+    use crate::domain::sql_backend_handler::SqlBackendHandler;
+    use anyhow::Context;
+    let output = schema::<SqlBackendHandler>().as_schema_language();
+    match opts.output_file {
+        None => println!("{}", output),
+        Some(path) => {
+            use std::fs::File;
+            use std::io::prelude::*;
+            use std::path::Path;
+            let path = Path::new(&path);
+            let mut file =
+                File::create(&path).context(format!("unable to open '{}'", path.display()))?;
+            file.write_all(output.as_bytes())
+                .context(format!("unable to write in '{}'", path.display()))?;
+        }
+    }
+    Ok(())
 }
 
 async fn graphiql_route() -> Result<HttpResponse, Error> {
