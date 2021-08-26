@@ -337,6 +337,49 @@ where
     }
 }
 
+pub struct ValidationResults {
+    pub user: String,
+    pub is_admin: bool,
+}
+
+impl ValidationResults {
+    #[cfg(test)]
+    pub fn admin() -> Self {
+        Self {
+            user: "admin".to_string(),
+            is_admin: true,
+        }
+    }
+
+    pub fn can_access(&self, user: &str) -> bool {
+        self.is_admin || self.user == user
+    }
+}
+
+pub(crate) fn check_if_token_is_valid<Backend>(
+    state: &AppState<Backend>,
+    token_str: &str,
+) -> Result<ValidationResults, actix_web::Error> {
+    let token: Token<_> = VerifyWithKey::verify_with_key(token_str, &state.jwt_key)
+        .map_err(|_| ErrorUnauthorized("Invalid JWT"))?;
+    if token.claims().exp.lt(&Utc::now()) {
+        return Err(ErrorUnauthorized("Expired JWT"));
+    }
+    let jwt_hash = {
+        let mut s = DefaultHasher::new();
+        token_str.hash(&mut s);
+        s.finish()
+    };
+    if state.jwt_blacklist.read().unwrap().contains(&jwt_hash) {
+        return Err(ErrorUnauthorized("JWT was logged out"));
+    }
+    let is_admin = token.claims().groups.contains("lldap_admin");
+    Ok(ValidationResults {
+        user: token.claims().user.clone(),
+        is_admin,
+    })
+}
+
 pub async fn token_validator<Backend>(
     req: ServiceRequest,
     credentials: BearerAuth,
@@ -348,24 +391,9 @@ where
     let state = req
         .app_data::<web::Data<AppState<Backend>>>()
         .expect("Invalid app config");
-    let token: Token<_> = VerifyWithKey::verify_with_key(credentials.token(), &state.jwt_key)
-        .map_err(|_| ErrorUnauthorized("Invalid JWT"))?;
-    if token.claims().exp.lt(&Utc::now()) {
-        return Err(ErrorUnauthorized("Expired JWT"));
-    }
-    let jwt_hash = {
-        let mut s = DefaultHasher::new();
-        credentials.token().hash(&mut s);
-        s.finish()
-    };
-    if state.jwt_blacklist.read().unwrap().contains(&jwt_hash) {
-        return Err(ErrorUnauthorized("JWT was logged out"));
-    }
-    let is_admin = token.claims().groups.contains("lldap_admin");
-    if is_admin
-        || (!admin_required && req.match_info().get("user_id") == Some(&token.claims().user))
-    {
-        debug!("Got authorized token for user {}", &token.claims().user);
+    let ValidationResults { user, is_admin } = check_if_token_is_valid(state, credentials.token())?;
+    if is_admin || (!admin_required && req.match_info().get("user_id") == Some(&user)) {
+        debug!("Got authorized token for user {}", &user);
         Ok(req)
     } else {
         Err(ErrorUnauthorized(

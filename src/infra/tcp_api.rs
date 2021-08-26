@@ -62,7 +62,7 @@ where
 
 pub fn api_config<Backend>(cfg: &mut web::ServiceConfig)
 where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
+    Backend: TcpBackendHandler + BackendHandler + Sync + 'static,
 {
     let json_config = web::JsonConfig::default()
         .limit(4096)
@@ -77,6 +77,7 @@ where
             .into()
         });
     cfg.app_data(json_config);
+    super::graphql::api::configure_endpoint::<Backend>(cfg);
     cfg.service(
         web::resource("/user/{user_id}")
             .route(web::get().to(user_details_handler::<Backend>))
