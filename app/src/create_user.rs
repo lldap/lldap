@@ -1,5 +1,5 @@
 use crate::api::HostService;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use lldap_model::*;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
@@ -48,7 +48,7 @@ impl CreateUserForm {
                 };
                 self._task = Some(
                     HostService::create_user(req, self.link.callback(Msg::CreateUserResponse))
-                        .map_err(|e| anyhow!("Error trying to create user: {}", e))?,
+                        .context("Error trying to create user")?,
                 );
             }
             Msg::CreateUserResponse(r) => {
@@ -73,7 +73,7 @@ impl CreateUserForm {
                             req,
                             self.link.callback(Msg::RegistrationStartResponse),
                         )
-                        .map_err(|e| anyhow!("Error trying to create user: {}", e))?,
+                        .context("Error trying to create user")?,
                     );
                 } else {
                     self.update(Msg::SuccessfulCreation);
@@ -97,7 +97,7 @@ impl CreateUserForm {
                         req,
                         self.link.callback(Msg::RegistrationFinishResponse),
                     )
-                    .map_err(|e| anyhow!("Error trying to register user: {}", e))?,
+                    .context("Error trying to register user")?,
                 );
             }
             Msg::RegistrationFinishResponse(response) => {

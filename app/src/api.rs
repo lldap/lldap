@@ -1,5 +1,5 @@
 use crate::cookies::set_cookie;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use lldap_model::*;
 
 use yew::callback::Callback;
@@ -33,7 +33,7 @@ where
     Callback::once(move |response: Response<Result<Resp>>| {
         let (meta, maybe_data) = response.into_parts();
         let message = maybe_data
-            .map_err(|e| anyhow!("Could not reach server: {}", e))
+            .context("Could not reach server")
             .and_then(|data| handler(meta.status, data));
         callback.emit(message)
     })
@@ -100,7 +100,7 @@ where
         callback,
         move |status: http::StatusCode, data: String| {
             if status.is_success() {
-                serde_json::from_str(&data).map_err(|e| anyhow!("Could not parse response: {}", e))
+                serde_json::from_str(&data).context("Could not parse response")
             } else {
                 Err(anyhow!("{}[{}]: {}", error_message, status, data))
             }
@@ -148,7 +148,7 @@ impl HostService {
             |status, data: String| {
                 if status.is_success() {
                     get_claims_from_jwt(&data)
-                        .map_err(|e| anyhow!("Could not parse response: {}", e))
+                        .context("Could not parse response")
                         .and_then(|jwt_claims| {
                             let is_admin = jwt_claims.groups.contains("lldap_admin");
                             set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
@@ -156,7 +156,7 @@ impl HostService {
                                     set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp)
                                 })
                                 .map(|_| (jwt_claims.user.clone(), is_admin))
-                                .map_err(|e| anyhow!("Error clearing cookie: {}", e))
+                                .context("Error clearing cookie")
                         })
                 } else {
                     Err(anyhow!(

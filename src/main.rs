@@ -9,7 +9,7 @@ use crate::{
     infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler},
 };
 use actix::Actor;
-use anyhow::{anyhow, Result};
+use anyhow::{Context, Result};
 use futures_util::TryFutureExt;
 use log::*;
 
@@ -24,20 +24,20 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
         })
         .and_then(|_| register_password(handler, &config.ldap_user_dn, &config.ldap_user_pass))
         .await
-        .map_err(|e| anyhow!("Error creating admin user: {}", e))?;
+        .context("Error creating admin user")?;
     let admin_group_id = handler
         .create_group(lldap_model::CreateGroupRequest {
             display_name: "lldap_admin".to_string(),
         })
         .await
-        .map_err(|e| anyhow!("Error creating admin group: {}", e))?;
+        .context("Error creating admin group")?;
     handler
         .add_user_to_group(lldap_model::AddUserToGroupRequest {
             user_id: config.ldap_user_dn.clone(),
             group_id: admin_group_id,
         })
         .await
-        .map_err(|e| anyhow!("Error adding admin user to group: {}", e))
+        .context("Error adding admin user to group")
 }
 
 async fn run_server(config: Configuration) -> Result<()> {

@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Context, Result};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
@@ -93,19 +93,16 @@ fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
     use std::path::Path;
     let path = Path::new(file_path);
     if path.exists() {
-        let bytes = std::fs::read(file_path)
-            .map_err(|e| anyhow!("Could not read key file `{}`: {}", file_path, e))?;
+        let bytes =
+            std::fs::read(file_path).context(format!("Could not read key file `{}`", file_path))?;
         Ok(ServerSetup::deserialize(&bytes)?)
     } else {
         let mut rng = rand::rngs::OsRng;
         let server_setup = ServerSetup::new(&mut rng);
-        std::fs::write(path, server_setup.serialize()).map_err(|e| {
-            anyhow!(
-                "Could not write the generated server setup to file `{}`: {}",
-                file_path,
-                e
-            )
-        })?;
+        std::fs::write(path, server_setup.serialize()).context(format!(
+            "Could not write the generated server setup to file `{}`",
+            file_path,
+        ))?;
         Ok(server_setup)
     }
 }

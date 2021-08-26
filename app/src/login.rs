@@ -1,5 +1,5 @@
 use crate::api::HostService;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use lldap_model::*;
 use wasm_bindgen::JsCast;
 use yew::prelude::*;
@@ -61,9 +61,8 @@ impl LoginForm {
                 let password = get_form_field("password")
                     .ok_or_else(|| anyhow!("Could not get password from form"))?;
                 let mut rng = rand::rngs::OsRng;
-                let login_start_request =
-                    opaque::client::login::start_login(&password, &mut rng)
-                        .map_err(|e| anyhow!("Could not initialize login: {}", e))?;
+                let login_start_request = opaque::client::login::start_login(&password, &mut rng)
+                    .context("Could not initialize login")?;
                 self.login_start = Some(login_start_request.state);
                 let req = login::ClientLoginStartRequest {
                     username,
