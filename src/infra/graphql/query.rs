@@ -88,7 +88,7 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         "1.0"
     }
 
-    async fn user(context: &Context<Handler>, user_id: String) -> FieldResult<User<Handler>> {
+    pub async fn user(context: &Context<Handler>, user_id: String) -> FieldResult<User<Handler>> {
         if !context.validation_result.can_access(&user_id) {
             return Err("Unauthorized access to user data".into());
         }

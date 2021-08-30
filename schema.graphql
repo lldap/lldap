@@ -3,6 +3,10 @@ input EqualityConstraint {
   value: String!
 }
 
+type Mutation {
+  createUser(user: UserInput!): User!
+}
+
 type Group {
   id: String!
   "The groups to which this user belongs."
@@ -23,6 +27,15 @@ input RequestFilter {
 "DateTime"
 scalar DateTimeUtc
 
+"The details required to create a user."
+input UserInput {
+  id: String!
+  email: String!
+  displayName: String
+  firstName: String
+  lastName: String
+}
+
 type Query {
   apiVersion: String!
   user(userId: String!): User!
@@ -42,4 +55,5 @@ type User {
 
 schema {
   query: Query
+  mutation: Mutation
 }

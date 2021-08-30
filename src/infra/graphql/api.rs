@@ -8,10 +8,10 @@ use crate::{
 };
 use actix_web::{web, Error, HttpResponse};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
-use juniper::{EmptyMutation, EmptySubscription, RootNode};
+use juniper::{EmptySubscription, RootNode};
 use juniper_actix::{graphiql_handler, graphql_handler, playground_handler};
 
-use super::query::Query;
+use super::{mutation::Mutation, query::Query};
 
 pub struct Context<Handler: BackendHandler> {
     pub handler: Box<Handler>,
@@ -20,17 +20,13 @@ pub struct Context<Handler: BackendHandler> {
 
 impl<Handler: BackendHandler> juniper::Context for Context<Handler> {}
 
-type Schema<Handler> = RootNode<
-    'static,
-    Query<Handler>,
-    EmptyMutation<Context<Handler>>,
-    EmptySubscription<Context<Handler>>,
->;
+type Schema<Handler> =
+    RootNode<'static, Query<Handler>, Mutation<Handler>, EmptySubscription<Context<Handler>>>;
 
 fn schema<Handler: BackendHandler + Sync>() -> Schema<Handler> {
     Schema::new(
         Query::<Handler>::new(),
-        EmptyMutation::<Context<Handler>>::new(),
+        Mutation::<Handler>::new(),
         EmptySubscription::<Context<Handler>>::new(),
     )
 }
