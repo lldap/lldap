@@ -1,4 +1,4 @@
-use crate::domain::handler::{BackendHandler, ListUsersRequest, LoginHandler, RequestFilter, User};
+use crate::domain::handler::{BackendHandler, LoginHandler, RequestFilter, User};
 use anyhow::{bail, Result};
 use ldap3_server::simple::*;
 
@@ -226,11 +226,7 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
                 )]
             }
         };
-        let users = match self
-            .backend_handler
-            .list_users(ListUsersRequest { filters })
-            .await
-        {
+        let users = match self.backend_handler.list_users(filters).await {
             Ok(users) => users,
             Err(e) => {
                 return vec![lsr.gen_error(
@@ -591,14 +587,12 @@ mod tests {
     async fn test_search_filters() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(ListUsersRequest {
-                filters: Some(RequestFilter::And(vec![RequestFilter::Or(vec![
-                    RequestFilter::Not(Box::new(RequestFilter::Equality(
-                        "user_id".to_string(),
-                        "bob".to_string(),
-                    ))),
-                ])])),
-            }))
+            .with(eq(Some(RequestFilter::And(vec![RequestFilter::Or(vec![
+                RequestFilter::Not(Box::new(RequestFilter::Equality(
+                    "user_id".to_string(),
+                    "bob".to_string(),
+                ))),
+            ])]))))
             .times(1)
             .return_once(|_| Ok(vec![]));
         let mut ldap_handler = setup_bound_handler(mock).await;

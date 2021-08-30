@@ -42,7 +42,7 @@ fn get_filter_expr(filter: RequestFilter) -> SimpleExpr {
 
 #[async_trait]
 impl BackendHandler for SqlBackendHandler {
-    async fn list_users(&self, request: ListUsersRequest) -> Result<Vec<User>> {
+    async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>> {
         let query = {
             let mut query_builder = Query::select()
                 .column(Users::UserId)
@@ -55,7 +55,7 @@ impl BackendHandler for SqlBackendHandler {
                 .from(Users::Table)
                 .order_by(Users::UserId, Order::Asc)
                 .to_owned();
-            if let Some(filter) = request.filters {
+            if let Some(filter) = filters {
                 if filter != RequestFilter::And(Vec::new())
                     && filter != RequestFilter::Or(Vec::new())
                 {
@@ -234,6 +234,7 @@ mod tests {
     use super::*;
     use crate::domain::sql_tables::init_table;
     use crate::infra::configuration::ConfigurationBuilder;
+    use lldap_model::{opaque, registration};
 
     fn get_default_config() -> Configuration {
         ConfigurationBuilder::default()
@@ -384,7 +385,7 @@ mod tests {
         insert_user(&handler, "John", "Pa33w0rd!").await;
         {
             let users = handler
-                .list_users(ListUsersRequest { filters: None })
+                .list_users(None)
                 .await
                 .unwrap()
                 .into_iter()
@@ -394,12 +395,10 @@ mod tests {
         }
         {
             let users = handler
-                .list_users(ListUsersRequest {
-                    filters: Some(RequestFilter::Equality(
-                        "user_id".to_string(),
-                        "bob".to_string(),
-                    )),
-                })
+                .list_users(Some(RequestFilter::Equality(
+                    "user_id".to_string(),
+                    "bob".to_string(),
+                )))
                 .await
                 .unwrap()
                 .into_iter()
@@ -409,12 +408,10 @@ mod tests {
         }
         {
             let users = handler
-                .list_users(ListUsersRequest {
-                    filters: Some(RequestFilter::Or(vec![
-                        RequestFilter::Equality("user_id".to_string(), "bob".to_string()),
-                        RequestFilter::Equality("user_id".to_string(), "John".to_string()),
-                    ])),
-                })
+                .list_users(Some(RequestFilter::Or(vec![
+                    RequestFilter::Equality("user_id".to_string(), "bob".to_string()),
+                    RequestFilter::Equality("user_id".to_string(), "John".to_string()),
+                ])))
                 .await
                 .unwrap()
                 .into_iter()
@@ -424,12 +421,10 @@ mod tests {
         }
         {
             let users = handler
-                .list_users(ListUsersRequest {
-                    filters: Some(RequestFilter::Not(Box::new(RequestFilter::Equality(
-                        "user_id".to_string(),
-                        "bob".to_string(),
-                    )))),
-                })
+                .list_users(Some(RequestFilter::Not(Box::new(RequestFilter::Equality(
+                    "user_id".to_string(),
+                    "bob".to_string(),
+                )))))
                 .await
                 .unwrap()
                 .into_iter()
@@ -540,7 +535,7 @@ mod tests {
             .unwrap();
 
         let users = handler
-            .list_users(ListUsersRequest { filters: None })
+            .list_users(None)
             .await
             .unwrap()
             .into_iter()
@@ -565,7 +560,7 @@ mod tests {
             .unwrap();
 
         let users = handler
-            .list_users(ListUsersRequest { filters: None })
+            .list_users(None)
             .await
             .unwrap()
             .into_iter()

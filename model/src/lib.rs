@@ -68,19 +68,6 @@ pub mod registration {
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub enum RequestFilter {
-    And(Vec<RequestFilter>),
-    Or(Vec<RequestFilter>),
-    Not(Box<RequestFilter>),
-    Equality(String, String),
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub struct ListUsersRequest {
-    pub filters: Option<RequestFilter>,
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct UserDetailsRequest {
     pub user_id: String,
 }
