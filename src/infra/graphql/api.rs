@@ -77,6 +77,19 @@ pub fn configure_endpoint<Backend>(cfg: &mut web::ServiceConfig)
 where
     Backend: BackendHandler + Sync + 'static,
 {
+    let json_config = web::JsonConfig::default()
+        .limit(4096)
+        .error_handler(|err, _req| {
+            // create custom error response
+            log::error!("API error: {}", err);
+            let msg = err.to_string();
+            actix_web::error::InternalError::from_response(
+                err,
+                HttpResponse::BadRequest().body(msg),
+            )
+            .into()
+        });
+    cfg.app_data(json_config);
     cfg.service(
         web::resource("/graphql")
             .route(web::post().to(graphql_route::<Backend>))

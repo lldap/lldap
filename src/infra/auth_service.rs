@@ -5,7 +5,6 @@ use crate::{
         opaque_handler::OpaqueHandler,
     },
     infra::{
-        tcp_api::{error_to_api_response, ApiResult},
         tcp_backend_handler::*,
         tcp_server::{error_to_http_response, AppState},
     },
@@ -16,7 +15,6 @@ use actix_web::{
     error::{ErrorBadRequest, ErrorUnauthorized},
     web, HttpRequest, HttpResponse,
 };
-use actix_web_httpauth::extractors::bearer::BearerAuth;
 use anyhow::Result;
 use chrono::prelude::*;
 use futures::future::{ok, Ready};
@@ -24,7 +22,6 @@ use futures_util::{FutureExt, TryFutureExt};
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
 use lldap_model::{login, registration, JWTClaims};
-use log::*;
 use sha2::Sha512;
 use std::collections::{hash_map::DefaultHasher, HashSet};
 use std::hash::{Hash, Hasher};
@@ -166,6 +163,12 @@ where
         )
         .finish()
 }
+
+pub(crate) fn error_to_api_response<T>(error: DomainError) -> ApiResult<T> {
+    ApiResult::Right(error_to_http_response(error))
+}
+
+pub type ApiResult<M> = actix_web::Either<web::Json<M>, HttpResponse>;
 
 async fn opaque_login_start<Backend>(
     data: web::Data<AppState<Backend>>,
@@ -384,48 +387,6 @@ pub(crate) fn check_if_token_is_valid<Backend>(
         user: token.claims().user.clone(),
         is_admin,
     })
-}
-
-pub async fn token_validator<Backend>(
-    req: ServiceRequest,
-    credentials: BearerAuth,
-    admin_required: bool,
-) -> Result<ServiceRequest, actix_web::Error>
-where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
-{
-    let state = req
-        .app_data::<web::Data<AppState<Backend>>>()
-        .expect("Invalid app config");
-    let ValidationResults { user, is_admin } = check_if_token_is_valid(state, credentials.token())?;
-    if is_admin || (!admin_required && req.match_info().get("user_id") == Some(&user)) {
-        debug!("Got authorized token for user {}", &user);
-        Ok(req)
-    } else {
-        Err(ErrorUnauthorized(
-            "JWT error: User is not authorized to access this resource",
-        ))
-    }
-}
-
-pub async fn admin_token_validator<Backend>(
-    req: ServiceRequest,
-    credentials: BearerAuth,
-) -> Result<ServiceRequest, actix_web::Error>
-where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
-{
-    token_validator::<Backend>(req, credentials, true).await
-}
-
-pub async fn user_token_validator<Backend>(
-    req: ServiceRequest,
-    credentials: BearerAuth,
-) -> Result<ServiceRequest, actix_web::Error>
-where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
-{
-    token_validator::<Backend>(req, credentials, false).await
 }
 
 pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig)
