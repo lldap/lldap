@@ -1,7 +1,7 @@
 use crate::{
     domain::{
         error::DomainError,
-        handler::{BackendHandler, LoginHandler},
+        handler::{BackendHandler, BindRequest, LoginHandler},
         opaque_handler::OpaqueHandler,
     },
     infra::{
@@ -23,7 +23,7 @@ use futures::future::{ok, Ready};
 use futures_util::{FutureExt, TryFutureExt};
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
-use lldap_model::{login, registration, BindRequest, JWTClaims};
+use lldap_model::{login, registration, JWTClaims};
 use log::*;
 use sha2::Sha512;
 use std::collections::{hash_map::DefaultHasher, HashSet};

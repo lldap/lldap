@@ -1,9 +1,12 @@
 use super::{
-    error::*, handler::LoginHandler, opaque_handler::*, sql_backend_handler::SqlBackendHandler,
+    error::*,
+    handler::{BindRequest, LoginHandler},
+    opaque_handler::*,
+    sql_backend_handler::SqlBackendHandler,
     sql_tables::*,
 };
 use async_trait::async_trait;
-use lldap_model::{opaque, BindRequest};
+use lldap_model::opaque;
 use log::*;
 use sea_query::{Expr, Iden, Query};
 use sqlx::Row;

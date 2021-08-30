@@ -1,8 +1,18 @@
 use super::error::*;
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-pub use lldap_model::*;
+pub use lldap_model::{
+    AddUserToGroupRequest, CreateGroupRequest, CreateUserRequest, DeleteUserRequest, Group,
+    ListUsersRequest, RequestFilter, User, UserDetailsRequest,
+};
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub struct BindRequest {
+    pub name: String,
+    pub password: String,
+}
 
 #[async_trait]
 pub trait LoginHandler: Clone + Send {
