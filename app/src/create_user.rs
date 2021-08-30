@@ -1,12 +1,22 @@
 use crate::api::HostService;
 use anyhow::{anyhow, Context, Result};
-use lldap_model::*;
+use graphql_client::GraphQLQuery;
+use lldap_model::{opaque, registration};
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
 use yew_router::{
     agent::{RouteAgentDispatcher, RouteRequest},
     route::Route,
 };
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
+    query_path = "queries/create_user.graphql",
+    response_derives = "Debug",
+    custom_scalars_module = "crate::graphql"
+)]
+pub struct CreateUser;
 
 pub struct CreateUserForm {
     link: ComponentLink<Self>,
@@ -19,7 +29,7 @@ pub struct CreateUserForm {
 }
 
 pub enum Msg {
-    CreateUserResponse(Result<()>),
+    CreateUserResponse(Result<create_user::ResponseData>),
     SubmitForm,
     SuccessfulCreation,
     RegistrationStartResponse(Result<Box<registration::ServerRegistrationStartResponse>>),
@@ -35,26 +45,33 @@ impl CreateUserForm {
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<()> {
         match msg {
             Msg::SubmitForm => {
-                let req = CreateUserRequest {
-                    user_id: get_element("username")
-                        .filter(not_empty)
-                        .ok_or_else(|| anyhow!("Missing username"))?,
-                    email: get_element("email")
-                        .filter(not_empty)
-                        .ok_or_else(|| anyhow!("Missing email"))?,
-                    display_name: get_element("displayname").filter(not_empty),
-                    first_name: get_element("firstname").filter(not_empty),
-                    last_name: get_element("lastname").filter(not_empty),
+                let req = create_user::Variables {
+                    user: create_user::UserInput {
+                        id: get_element("username")
+                            .filter(not_empty)
+                            .ok_or_else(|| anyhow!("Missing username"))?,
+                        email: get_element("email")
+                            .filter(not_empty)
+                            .ok_or_else(|| anyhow!("Missing email"))?,
+                        displayName: get_element("displayname").filter(not_empty),
+                        firstName: get_element("firstname").filter(not_empty),
+                        lastName: get_element("lastname").filter(not_empty),
+                    },
                 };
-                self._task = Some(
-                    HostService::create_user(req, self.link.callback(Msg::CreateUserResponse))
-                        .context("Error trying to create user")?,
-                );
+                self._task = Some(HostService::graphql_query::<CreateUser>(
+                    req,
+                    self.link.callback(Msg::CreateUserResponse),
+                    "Error trying to create user",
+                )?);
             }
             Msg::CreateUserResponse(r) => {
-                if r.is_err() {
-                    return r;
-                }
+                match r {
+                    Err(e) => return Err(e),
+                    Ok(r) => ConsoleService::log(&format!(
+                        "Created user '{}' at '{}'",
+                        &r.create_user.id, &r.create_user.creation_date
+                    )),
+                };
                 let user_id = get_element("username")
                     .filter(not_empty)
                     .ok_or_else(|| anyhow!("Missing username"))?;
@@ -183,7 +200,7 @@ impl Component for CreateUserForm {
                     <label for="password">{"Password:"}</label>
                     <input type="password" id="password" />
                 </div>
-                <button type="submit">{"Login"}</button>
+                <button type="submit">{"Submit"}</button>
                 <div>
                 { if let Some(e) = &self.error {
                     html! { e.to_string() }

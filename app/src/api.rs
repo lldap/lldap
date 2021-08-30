@@ -1,7 +1,7 @@
 use crate::cookies::set_cookie;
 use anyhow::{anyhow, Context, Result};
 use graphql_client::GraphQLQuery;
-use lldap_model::*;
+use lldap_model::{login, registration, JWTClaims};
 
 use yew::callback::Callback;
 use yew::format::Json;
@@ -229,18 +229,6 @@ impl HostService {
             yew::format::Nothing,
             callback,
             "Could not logout",
-        )
-    }
-
-    pub fn create_user(
-        request: CreateUserRequest,
-        callback: Callback<Result<()>>,
-    ) -> Result<FetchTask> {
-        call_server_empty_response_with_error_message(
-            "/api/users/create",
-            &request,
-            callback,
-            "Could not create a user",
         )
     }
 }
