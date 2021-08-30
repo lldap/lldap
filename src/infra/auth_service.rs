@@ -365,6 +365,12 @@ pub(crate) fn check_if_token_is_valid<Backend>(
     if token.claims().exp.lt(&Utc::now()) {
         return Err(ErrorUnauthorized("Expired JWT"));
     }
+    if token.header().algorithm != jwt::AlgorithmType::Hs512 {
+        return Err(ErrorUnauthorized(format!(
+            "Unsupported JWT algorithm: '{:?}'. Supported ones are: ['HS512']",
+            token.header().algorithm
+        )));
+    }
     let jwt_hash = {
         let mut s = DefaultHasher::new();
         token_str.hash(&mut s);
