@@ -5,12 +5,6 @@ use std::collections::HashSet;
 
 pub mod opaque;
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub struct BindRequest {
-    pub name: String,
-    pub password: String,
-}
-
 /// The messages for the 3-step OPAQUE login process.
 pub mod login {
     use super::*;
