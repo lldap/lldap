@@ -1,9 +1,10 @@
 use crate::domain::handler::BackendHandler;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
-use lldap_model::{ListUsersRequest, UserDetailsRequest};
+use lldap_model::UserDetailsRequest;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 
+type DomainRequestFilter = crate::domain::handler::RequestFilter;
 use super::api::Context;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
@@ -16,9 +17,9 @@ pub struct RequestFilter {
     eq: Option<EqualityConstraint>,
 }
 
-impl TryInto<lldap_model::RequestFilter> for RequestFilter {
+impl TryInto<DomainRequestFilter> for RequestFilter {
     type Error = String;
-    fn try_into(self) -> Result<lldap_model::RequestFilter, Self::Error> {
+    fn try_into(self) -> Result<DomainRequestFilter, Self::Error> {
         let mut field_count = 0;
         if self.any.is_some() {
             field_count += 1;
@@ -39,24 +40,24 @@ impl TryInto<lldap_model::RequestFilter> for RequestFilter {
             return Err("Multiple fields specified in request filter".to_string());
         }
         if let Some(e) = self.eq {
-            return Ok(lldap_model::RequestFilter::Equality(e.field, e.value));
+            return Ok(DomainRequestFilter::Equality(e.field, e.value));
         }
         if let Some(c) = self.any {
-            return Ok(lldap_model::RequestFilter::Or(
+            return Ok(DomainRequestFilter::Or(
                 c.into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<Vec<_>, String>>()?,
             ));
         }
         if let Some(c) = self.all {
-            return Ok(lldap_model::RequestFilter::And(
+            return Ok(DomainRequestFilter::And(
                 c.into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<Vec<_>, String>>()?,
             ));
         }
         if let Some(c) = self.not {
-            return Ok(lldap_model::RequestFilter::Not(Box::new((*c).try_into()?)));
+            return Ok(DomainRequestFilter::Not(Box::new((*c).try_into()?)));
         }
         unreachable!();
     }
@@ -108,12 +109,7 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         }
         Ok(context
             .handler
-            .list_users(ListUsersRequest {
-                filters: match filters {
-                    None => None,
-                    Some(f) => Some(f.try_into()?),
-                },
-            })
+            .list_users(filters.map(TryInto::try_into).transpose()?)
             .await
             .map(|v| v.into_iter().map(Into::into).collect())?)
     }
@@ -304,14 +300,13 @@ mod tests {
         }"#;
 
         let mut mock = MockTestBackendHandler::new();
-        use lldap_model::{RequestFilter, User};
+        use crate::domain::handler::RequestFilter;
+        use lldap_model::User;
         mock.expect_list_users()
-            .with(eq(ListUsersRequest {
-                filters: Some(RequestFilter::Or(vec![
-                    RequestFilter::Equality("id".to_string(), "bob".to_string()),
-                    RequestFilter::Equality("email".to_string(), "robert@bobbers.on".to_string()),
-                ])),
-            }))
+            .with(eq(Some(RequestFilter::Or(vec![
+                RequestFilter::Equality("id".to_string(), "bob".to_string()),
+                RequestFilter::Equality("email".to_string(), "robert@bobbers.on".to_string()),
+            ]))))
             .return_once(|_| {
                 Ok(vec![
                     User {

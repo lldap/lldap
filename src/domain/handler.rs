@@ -4,14 +4,22 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 pub use lldap_model::{
-    AddUserToGroupRequest, CreateGroupRequest, CreateUserRequest, DeleteUserRequest, Group,
-    ListUsersRequest, RequestFilter, User, UserDetailsRequest,
+    AddUserToGroupRequest, CreateGroupRequest, CreateUserRequest, DeleteUserRequest, Group, User,
+    UserDetailsRequest,
 };
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct BindRequest {
     pub name: String,
     pub password: String,
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub enum RequestFilter {
+    And(Vec<RequestFilter>),
+    Or(Vec<RequestFilter>),
+    Not(Box<RequestFilter>),
+    Equality(String, String),
 }
 
 #[async_trait]
@@ -21,7 +29,7 @@ pub trait LoginHandler: Clone + Send {
 
 #[async_trait]
 pub trait BackendHandler: Clone + Send {
-    async fn list_users(&self, request: ListUsersRequest) -> Result<Vec<User>>;
+    async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>>;
     async fn list_groups(&self) -> Result<Vec<Group>>;
     async fn get_user_details(&self, request: UserDetailsRequest) -> Result<User>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
@@ -39,7 +47,7 @@ mockall::mock! {
     }
     #[async_trait]
     impl BackendHandler for TestBackendHandler {
-        async fn list_users(&self, request: ListUsersRequest) -> Result<Vec<User>>;
+        async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>>;
         async fn list_groups(&self) -> Result<Vec<Group>>;
         async fn get_user_details(&self, request: UserDetailsRequest) -> Result<User>;
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
