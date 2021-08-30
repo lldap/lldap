@@ -36,7 +36,7 @@ impl UserDetails {
     fn get_user_details(&mut self) {
         self._task = HostService::graphql_query::<GetUserDetails>(
             get_user_details::Variables {
-                id: Some(self.username.clone()),
+                id: self.username.clone(),
             },
             self.link.callback(Msg::UserDetailsResponse),
             "Error trying to fetch user details",
