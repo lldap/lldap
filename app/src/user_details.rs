@@ -1,8 +1,19 @@
 use crate::api::HostService;
 use anyhow::{anyhow, Result};
-use lldap_model::*;
+use graphql_client::GraphQLQuery;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
+    query_path = "queries/get_user_details.graphql",
+    response_derives = "Debug",
+    custom_scalars_module = "crate::graphql"
+)]
+pub struct GetUserDetails;
+
+type User = get_user_details::GetUserDetailsUser;
 
 pub struct UserDetails {
     link: ComponentLink<Self>,
@@ -13,7 +24,7 @@ pub struct UserDetails {
 }
 
 pub enum Msg {
-    UserDetailsResponse(Result<User>),
+    UserDetailsResponse(Result<get_user_details::ResponseData>),
 }
 
 #[derive(yew::Properties, Clone, PartialEq)]
@@ -23,16 +34,18 @@ pub struct Props {
 
 impl UserDetails {
     fn get_user_details(&mut self) {
-        match HostService::get_user_details(
-            &self.username,
+        self._task = HostService::graphql_query::<GetUserDetails>(
+            get_user_details::Variables {
+                id: Some(self.username.clone()),
+            },
             self.link.callback(Msg::UserDetailsResponse),
-        ) {
-            Ok(task) => self._task = Some(task),
-            Err(e) => {
-                self._task = None;
-                ConsoleService::log(format!("Error trying to fetch user details: {}", e).as_str())
-            }
-        };
+            "Error trying to fetch user details",
+        )
+        .map_err(|e| {
+            ConsoleService::log(&e.to_string());
+            e
+        })
+        .ok();
     }
 }
 
@@ -55,7 +68,7 @@ impl Component for UserDetails {
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::UserDetailsResponse(Ok(user)) => {
-                self.user = Some(Ok(user));
+                self.user = Some(Ok(user.user));
                 true
             }
             Msg::UserDetailsResponse(Err(e)) => {
@@ -76,7 +89,7 @@ impl Component for UserDetails {
             Some(Ok(u)) => {
                 html! {
                     <div>
-                        <div>{"User ID: "} {&u.user_id}</div>
+                        <div>{"User ID: "} {&u.id}</div>
                         <div>{"Email: "}{&u.email}</div>
                         <div>{"Display name: "}{&u.display_name.as_ref().unwrap_or(&String::new())}</div>
                         <div>{"First name: "}{&u.first_name.as_ref().unwrap_or(&String::new())}</div>
