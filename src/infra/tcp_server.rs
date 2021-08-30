@@ -4,7 +4,7 @@ use crate::{
         handler::{BackendHandler, LoginHandler},
         opaque_handler::OpaqueHandler,
     },
-    infra::{auth_service, configuration::Configuration, tcp_api, tcp_backend_handler::*},
+    infra::{auth_service, configuration::Configuration, tcp_backend_handler::*},
 };
 use actix_files::{Files, NamedFile};
 use actix_http::HttpServiceBuilder;
@@ -64,7 +64,7 @@ fn http_config<Backend>(
     .service(
         web::scope("/api")
             .wrap(auth_service::CookieToHeaderTranslatorFactory)
-            .configure(tcp_api::api_config::<Backend>),
+            .configure(super::graphql::api::configure_endpoint::<Backend>),
     )
     // Serve the /pkg path with the compiled WASM app.
     .service(Files::new("/pkg", "./app/pkg"))
