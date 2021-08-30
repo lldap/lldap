@@ -120,7 +120,7 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDateTime;
+    use chrono::prelude::*;
     use sqlx::{Column, Row};
 
     #[actix_rt::test]
@@ -138,8 +138,8 @@ mod tests {
         assert_eq!(row.column(0).name(), "display_name");
         assert_eq!(row.get::<String, _>("display_name"), "Bob Bobbersön");
         assert_eq!(
-            row.get::<NaiveDateTime, _>("creation_date"),
-            NaiveDateTime::from_timestamp(0, 0)
+            row.get::<DateTime<Utc>, _>("creation_date"),
+            Utc.timestamp(0, 0),
         );
     }
 

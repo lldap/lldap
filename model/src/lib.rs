@@ -100,7 +100,7 @@ pub struct User {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     // pub avatar: ?,
-    pub creation_date: chrono::NaiveDateTime,
+    pub creation_date: chrono::DateTime<chrono::Utc>,
 }
 
 impl Default for User {
@@ -111,7 +111,7 @@ impl Default for User {
             display_name: None,
             first_name: None,
             last_name: None,
-            creation_date: chrono::NaiveDateTime::from_timestamp(0, 0),
+            creation_date: Utc.timestamp(0, 0),
         }
     }
 }

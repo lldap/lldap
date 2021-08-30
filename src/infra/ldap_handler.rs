@@ -277,7 +277,6 @@ mod tests {
     use super::*;
     use crate::domain::handler::BindRequest;
     use crate::domain::handler::MockTestBackendHandler;
-    use chrono::NaiveDateTime;
     use mockall::predicate::eq;
     use tokio;
 
@@ -487,7 +486,7 @@ mod tests {
                     display_name: Some("Bôb Böbberson".to_string()),
                     first_name: Some("Bôb".to_string()),
                     last_name: Some("Böbberson".to_string()),
-                    creation_date: NaiveDateTime::from_timestamp(1_000_000, 0),
+                    ..Default::default()
                 },
                 User {
                     user_id: "jim".to_string(),
@@ -495,7 +494,7 @@ mod tests {
                     display_name: Some("Jimminy Cricket".to_string()),
                     first_name: Some("Jim".to_string()),
                     last_name: Some("Cricket".to_string()),
-                    creation_date: NaiveDateTime::from_timestamp(1_500_000, 0),
+                    ..Default::default()
                 },
             ])
         });

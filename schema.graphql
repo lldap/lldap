@@ -20,14 +20,14 @@ input RequestFilter {
   eq: EqualityConstraint
 }
 
+"DateTime"
+scalar DateTimeUtc
+
 type Query {
   apiVersion: String!
   user(userId: String!): User!
   users(filters: RequestFilter): [User!]!
 }
-
-"NaiveDateTime"
-scalar NaiveDateTime
 
 type User {
   id: String!
@@ -35,7 +35,7 @@ type User {
   displayName: String
   firstName: String
   lastName: String
-  creationDate: NaiveDateTime!
+  creationDate: DateTimeUtc!
   "The groups to which this user belongs."
   groups: [Group!]!
 }
