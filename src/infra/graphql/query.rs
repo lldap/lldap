@@ -157,7 +157,7 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
         self.user.last_name.as_ref()
     }
 
-    fn creation_date(&self) -> chrono::NaiveDateTime {
+    fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
         self.user.creation_date
     }
 

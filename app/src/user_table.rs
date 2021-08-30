@@ -10,7 +10,7 @@ use yew::services::{fetch::FetchTask, ConsoleService};
     schema_path = "../schema.graphql",
     query_path = "queries/list_users.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "chrono"
+    custom_scalars_module = "crate::graphql"
 )]
 pub struct ListUsersQuery;
 
@@ -89,7 +89,7 @@ impl Component for UserTable {
                                 <td>{&u.display_name.as_ref().unwrap_or(&String::new())}</td>
                                 <td>{&u.first_name.as_ref().unwrap_or(&String::new())}</td>
                                 <td>{&u.last_name.as_ref().unwrap_or(&String::new())}</td>
-                                <td>{&u.creation_date}</td>
+                                <td>{&u.creation_date.with_timezone(&chrono::Local)}</td>
                             </tr>
                         }
                     })
