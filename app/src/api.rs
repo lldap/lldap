@@ -162,15 +162,6 @@ impl HostService {
         )
     }
 
-    pub fn get_user_details(username: &str, callback: Callback<Result<User>>) -> Result<FetchTask> {
-        call_server_json_with_error_message(
-            &format!("/api/user/{}", username),
-            yew::format::Nothing,
-            callback,
-            "",
-        )
-    }
-
     pub fn login_start(
         request: login::ClientLoginStartRequest,
         callback: Callback<Result<Box<login::ServerLoginStartResponse>>>,
