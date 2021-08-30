@@ -204,7 +204,7 @@ impl HostService {
         callback: Callback<Result<Box<registration::ServerRegistrationStartResponse>>>,
     ) -> Result<FetchTask> {
         call_server_json_with_error_message(
-            "/auth/opaque/registration/start",
+            "/auth/opaque/register/start",
             &request,
             callback,
             "Could not start registration: ",
@@ -216,7 +216,7 @@ impl HostService {
         callback: Callback<Result<()>>,
     ) -> Result<FetchTask> {
         call_server_empty_response_with_error_message(
-            "/auth/opaque/registration/finish",
+            "/auth/opaque/register/finish",
             &request,
             callback,
             "Could not finish registration",
