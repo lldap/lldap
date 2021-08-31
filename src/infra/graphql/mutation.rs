@@ -1,4 +1,4 @@
-use crate::domain::handler::BackendHandler;
+use crate::domain::handler::{BackendHandler, CreateUserRequest};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 
 use super::api::Context;
@@ -38,7 +38,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         }
         context
             .handler
-            .create_user(lldap_model::CreateUserRequest {
+            .create_user(CreateUserRequest {
                 user_id: user.id.clone(),
                 email: user.email,
                 display_name: user.display_name,

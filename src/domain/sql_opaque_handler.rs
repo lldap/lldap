@@ -249,11 +249,12 @@ mod tests {
     use super::*;
     use crate::{
         domain::{
-            handler::BackendHandler, sql_backend_handler::SqlBackendHandler, sql_tables::init_table,
+            handler::{BackendHandler, CreateUserRequest},
+            sql_backend_handler::SqlBackendHandler,
+            sql_tables::init_table,
         },
         infra::configuration::{Configuration, ConfigurationBuilder},
     };
-    use lldap_model::*;
 
     fn get_default_config() -> Configuration {
         ConfigurationBuilder::default()
