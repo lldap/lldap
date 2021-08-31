@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-pub use lldap_model::{AddUserToGroupRequest, CreateGroupRequest, DeleteUserRequest, Group, User};
+pub use lldap_model::{AddUserToGroupRequest, CreateGroupRequest, Group, User};
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct BindRequest {
@@ -40,7 +40,7 @@ pub trait BackendHandler: Clone + Send {
     async fn list_groups(&self) -> Result<Vec<Group>>;
     async fn get_user_details(&self, user_id: &str) -> Result<User>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
-    async fn delete_user(&self, request: DeleteUserRequest) -> Result<()>;
+    async fn delete_user(&self, user_id: &str) -> Result<()>;
     async fn create_group(&self, request: CreateGroupRequest) -> Result<i32>;
     async fn add_user_to_group(&self, request: AddUserToGroupRequest) -> Result<()>;
     async fn get_user_groups(&self, user: &str) -> Result<HashSet<String>>;
@@ -58,7 +58,7 @@ mockall::mock! {
         async fn list_groups(&self) -> Result<Vec<Group>>;
         async fn get_user_details(&self, user_id: &str) -> Result<User>;
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
-        async fn delete_user(&self, request: DeleteUserRequest) -> Result<()>;
+        async fn delete_user(&self, user_id: &str) -> Result<()>;
         async fn create_group(&self, request: CreateGroupRequest) -> Result<i32>;
         async fn get_user_groups(&self, user: &str) -> Result<HashSet<String>>;
         async fn add_user_to_group(&self, request: AddUserToGroupRequest) -> Result<()>;
