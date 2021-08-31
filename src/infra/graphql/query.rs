@@ -1,6 +1,5 @@
 use crate::domain::handler::BackendHandler;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
-use lldap_model::UserDetailsRequest;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 
@@ -95,7 +94,7 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         }
         Ok(context
             .handler
-            .get_user_details(UserDetailsRequest { user_id })
+            .get_user_details(&user_id)
             .await
             .map(Into::into)?)
     }
@@ -242,9 +241,7 @@ mod tests {
 
         let mut mock = MockTestBackendHandler::new();
         mock.expect_get_user_details()
-            .with(eq(UserDetailsRequest {
-                user_id: "bob".to_string(),
-            }))
+            .with(eq("bob"))
             .return_once(|_| {
                 Ok(lldap_model::User {
                     user_id: "bob".to_string(),

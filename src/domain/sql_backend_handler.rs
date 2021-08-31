@@ -117,7 +117,7 @@ impl BackendHandler for SqlBackendHandler {
         Ok(groups)
     }
 
-    async fn get_user_details(&self, request: UserDetailsRequest) -> Result<User> {
+    async fn get_user_details(&self, user_id: &str) -> Result<User> {
         let query = Query::select()
             .column(Users::UserId)
             .column(Users::Email)
@@ -127,7 +127,7 @@ impl BackendHandler for SqlBackendHandler {
             .column(Users::Avatar)
             .column(Users::CreationDate)
             .from(Users::Table)
-            .and_where(Expr::col(Users::UserId).eq(request.user_id))
+            .and_where(Expr::col(Users::UserId).eq(user_id))
             .to_string(DbQueryBuilder {});
 
         Ok(sqlx::query_as::<_, User>(&query)
@@ -470,21 +470,11 @@ mod tests {
         let handler = SqlBackendHandler::new(config, sql_pool);
         insert_user(&handler, "bob", "bob00").await;
         {
-            let user = handler
-                .get_user_details(UserDetailsRequest {
-                    user_id: String::from("bob"),
-                })
-                .await
-                .unwrap();
+            let user = handler.get_user_details("bob").await.unwrap();
             assert_eq!(user.user_id, "bob".to_string());
         }
         {
-            handler
-                .get_user_details(UserDetailsRequest {
-                    user_id: String::from("John"),
-                })
-                .await
-                .unwrap_err();
+            handler.get_user_details("John").await.unwrap_err();
         }
     }
     #[tokio::test]
