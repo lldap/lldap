@@ -202,7 +202,7 @@ impl BackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    async fn create_group(&self, group_name: &str) -> Result<i32> {
+    async fn create_group(&self, group_name: &str) -> Result<GroupId> {
         let query = Query::insert()
             .into_table(Groups::Table)
             .columns(vec![Groups::DisplayName])
@@ -215,14 +215,14 @@ impl BackendHandler for SqlBackendHandler {
             .and_where(Expr::col(Groups::DisplayName).eq(group_name))
             .to_string(DbQueryBuilder {});
         let row = sqlx::query(&query).fetch_one(&self.sql_pool).await?;
-        Ok(row.get::<i32, _>(&*Groups::GroupId.to_string()))
+        Ok(GroupId(row.get::<i32, _>(&*Groups::GroupId.to_string())))
     }
 
-    async fn add_user_to_group(&self, request: AddUserToGroupRequest) -> Result<()> {
+    async fn add_user_to_group(&self, user_id: &str, group_id: GroupId) -> Result<()> {
         let query = Query::insert()
             .into_table(Memberships::Table)
             .columns(vec![Memberships::UserId, Memberships::GroupId])
-            .values_panic(vec![request.user_id.into(), request.group_id.into()])
+            .values_panic(vec![user_id.into(), group_id.0.into()])
             .to_string(DbQueryBuilder {});
         sqlx::query(&query).execute(&self.sql_pool).await?;
         Ok(())
@@ -292,18 +292,12 @@ mod tests {
             .unwrap();
     }
 
-    async fn insert_group(handler: &SqlBackendHandler, name: &str) -> i32 {
+    async fn insert_group(handler: &SqlBackendHandler, name: &str) -> GroupId {
         handler.create_group(name).await.unwrap()
     }
 
-    async fn insert_membership(handler: &SqlBackendHandler, group_id: i32, user_id: &str) {
-        handler
-            .add_user_to_group(AddUserToGroupRequest {
-                user_id: user_id.to_string(),
-                group_id,
-            })
-            .await
-            .unwrap();
+    async fn insert_membership(handler: &SqlBackendHandler, group_id: GroupId, user_id: &str) {
+        handler.add_user_to_group(user_id, group_id).await.unwrap();
     }
 
     #[tokio::test]
