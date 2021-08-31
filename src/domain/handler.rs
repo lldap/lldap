@@ -5,7 +5,6 @@ use std::collections::HashSet;
 
 pub use lldap_model::{
     AddUserToGroupRequest, CreateGroupRequest, CreateUserRequest, DeleteUserRequest, Group, User,
-    UserDetailsRequest,
 };
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
@@ -31,7 +30,7 @@ pub trait LoginHandler: Clone + Send {
 pub trait BackendHandler: Clone + Send {
     async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>>;
     async fn list_groups(&self) -> Result<Vec<Group>>;
-    async fn get_user_details(&self, request: UserDetailsRequest) -> Result<User>;
+    async fn get_user_details(&self, user_id: &str) -> Result<User>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
     async fn delete_user(&self, request: DeleteUserRequest) -> Result<()>;
     async fn create_group(&self, request: CreateGroupRequest) -> Result<i32>;
@@ -49,7 +48,7 @@ mockall::mock! {
     impl BackendHandler for TestBackendHandler {
         async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>>;
         async fn list_groups(&self) -> Result<Vec<Group>>;
-        async fn get_user_details(&self, request: UserDetailsRequest) -> Result<User>;
+        async fn get_user_details(&self, user_id: &str) -> Result<User>;
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
         async fn delete_user(&self, request: DeleteUserRequest) -> Result<()>;
         async fn create_group(&self, request: CreateGroupRequest) -> Result<i32>;

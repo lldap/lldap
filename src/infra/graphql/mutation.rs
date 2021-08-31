@@ -1,6 +1,5 @@
 use crate::domain::handler::BackendHandler;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
-use lldap_model::UserDetailsRequest;
 
 use super::api::Context;
 
@@ -49,7 +48,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             .await?;
         Ok(context
             .handler
-            .get_user_details(UserDetailsRequest { user_id: user.id })
+            .get_user_details(&user.id)
             .await
             .map(Into::into)?)
     }
