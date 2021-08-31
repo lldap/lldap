@@ -141,7 +141,7 @@ impl App {
     fn get_redirect_route() -> Option<String> {
         let route_service = RouteService::<()>::new();
         let current_route = route_service.get_path();
-        if current_route.is_empty() || current_route.contains("login") {
+        if current_route.is_empty() || current_route == "/" || current_route.contains("login") {
             None
         } else {
             Some(current_route)
