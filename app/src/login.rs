@@ -1,6 +1,6 @@
 use crate::api::HostService;
 use anyhow::{anyhow, Context, Result};
-use lldap_model::*;
+use lldap_auth::*;
 use wasm_bindgen::JsCast;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};

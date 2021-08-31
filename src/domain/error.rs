@@ -8,7 +8,7 @@ pub enum DomainError {
     #[error("Database error: `{0}`")]
     DatabaseError(#[from] sqlx::Error),
     #[error("Authentication protocol error for `{0}`")]
-    AuthenticationProtocolError(#[from] lldap_model::opaque::AuthenticationError),
+    AuthenticationProtocolError(#[from] lldap_auth::opaque::AuthenticationError),
     #[error("Unknown crypto error: `{0}`")]
     UnknownCryptoError(#[from] orion::errors::UnknownCryptoError),
     #[error("Binary serialization error: `{0}`")]

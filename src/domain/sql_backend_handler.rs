@@ -234,7 +234,7 @@ mod tests {
     use super::*;
     use crate::domain::sql_tables::init_table;
     use crate::infra::configuration::ConfigurationBuilder;
-    use lldap_model::{opaque, registration};
+    use lldap_auth::{opaque, registration};
 
     fn get_default_config() -> Configuration {
         ConfigurationBuilder::default()

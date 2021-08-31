@@ -6,7 +6,7 @@ use super::{
     sql_tables::*,
 };
 use async_trait::async_trait;
-use lldap_model::opaque;
+use lldap_auth::opaque;
 use log::*;
 use sea_query::{Expr, Iden, Query};
 use sqlx::Row;

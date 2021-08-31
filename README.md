@@ -49,13 +49,13 @@ Data storage:
 
 ### Code organization
 
-* `model/`: Contains the shared data, the interface between front and back-end.
-  The data is transferred by being serialized to JSON, for compatibility with
-  other HTTP-based clients.
+* `auth/`: Contains the shared structures needed for authentication, the
+  interface between front and back-end. In particular, it contains the OPAQUE
+  structures and the JWT format.
 * `app/`: The frontend.
 * `src/`: The backend.
   * `domain/`: Domain-specific logic: users, groups, checking passwords...
-  * `infra/`: API, both HTTP and LDAP
+  * `infra/`: API, both GraphQL and LDAP
 
 ## Authentication
 
@@ -99,7 +99,7 @@ We don't have a code of conduct, just be respectful and remember that it's just
 normal people doing this for free on their free time.
 
 Make sure that you run `cargo fmt` in each crate that you modified (top-level,
-`app/` and `model/`) before creating the PR.
+`app/` and `auth/`) before creating the PR.
 
 ### Setup
 

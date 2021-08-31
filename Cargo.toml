@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "model", "app"]
+members = [".", "auth", "app"]
 
 [package]
 authors = ["Valentin Tolmer <valentin@tolmer.fr>", "Steve Barrau <steve.barrau@gmail.com>", "Thomas Wickham <mackwic@gmail.com>"]
@@ -30,7 +30,7 @@ hmac = "0.10"
 http = "*"
 jwt = "0.13"
 ldap3_server = "*"
-lldap_model = { path = "model" }
+lldap_auth = { path = "auth" }
 log = "*"
 orion = "0.16"
 serde = "*"

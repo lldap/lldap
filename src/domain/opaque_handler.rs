@@ -1,7 +1,7 @@
 use super::error::*;
 use async_trait::async_trait;
 
-pub use lldap_model::{login, registration};
+pub use lldap_auth::{login, registration};
 
 #[async_trait]
 pub trait OpaqueHandler: Clone + Send {

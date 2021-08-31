@@ -1,7 +1,7 @@
 use crate::api::HostService;
 use anyhow::{anyhow, Context, Result};
 use graphql_client::GraphQLQuery;
-use lldap_model::{opaque, registration};
+use lldap_auth::{opaque, registration};
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
 use yew_router::{

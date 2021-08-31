@@ -3,7 +3,7 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
-use lldap_model::opaque::{server::ServerSetup, KeyPair};
+use lldap_auth::opaque::{server::ServerSetup, KeyPair};
 use serde::{Deserialize, Serialize};
 
 use crate::infra::cli::RunOpts;

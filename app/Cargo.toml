@@ -31,8 +31,8 @@ features = [
   "wasmbind"
 ]
 
-[dependencies.lldap_model]
-path = "../model"
+[dependencies.lldap_auth]
+path = "../auth"
 features = [ "opaque_client" ]
 
 [lib]
