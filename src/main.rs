@@ -28,9 +28,7 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
         .await
         .context("Error creating admin user")?;
     let admin_group_id = handler
-        .create_group(lldap_model::CreateGroupRequest {
-            display_name: "lldap_admin".to_string(),
-        })
+        .create_group("lldap_admin")
         .await
         .context("Error creating admin group")?;
     handler
