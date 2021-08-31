@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1"
-chrono = "*"
 http = "0.2.4"
 jwt = "0.13"
 rand = "0.8"
@@ -24,6 +23,12 @@ features = [
   "Element",
   "HtmlDocument",
   "console",
+]
+
+[dependencies.chrono]
+version = "*"
+features = [
+  "wasmbind"
 ]
 
 [dependencies.lldap_model]
