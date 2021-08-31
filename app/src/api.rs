@@ -1,7 +1,7 @@
 use crate::cookies::set_cookie;
 use anyhow::{anyhow, Context, Result};
 use graphql_client::GraphQLQuery;
-use lldap_model::{login, registration, JWTClaims};
+use lldap_auth::{login, registration, JWTClaims};
 
 use yew::callback::Callback;
 use yew::format::Json;

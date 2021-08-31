@@ -4,7 +4,7 @@
 # Don't track cargo generated files
 target/*
 app/target/*
-model/target/*
+auth/target/*
 
 # Don't track the generated JS
 app/pkg/*

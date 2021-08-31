@@ -1721,7 +1721,7 @@ dependencies = [
  "juniper_actix",
  "jwt",
  "ldap3_server",
- "lldap_model",
+ "lldap_auth",
  "log",
  "mockall",
  "opaque-ke",
@@ -1752,7 +1752,7 @@ dependencies = [
  "graphql_client",
  "http",
  "jwt",
- "lldap_model",
+ "lldap_auth",
  "rand 0.8.3",
  "serde",
  "serde_json",
@@ -1763,7 +1763,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "lldap_model"
+name = "lldap_auth"
 version = "0.1.0"
 dependencies = [
  "chrono",

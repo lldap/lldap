@@ -21,7 +21,7 @@ use futures::future::{ok, Ready};
 use futures_util::{FutureExt, TryFutureExt};
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
-use lldap_model::{login, registration, JWTClaims};
+use lldap_auth::{login, registration, JWTClaims};
 use sha2::Sha512;
 use std::collections::{hash_map::DefaultHasher, HashSet};
 use std::hash::{Hash, Hasher};
