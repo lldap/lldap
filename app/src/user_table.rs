@@ -16,9 +16,11 @@ pub struct ListUsersQuery;
 
 use list_users_query::{RequestFilter, ResponseData};
 
+type User = list_users_query::ListUsersQueryUsers;
+
 pub struct UserTable {
     link: ComponentLink<Self>,
-    users: Option<Result<Vec<list_users_query::ListUsersQueryUsers>>>,
+    users: Option<Result<Vec<User>>>,
     // Used to keep the request alive long enough.
     _task: Option<FetchTask>,
 }
@@ -75,39 +77,37 @@ impl Component for UserTable {
     }
 
     fn view(&self) -> Html {
+        let make_user_row = |user: &User| {
+            html! {
+                <tr>
+                    <td>{&user.id}</td>
+                    <td>{&user.email}</td>
+                    <td>{&user.display_name.as_ref().unwrap_or(&String::new())}</td>
+                    <td>{&user.first_name.as_ref().unwrap_or(&String::new())}</td>
+                    <td>{&user.last_name.as_ref().unwrap_or(&String::new())}</td>
+                    <td>{&user.creation_date.with_timezone(&chrono::Local)}</td>
+                </tr>
+            }
+        };
+        let make_table = |users: &Vec<User>| {
+            html! {
+                <table>
+                  <tr>
+                    <th>{"User ID"}</th>
+                    <th>{"Email"}</th>
+                    <th>{"Display name"}</th>
+                    <th>{"First name"}</th>
+                    <th>{"Last name"}</th>
+                    <th>{"Creation date"}</th>
+                  </tr>
+                  {users.iter().map(make_user_row).collect::<Vec<_>>()}
+                </table>
+            }
+        };
         match &self.users {
             None => html! {{"Loading..."}},
             Some(Err(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
-            Some(Ok(users)) => {
-                let table_content: Vec<_> = users
-                    .iter()
-                    .map(|u| {
-                        html! {
-                            <tr>
-                                <td>{&u.id}</td>
-                                <td>{&u.email}</td>
-                                <td>{&u.display_name.as_ref().unwrap_or(&String::new())}</td>
-                                <td>{&u.first_name.as_ref().unwrap_or(&String::new())}</td>
-                                <td>{&u.last_name.as_ref().unwrap_or(&String::new())}</td>
-                                <td>{&u.creation_date.with_timezone(&chrono::Local)}</td>
-                            </tr>
-                        }
-                    })
-                    .collect();
-                html! {
-                    <table>
-                      <tr>
-                        <th>{"User ID"}</th>
-                        <th>{"Email"}</th>
-                        <th>{"Display name"}</th>
-                        <th>{"First name"}</th>
-                        <th>{"Last name"}</th>
-                        <th>{"Creation date"}</th>
-                      </tr>
-                      {table_content}
-                    </table>
-                }
-            }
+            Some(Ok(users)) => make_table(users),
         }
     }
 }
