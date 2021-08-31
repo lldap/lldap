@@ -202,17 +202,17 @@ impl BackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    async fn create_group(&self, request: CreateGroupRequest) -> Result<i32> {
+    async fn create_group(&self, group_name: &str) -> Result<i32> {
         let query = Query::insert()
             .into_table(Groups::Table)
             .columns(vec![Groups::DisplayName])
-            .values_panic(vec![request.display_name.as_str().into()])
+            .values_panic(vec![group_name.into()])
             .to_string(DbQueryBuilder {});
         sqlx::query(&query).execute(&self.sql_pool).await?;
         let query = Query::select()
             .column(Groups::GroupId)
             .from(Groups::Table)
-            .and_where(Expr::col(Groups::DisplayName).eq(request.display_name.as_str()))
+            .and_where(Expr::col(Groups::DisplayName).eq(group_name))
             .to_string(DbQueryBuilder {});
         let row = sqlx::query(&query).fetch_one(&self.sql_pool).await?;
         Ok(row.get::<i32, _>(&*Groups::GroupId.to_string()))
@@ -293,12 +293,7 @@ mod tests {
     }
 
     async fn insert_group(handler: &SqlBackendHandler, name: &str) -> i32 {
-        handler
-            .create_group(CreateGroupRequest {
-                display_name: name.to_string(),
-            })
-            .await
-            .unwrap()
+        handler.create_group(name).await.unwrap()
     }
 
     async fn insert_membership(handler: &SqlBackendHandler, group_id: i32, user_id: &str) {
