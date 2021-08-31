@@ -32,10 +32,7 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
         .await
         .context("Error creating admin group")?;
     handler
-        .add_user_to_group(lldap_model::AddUserToGroupRequest {
-            user_id: config.ldap_user_dn.clone(),
-            group_id: admin_group_id,
-        })
+        .add_user_to_group(&config.ldap_user_dn, admin_group_id)
         .await
         .context("Error adding admin user to group")
 }
