@@ -28,7 +28,8 @@ Backend:
   * Only a small, read-only subset of the LDAP protocol is supported.
 * Listens on another port for HTTP traffic.
   * The authentication API, based on JWTs, is under "/auth".
-  * The user management API is under "/api" (POST requests only).
+  * The user management API is a GraphQL API under "/api/graphql". The schema
+    is defined in `schema.graphql`.
   * The static frontend files are served by this port too.
 
 Note that secure protocols (LDAPS, HTTPS) are currently not supported. This can
@@ -53,9 +54,9 @@ Data storage:
   interface between front and back-end. In particular, it contains the OPAQUE
   structures and the JWT format.
 * `app/`: The frontend.
-* `src/`: The backend.
-  * `domain/`: Domain-specific logic: users, groups, checking passwords...
-  * `infra/`: API, both GraphQL and LDAP
+* `server/`: The backend.
+  * `src/domain/`: Domain-specific logic: users, groups, checking passwords...
+  * `src/infra/`: API, both GraphQL and LDAP
 
 ## Authentication
 
@@ -98,8 +99,7 @@ Contributions are welcome! Just fork and open a PR. Or just file a bug.
 We don't have a code of conduct, just be respectful and remember that it's just
 normal people doing this for free on their free time.
 
-Make sure that you run `cargo fmt` in each crate that you modified (top-level,
-`app/` and `auth/`) before creating the PR.
+Make sure that you run `cargo fmt` from the root before creating the PR.
 
 ### Setup
 
