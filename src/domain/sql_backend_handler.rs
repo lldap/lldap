@@ -193,10 +193,10 @@ impl BackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    async fn delete_user(&self, request: DeleteUserRequest) -> Result<()> {
+    async fn delete_user(&self, user_id: &str) -> Result<()> {
         let delete_query = Query::delete()
             .from_table(Users::Table)
-            .and_where(Expr::col(Users::UserId).eq(request.user_id))
+            .and_where(Expr::col(Users::UserId).eq(user_id))
             .to_string(DbQueryBuilder {});
         sqlx::query(&delete_query).execute(&self.sql_pool).await?;
         Ok(())
@@ -517,12 +517,7 @@ mod tests {
         insert_user(&handler, "Jennz", "boupBoup").await;
 
         // Remove a user
-        let _request_result = handler
-            .delete_user(DeleteUserRequest {
-                user_id: "Jennz".to_owned(),
-            })
-            .await
-            .unwrap();
+        let _request_result = handler.delete_user("Jennz").await.unwrap();
 
         let users = handler
             .list_users(None)
@@ -536,18 +531,8 @@ mod tests {
 
         // Insert new user and remove two
         insert_user(&handler, "NewBoi", "Joni").await;
-        let _request_result = handler
-            .delete_user(DeleteUserRequest {
-                user_id: "Hector".to_owned(),
-            })
-            .await
-            .unwrap();
-        let _request_result = handler
-            .delete_user(DeleteUserRequest {
-                user_id: "NewBoi".to_owned(),
-            })
-            .await
-            .unwrap();
+        let _request_result = handler.delete_user("Hector").await.unwrap();
+        let _request_result = handler.delete_user("NewBoi").await.unwrap();
 
         let users = handler
             .list_users(None)
