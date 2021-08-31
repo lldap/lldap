@@ -20,7 +20,7 @@ use std::sync::RwLock;
 
 async fn index(req: HttpRequest) -> actix_web::Result<NamedFile> {
     let mut path = PathBuf::new();
-    path.push("app");
+    path.push("../app");
     let file = req.match_info().query("filename");
     path.push(if file.is_empty() { "index.html" } else { file });
     Ok(NamedFile::open(path)?)
@@ -120,7 +120,7 @@ mod tests {
     async fn test_index_ok() {
         let req = TestRequest::default().to_http_request();
         let resp = index(req).await.unwrap();
-        assert_eq!(resp.path(), Path::new("app/index.html"));
+        assert_eq!(resp.path(), Path::new("../app/index.html"));
     }
 
     #[actix_rt::test]
@@ -129,6 +129,6 @@ mod tests {
             .param("filename", "main.js")
             .to_http_request();
         let resp = index(req).await.unwrap();
-        assert_eq!(resp.path(), Path::new("app/main.js"));
+        assert_eq!(resp.path(), Path::new("../app/main.js"));
     }
 }

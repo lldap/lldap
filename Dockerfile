@@ -12,7 +12,7 @@ RUN set -x \
         app
 RUN set -x \
     # Install required packages
-    && apk add npm openssl-dev musl-dev
+    && apk add npm openssl-dev musl-dev make perl
 USER app
 WORKDIR /app
 RUN set -x \
@@ -21,7 +21,7 @@ RUN set -x \
     && npm install rollup
 # Build
 COPY --chown=app:app . /app
-RUN cargo build --release
+RUN cargo build --release -p lldap
 # TODO: release mode.
 RUN ./app/build.sh
 

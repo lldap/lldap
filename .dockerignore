@@ -3,6 +3,7 @@
 
 # Don't track cargo generated files
 target/*
+server/target/*
 app/target/*
 auth/target/*
 
