@@ -3,8 +3,10 @@
 
 use crate::{
     domain::{
-        handler::BackendHandler, sql_backend_handler::SqlBackendHandler,
-        sql_opaque_handler::register_password, sql_tables::PoolOptions,
+        handler::{BackendHandler, CreateUserRequest},
+        sql_backend_handler::SqlBackendHandler,
+        sql_opaque_handler::register_password,
+        sql_tables::PoolOptions,
     },
     infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler},
 };
@@ -18,7 +20,7 @@ mod infra;
 
 async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) -> Result<()> {
     handler
-        .create_user(lldap_model::CreateUserRequest {
+        .create_user(CreateUserRequest {
             user_id: config.ldap_user_dn.clone(),
             ..Default::default()
         })

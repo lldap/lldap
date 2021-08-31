@@ -3,9 +3,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-pub use lldap_model::{
-    AddUserToGroupRequest, CreateGroupRequest, CreateUserRequest, DeleteUserRequest, Group, User,
-};
+pub use lldap_model::{AddUserToGroupRequest, CreateGroupRequest, DeleteUserRequest, Group, User};
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct BindRequest {
@@ -19,6 +17,16 @@ pub enum RequestFilter {
     Or(Vec<RequestFilter>),
     Not(Box<RequestFilter>),
     Equality(String, String),
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
+pub struct CreateUserRequest {
+    // Same fields as User, but no creation_date, and with password.
+    pub user_id: String,
+    pub email: String,
+    pub display_name: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
 }
 
 #[async_trait]
