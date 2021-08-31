@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 
 type DomainRequestFilter = crate::domain::handler::RequestFilter;
+type DomainUser = crate::domain::handler::User;
 use super::api::Context;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
@@ -117,14 +118,14 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 /// Represents a single user.
 pub struct User<Handler: BackendHandler> {
-    user: lldap_model::User,
+    user: DomainUser,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
 
 impl<Handler: BackendHandler> Default for User<Handler> {
     fn default() -> Self {
         Self {
-            user: lldap_model::User::default(),
+            user: DomainUser::default(),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -166,8 +167,8 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
     }
 }
 
-impl<Handler: BackendHandler> From<lldap_model::User> for User<Handler> {
-    fn from(user: lldap_model::User) -> Self {
+impl<Handler: BackendHandler> From<DomainUser> for User<Handler> {
+    fn from(user: DomainUser) -> Self {
         Self {
             user,
             _phantom: std::marker::PhantomData,
@@ -243,7 +244,7 @@ mod tests {
         mock.expect_get_user_details()
             .with(eq("bob"))
             .return_once(|_| {
-                Ok(lldap_model::User {
+                Ok(DomainUser {
                     user_id: "bob".to_string(),
                     email: "bob@bobbers.on".to_string(),
                     ..Default::default()
@@ -298,7 +299,6 @@ mod tests {
 
         let mut mock = MockTestBackendHandler::new();
         use crate::domain::handler::RequestFilter;
-        use lldap_model::User;
         mock.expect_list_users()
             .with(eq(Some(RequestFilter::Or(vec![
                 RequestFilter::Equality("id".to_string(), "bob".to_string()),
@@ -306,12 +306,12 @@ mod tests {
             ]))))
             .return_once(|_| {
                 Ok(vec![
-                    User {
+                    DomainUser {
                         user_id: "bob".to_string(),
                         email: "bob@bobbers.on".to_string(),
                         ..Default::default()
                     },
-                    User {
+                    DomainUser {
                         user_id: "robert".to_string(),
                         email: "robert@bobbers.on".to_string(),
                         ..Default::default()

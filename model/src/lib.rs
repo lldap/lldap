@@ -67,37 +67,6 @@ pub mod registration {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(sqlx::FromRow))]
-pub struct User {
-    pub user_id: String,
-    pub email: String,
-    pub display_name: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    // pub avatar: ?,
-    pub creation_date: chrono::DateTime<chrono::Utc>,
-}
-
-impl Default for User {
-    fn default() -> Self {
-        User {
-            user_id: String::new(),
-            email: String::new(),
-            display_name: None,
-            first_name: None,
-            last_name: None,
-            creation_date: Utc.timestamp(0, 0),
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct Group {
-    pub display_name: String,
-    pub users: Vec<String>,
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JWTClaims {
     pub exp: DateTime<Utc>,
