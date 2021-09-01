@@ -193,6 +193,31 @@ impl BackendHandler for SqlBackendHandler {
         Ok(())
     }
 
+    async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
+        let mut values = Vec::new();
+        if let Some(email) = request.email {
+            values.push((Users::Email, email.into()));
+        }
+        if let Some(display_name) = request.display_name {
+            values.push((Users::DisplayName, display_name.into()));
+        }
+        if let Some(first_name) = request.first_name {
+            values.push((Users::FirstName, first_name.into()));
+        }
+        if let Some(last_name) = request.last_name {
+            values.push((Users::LastName, last_name.into()));
+        }
+        if values.is_empty() {
+            return Ok(());
+        }
+        let query = Query::update()
+            .table(Users::Table)
+            .values(values)
+            .to_string(DbQueryBuilder {});
+        sqlx::query(&query).execute(&self.sql_pool).await?;
+        Ok(())
+    }
+
     async fn delete_user(&self, user_id: &str) -> Result<()> {
         let delete_query = Query::delete()
             .from_table(Users::Table)

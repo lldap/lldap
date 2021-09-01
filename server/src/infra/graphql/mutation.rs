@@ -1,5 +1,5 @@
-use crate::domain::handler::{BackendHandler, CreateUserRequest};
-use juniper::{graphql_object, FieldResult, GraphQLInputObject};
+use crate::domain::handler::{BackendHandler, CreateUserRequest, UpdateUserRequest};
+use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
 
 use super::api::Context;
 
@@ -19,7 +19,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
 /// The details required to create a user.
-pub struct UserInput {
+pub struct CreateUserInput {
     id: String,
     email: String,
     display_name: Option<String>,
@@ -27,11 +27,32 @@ pub struct UserInput {
     last_name: Option<String>,
 }
 
+#[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
+/// The fields that can be updated for a user.
+pub struct UpdateUserInput {
+    id: String,
+    email: Option<String>,
+    display_name: Option<String>,
+    first_name: Option<String>,
+    last_name: Option<String>,
+}
+
+#[derive(PartialEq, Eq, Debug, GraphQLObject)]
+pub struct Success {
+    ok: bool,
+}
+
+impl Success {
+    fn new() -> Self {
+        Self { ok: true }
+    }
+}
+
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler + Sync> Mutation<Handler> {
     async fn create_user(
         context: &Context<Handler>,
-        user: UserInput,
+        user: CreateUserInput,
     ) -> FieldResult<super::query::User<Handler>> {
         if !context.validation_result.is_admin {
             return Err("Unauthorized user creation".into());
@@ -51,5 +72,25 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             .get_user_details(&user.id)
             .await
             .map(Into::into)?)
+    }
+
+    async fn update_user(
+        context: &Context<Handler>,
+        user: UpdateUserInput,
+    ) -> FieldResult<Success> {
+        if !context.validation_result.can_access(&user.id) {
+            return Err("Unauthorized user update".into());
+        }
+        context
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: user.id,
+                email: user.email,
+                display_name: user.display_name,
+                first_name: user.first_name,
+                last_name: user.last_name,
+            })
+            .await?;
+        Ok(Success::new())
     }
 }

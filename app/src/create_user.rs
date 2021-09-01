@@ -46,7 +46,7 @@ impl CreateUserForm {
         match msg {
             Msg::SubmitForm => {
                 let req = create_user::Variables {
-                    user: create_user::UserInput {
+                    user: create_user::CreateUserInput {
                         id: get_element("username")
                             .filter(not_empty)
                             .ok_or_else(|| anyhow!("Missing username"))?,
