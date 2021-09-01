@@ -4,7 +4,8 @@ input EqualityConstraint {
 }
 
 type Mutation {
-  createUser(user: UserInput!): User!
+  createUser(user: CreateUserInput!): User!
+  updateUser(user: UpdateUserInput!): Success!
 }
 
 type Group {
@@ -28,7 +29,7 @@ input RequestFilter {
 scalar DateTimeUtc
 
 "The details required to create a user."
-input UserInput {
+input CreateUserInput {
   id: String!
   email: String!
   displayName: String
@@ -51,6 +52,19 @@ type User {
   creationDate: DateTimeUtc!
   "The groups to which this user belongs."
   groups: [Group!]!
+}
+
+type Success {
+  ok: Boolean!
+}
+
+"The fields that can be updated for a user."
+input UpdateUserInput {
+  id: String!
+  email: String
+  displayName: String
+  firstName: String
+  lastName: String
 }
 
 schema {

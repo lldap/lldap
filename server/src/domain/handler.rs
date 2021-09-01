@@ -59,6 +59,16 @@ pub struct CreateUserRequest {
     pub last_name: Option<String>,
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
+pub struct UpdateUserRequest {
+    // Same fields as CreateUserRequest, but no with an extra layer of Option.
+    pub user_id: String,
+    pub email: Option<String>,
+    pub display_name: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+}
+
 #[async_trait]
 pub trait LoginHandler: Clone + Send {
     async fn bind(&self, request: BindRequest) -> Result<()>;
@@ -73,6 +83,7 @@ pub trait BackendHandler: Clone + Send {
     async fn list_groups(&self) -> Result<Vec<Group>>;
     async fn get_user_details(&self, user_id: &str) -> Result<User>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
+    async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
     async fn delete_user(&self, user_id: &str) -> Result<()>;
     async fn create_group(&self, group_name: &str) -> Result<GroupId>;
     async fn add_user_to_group(&self, user_id: &str, group_id: GroupId) -> Result<()>;
@@ -91,6 +102,7 @@ mockall::mock! {
         async fn list_groups(&self) -> Result<Vec<Group>>;
         async fn get_user_details(&self, user_id: &str) -> Result<User>;
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
+        async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
         async fn delete_user(&self, user_id: &str) -> Result<()>;
         async fn create_group(&self, group_name: &str) -> Result<GroupId>;
         async fn get_user_groups(&self, user: &str) -> Result<HashSet<String>>;
