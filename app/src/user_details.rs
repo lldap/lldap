@@ -91,9 +91,9 @@ impl Component for UserDetails {
                     <div>
                         <div>{"User ID: "} {&u.id}</div>
                         <div>{"Email: "}{&u.email}</div>
-                        <div>{"Display name: "}{&u.display_name.as_ref().unwrap_or(&String::new())}</div>
-                        <div>{"First name: "}{&u.first_name.as_ref().unwrap_or(&String::new())}</div>
-                        <div>{"Last name: "}{&u.last_name.as_ref().unwrap_or(&String::new())}</div>
+                        <div>{"Display name: "}{&u.display_name}</div>
+                        <div>{"First name: "}{&u.first_name}</div>
+                        <div>{"Last name: "}{&u.last_name}</div>
                         <div>{"Creation date: "}{&u.creation_date.with_timezone(&chrono::Local)}</div>
                     </div>
                 }

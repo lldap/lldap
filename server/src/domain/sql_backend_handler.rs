@@ -3,7 +3,7 @@ use crate::infra::configuration::Configuration;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
-use sea_query::{Expr, Iden, Order, Query, SimpleExpr, Value};
+use sea_query::{Expr, Iden, Order, Query, SimpleExpr};
 use sqlx::Row;
 use std::collections::HashSet;
 
@@ -179,9 +179,9 @@ impl BackendHandler for SqlBackendHandler {
         let values = vec![
             request.user_id.clone().into(),
             request.email.into(),
-            request.display_name.map(Into::into).unwrap_or(Value::Null),
-            request.first_name.map(Into::into).unwrap_or(Value::Null),
-            request.last_name.map(Into::into).unwrap_or(Value::Null),
+            request.display_name.unwrap_or_default().into(),
+            request.first_name.unwrap_or_default().into(),
+            request.last_name.unwrap_or_default().into(),
             chrono::Utc::now().naive_utc().into(),
         ];
         let query = Query::insert()

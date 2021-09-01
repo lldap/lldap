@@ -49,9 +49,13 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
                     .primary_key(),
             )
             .col(ColumnDef::new(Users::Email).string_len(255).not_null())
-            .col(ColumnDef::new(Users::DisplayName).string_len(255))
-            .col(ColumnDef::new(Users::FirstName).string_len(255))
-            .col(ColumnDef::new(Users::LastName).string_len(255))
+            .col(
+                ColumnDef::new(Users::DisplayName)
+                    .string_len(255)
+                    .not_null(),
+            )
+            .col(ColumnDef::new(Users::FirstName).string_len(255).not_null())
+            .col(ColumnDef::new(Users::LastName).string_len(255).not_null())
             .col(ColumnDef::new(Users::Avatar).binary())
             .col(ColumnDef::new(Users::CreationDate).date_time().not_null())
             .col(ColumnDef::new(Users::PasswordHash).binary())

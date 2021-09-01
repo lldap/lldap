@@ -8,9 +8,9 @@ use std::collections::HashSet;
 pub struct User {
     pub user_id: String,
     pub email: String,
-    pub display_name: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
+    pub display_name: String,
+    pub first_name: String,
+    pub last_name: String,
     // pub avatar: ?,
     pub creation_date: chrono::DateTime<chrono::Utc>,
 }
@@ -21,9 +21,9 @@ impl Default for User {
         User {
             user_id: String::new(),
             email: String::new(),
-            display_name: None,
-            first_name: None,
-            last_name: None,
+            display_name: String::new(),
+            first_name: String::new(),
+            last_name: String::new(),
             creation_date: chrono::Utc.timestamp(0, 0),
         }
     }

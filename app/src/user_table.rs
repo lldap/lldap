@@ -82,9 +82,9 @@ impl Component for UserTable {
                 <tr>
                     <td>{&user.id}</td>
                     <td>{&user.email}</td>
-                    <td>{&user.display_name.as_ref().unwrap_or(&String::new())}</td>
-                    <td>{&user.first_name.as_ref().unwrap_or(&String::new())}</td>
-                    <td>{&user.last_name.as_ref().unwrap_or(&String::new())}</td>
+                    <td>{&user.display_name}</td>
+                    <td>{&user.first_name}</td>
+                    <td>{&user.last_name}</td>
                     <td>{&user.creation_date.with_timezone(&chrono::Local)}</td>
                 </tr>
             }

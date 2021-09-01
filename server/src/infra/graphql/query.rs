@@ -141,16 +141,16 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
         &self.user.email
     }
 
-    fn display_name(&self) -> Option<&String> {
-        self.user.display_name.as_ref()
+    fn display_name(&self) -> &str {
+        &self.user.display_name
     }
 
-    fn first_name(&self) -> Option<&String> {
-        self.user.first_name.as_ref()
+    fn first_name(&self) -> &str {
+        &self.user.first_name
     }
 
-    fn last_name(&self) -> Option<&String> {
-        self.user.last_name.as_ref()
+    fn last_name(&self) -> &str {
+        &self.user.last_name
     }
 
     fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
