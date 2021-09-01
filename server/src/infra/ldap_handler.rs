@@ -69,12 +69,9 @@ fn get_attribute(user: &User, attribute: &str) -> Result<Vec<String>> {
         ]),
         "uid" => Ok(vec![user.user_id.clone()]),
         "mail" => Ok(vec![user.email.clone()]),
-        "givenName" => Ok(vec![user.first_name.clone().unwrap_or_default()]),
-        "sn" => Ok(vec![user.last_name.clone().unwrap_or_default()]),
-        "cn" => Ok(vec![user
-            .display_name
-            .clone()
-            .unwrap_or_else(|| user.user_id.clone())]),
+        "givenName" => Ok(vec![user.first_name.clone()]),
+        "sn" => Ok(vec![user.last_name.clone()]),
+        "cn" => Ok(vec![user.display_name.clone()]),
         _ => bail!("Unsupported attribute: {}", attribute),
     }
 }
@@ -479,17 +476,17 @@ mod tests {
                 User {
                     user_id: "bob_1".to_string(),
                     email: "bob@bobmail.bob".to_string(),
-                    display_name: Some("Bôb Böbberson".to_string()),
-                    first_name: Some("Bôb".to_string()),
-                    last_name: Some("Böbberson".to_string()),
+                    display_name: "Bôb Böbberson".to_string(),
+                    first_name: "Bôb".to_string(),
+                    last_name: "Böbberson".to_string(),
                     ..Default::default()
                 },
                 User {
                     user_id: "jim".to_string(),
                     email: "jim@cricket.jim".to_string(),
-                    display_name: Some("Jimminy Cricket".to_string()),
-                    first_name: Some("Jim".to_string()),
-                    last_name: Some("Cricket".to_string()),
+                    display_name: "Jimminy Cricket".to_string(),
+                    first_name: "Jim".to_string(),
+                    last_name: "Cricket".to_string(),
                     ..Default::default()
                 },
             ])

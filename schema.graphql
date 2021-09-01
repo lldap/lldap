@@ -45,9 +45,9 @@ type Query {
 type User {
   id: String!
   email: String!
-  displayName: String
-  firstName: String
-  lastName: String
+  displayName: String!
+  firstName: String!
+  lastName: String!
   creationDate: DateTimeUtc!
   "The groups to which this user belongs."
   groups: [Group!]!
