@@ -4,3 +4,8 @@ members = [
   "auth",
   "app"
 ]
+
+#TODO: remove once https://github.com/rust-num/num-bigint/issues/218 is fixed
+[patch.crates-io.num-bigint]
+git = 'https://github.com/nitnelave/num-bigint/'
+branch = '0.3.2-patch'
