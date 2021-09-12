@@ -1,22 +1,28 @@
 use crate::{
-    cookies::get_cookie, create_user::CreateUserForm, login::LoginForm, logout::LogoutButton,
-    user_details::UserDetails, user_table::UserTable,
+    components::{
+        change_password::ChangePasswordForm,
+        create_user::CreateUserForm,
+        login::LoginForm,
+        logout::LogoutButton,
+        router::{AppRoute, Link},
+        user_details::UserDetails,
+        user_table::UserTable,
+    },
+    infra::cookies::get_cookie,
 };
 use yew::prelude::*;
 use yew::services::ConsoleService;
 use yew_router::{
     agent::{RouteAgentDispatcher, RouteRequest},
-    components::RouterAnchor,
     route::Route,
     router::Router,
     service::RouteService,
-    Switch,
 };
 
 pub struct App {
     link: ComponentLink<Self>,
     user_info: Option<(String, bool)>,
-    redirect_to: Option<String>,
+    redirect_to: Option<AppRoute>,
     route_dispatcher: RouteAgentDispatcher,
 }
 
@@ -24,22 +30,6 @@ pub enum Msg {
     Login((String, bool)),
     Logout,
 }
-
-#[derive(Switch, Debug, Clone)]
-pub enum AppRoute {
-    #[to = "/login"]
-    Login,
-    #[to = "/users"]
-    ListUsers,
-    #[to = "/create_user"]
-    CreateUser,
-    #[to = "/details/{user_id}"]
-    UserDetails(String),
-    #[to = "/"]
-    Index,
-}
-
-type Link = RouterAnchor<AppRoute>;
 
 impl Component for App {
     type Message = Msg;
@@ -72,20 +62,20 @@ impl Component for App {
         match msg {
             Msg::Login((user_name, is_admin)) => {
                 self.user_info = Some((user_name.clone(), is_admin));
-                let user_route = "/details/".to_string() + &user_name;
                 self.route_dispatcher
-                    .send(RouteRequest::ChangeRoute(Route::new_no_state(
-                        self.redirect_to.as_deref().unwrap_or_else(|| {
+                    .send(RouteRequest::ChangeRoute(Route::from(
+                        self.redirect_to.take().unwrap_or_else(|| {
                             if is_admin {
-                                "/users"
+                                AppRoute::ListUsers
                             } else {
-                                &user_route
+                                AppRoute::UserDetails(user_name.clone())
                             }
                         }),
                     )));
             }
             Msg::Logout => {
                 self.user_info = None;
+                self.redirect_to = None;
             }
         }
         if self.user_info.is_none() {
@@ -129,6 +119,12 @@ impl Component for App {
                                 <UserDetails username=username.clone() />
                               </div>
                           },
+                          AppRoute::ChangePassword(username) => html! {
+                              <div>
+                                <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
+                                <ChangePasswordForm username=username.clone() />
+                              </div>
+                          }
                       }
                   })
                 />
@@ -138,39 +134,37 @@ impl Component for App {
 }
 
 impl App {
-    fn get_redirect_route() -> Option<String> {
+    fn get_redirect_route() -> Option<AppRoute> {
         let route_service = RouteService::<()>::new();
         let current_route = route_service.get_path();
         if current_route.is_empty() || current_route == "/" || current_route.contains("login") {
             None
         } else {
-            Some(current_route)
+            use yew_router::Switch;
+            AppRoute::from_route_part::<()>(current_route, None).0
         }
     }
 
     fn apply_initial_redirections(&mut self) {
         match &self.user_info {
             None => {
-                ConsoleService::info("Redirecting to login");
                 self.route_dispatcher
                     .send(RouteRequest::ReplaceRoute(Route::new_no_state("/login")));
             }
             Some((user_name, is_admin)) => match &self.redirect_to {
                 Some(url) => {
-                    ConsoleService::info(&format!("Redirecting to specified url: {}", url));
                     self.route_dispatcher
-                        .send(RouteRequest::ReplaceRoute(Route::new_no_state(url)));
+                        .send(RouteRequest::ReplaceRoute(Route::from(url.clone())));
                 }
                 None => {
                     if *is_admin {
-                        ConsoleService::info("Redirecting to user list");
                         self.route_dispatcher
                             .send(RouteRequest::ReplaceRoute(Route::new_no_state("/users")));
                     } else {
-                        ConsoleService::info("Redirecting to user view");
-                        self.route_dispatcher.send(RouteRequest::ReplaceRoute(
-                            Route::new_no_state(&("/details/".to_string() + user_name)),
-                        ));
+                        self.route_dispatcher
+                            .send(RouteRequest::ReplaceRoute(Route::from(
+                                AppRoute::UserDetails(user_name.clone()),
+                            )));
                     }
                 }
             },

@@ -1,4 +1,4 @@
-use crate::api::HostService;
+use crate::infra::api::HostService;
 use anyhow::{anyhow, Result};
 use graphql_client::GraphQLQuery;
 use yew::format::Json;
@@ -10,7 +10,7 @@ use yew::services::{fetch::FetchTask, ConsoleService};
     schema_path = "../schema.graphql",
     query_path = "queries/list_users.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::graphql"
+    custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct ListUsersQuery;
 

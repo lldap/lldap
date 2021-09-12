@@ -1,4 +1,4 @@
-use crate::{api::HostService, cookies::delete_cookie};
+use crate::infra::{api::HostService, cookies::delete_cookie};
 use anyhow::Result;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};

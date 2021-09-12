@@ -1,15 +1,20 @@
-use crate::api::HostService;
+use crate::{
+    components::router::{AppRoute, NavButton},
+    infra::api::HostService,
+};
 use anyhow::{anyhow, Result};
 use graphql_client::GraphQLQuery;
-use yew::prelude::*;
-use yew::services::{fetch::FetchTask, ConsoleService};
+use yew::{
+    prelude::*,
+    services::{fetch::FetchTask, ConsoleService},
+};
 
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
     query_path = "queries/get_user_details.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::graphql"
+    custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct GetUserDetails;
 
@@ -21,7 +26,7 @@ type User = get_user_details::GetUserDetailsUser;
     query_path = "queries/update_user.graphql",
     response_derives = "Debug",
     variables_derives = "Clone",
-    custom_scalars_module = "crate::graphql"
+    custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct UpdateUser;
 
@@ -248,6 +253,9 @@ impl Component for UserDetails {
                           </div>
                         }
                       } else { html! {} }}
+                      <div>
+                        <NavButton route=AppRoute::ChangePassword(self.username.clone())>{"Change password"}</NavButton>
+                      </div>
                     </form>
                 }
             }
