@@ -1,4 +1,4 @@
-use crate::api::HostService;
+use crate::infra::api::HostService;
 use anyhow::{anyhow, Context, Result};
 use graphql_client::GraphQLQuery;
 use lldap_auth::{opaque, registration};
@@ -14,7 +14,7 @@ use yew_router::{
     schema_path = "../schema.graphql",
     query_path = "queries/create_user.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::graphql"
+    custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct CreateUser;
 
@@ -178,11 +178,11 @@ impl Component for CreateUserForm {
             <form ref=self.node_ref.clone() onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::SubmitForm })>
                 <div>
                     <label for="username">{"User name:"}</label>
-                    <input type="text" id="username" />
+                    <input type="text" id="username" required=true />
                 </div>
                 <div>
                     <label for="email">{"Email:"}</label>
-                    <input type="text" id="email" />
+                    <input type="email" id="email" required=true />
                 </div>
                 <div>
                     <label for="displayname">{"Display name:"}</label>
@@ -198,7 +198,7 @@ impl Component for CreateUserForm {
                 </div>
                 <div>
                     <label for="password">{"Password:"}</label>
-                    <input type="password" id="password" />
+                    <input type="password" id="password" autocomplete="new-password" minlength="8" />
                 </div>
                 <button type="submit">{"Submit"}</button>
                 <div>

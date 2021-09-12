@@ -1,10 +1,9 @@
-use crate::api::HostService;
+use crate::infra::api::HostService;
 use anyhow::{anyhow, Context, Result};
 use lldap_auth::*;
 use wasm_bindgen::JsCast;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
-use yew::FocusEvent;
 
 pub struct LoginForm {
     link: ComponentLink<Self>,
@@ -146,11 +145,11 @@ impl Component for LoginForm {
             <form ref=self.node_ref.clone() onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::Submit })>
                 <div>
                     <label for="username">{"User name:"}</label>
-                    <input type="text" id="username" />
+                    <input type="text" id="username" required=true />
                 </div>
                 <div>
                     <label for="password">{"Password:"}</label>
-                    <input type="password" id="password" />
+                    <input type="password" id="password" required=true autocomplete="current-password" />
                 </div>
                 <button type="submit">{"Login"}</button>
                 <div>

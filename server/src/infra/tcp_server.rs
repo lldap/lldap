@@ -20,7 +20,7 @@ use std::sync::RwLock;
 
 async fn index(req: HttpRequest) -> actix_web::Result<NamedFile> {
     let mut path = PathBuf::new();
-    path.push("../app");
+    path.push("app");
     let file = req.match_info().query("filename");
     path.push(if file.is_empty() { "index.html" } else { file });
     Ok(NamedFile::open(path)?)
@@ -108,27 +108,4 @@ where
                 config.http_port
             )
         })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use actix_web::test::TestRequest;
-    use std::path::Path;
-
-    #[actix_rt::test]
-    async fn test_index_ok() {
-        let req = TestRequest::default().to_http_request();
-        let resp = index(req).await.unwrap();
-        assert_eq!(resp.path(), Path::new("../app/index.html"));
-    }
-
-    #[actix_rt::test]
-    async fn test_index_main_js() {
-        let req = TestRequest::default()
-            .param("filename", "main.js")
-            .to_http_request();
-        let resp = index(req).await.unwrap();
-        assert_eq!(resp.path(), Path::new("../app/main.js"));
-    }
 }

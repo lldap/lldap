@@ -1,4 +1,4 @@
-use crate::cookies::set_cookie;
+use super::cookies::set_cookie;
 use anyhow::{anyhow, Context, Result};
 use graphql_client::GraphQLQuery;
 use lldap_auth::{login, registration, JWTClaims};
