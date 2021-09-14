@@ -4,7 +4,7 @@ use crate::{
         create_user::CreateUserForm,
         login::LoginForm,
         logout::LogoutButton,
-        router::{AppRoute, Link},
+        router::{AppRoute, NavButton},
         user_details::UserDetails,
         user_table::UserTable,
     },
@@ -91,6 +91,7 @@ impl Component for App {
 
     fn view(&self) -> Html {
         let link = self.link.clone();
+        let is_admin = self.is_admin();
         html! {
             <div>
                 <h1>{ "LLDAP" }</h1>
@@ -110,7 +111,7 @@ impl Component for App {
                               <div>
                                 <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
                                 <UserTable />
-                                <Link route=AppRoute::CreateUser>{"Create a user"}</Link>
+                                <NavButton route=AppRoute::CreateUser>{"Create a user"}</NavButton>
                               </div>
                           },
                           AppRoute::UserDetails(username) => html! {
@@ -122,7 +123,7 @@ impl Component for App {
                           AppRoute::ChangePassword(username) => html! {
                               <div>
                                 <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
-                                <ChangePasswordForm username=username.clone() />
+                                <ChangePasswordForm username=username.clone() is_admin=is_admin />
                               </div>
                           }
                       }
@@ -168,6 +169,13 @@ impl App {
                     }
                 }
             },
+        }
+    }
+
+    fn is_admin(&self) -> bool {
+        match &self.user_info {
+            None => false,
+            Some((_, is_admin)) => *is_admin,
         }
     }
 }

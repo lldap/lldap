@@ -36,6 +36,7 @@ pub struct ChangePasswordForm {
     node_ref: NodeRef,
     opaque_data: OpaqueData,
     successfully_changed_password: bool,
+    is_admin: bool,
     // Used to keep the request alive long enough.
     _task: Option<FetchTask>,
 }
@@ -43,11 +44,13 @@ pub struct ChangePasswordForm {
 #[derive(Clone, PartialEq, Properties)]
 pub struct Props {
     pub username: String,
+    pub is_admin: bool,
 }
 
 pub enum Msg {
     Submit,
     AuthenticationStartResponse(Result<Box<login::ServerLoginStartResponse>>),
+    SubmitNewPassword,
     RegistrationStartResponse(Result<Box<registration::ServerRegistrationStartResponse>>),
     RegistrationFinishResponse(Result<()>),
 }
@@ -107,21 +110,25 @@ impl ChangePasswordForm {
                 if new_password != confirm_password {
                     bail!("Confirmation password doesn't match");
                 }
-                let mut rng = rand::rngs::OsRng;
-                let login_start_request =
-                    opaque::client::login::start_login(&old_password, &mut rng)
-                        .context("Could not initialize login")?;
-                self.opaque_data = OpaqueData::Login(login_start_request.state);
-                let req = login::ClientLoginStartRequest {
-                    username: self.username.clone(),
-                    login_start_request: login_start_request.message,
-                };
-                self.call_backend(
-                    HostService::login_start,
-                    req,
-                    Msg::AuthenticationStartResponse,
-                )?;
-                Ok(())
+                if self.is_admin {
+                    self.handle_message(Msg::SubmitNewPassword)
+                } else {
+                    let mut rng = rand::rngs::OsRng;
+                    let login_start_request =
+                        opaque::client::login::start_login(&old_password, &mut rng)
+                            .context("Could not initialize login")?;
+                    self.opaque_data = OpaqueData::Login(login_start_request.state);
+                    let req = login::ClientLoginStartRequest {
+                        username: self.username.clone(),
+                        login_start_request: login_start_request.message,
+                    };
+                    self.call_backend(
+                        HostService::login_start,
+                        req,
+                        Msg::AuthenticationStartResponse,
+                    )?;
+                    Ok(())
+                }
             }
             Msg::AuthenticationStartResponse(res) => {
                 let res = res.context("Could not initiate login")?;
@@ -141,6 +148,9 @@ impl ChangePasswordForm {
                     }
                     _ => panic!("Unexpected data in opaque_data field"),
                 };
+                self.handle_message(Msg::SubmitNewPassword)
+            }
+            Msg::SubmitNewPassword => {
                 let mut rng = rand::rngs::OsRng;
                 let new_password = get_form_field("newPassword")
                     .ok_or_else(|| anyhow!("Could not get new password from form"))?;
@@ -207,6 +217,7 @@ impl Component for ChangePasswordForm {
             node_ref: NodeRef::default(),
             opaque_data: OpaqueData::None,
             successfully_changed_password: false,
+            is_admin: props.is_admin,
             _task: None,
         }
     }
@@ -225,11 +236,12 @@ impl Component for ChangePasswordForm {
     }
 
     fn view(&self) -> Html {
+        let is_admin = self.is_admin;
         html! {
             <form ref=self.node_ref.clone() onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::Submit })>
                 <div>
                     <label for="oldPassword">{"Old password:"}</label>
-                    <input type="password" id="oldPassword" autocomplete="current-password" required=true />
+                    <input type="password" id="oldPassword" autocomplete="current-password" required=true disabled=is_admin />
                 </div>
                 <div>
                     <label for="newPassword">{"New password:"}</label>
