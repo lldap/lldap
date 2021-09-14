@@ -1,4 +1,7 @@
-use crate::infra::api::HostService;
+use crate::{
+    components::router::{AppRoute, Link},
+    infra::api::HostService,
+};
 use anyhow::{anyhow, Result};
 use graphql_client::GraphQLQuery;
 use yew::format::Json;
@@ -80,7 +83,7 @@ impl Component for UserTable {
         let make_user_row = |user: &User| {
             html! {
                 <tr>
-                    <td>{&user.id}</td>
+                    <td><Link route=AppRoute::UserDetails(user.id.clone())>{&user.id}</Link></td>
                     <td>{&user.email}</td>
                     <td>{&user.display_name}</td>
                     <td>{&user.first_name}</td>
