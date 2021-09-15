@@ -134,19 +134,24 @@ impl UserDetails {
                     Ok(_) => {
                         ConsoleService::log("Successfully updated user");
                         self.update_successful = true;
-                        let user = self.user.as_ref().unwrap();
+                        let User {
+                            id,
+                            display_name,
+                            first_name,
+                            last_name,
+                            email,
+                            creation_date,
+                            groups,
+                        } = self.user.take().unwrap();
                         let new_user = self.update_request.take().unwrap();
                         self.user = Some(User {
-                            id: user.id.clone(),
-                            email: new_user.email.unwrap_or_else(|| user.email.clone()),
-                            display_name: new_user
-                                .displayName
-                                .unwrap_or_else(|| user.display_name.clone()),
-                            first_name: new_user
-                                .firstName
-                                .unwrap_or_else(|| user.first_name.clone()),
-                            last_name: new_user.lastName.unwrap_or_else(|| user.last_name.clone()),
-                            creation_date: user.creation_date,
+                            id,
+                            email: new_user.email.unwrap_or(email),
+                            display_name: new_user.displayName.unwrap_or(display_name),
+                            first_name: new_user.firstName.unwrap_or(first_name),
+                            last_name: new_user.lastName.unwrap_or(last_name),
+                            creation_date,
+                            groups,
                         });
                     }
                 };
@@ -209,6 +214,15 @@ impl Component for UserDetails {
     }
 
     fn view(&self) -> Html {
+        type Group = get_user_details::GetUserDetailsUserGroups;
+        let make_group_row = |group: &Group| {
+            html! {
+              <tr>
+                <td><button>{"-"}</button></td>
+                <td>{&group.id}</td>
+              </tr>
+            }
+        };
         match (&self.user, &self.error) {
             (None, None) => html! {{"Loading..."}},
             (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
@@ -253,6 +267,19 @@ impl Component for UserDetails {
                           </div>
                         }
                       } else { html! {} }}
+                      <div>
+                        <span>{"Group memberships"}</span>
+                        <table>
+                          <tr>
+                            <th></th>
+                            <th>{"Group"}</th>
+                          </tr>
+                          {u.groups.iter().map(make_group_row).collect::<Vec<_>>()}
+                          <tr>
+                            <td><button>{"+"}</button></td>
+                          </tr>
+                        </table>
+                      </div>
                       <div>
                         <NavButton route=AppRoute::ChangePassword(self.username.clone())>{"Change password"}</NavButton>
                       </div>

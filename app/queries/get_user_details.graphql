@@ -6,5 +6,8 @@ query GetUserDetails($id: String!) {
     firstName
     lastName
     creationDate
+    groups {
+      id
+    }
   }
 }
