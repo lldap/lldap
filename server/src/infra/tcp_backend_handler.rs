@@ -35,6 +35,7 @@ mockall::mock! {
         async fn delete_user(&self, user_id: &str) -> DomainResult<()>;
         async fn create_group(&self, group_name: &str) -> DomainResult<GroupId>;
         async fn add_user_to_group(&self, user_id: &str, group_id: GroupId) -> DomainResult<()>;
+        async fn remove_user_from_group(&self, user_id: &str, group_id: GroupId) -> DomainResult<()>;
     }
     #[async_trait]
     impl TcpBackendHandler for TestTcpBackendHandler {

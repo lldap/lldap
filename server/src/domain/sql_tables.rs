@@ -1,9 +1,16 @@
+use super::handler::GroupId;
 use sea_query::*;
 
 pub type Pool = sqlx::sqlite::SqlitePool;
 pub type PoolOptions = sqlx::sqlite::SqlitePoolOptions;
 pub type DbRow = sqlx::sqlite::SqliteRow;
 pub type DbQueryBuilder = SqliteQueryBuilder;
+
+impl From<GroupId> for Value {
+    fn from(group_id: GroupId) -> Self {
+        group_id.0.into()
+    }
+}
 
 #[derive(Iden)]
 pub enum Users {
