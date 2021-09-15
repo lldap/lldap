@@ -1,4 +1,4 @@
-use crate::domain::handler::{BackendHandler, CreateUserRequest, UpdateUserRequest};
+use crate::domain::handler::{BackendHandler, CreateUserRequest, GroupId, UpdateUserRequest};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
 
 use super::api::Context;
@@ -90,6 +90,36 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
                 first_name: user.first_name,
                 last_name: user.last_name,
             })
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn add_user_to_group(
+        context: &Context<Handler>,
+        user_id: String,
+        group_id: i32,
+    ) -> FieldResult<Success> {
+        if !context.validation_result.is_admin {
+            return Err("Unauthorized group membership modification".into());
+        }
+        context
+            .handler
+            .add_user_to_group(&user_id, GroupId(group_id))
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn remove_user_from_group(
+        context: &Context<Handler>,
+        user_id: String,
+        group_id: i32,
+    ) -> FieldResult<Success> {
+        if !context.validation_result.is_admin {
+            return Err("Unauthorized group membership modification".into());
+        }
+        context
+            .handler
+            .remove_user_from_group(&user_id, GroupId(group_id))
             .await?;
         Ok(Success::new())
     }

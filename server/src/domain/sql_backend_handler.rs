@@ -247,7 +247,17 @@ impl BackendHandler for SqlBackendHandler {
         let query = Query::insert()
             .into_table(Memberships::Table)
             .columns(vec![Memberships::UserId, Memberships::GroupId])
-            .values_panic(vec![user_id.into(), group_id.0.into()])
+            .values_panic(vec![user_id.into(), group_id.into()])
+            .to_string(DbQueryBuilder {});
+        sqlx::query(&query).execute(&self.sql_pool).await?;
+        Ok(())
+    }
+
+    async fn remove_user_from_group(&self, user_id: &str, group_id: GroupId) -> Result<()> {
+        let query = Query::delete()
+            .from_table(Memberships::Table)
+            .and_where(Expr::col(Memberships::GroupId).eq(group_id))
+            .and_where(Expr::col(Memberships::UserId).eq(user_id))
             .to_string(DbQueryBuilder {});
         sqlx::query(&query).execute(&self.sql_pool).await?;
         Ok(())
