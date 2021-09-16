@@ -1,10 +1,11 @@
-use crate::domain::handler::BackendHandler;
+use crate::domain::handler::{BackendHandler, GroupIdAndName};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 
 type DomainRequestFilter = crate::domain::handler::RequestFilter;
 type DomainUser = crate::domain::handler::User;
+type DomainGroup = crate::domain::handler::Group;
 use super::api::Context;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
@@ -113,6 +114,17 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
             .await
             .map(|v| v.into_iter().map(Into::into).collect())?)
     }
+
+    async fn groups(context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
+        if !context.validation_result.is_admin {
+            return Err("Unauthorized access to group list".into());
+        }
+        Ok(context
+            .handler
+            .list_groups()
+            .await
+            .map(|v| v.into_iter().map(Into::into).collect())?)
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -179,14 +191,19 @@ impl<Handler: BackendHandler> From<DomainUser> for User<Handler> {
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 /// Represents a single group.
 pub struct Group<Handler: BackendHandler> {
-    group_id: String,
+    group_id: i32,
+    display_name: String,
+    members: Option<Vec<String>>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
 
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler + Sync> Group<Handler> {
-    fn id(&self) -> String {
-        self.group_id.clone()
+    fn id(&self) -> i32 {
+        self.group_id
+    }
+    fn display_name(&self) -> String {
+        self.display_name.clone()
     }
     /// The groups to which this user belongs.
     async fn users(&self, context: &Context<Handler>) -> FieldResult<Vec<User<Handler>>> {
@@ -197,10 +214,23 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
     }
 }
 
-impl<Handler: BackendHandler> From<String> for Group<Handler> {
-    fn from(group_id: String) -> Self {
+impl<Handler: BackendHandler> From<GroupIdAndName> for Group<Handler> {
+    fn from(group_id_and_name: GroupIdAndName) -> Self {
         Self {
-            group_id,
+            group_id: group_id_and_name.0 .0,
+            display_name: group_id_and_name.1,
+            members: None,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
+    fn from(group: DomainGroup) -> Self {
+        Self {
+            group_id: group.id.0,
+            display_name: group.display_name,
+            members: Some(group.users.into_iter().map(Into::into).collect()),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -209,7 +239,10 @@ impl<Handler: BackendHandler> From<String> for Group<Handler> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{domain::handler::MockTestBackendHandler, infra::auth_service::ValidationResults};
+    use crate::{
+        domain::handler::{GroupId, GroupIdAndName, MockTestBackendHandler},
+        infra::auth_service::ValidationResults,
+    };
     use juniper::{
         execute, graphql_value, DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType,
         RootNode, Variables,
@@ -250,8 +283,8 @@ mod tests {
                     ..Default::default()
                 })
             });
-        let mut groups = HashSet::<String>::new();
-        groups.insert("Bobbersons".to_string());
+        let mut groups = HashSet::new();
+        groups.insert(GroupIdAndName(GroupId(3), "Bobbersons".to_string()));
         mock.expect_get_user_groups()
             .with(eq("bob"))
             .return_once(|_| Ok(groups));
@@ -270,7 +303,7 @@ mod tests {
                     "user": {
                         "id": "bob",
                         "email": "bob@bobbers.on",
-                        "groups": [{"id": "Bobbersons"}]
+                        "groups": [{"id": 3}]
                     }
                 }),
                 vec![]

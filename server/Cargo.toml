@@ -45,6 +45,7 @@ tracing-subscriber = "*"
 rand = { version = "0.8", features = ["small_rng", "getrandom"] }
 juniper_actix = "0.4.0"
 juniper = "0.15.6"
+itertools = "0.10.1"
 
 # TODO: update to 0.6 when out.
 [dependencies.opaque-ke]

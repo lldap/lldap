@@ -29,7 +29,7 @@ mockall::mock! {
         async fn list_users(&self, filters: Option<RequestFilter>) -> DomainResult<Vec<User>>;
         async fn list_groups(&self) -> DomainResult<Vec<Group>>;
         async fn get_user_details(&self, user_id: &str) -> DomainResult<User>;
-        async fn get_user_groups(&self, user: &str) -> DomainResult<HashSet<String>>;
+        async fn get_user_groups(&self, user: &str) -> DomainResult<HashSet<GroupIdAndName>>;
         async fn create_user(&self, request: CreateUserRequest) -> DomainResult<()>;
         async fn update_user(&self, request: UpdateUserRequest) -> DomainResult<()>;
         async fn delete_user(&self, user_id: &str) -> DomainResult<()>;

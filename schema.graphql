@@ -11,7 +11,8 @@ type Mutation {
 }
 
 type Group {
-  id: String!
+  id: Int!
+  displayName: String!
   "The groups to which this user belongs."
   users: [User!]!
 }
@@ -30,6 +31,13 @@ input RequestFilter {
 "DateTime"
 scalar DateTimeUtc
 
+type Query {
+  apiVersion: String!
+  user(userId: String!): User!
+  users(filters: RequestFilter): [User!]!
+  groups: [Group!]!
+}
+
 "The details required to create a user."
 input CreateUserInput {
   id: String!
@@ -37,12 +45,6 @@ input CreateUserInput {
   displayName: String
   firstName: String
   lastName: String
-}
-
-type Query {
-  apiVersion: String!
-  user(userId: String!): User!
-  users(filters: RequestFilter): [User!]!
 }
 
 type User {

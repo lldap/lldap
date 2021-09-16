@@ -219,7 +219,7 @@ impl Component for UserDetails {
             html! {
               <tr>
                 <td><button>{"-"}</button></td>
-                <td>{&group.id}</td>
+                <td>{&group.display_name}</td>
               </tr>
             }
         };
