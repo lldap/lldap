@@ -117,7 +117,7 @@ impl Component for App {
                           AppRoute::UserDetails(username) => html! {
                               <div>
                                 <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
-                                <UserDetails username=username.clone() />
+                                <UserDetails username=username.clone() is_admin=is_admin />
                               </div>
                           },
                           AppRoute::ChangePassword(username) => html! {
