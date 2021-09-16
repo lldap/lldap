@@ -22,6 +22,8 @@ features = [
   "Document",
   "Element",
   "HtmlDocument",
+  "HtmlInputElement",
+  "HtmlOptionElement",
   "console",
 ]
 

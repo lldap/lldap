@@ -1,0 +1,6 @@
+query GetGroupList {
+  groups {
+    id
+    displayName
+  }
+}

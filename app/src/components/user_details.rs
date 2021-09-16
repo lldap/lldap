@@ -2,8 +2,9 @@ use crate::{
     components::router::{AppRoute, NavButton},
     infra::api::HostService,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Error, Result};
 use graphql_client::GraphQLQuery;
+use std::collections::HashSet;
 use yew::{
     prelude::*,
     services::{fetch::FetchTask, ConsoleService},
@@ -13,12 +14,23 @@ use yew::{
 #[graphql(
     schema_path = "../schema.graphql",
     query_path = "queries/get_user_details.graphql",
-    response_derives = "Debug",
+    response_derives = "Debug, Hash, PartialEq, Eq",
     custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct GetUserDetails;
 
 type User = get_user_details::GetUserDetailsUser;
+type Group = get_user_details::GetUserDetailsUserGroups;
+type GroupListGroup = get_group_list::GetGroupListGroups;
+
+impl From<GroupListGroup> for Group {
+    fn from(group: GroupListGroup) -> Self {
+        Self {
+            id: group.id,
+            display_name: group.display_name,
+        }
+    }
+}
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -30,31 +42,83 @@ type User = get_user_details::GetUserDetailsUser;
 )]
 pub struct UpdateUser;
 
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
+    query_path = "queries/add_user_to_group.graphql",
+    response_derives = "Debug",
+    variables_derives = "Clone",
+    custom_scalars_module = "crate::infra::graphql"
+)]
+pub struct AddUserToGroup;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
+    query_path = "queries/remove_user_from_group.graphql",
+    response_derives = "Debug",
+    variables_derives = "Clone",
+    custom_scalars_module = "crate::infra::graphql"
+)]
+pub struct RemoveUserFromGroup;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
+    query_path = "queries/get_group_list.graphql",
+    response_derives = "Debug",
+    variables_derives = "Clone",
+    custom_scalars_module = "crate::infra::graphql"
+)]
+pub struct GetGroupList;
+
 pub struct UserDetails {
     link: ComponentLink<Self>,
+    /// Which user this is about.
     username: String,
+    /// The user info. If none, the error is in `error`. If `error` is None, then we haven't
+    /// received the server response yet.
     user: Option<User>,
     // Needed for the form.
     node_ref: NodeRef,
-    // Error message displayed to the user.
-    error: Option<anyhow::Error>,
-    // The request, while we're waiting for the server to reply.
+    /// Error message displayed to the user.
+    error: Option<Error>,
+    /// The request, while we're waiting for the server to reply.
     update_request: Option<update_user::UpdateUserInput>,
-    // True iff we just finished updating the user, to display a successful message.
+    /// True iff we just finished updating the user, to display a successful message.
     update_successful: bool,
+    /// Whether the "+" button has been clicked.
+    add_group: bool,
+    is_admin: bool,
+    /// The list of existing groups, initially not loaded.
+    group_list: Option<Vec<Group>>,
+    /// The group that we're requesting to remove, if any.
+    group_to_remove: Option<Group>,
     // Used to keep the request alive long enough.
     _task: Option<FetchTask>,
 }
 
+/// State machine describing the possible transitions of the component state.
+/// It starts out by fetching the user's details from the backend when loading.
 pub enum Msg {
+    /// Received the user details response, either the user data or an error.
     UserDetailsResponse(Result<get_user_details::ResponseData>),
-    SubmitForm,
+    /// The user changed some fields and submitted the form for update.
+    SubmitUserUpdateForm,
+    /// Response after updating the user's details.
     UpdateFinished(Result<update_user::ResponseData>),
+    AddGroupButtonClicked,
+    GroupListResponse(Result<get_group_list::ResponseData>),
+    SubmitAddGroup,
+    AddGroupResponse(Result<add_user_to_group::ResponseData>),
+    SubmitRemoveGroup(Group),
+    RemoveGroupResponse(Result<remove_user_from_group::ResponseData>),
 }
 
 #[derive(yew::Properties, Clone, PartialEq)]
 pub struct Props {
     pub username: String,
+    pub is_admin: bool,
 }
 
 #[allow(clippy::ptr_arg)]
@@ -77,158 +141,196 @@ impl UserDetails {
         })
         .ok();
     }
+
+    fn submit_user_update_form(&mut self) -> Result<bool> {
+        let base_user = self.user.as_ref().unwrap();
+        let mut user_input = update_user::UpdateUserInput {
+            id: self.username.clone(),
+            email: None,
+            displayName: None,
+            firstName: None,
+            lastName: None,
+        };
+        let mut should_send_form = false;
+        let email = get_element("email")
+            .filter(not_empty)
+            .ok_or_else(|| anyhow!("Missing email"))?;
+        if base_user.email != email {
+            should_send_form = true;
+            user_input.email = Some(email);
+        }
+        if base_user.display_name != get_element_or_empty("display_name") {
+            should_send_form = true;
+            user_input.displayName = Some(get_element_or_empty("display_name"));
+        }
+        if base_user.first_name != get_element_or_empty("first_name") {
+            should_send_form = true;
+            user_input.firstName = Some(get_element_or_empty("first_name"));
+        }
+        if base_user.last_name != get_element_or_empty("last_name") {
+            should_send_form = true;
+            user_input.lastName = Some(get_element_or_empty("last_name"));
+        }
+        if !should_send_form {
+            return Ok(false);
+        }
+        self.update_request = Some(user_input.clone());
+        let req = update_user::Variables { user: user_input };
+        self._task = Some(HostService::graphql_query::<UpdateUser>(
+            req,
+            self.link.callback(Msg::UpdateFinished),
+            "Error trying to update user",
+        )?);
+        Ok(false)
+    }
+
+    fn user_update_finished(&mut self, r: Result<update_user::ResponseData>) -> Result<bool> {
+        match r {
+            Err(e) => return Err(e),
+            Ok(_) => {
+                ConsoleService::log("Successfully updated user");
+                self.update_successful = true;
+                let User {
+                    id,
+                    display_name,
+                    first_name,
+                    last_name,
+                    email,
+                    creation_date,
+                    groups,
+                } = self.user.take().unwrap();
+                let new_user = self.update_request.take().unwrap();
+                self.user = Some(User {
+                    id,
+                    email: new_user.email.unwrap_or(email),
+                    display_name: new_user.displayName.unwrap_or(display_name),
+                    first_name: new_user.firstName.unwrap_or(first_name),
+                    last_name: new_user.lastName.unwrap_or(last_name),
+                    creation_date,
+                    groups,
+                });
+            }
+        };
+        Ok(true)
+    }
+
+    fn get_group_list(&mut self) {
+        self._task = HostService::graphql_query::<GetGroupList>(
+            get_group_list::Variables,
+            self.link.callback(Msg::GroupListResponse),
+            "Error trying to fetch group list",
+        )
+        .map_err(|e| {
+            ConsoleService::log(&e.to_string());
+            e
+        })
+        .ok();
+    }
+
+    fn submit_add_group(&mut self) -> Result<bool> {
+        if self.group_list.is_none() {
+            return Ok(false);
+        }
+        let group_id = get_selected_group()
+            .expect("could not get selected group")
+            .id;
+        self._task = HostService::graphql_query::<AddUserToGroup>(
+            add_user_to_group::Variables {
+                user: self.username.clone(),
+                group: group_id,
+            },
+            self.link.callback(Msg::AddGroupResponse),
+            "Error trying to initiate adding the user to a group",
+        )
+        .map_err(|e| {
+            ConsoleService::log(&e.to_string());
+            e
+        })
+        .ok();
+        Ok(true)
+    }
+
+    fn submit_remove_group(&mut self, group: Group) -> Result<bool> {
+        self._task = HostService::graphql_query::<RemoveUserFromGroup>(
+            remove_user_from_group::Variables {
+                user: self.username.clone(),
+                group: group.id,
+            },
+            self.link.callback(Msg::RemoveGroupResponse),
+            "Error trying to initiate removing the user from a group",
+        )
+        .map_err(|e| {
+            ConsoleService::log(&e.to_string());
+            e
+        })
+        .ok();
+        self.group_to_remove = Some(group);
+        Ok(true)
+    }
+
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         self.update_successful = false;
         match msg {
-            Msg::UserDetailsResponse(Ok(user)) => {
-                self.user = Some(user.user);
+            Msg::UserDetailsResponse(response) => match response {
+                Ok(user) => self.user = Some(user.user),
+                Err(e) => {
+                    self.user = None;
+                    bail!("Error getting user details: {}", e);
+                }
+            },
+            Msg::SubmitUserUpdateForm => return self.submit_user_update_form(),
+            Msg::UpdateFinished(r) => return self.user_update_finished(r),
+            Msg::AddGroupButtonClicked => {
+                if self.group_list.is_none() {
+                    self.get_group_list();
+                }
+                self.add_group = true;
             }
-            Msg::UserDetailsResponse(Err(e)) => {
-                self.error = Some(anyhow!("Error getting user details: {}", e));
-                self.user = None;
+            Msg::GroupListResponse(response) => {
+                let user_groups = self
+                    .user
+                    .as_ref()
+                    .unwrap()
+                    .groups
+                    .iter()
+                    .collect::<HashSet<_>>();
+                self.group_list = Some(
+                    response?
+                        .groups
+                        .into_iter()
+                        .map(Into::into)
+                        .filter(|g| !user_groups.contains(g))
+                        .collect(),
+                );
             }
-            Msg::SubmitForm => {
-                let base_user = self.user.as_ref().unwrap();
-                let mut user_input = update_user::UpdateUserInput {
-                    id: self.username.clone(),
-                    email: None,
-                    displayName: None,
-                    firstName: None,
-                    lastName: None,
-                };
-                let mut should_send_form = false;
-                let email = get_element("email")
-                    .filter(not_empty)
-                    .ok_or_else(|| anyhow!("Missing email"))?;
-                if base_user.email != email {
-                    should_send_form = true;
-                    user_input.email = Some(email);
-                }
-                if base_user.display_name != get_element_or_empty("display_name") {
-                    should_send_form = true;
-                    user_input.displayName = Some(get_element_or_empty("display_name"));
-                }
-                if base_user.first_name != get_element_or_empty("first_name") {
-                    should_send_form = true;
-                    user_input.firstName = Some(get_element_or_empty("first_name"));
-                }
-                if base_user.last_name != get_element_or_empty("last_name") {
-                    should_send_form = true;
-                    user_input.lastName = Some(get_element_or_empty("last_name"));
-                }
-                if !should_send_form {
-                    return Ok(false);
-                }
-                self.update_request = Some(user_input.clone());
-                let req = update_user::Variables { user: user_input };
-                self._task = Some(HostService::graphql_query::<UpdateUser>(
-                    req,
-                    self.link.callback(Msg::UpdateFinished),
-                    "Error trying to update user",
-                )?);
-                return Ok(false);
+            Msg::SubmitAddGroup => return self.submit_add_group(),
+            Msg::AddGroupResponse(response) => {
+                response?;
+                // Adding the user to the group succeeded, we're not in the process of adding a
+                // group anymore.
+                self.add_group = false;
+                let group = get_selected_group().expect("Could not get selected group");
+                // Remove the group from the dropdown.
+                self.group_list.as_mut().unwrap().retain(|g| g != &group);
+                self.user.as_mut().unwrap().groups.push(group);
             }
-            Msg::UpdateFinished(r) => {
-                match r {
-                    Err(e) => return Err(e),
-                    Ok(_) => {
-                        ConsoleService::log("Successfully updated user");
-                        self.update_successful = true;
-                        let User {
-                            id,
-                            display_name,
-                            first_name,
-                            last_name,
-                            email,
-                            creation_date,
-                            groups,
-                        } = self.user.take().unwrap();
-                        let new_user = self.update_request.take().unwrap();
-                        self.user = Some(User {
-                            id,
-                            email: new_user.email.unwrap_or(email),
-                            display_name: new_user.displayName.unwrap_or(display_name),
-                            first_name: new_user.firstName.unwrap_or(first_name),
-                            last_name: new_user.lastName.unwrap_or(last_name),
-                            creation_date,
-                            groups,
-                        });
-                    }
-                };
+            Msg::SubmitRemoveGroup(group) => return self.submit_remove_group(group),
+            Msg::RemoveGroupResponse(response) => {
+                response?;
+                let group = self.group_to_remove.take().unwrap();
+                // Remove the group from the user and add it to the dropdown.
+                self.user.as_mut().unwrap().groups.retain(|g| g != &group);
+                if let Some(groups) = self.group_list.as_mut() {
+                    groups.push(group);
+                }
             }
         }
         Ok(true)
     }
-}
 
-fn get_element(name: &str) -> Option<String> {
-    use wasm_bindgen::JsCast;
-    Some(
-        web_sys::window()?
-            .document()?
-            .get_element_by_id(name)?
-            .dyn_into::<web_sys::HtmlInputElement>()
-            .ok()?
-            .value(),
-    )
-}
-
-fn get_element_or_empty(name: &str) -> String {
-    get_element(name).unwrap_or_default()
-}
-
-impl Component for UserDetails {
-    type Message = Msg;
-    // The username.
-    type Properties = Props;
-
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
-        let mut table = UserDetails {
-            link,
-            username: props.username,
-            node_ref: NodeRef::default(),
-            _task: None,
-            user: None,
-            error: None,
-            update_request: None,
-            update_successful: false,
-        };
-        table.get_user_details();
-        table
-    }
-
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        self.error = None;
-        match self.handle_msg(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.error = Some(e);
-                true
-            }
-            Ok(b) => b,
-        }
-    }
-
-    fn change(&mut self, _: Self::Properties) -> ShouldRender {
-        false
-    }
-
-    fn view(&self) -> Html {
-        type Group = get_user_details::GetUserDetailsUserGroups;
-        let make_group_row = |group: &Group| {
-            html! {
-              <tr>
-                <td><button>{"-"}</button></td>
-                <td>{&group.display_name}</td>
-              </tr>
-            }
-        };
-        match (&self.user, &self.error) {
-            (None, None) => html! {{"Loading..."}},
-            (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
-            (Some(u), error) => {
-                html! {
-                    <form ref=self.node_ref.clone() onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::SubmitForm })>
+    fn view_form(&self, u: &User) -> Html {
+        html! {
+                    <form ref=self.node_ref.clone() onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::SubmitUserUpdateForm })>
                       <div>
                         <span>{"User ID: "}</span>
                           <span>{&u.id}</span>
@@ -256,34 +358,185 @@ impl Component for UserDetails {
                       <div>
                         <button type="submit">{"Update"}</button>
                       </div>
-                      { if self.update_successful {
-                        html! {
-                          <span>{"Update successful!"}</span>
-                        }
-                      } else if let Some(e) = error {
-                        html! {
-                          <div>
-                            <span>{"Error: "}{e.to_string()}</span>
-                          </div>
-                        }
-                      } else { html! {} }}
-                      <div>
-                        <span>{"Group memberships"}</span>
-                        <table>
-                          <tr>
-                            <th></th>
-                            <th>{"Group"}</th>
-                          </tr>
-                          {u.groups.iter().map(make_group_row).collect::<Vec<_>>()}
-                          <tr>
-                            <td><button>{"+"}</button></td>
-                          </tr>
-                        </table>
-                      </div>
+                    </form>
+        }
+    }
+    fn view_messages(&self, error: &Option<Error>) -> Html {
+        if self.update_successful {
+            html! {
+              <span>{"Update successful!"}</span>
+            }
+        } else if let Some(e) = error {
+            html! {
+              <div>
+                <span>{"Error: "}{e.to_string()}</span>
+              </div>
+            }
+        } else {
+            html! {}
+        }
+    }
+
+    fn view_group_memberships(&self, u: &User) -> Html {
+        let make_group_row = |group: &Group| {
+            let id = group.id;
+            let display_name = group.display_name.clone();
+            html! {
+              <tr>
+                <td>{&group.display_name}</td>
+                { if self.is_admin { html! {
+                    <td><button onclick=self.link.callback(move |_| Msg::SubmitRemoveGroup(Group{id, display_name: display_name.clone()}))>{"-"}</button></td>
+                  }} else { html!{} }
+                }
+              </tr>
+            }
+        };
+        html! {
+        <div>
+          <span>{"Group memberships"}</span>
+          <table>
+            <tr>
+              <th>{"Group"}</th>
+              { if self.is_admin { html!{ <th></th> }} else { html!{} }}
+            </tr>
+            {u.groups.iter().map(make_group_row).collect::<Vec<_>>()}
+            {self.view_add_group_button()}
+          </table>
+        </div>
+        }
+    }
+
+    fn view_add_group_button(&self) -> Html {
+        let make_select_option = |group: &Group| {
+            html! {
+                <option value={group.id.to_string()}>{&group.display_name}</option>
+            }
+        };
+        if self.add_group {
+            html! {
+            <tr>
+              <td>
+                { if let Some(groups) = self.group_list.as_ref() {
+                    html! {
+                      <select name="groupToAdd" id="groupToAdd">
+                        {groups.iter().map(make_select_option).collect::<Vec<_>>()}
+                      </select>
+                    }
+                  } else {
+                    html! { <span>{"Loading groups"} </span> } }
+                }
+              </td>
+              { if self.is_admin { html!{
+                  <td>
+                    <button onclick=self.link.callback(
+                        |_| Msg::SubmitAddGroup)>
+                      {"Add"}
+                    </button>
+                  </td>
+                }} else { html! {} }
+              }
+            </tr>
+            }
+        } else {
+            html! {
+            <tr>
+              <td></td>
+              <td>
+                <button onclick=self.link.callback(
+                    |_| Msg::AddGroupButtonClicked)>
+                  {"+"}
+                </button>
+              </td>
+            </tr>
+            }
+        }
+    }
+}
+
+fn get_html_element<T: wasm_bindgen::JsCast>(name: &str) -> Option<T> {
+    use wasm_bindgen::JsCast;
+    web_sys::window()?
+        .document()?
+        .get_element_by_id(name)?
+        .dyn_into::<T>()
+        .ok()
+}
+
+fn get_element(name: &str) -> Option<String> {
+    Some(get_html_element::<web_sys::HtmlInputElement>(name)?.value())
+}
+
+fn get_selected_group() -> Option<Group> {
+    use wasm_bindgen::JsCast;
+    let select = get_html_element::<web_sys::HtmlSelectElement>("groupToAdd")?;
+    let id = select.value().parse::<i64>().expect("invalid group id");
+    let display_name = select
+        .get(select.selected_index() as u32)
+        .unwrap()
+        .dyn_into::<web_sys::HtmlOptionElement>()
+        .unwrap()
+        .text();
+    Some(Group { id, display_name })
+}
+
+fn get_element_or_empty(name: &str) -> String {
+    get_element(name).unwrap_or_default()
+}
+
+impl Component for UserDetails {
+    type Message = Msg;
+    // The username.
+    type Properties = Props;
+
+    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+        let mut table = Self {
+            link,
+            username: props.username,
+            node_ref: NodeRef::default(),
+            _task: None,
+            user: None,
+            group_list: None,
+            error: None,
+            update_request: None,
+            update_successful: false,
+            add_group: false,
+            is_admin: props.is_admin,
+            group_to_remove: None,
+        };
+        table.get_user_details();
+        table
+    }
+
+    fn update(&mut self, msg: Self::Message) -> ShouldRender {
+        self.error = None;
+        match self.handle_msg(msg) {
+            Err(e) => {
+                ConsoleService::error(&e.to_string());
+                self.error = Some(e);
+                true
+            }
+            Ok(b) => b,
+        }
+    }
+
+    fn change(&mut self, _: Self::Properties) -> ShouldRender {
+        false
+    }
+
+    fn view(&self) -> Html {
+        match (&self.user, &self.error) {
+            (None, None) => html! {{"Loading..."}},
+            (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
+            (Some(u), error) => {
+                html! {
+                    <div>
+                      {self.view_form(u)}
+                      {self.view_messages(error)}
+                      {self.view_group_memberships(u)}
                       <div>
                         <NavButton route=AppRoute::ChangePassword(self.username.clone())>{"Change password"}</NavButton>
                       </div>
-                    </form>
+                    </div>
                 }
             }
         }
