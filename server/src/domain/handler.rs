@@ -31,6 +31,7 @@ impl Default for User {
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Group {
+    pub id: GroupId,
     pub display_name: String,
     pub users: Vec<String>,
 }
@@ -74,8 +75,11 @@ pub trait LoginHandler: Clone + Send {
     async fn bind(&self, request: BindRequest) -> Result<()>;
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GroupId(pub i32);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GroupIdAndName(pub GroupId, pub String);
 
 #[async_trait]
 pub trait BackendHandler: Clone + Send {
@@ -88,7 +92,7 @@ pub trait BackendHandler: Clone + Send {
     async fn create_group(&self, group_name: &str) -> Result<GroupId>;
     async fn add_user_to_group(&self, user_id: &str, group_id: GroupId) -> Result<()>;
     async fn remove_user_from_group(&self, user_id: &str, group_id: GroupId) -> Result<()>;
-    async fn get_user_groups(&self, user: &str) -> Result<HashSet<String>>;
+    async fn get_user_groups(&self, user: &str) -> Result<HashSet<GroupIdAndName>>;
 }
 
 #[cfg(test)]
@@ -106,7 +110,7 @@ mockall::mock! {
         async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
         async fn delete_user(&self, user_id: &str) -> Result<()>;
         async fn create_group(&self, group_name: &str) -> Result<GroupId>;
-        async fn get_user_groups(&self, user: &str) -> Result<HashSet<String>>;
+        async fn get_user_groups(&self, user: &str) -> Result<HashSet<GroupIdAndName>>;
         async fn add_user_to_group(&self, user_id: &str, group_id: GroupId) -> Result<()>;
         async fn remove_user_from_group(&self, user_id: &str, group_id: GroupId) -> Result<()>;
     }

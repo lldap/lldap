@@ -12,6 +12,31 @@ impl From<GroupId> for Value {
     }
 }
 
+impl<DB> sqlx::Type<DB> for GroupId
+where
+    DB: sqlx::Database,
+    i32: sqlx::Type<DB>,
+{
+    fn type_info() -> <DB as sqlx::Database>::TypeInfo {
+        <i32 as sqlx::Type<DB>>::type_info()
+    }
+    fn compatible(ty: &<DB as sqlx::Database>::TypeInfo) -> bool {
+        <i32 as sqlx::Type<DB>>::compatible(ty)
+    }
+}
+
+impl<'r, DB> sqlx::Decode<'r, DB> for GroupId
+where
+    DB: sqlx::Database,
+    i32: sqlx::Decode<'r, DB>,
+{
+    fn decode(
+        value: <DB as sqlx::database::HasValueRef<'r>>::ValueRef,
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send + 'static>> {
+        <i32 as sqlx::Decode<'r, DB>>::decode(value).map(GroupId)
+    }
+}
+
 #[derive(Iden)]
 pub enum Users {
     Table,

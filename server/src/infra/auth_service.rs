@@ -1,7 +1,7 @@
 use crate::{
     domain::{
         error::DomainError,
-        handler::{BackendHandler, BindRequest, LoginHandler},
+        handler::{BackendHandler, BindRequest, GroupIdAndName, LoginHandler},
         opaque_handler::OpaqueHandler,
     },
     infra::{
@@ -32,12 +32,12 @@ use time::ext::NumericalDuration;
 type Token<S> = jwt::Token<jwt::Header, JWTClaims, S>;
 type SignedToken = Token<jwt::token::Signed>;
 
-fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<String>) -> SignedToken {
+fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<GroupIdAndName>) -> SignedToken {
     let claims = JWTClaims {
         exp: Utc::now() + chrono::Duration::days(1),
         iat: Utc::now(),
         user,
-        groups,
+        groups: groups.into_iter().map(|g| g.1).collect(),
     };
     let header = jwt::Header {
         algorithm: jwt::AlgorithmType::Hs512,
