@@ -24,6 +24,8 @@ features = [
   "HtmlDocument",
   "HtmlInputElement",
   "HtmlOptionElement",
+  "HtmlOptionsCollection",
+  "HtmlSelectElement",
   "console",
 ]
 

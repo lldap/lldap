@@ -1,10 +1,12 @@
 use crate::{
-    components::router::{AppRoute, NavButton},
+    components::{
+        add_user_to_group::AddUserToGroupComponent,
+        router::{AppRoute, NavButton},
+    },
     infra::api::HostService,
 };
 use anyhow::{anyhow, bail, Error, Result};
 use graphql_client::GraphQLQuery;
-use std::collections::HashSet;
 use yew::{
     prelude::*,
     services::{fetch::FetchTask, ConsoleService},
@@ -14,23 +16,13 @@ use yew::{
 #[graphql(
     schema_path = "../schema.graphql",
     query_path = "queries/get_user_details.graphql",
-    response_derives = "Debug, Hash, PartialEq, Eq",
+    response_derives = "Debug, Hash, PartialEq, Eq, Clone",
     custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct GetUserDetails;
 
-type User = get_user_details::GetUserDetailsUser;
-type Group = get_user_details::GetUserDetailsUserGroups;
-type GroupListGroup = get_group_list::GetGroupListGroups;
-
-impl From<GroupListGroup> for Group {
-    fn from(group: GroupListGroup) -> Self {
-        Self {
-            id: group.id,
-            display_name: group.display_name,
-        }
-    }
-}
+pub type User = get_user_details::GetUserDetailsUser;
+pub type Group = get_user_details::GetUserDetailsUserGroups;
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -45,32 +37,12 @@ pub struct UpdateUser;
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
-    query_path = "queries/add_user_to_group.graphql",
-    response_derives = "Debug",
-    variables_derives = "Clone",
-    custom_scalars_module = "crate::infra::graphql"
-)]
-pub struct AddUserToGroup;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "../schema.graphql",
     query_path = "queries/remove_user_from_group.graphql",
     response_derives = "Debug",
     variables_derives = "Clone",
     custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct RemoveUserFromGroup;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "queries/get_group_list.graphql",
-    response_derives = "Debug",
-    variables_derives = "Clone",
-    custom_scalars_module = "crate::infra::graphql"
-)]
-pub struct GetGroupList;
 
 pub struct UserDetails {
     link: ComponentLink<Self>,
@@ -87,11 +59,7 @@ pub struct UserDetails {
     update_request: Option<update_user::UpdateUserInput>,
     /// True iff we just finished updating the user, to display a successful message.
     update_successful: bool,
-    /// Whether the "+" button has been clicked.
-    add_group: bool,
     is_admin: bool,
-    /// The list of existing groups, initially not loaded.
-    group_list: Option<Vec<Group>>,
     /// The group that we're requesting to remove, if any.
     group_to_remove: Option<Group>,
     // Used to keep the request alive long enough.
@@ -107,12 +75,10 @@ pub enum Msg {
     SubmitUserUpdateForm,
     /// Response after updating the user's details.
     UpdateFinished(Result<update_user::ResponseData>),
-    AddGroupButtonClicked,
-    GroupListResponse(Result<get_group_list::ResponseData>),
-    SubmitAddGroup,
-    AddGroupResponse(Result<add_user_to_group::ResponseData>),
     SubmitRemoveGroup(Group),
     RemoveGroupResponse(Result<remove_user_from_group::ResponseData>),
+    OnError(Error),
+    OnUserAddedToGroup(Group),
 }
 
 #[derive(yew::Properties, Clone, PartialEq)]
@@ -214,42 +180,6 @@ impl UserDetails {
         Ok(true)
     }
 
-    fn get_group_list(&mut self) {
-        self._task = HostService::graphql_query::<GetGroupList>(
-            get_group_list::Variables,
-            self.link.callback(Msg::GroupListResponse),
-            "Error trying to fetch group list",
-        )
-        .map_err(|e| {
-            ConsoleService::log(&e.to_string());
-            e
-        })
-        .ok();
-    }
-
-    fn submit_add_group(&mut self) -> Result<bool> {
-        if self.group_list.is_none() {
-            return Ok(false);
-        }
-        let group_id = get_selected_group()
-            .expect("could not get selected group")
-            .id;
-        self._task = HostService::graphql_query::<AddUserToGroup>(
-            add_user_to_group::Variables {
-                user: self.username.clone(),
-                group: group_id,
-            },
-            self.link.callback(Msg::AddGroupResponse),
-            "Error trying to initiate adding the user to a group",
-        )
-        .map_err(|e| {
-            ConsoleService::log(&e.to_string());
-            e
-        })
-        .ok();
-        Ok(true)
-    }
-
     fn submit_remove_group(&mut self, group: Group) -> Result<bool> {
         self._task = HostService::graphql_query::<RemoveUserFromGroup>(
             remove_user_from_group::Variables {
@@ -280,49 +210,16 @@ impl UserDetails {
             },
             Msg::SubmitUserUpdateForm => return self.submit_user_update_form(),
             Msg::UpdateFinished(r) => return self.user_update_finished(r),
-            Msg::AddGroupButtonClicked => {
-                if self.group_list.is_none() {
-                    self.get_group_list();
-                }
-                self.add_group = true;
-            }
-            Msg::GroupListResponse(response) => {
-                let user_groups = self
-                    .user
-                    .as_ref()
-                    .unwrap()
-                    .groups
-                    .iter()
-                    .collect::<HashSet<_>>();
-                self.group_list = Some(
-                    response?
-                        .groups
-                        .into_iter()
-                        .map(Into::into)
-                        .filter(|g| !user_groups.contains(g))
-                        .collect(),
-                );
-            }
-            Msg::SubmitAddGroup => return self.submit_add_group(),
-            Msg::AddGroupResponse(response) => {
-                response?;
-                // Adding the user to the group succeeded, we're not in the process of adding a
-                // group anymore.
-                self.add_group = false;
-                let group = get_selected_group().expect("Could not get selected group");
-                // Remove the group from the dropdown.
-                self.group_list.as_mut().unwrap().retain(|g| g != &group);
-                self.user.as_mut().unwrap().groups.push(group);
-            }
             Msg::SubmitRemoveGroup(group) => return self.submit_remove_group(group),
             Msg::RemoveGroupResponse(response) => {
                 response?;
                 let group = self.group_to_remove.take().unwrap();
                 // Remove the group from the user and add it to the dropdown.
                 self.user.as_mut().unwrap().groups.retain(|g| g != &group);
-                if let Some(groups) = self.group_list.as_mut() {
-                    groups.push(group);
-                }
+            }
+            Msg::OnError(e) => return Err(e),
+            Msg::OnUserAddedToGroup(group) => {
+                self.user.as_mut().unwrap().groups.push(group);
             }
         }
         Ok(true)
@@ -382,7 +279,7 @@ impl UserDetails {
             let id = group.id;
             let display_name = group.display_name.clone();
             html! {
-              <tr>
+              <tr key="groupRow_".to_string() + &display_name.clone()>
                 <td>{&group.display_name}</td>
                 { if self.is_admin { html! {
                     <td><button onclick=self.link.callback(move |_| Msg::SubmitRemoveGroup(Group{id, display_name: display_name.clone()}))>{"-"}</button></td>
@@ -395,88 +292,43 @@ impl UserDetails {
         <div>
           <span>{"Group memberships"}</span>
           <table>
-            <tr>
+            <tr key="headerRow">
               <th>{"Group"}</th>
               { if self.is_admin { html!{ <th></th> }} else { html!{} }}
             </tr>
             {u.groups.iter().map(make_group_row).collect::<Vec<_>>()}
-            {self.view_add_group_button()}
+            <tr key="groupToAddRow">
+              {self.view_add_group_button(u)}
+            </tr>
           </table>
         </div>
         }
     }
 
-    fn view_add_group_button(&self) -> Html {
-        let make_select_option = |group: &Group| {
+    fn view_add_group_button(&self, u: &User) -> Html {
+        if self.is_admin {
             html! {
-                <option value={group.id.to_string()}>{&group.display_name}</option>
-            }
-        };
-        if self.add_group {
-            html! {
-            <tr>
-              <td>
-                { if let Some(groups) = self.group_list.as_ref() {
-                    html! {
-                      <select name="groupToAdd" id="groupToAdd">
-                        {groups.iter().map(make_select_option).collect::<Vec<_>>()}
-                      </select>
-                    }
-                  } else {
-                    html! { <span>{"Loading groups"} </span> } }
-                }
-              </td>
-              { if self.is_admin { html!{
-                  <td>
-                    <button onclick=self.link.callback(
-                        |_| Msg::SubmitAddGroup)>
-                      {"Add"}
-                    </button>
-                  </td>
-                }} else { html! {} }
-              }
-            </tr>
+                <AddUserToGroupComponent
+                    user=u.clone()
+                    on_error=self.link.callback(Msg::OnError)
+                    on_user_added_to_group=self.link.callback(Msg::OnUserAddedToGroup)/>
             }
         } else {
-            html! {
-            <tr>
-              <td></td>
-              <td>
-                <button onclick=self.link.callback(
-                    |_| Msg::AddGroupButtonClicked)>
-                  {"+"}
-                </button>
-              </td>
-            </tr>
-            }
+            html! {}
         }
     }
 }
 
-fn get_html_element<T: wasm_bindgen::JsCast>(name: &str) -> Option<T> {
-    use wasm_bindgen::JsCast;
-    web_sys::window()?
-        .document()?
-        .get_element_by_id(name)?
-        .dyn_into::<T>()
-        .ok()
-}
-
 fn get_element(name: &str) -> Option<String> {
-    Some(get_html_element::<web_sys::HtmlInputElement>(name)?.value())
-}
-
-fn get_selected_group() -> Option<Group> {
     use wasm_bindgen::JsCast;
-    let select = get_html_element::<web_sys::HtmlSelectElement>("groupToAdd")?;
-    let id = select.value().parse::<i64>().expect("invalid group id");
-    let display_name = select
-        .get(select.selected_index() as u32)
-        .unwrap()
-        .dyn_into::<web_sys::HtmlOptionElement>()
-        .unwrap()
-        .text();
-    Some(Group { id, display_name })
+    Some(
+        web_sys::window()?
+            .document()?
+            .get_element_by_id(name)?
+            .dyn_into::<web_sys::HtmlInputElement>()
+            .ok()?
+            .value(),
+    )
 }
 
 fn get_element_or_empty(name: &str) -> String {
@@ -485,7 +337,6 @@ fn get_element_or_empty(name: &str) -> String {
 
 impl Component for UserDetails {
     type Message = Msg;
-    // The username.
     type Properties = Props;
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
@@ -495,11 +346,9 @@ impl Component for UserDetails {
             node_ref: NodeRef::default(),
             _task: None,
             user: None,
-            group_list: None,
             error: None,
             update_request: None,
             update_successful: false,
-            add_group: false,
             is_admin: props.is_admin,
             group_to_remove: None,
         };
