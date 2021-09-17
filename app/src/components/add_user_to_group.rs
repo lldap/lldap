@@ -1,12 +1,14 @@
 use crate::{
-    components::user_details::{Group, User},
+    components::{
+        select::{Select, SelectOption, SelectOptionProps},
+        user_details::{Group, User},
+    },
     infra::api::HostService,
 };
 use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
 use std::collections::HashSet;
 use yew::{
-    html::ChangeData,
     prelude::*,
     services::{fetch::FetchTask, ConsoleService},
 };
@@ -43,24 +45,20 @@ impl From<GroupListGroup> for Group {
 
 pub struct AddUserToGroupComponent {
     link: ComponentLink<Self>,
-    user: User,
+    props: Props,
     /// The list of existing groups, initially not loaded.
     group_list: Option<Vec<Group>>,
-    /// Whether the "+" button has been clicked.
-    add_group: bool,
-    on_error: Callback<Error>,
-    on_user_added_to_group: Callback<Group>,
+    /// The currently selected group.
     selected_group: Option<Group>,
     // Used to keep the request alive long enough.
     _task: Option<FetchTask>,
 }
 
 pub enum Msg {
-    AddGroupButtonClicked,
     GroupListResponse(Result<get_group_list::ResponseData>),
     SubmitAddGroup,
     AddGroupResponse(Result<add_user_to_group::ResponseData>),
-    SelectionChanged(ChangeData),
+    SelectionChanged(Option<SelectOptionProps>),
 }
 
 #[derive(yew::Properties, Clone, PartialEq)]
@@ -91,7 +89,7 @@ impl AddUserToGroupComponent {
         };
         self._task = HostService::graphql_query::<AddUserToGroup>(
             add_user_to_group::Variables {
-                user: self.user.id.clone(),
+                user: self.props.user.id.clone(),
                 group: group_id,
             },
             self.link.callback(Msg::AddGroupResponse),
@@ -107,74 +105,40 @@ impl AddUserToGroupComponent {
 
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
-            Msg::AddGroupButtonClicked => {
-                if self.group_list.is_none() {
-                    self.get_group_list();
-                } else {
-                    self.set_default_selection();
-                }
-                self.add_group = true;
-            }
             Msg::GroupListResponse(response) => {
                 self.group_list = Some(response?.groups.into_iter().map(Into::into).collect());
-                self.set_default_selection();
             }
             Msg::SubmitAddGroup => return self.submit_add_group(),
             Msg::AddGroupResponse(response) => {
                 response?;
                 // Adding the user to the group succeeded, we're not in the process of adding a
                 // group anymore.
-                self.add_group = false;
                 let group = self
                     .selected_group
                     .as_ref()
                     .expect("Could not get selected group")
                     .clone();
                 // Remove the group from the dropdown.
-                self.on_user_added_to_group.emit(group);
+                self.props.on_user_added_to_group.emit(group);
             }
-            Msg::SelectionChanged(data) => match data {
-                ChangeData::Select(e) => {
-                    self.update_selection(e);
-                }
-                _ => unreachable!(),
-            },
+            Msg::SelectionChanged(option_props) => {
+                self.selected_group = option_props.map(|props| Group {
+                    id: props.value.parse::<i64>().unwrap(),
+                    display_name: props.text,
+                });
+                return Ok(false);
+            }
         }
         Ok(true)
     }
 
-    fn update_selection(&mut self, e: web_sys::HtmlSelectElement) {
-        if e.selected_index() == -1 {
-            self.selected_group = None;
-        } else {
-            use wasm_bindgen::JsCast;
-            let option = e
-                .options()
-                .get_with_index(e.selected_index() as u32)
-                .unwrap()
-                .dyn_into::<web_sys::HtmlOptionElement>()
-                .unwrap();
-            self.selected_group = Some(Group {
-                id: option.value().parse::<i64>().unwrap(),
-                display_name: option.text(),
-            });
-        }
-    }
-
-    fn get_selectable_group_list(&self, group_list: &Vec<Group>) -> Vec<Group> {
-        let user_groups = self.user.groups.iter().collect::<HashSet<_>>();
+    fn get_selectable_group_list(&self, group_list: &[Group]) -> Vec<Group> {
+        let user_groups = self.props.user.groups.iter().collect::<HashSet<_>>();
         group_list
             .iter()
             .filter(|g| !user_groups.contains(g))
             .map(Clone::clone)
             .collect()
-    }
-
-    fn set_default_selection(&mut self) {
-        self.selected_group = (|| {
-            let groups = self.get_selectable_group_list(self.group_list.as_ref()?);
-            groups.into_iter().next()
-        })();
     }
 }
 
@@ -182,22 +146,21 @@ impl Component for AddUserToGroupComponent {
     type Message = Msg;
     type Properties = Props;
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
-        Self {
+        let mut res = Self {
             link,
-            user: props.user,
+            props,
             group_list: None,
-            add_group: false,
-            on_error: props.on_error,
-            on_user_added_to_group: props.on_user_added_to_group,
             selected_group: None,
             _task: None,
-        }
+        };
+        res.get_group_list();
+        res
     }
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match self.handle_msg(msg) {
             Err(e) => {
                 ConsoleService::error(&e.to_string());
-                self.on_error.emit(e);
+                self.props.on_error.emit(e);
                 true
             }
             Ok(b) => b,
@@ -205,11 +168,8 @@ impl Component for AddUserToGroupComponent {
     }
 
     fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        if props.user.groups != self.user.groups {
-            self.user = props.user;
-            if self.selected_group.is_none() {
-                self.set_default_selection();
-            }
+        if props.user.groups != self.props.user.groups {
+            self.props.user = props.user;
             true
         } else {
             false
@@ -217,39 +177,25 @@ impl Component for AddUserToGroupComponent {
     }
 
     fn view(&self) -> Html {
-        if !self.add_group {
-            return html! {
-            <>
-              <td></td>
-              <td>
-                <button onclick=self.link.callback(
-                    |_| Msg::AddGroupButtonClicked)>
-                  {"+"}
-                </button>
-              </td>
-            </>
-            };
-        }
-
         if let Some(group_list) = &self.group_list {
-            let to_add_group_list = self.get_selectable_group_list(&group_list);
+            let to_add_group_list = self.get_selectable_group_list(group_list);
+            #[allow(unused_braces)]
             let make_select_option = |group: Group| {
-                html! {
-                    <option value={group.id.to_string()}>{group.display_name}</option>
+                html_nested! {
+                    <SelectOption value=group.id.to_string() text=group.display_name key=group.id />
                 }
             };
             html! {
             <>
               <td>
-                <select name="groupToAdd" id="groupToAdd"
-                  onchange=self.link.callback(|e| Msg::SelectionChanged(e))>
+                <Select on_selection_change=self.link.callback(Msg::SelectionChanged)>
                   {
                     to_add_group_list
                         .into_iter()
                         .map(make_select_option)
                         .collect::<Vec<_>>()
                   }
-                </select>
+                </Select>
               </td>
                   <td>
                     <button onclick=self.link.callback(
