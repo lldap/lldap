@@ -5,5 +5,6 @@ pub mod create_user;
 pub mod login;
 pub mod logout;
 pub mod router;
+pub mod select;
 pub mod user_details;
 pub mod user_table;

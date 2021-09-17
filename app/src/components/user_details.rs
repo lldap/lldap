@@ -279,7 +279,7 @@ impl UserDetails {
             let id = group.id;
             let display_name = group.display_name.clone();
             html! {
-              <tr key="groupRow_".to_string() + &display_name.clone()>
+              <tr key="groupRow_".to_string() + &display_name>
                 <td>{&group.display_name}</td>
                 { if self.is_admin { html! {
                     <td><button onclick=self.link.callback(move |_| Msg::SubmitRemoveGroup(Group{id, display_name: display_name.clone()}))>{"-"}</button></td>
