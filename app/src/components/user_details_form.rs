@@ -8,14 +8,10 @@ use yew::{
 };
 use yew_form_derive::Model;
 
-lazy_static::lazy_static! {
-    static ref EMAIL_RE: regex::Regex = regex::Regex::new("^[^@]+@[^@]+\\.[^@]+$").unwrap();
-}
-
 /// The fields of the form, with the editable details and the constraints.
 #[derive(Model, Validate, PartialEq, Clone)]
 pub struct UserModel {
-    #[validate(regex(path = "EMAIL_RE", message = "Enter a valid email"))]
+    #[validate(email)]
     email: String,
     #[validate(length(min = 1, message = "Display name is required"))]
     display_name: String,
