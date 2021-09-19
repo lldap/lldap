@@ -1770,6 +1770,7 @@ dependencies = [
  "yew-router",
  "yew_form",
  "yew_form_derive",
+ "yewtil",
 ]
 
 [[package]]
@@ -3537,6 +3538,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ce9b1b516211d33767048e5d47fa2a381ed8b76fc48d2ce4aa39877f9f183e0"
 dependencies = [
  "cfg-if 1.0.0",
+ "serde",
+ "serde_json",
  "wasm-bindgen-macro",
 ]
 
@@ -3755,6 +3758,19 @@ dependencies = [
  "quote",
  "syn",
  "yew_form",
+]
+
+[[package]]
+name = "yewtil"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8543663ac49cd613df079282a1d8bdbdebdad6e02bac229f870fd4237b5d9aaa"
+dependencies = [
+ "log",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "yew",
 ]
 
 [[package]]

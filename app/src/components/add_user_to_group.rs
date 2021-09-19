@@ -1,7 +1,7 @@
 use crate::{
     components::{
         select::{Select, SelectOption, SelectOptionProps},
-        user_details::{Group, User},
+        user_details::Group,
     },
     infra::api::HostService,
 };
@@ -12,6 +12,7 @@ use yew::{
     prelude::*,
     services::{fetch::FetchTask, ConsoleService},
 };
+use yewtil::NeqAssign;
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -63,7 +64,8 @@ pub enum Msg {
 
 #[derive(yew::Properties, Clone, PartialEq)]
 pub struct Props {
-    pub user: User,
+    pub username: String,
+    pub groups: Vec<Group>,
     pub on_user_added_to_group: Callback<Group>,
     pub on_error: Callback<Error>,
 }
@@ -89,7 +91,7 @@ impl AddUserToGroupComponent {
         };
         self._task = HostService::graphql_query::<AddUserToGroup>(
             add_user_to_group::Variables {
-                user: self.props.user.id.clone(),
+                user: self.props.username.clone(),
                 group: group_id,
             },
             self.link.callback(Msg::AddGroupResponse),
@@ -133,7 +135,7 @@ impl AddUserToGroupComponent {
     }
 
     fn get_selectable_group_list(&self, group_list: &[Group]) -> Vec<Group> {
-        let user_groups = self.props.user.groups.iter().collect::<HashSet<_>>();
+        let user_groups = self.props.groups.iter().collect::<HashSet<_>>();
         group_list
             .iter()
             .filter(|g| !user_groups.contains(g))
@@ -168,12 +170,7 @@ impl Component for AddUserToGroupComponent {
     }
 
     fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        if props.user.groups != self.props.user.groups {
-            self.props.user = props.user;
-            true
-        } else {
-            false
-        }
+        self.props.neq_assign(props)
     }
 
     fn view(&self) -> Html {
