@@ -102,7 +102,13 @@ impl Component for RemoveUserFromGroupComponent {
           <>
             <td>{&group.display_name}</td>
             { if self.props.is_admin { html! {
-                <td><button onclick=self.link.callback(|_| Msg::SubmitRemoveGroup)>{"-"}</button></td>
+                <td>
+                  <button
+                    class="btn btn-danger"
+                    onclick=self.link.callback(|_| Msg::SubmitRemoveGroup)>
+                    <i class="bi-x-circle-fill" aria-label="Remove user from group" />
+                  </button>
+                </td>
               }} else { html!{} }
             }
           </>

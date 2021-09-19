@@ -93,7 +93,7 @@ impl Component for App {
         let link = self.link.clone();
         let is_admin = self.is_admin();
         html! {
-            <div>
+            <div class="container">
                 <h1>{ "LLDAP" }</h1>
                 <Router<AppRoute>
                   render = Router::render(move |switch: AppRoute| {
@@ -111,7 +111,7 @@ impl Component for App {
                               <div>
                                 <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
                                 <UserTable />
-                                <NavButton route=AppRoute::CreateUser>{"Create a user"}</NavButton>
+                                <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
                               </div>
                           },
                           AppRoute::UserDetails(username) => html! {

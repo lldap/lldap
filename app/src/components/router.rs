@@ -7,10 +7,10 @@ use yew_router::{
 pub enum AppRoute {
     #[to = "/login"]
     Login,
-    #[to = "/users"]
-    ListUsers,
     #[to = "/users/create"]
     CreateUser,
+    #[to = "/users"]
+    ListUsers,
     #[to = "/user/{user_id}/password"]
     ChangePassword(String),
     #[to = "/user/{user_id}"]

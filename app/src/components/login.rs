@@ -142,17 +142,45 @@ impl Component for LoginForm {
 
     fn view(&self) -> Html {
         html! {
-            <form ref=self.node_ref.clone() onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::Submit })>
-                <div>
-                    <label for="username">{"User name:"}</label>
-                    <input type="text" id="username" required=true />
+            <form
+              ref=self.node_ref.clone()
+              class="form center-block col-sm-4 col-offset-4"
+              onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::Submit })>
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">
+                      <i class="bi-person-fill"/>
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="username"
+                    placeholder="Username"
+                    required=true />
                 </div>
-                <div>
-                    <label for="password">{"Password:"}</label>
-                    <input type="password" id="password" required=true autocomplete="current-password" />
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">
+                      <i class="bi-lock-fill"/>
+                    </span>
+                  </div>
+                  <input
+                    type="password"
+                    class="form-control"
+                    id="password"
+                    required=true
+                    placeholder="Email"
+                    autocomplete="current-password" />
                 </div>
-                <button type="submit">{"Login"}</button>
-                <div>
+                <div class="form-group">
+                  <button
+                    type="submit"
+                    class="btn btn-primary">
+                    {"Login"}
+                  </button>
+                </div>
+                <div class="form-group">
                 { if let Some(e) = &self.error {
                     html! { e.to_string() }
                   } else { html! {} }

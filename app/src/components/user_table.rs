@@ -4,7 +4,6 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use graphql_client::GraphQLQuery;
-use yew::format::Json;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
 
@@ -65,7 +64,6 @@ impl Component for UserTable {
         match msg {
             Msg::ListUsersResponse(Ok(users)) => {
                 self.users = Some(Ok(users.users.into_iter().collect()));
-                ConsoleService::log(format!("Response: {:?}", Json(&self.users)).as_str());
                 true
             }
             Msg::ListUsersResponse(Err(e)) => {
@@ -94,17 +92,23 @@ impl Component for UserTable {
         };
         let make_table = |users: &Vec<User>| {
             html! {
-                <table>
-                  <tr>
-                    <th>{"User ID"}</th>
-                    <th>{"Email"}</th>
-                    <th>{"Display name"}</th>
-                    <th>{"First name"}</th>
-                    <th>{"Last name"}</th>
-                    <th>{"Creation date"}</th>
-                  </tr>
-                  {users.iter().map(make_user_row).collect::<Vec<_>>()}
-                </table>
+                <div class="table-responsive">
+                  <table class="table table-striped">
+                    <thead>
+                      <tr>
+                        <th>{"User ID"}</th>
+                        <th>{"Email"}</th>
+                        <th>{"Display name"}</th>
+                        <th>{"First name"}</th>
+                        <th>{"Last name"}</th>
+                        <th>{"Creation date"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.iter().map(make_user_row).collect::<Vec<_>>()}
+                    </tbody>
+                  </table>
+                </div>
             }
         };
         match &self.users {
