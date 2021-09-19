@@ -7,4 +7,5 @@ pub mod logout;
 pub mod router;
 pub mod select;
 pub mod user_details;
+pub mod user_details_form;
 pub mod user_table;

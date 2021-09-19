@@ -1484,6 +1484,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "if_chain"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb56e1aa765b4b4f3aadfab769793b7087bb03a4ea4920644a6d238e2df5b9ed"
+
+[[package]]
 name = "indexmap"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1750,14 +1756,20 @@ dependencies = [
  "graphql_client",
  "http",
  "jwt",
+ "lazy_static",
  "lldap_auth",
  "rand 0.8.4",
+ "regex",
  "serde",
  "serde_json",
+ "validator",
+ "validator_derive",
  "wasm-bindgen",
  "web-sys",
  "yew",
  "yew-router",
+ "yew_form",
+ "yew_form_derive",
 ]
 
 [[package]]
@@ -2017,8 +2029,9 @@ dependencies = [
 
 [[package]]
 name = "num-bigint"
-version = "0.3.2"
-source = "git+https://github.com/nitnelave/num-bigint/?branch=0.3.2-patch#e56d6cca158ec358a48daadf58c070f40a6976ca"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f6f7833f2cbf2360a6cfd58cd41a53aa7a90bd4c202f5b1c7dd2ed73c57b2c3"
 dependencies = [
  "autocfg 1.0.1",
  "num-integer",
@@ -2876,7 +2889,7 @@ dependencies = [
  "log",
  "md-5",
  "memchr",
- "num-bigint 0.3.2",
+ "num-bigint 0.3.3",
  "once_cell",
  "parking_lot",
  "percent-encoding",
@@ -3440,6 +3453,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "validator"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d0f08911ab0fee2c5009580f04615fa868898ee57de10692a45da0c3bcc3e5e"
+dependencies = [
+ "idna",
+ "lazy_static",
+ "regex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "url",
+ "validator_types",
+]
+
+[[package]]
+name = "validator_derive"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d85135714dba11a1bd0b3eb1744169266f1a38977bf4e3ff5e2e1acb8c2b7eee"
+dependencies = [
+ "if_chain",
+ "lazy_static",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn",
+ "validator_types",
+]
+
+[[package]]
+name = "validator_types"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ded9d97e1d42327632f5f3bae6403c04886e2de3036261ef42deebd931a6a291"
+dependencies = [
+ "proc-macro2",
+ "syn",
+]
+
+[[package]]
 name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3679,6 +3734,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de4a67208fb46b900af18a7397938b01f379dfc18da34799cfa8347eec715697"
 dependencies = [
  "nom 5.1.2",
+]
+
+[[package]]
+name = "yew_form"
+version = "0.1.8"
+source = "git+https://github.com/sassman/yew_form/?rev=67050812695b7a8a90b81b0637e347fc6629daed#67050812695b7a8a90b81b0637e347fc6629daed"
+dependencies = [
+ "validator",
+ "validator_derive",
+ "yew",
+]
+
+[[package]]
+name = "yew_form_derive"
+version = "0.1.8"
+source = "git+https://github.com/sassman/yew_form/?rev=67050812695b7a8a90b81b0637e347fc6629daed#67050812695b7a8a90b81b0637e347fc6629daed"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "yew_form",
 ]
 
 [[package]]
