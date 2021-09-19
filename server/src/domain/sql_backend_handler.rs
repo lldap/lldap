@@ -220,6 +220,7 @@ impl BackendHandler for SqlBackendHandler {
         let query = Query::update()
             .table(Users::Table)
             .values(values)
+            .and_where(Expr::col(Users::UserId).eq(request.user_id))
             .to_string(DbQueryBuilder {});
         sqlx::query(&query).execute(&self.sql_pool).await?;
         Ok(())
