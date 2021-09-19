@@ -93,7 +93,7 @@ impl UserDetails {
     fn view_messages(&self, error: &Option<Error>) -> Html {
         if let Some(e) = error {
             html! {
-              <div>
+              <div class="alert alert-danger">
                 <span>{"Error: "}{e.to_string()}</span>
               </div>
             }
@@ -205,7 +205,6 @@ impl Component for UserDetails {
                       <UserDetailsForm
                         user=u.clone()
                         on_error=self.link.callback(Msg::OnError)/>
-                      {self.view_messages(error)}
                       {self.view_group_memberships(u)}
                       <div>
                         <NavButton
@@ -214,6 +213,7 @@ impl Component for UserDetails {
                             {"Change password"}
                         </NavButton>
                       </div>
+                      {self.view_messages(error)}
                     </div>
                 }
             }

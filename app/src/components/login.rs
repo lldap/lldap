@@ -1,18 +1,28 @@
 use crate::infra::api::HostService;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use lldap_auth::*;
-use wasm_bindgen::JsCast;
+use validator_derive::Validate;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
+use yew_form::Form;
+use yew_form_derive::Model;
 
 pub struct LoginForm {
     link: ComponentLink<Self>,
     on_logged_in: Callback<(String, bool)>,
     error: Option<anyhow::Error>,
-    node_ref: NodeRef,
-    login_start: Option<opaque::client::login::ClientLogin>,
+    form: Form<FormModel>,
     // Used to keep the request alive long enough.
     _task: Option<FetchTask>,
+}
+
+/// The fields of the form, with the constraints.
+#[derive(Model, Validate, PartialEq, Clone, Default)]
+pub struct FormModel {
+    #[validate(length(min = 1, message = "Missing username"))]
+    username: String,
+    #[validate(length(min = 8, message = "Invalid password. Min length: 8"))]
+    password: String,
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -21,94 +31,70 @@ pub struct Props {
 }
 
 pub enum Msg {
+    Update,
     Submit,
-    AuthenticationStartResponse(Result<Box<login::ServerLoginStartResponse>>),
+    AuthenticationStartResponse(
+        (
+            opaque::client::login::ClientLogin,
+            Result<Box<login::ServerLoginStartResponse>>,
+        ),
+    ),
     AuthenticationFinishResponse(Result<(String, bool)>),
 }
 
-fn get_form_field(field_id: &str) -> Option<String> {
-    let document = web_sys::window()?.document()?;
-    Some(
-        document
-            .get_element_by_id(field_id)?
-            .dyn_into::<web_sys::HtmlInputElement>()
-            .ok()?
-            .value(),
-    )
-}
-
 impl LoginForm {
-    fn set_error(&mut self, error: anyhow::Error) {
-        ConsoleService::error(&error.to_string());
-        self.error = Some(error);
-    }
-
-    fn call_backend<M, Req, C, Resp>(&mut self, method: M, req: Req, callback: C) -> Result<()>
-    where
-        M: Fn(Req, Callback<Resp>) -> Result<FetchTask>,
-        C: Fn(Resp) -> <Self as Component>::Message + 'static,
-    {
-        self._task = Some(method(req, self.link.callback(callback))?);
-        Ok(())
-    }
-
-    fn handle_message(&mut self, msg: <Self as Component>::Message) -> Result<()> {
+    fn handle_message(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
+            Msg::Update => Ok(true),
             Msg::Submit => {
-                let username = get_form_field("username")
-                    .ok_or_else(|| anyhow!("Could not get username from form"))?;
-                let password = get_form_field("password")
-                    .ok_or_else(|| anyhow!("Could not get password from form"))?;
+                if !self.form.validate() {
+                    bail!("Invalid inputs");
+                }
+                let FormModel { username, password } = self.form.model();
                 let mut rng = rand::rngs::OsRng;
-                let login_start_request = opaque::client::login::start_login(&password, &mut rng)
-                    .context("Could not initialize login")?;
-                self.login_start = Some(login_start_request.state);
+                let opaque::client::login::ClientLoginStartResult { state, message } =
+                    opaque::client::login::start_login(&password, &mut rng)
+                        .context("Could not initialize login")?;
                 let req = login::ClientLoginStartRequest {
                     username,
-                    login_start_request: login_start_request.message,
+                    login_start_request: message,
                 };
-                self.call_backend(
-                    HostService::login_start,
+                self._task = Some(HostService::login_start(
                     req,
-                    Msg::AuthenticationStartResponse,
-                )?;
-                Ok(())
+                    self.link
+                        .callback_once(move |r| Msg::AuthenticationStartResponse((state, r))),
+                )?);
+                Ok(false)
             }
-            Msg::AuthenticationStartResponse(Ok(res)) => {
-                debug_assert!(self.login_start.is_some());
-                let login_finish = match opaque::client::login::finish_login(
-                    self.login_start.as_ref().unwrap().clone(),
-                    res.credential_response,
-                ) {
-                    Err(e) => {
-                        // Common error, we want to print a full error to the console but only a
-                        // simple one to the user.
-                        ConsoleService::error(&format!("Invalid username or password: {}", e));
-                        self.error = Some(anyhow!("Invalid username or password"));
-                        return Ok(());
-                    }
-                    Ok(l) => l,
-                };
+            Msg::AuthenticationStartResponse((login_start, res)) => {
+                let res = res.context("Could not log in (invalid response to login start)")?;
+                let login_finish =
+                    match opaque::client::login::finish_login(login_start, res.credential_response)
+                    {
+                        Err(e) => {
+                            // Common error, we want to print a full error to the console but only a
+                            // simple one to the user.
+                            ConsoleService::error(&format!("Invalid username or password: {}", e));
+                            self.error = Some(anyhow!("Invalid username or password"));
+                            return Ok(true);
+                        }
+                        Ok(l) => l,
+                    };
                 let req = login::ClientLoginFinishRequest {
                     server_data: res.server_data,
                     credential_finalization: login_finish.message,
                 };
-                self.call_backend(
-                    HostService::login_finish,
+                self._task = Some(HostService::login_finish(
                     req,
-                    Msg::AuthenticationFinishResponse,
-                )?;
-                Ok(())
+                    self.link.callback_once(Msg::AuthenticationFinishResponse),
+                )?);
+                Ok(false)
             }
-            Msg::AuthenticationStartResponse(Err(e)) => Err(anyhow!(
-                "Could not log in (invalid response to login start): {}",
-                e
-            )),
-            Msg::AuthenticationFinishResponse(Ok(user_info)) => {
-                self.on_logged_in.emit(user_info);
-                Ok(())
+            Msg::AuthenticationFinishResponse(user_info) => {
+                self.on_logged_in
+                    .emit(user_info.context("Could not log in")?);
+                Ok(true)
             }
-            Msg::AuthenticationFinishResponse(Err(e)) => Err(anyhow!("Could not log in: {}", e)),
         }
     }
 }
@@ -122,18 +108,21 @@ impl Component for LoginForm {
             link,
             on_logged_in: props.on_logged_in,
             error: None,
-            node_ref: NodeRef::default(),
-            login_start: None,
+            form: Form::<FormModel>::new(FormModel::default()),
             _task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         self.error = None;
-        if let Err(e) = self.handle_message(msg) {
-            self.set_error(e);
+        match self.handle_message(msg) {
+            Err(e) => {
+                ConsoleService::error(&e.to_string());
+                self.error = Some(e);
+                true
+            }
+            Ok(b) => b,
         }
-        true
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -141,23 +130,25 @@ impl Component for LoginForm {
     }
 
     fn view(&self) -> Html {
+        type Field = yew_form::Field<FormModel>;
         html! {
             <form
-              ref=self.node_ref.clone()
-              class="form center-block col-sm-4 col-offset-4"
-              onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::Submit })>
+              class="form center-block col-sm-4 col-offset-4">
                 <div class="input-group">
                   <div class="input-group-prepend">
                     <span class="input-group-text">
                       <i class="bi-person-fill"/>
                     </span>
                   </div>
-                  <input
-                    type="text"
+                  <Field
                     class="form-control"
-                    id="username"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    form=&self.form
+                    field_name="username"
                     placeholder="Username"
-                    required=true />
+                    autocomplete="username"
+                    oninput=self.link.callback(|_| Msg::Update) />
                 </div>
                 <div class="input-group">
                   <div class="input-group-prepend">
@@ -165,18 +156,21 @@ impl Component for LoginForm {
                       <i class="bi-lock-fill"/>
                     </span>
                   </div>
-                  <input
-                    type="password"
+                  <Field
                     class="form-control"
-                    id="password"
-                    required=true
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    form=&self.form
+                    field_name="password"
+                    input_type="password"
                     placeholder="Email"
                     autocomplete="current-password" />
                 </div>
                 <div class="form-group">
                   <button
                     type="submit"
-                    class="btn btn-primary">
+                    class="btn btn-primary"
+                    onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
                     {"Login"}
                   </button>
                 </div>
