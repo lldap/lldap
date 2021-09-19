@@ -195,8 +195,9 @@ impl Component for AddUserToGroupComponent {
                 </Select>
               </td>
                   <td>
-                    <button onclick=self.link.callback(
-                        |_| Msg::SubmitAddGroup)>
+                    <button
+                      class="btn btn-success"
+                      onclick=self.link.callback(|_| Msg::SubmitAddGroup)>
                       {"Add"}
                     </button>
                   </td>

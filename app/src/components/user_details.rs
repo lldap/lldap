@@ -118,17 +118,32 @@ impl UserDetails {
         };
         html! {
         <div>
-          <span>{"Group memberships"}</span>
-          <table>
-            <tr key="headerRow">
-              <th>{"Group"}</th>
-              { if self.props.is_admin { html!{ <th></th> }} else { html!{} }}
-            </tr>
-            {u.groups.iter().map(make_group_row).collect::<Vec<_>>()}
-            <tr key="groupToAddRow">
-              {self.view_add_group_button(u)}
-            </tr>
-          </table>
+          <h3>{"Group memberships"}</h3>
+          <div class="table-responsive">
+            <table class="table table-striped">
+              <thead>
+                <tr key="headerRow">
+                  <th>{"Group"}</th>
+                  { if self.props.is_admin { html!{ <th></th> }} else { html!{} }}
+                </tr>
+              </thead>
+              <tbody>
+                {if u.groups.is_empty() {
+                  html! {
+                    <tr key="EmptyRow">
+                      <td>{"Not member of any group"}</td>
+                    </tr>
+                  }
+                } else {
+                  html! {<>{u.groups.iter().map(make_group_row).collect::<Vec<_>>()}</>}
+                }}
+                <hr/>
+                <tr key="groupToAddRow">
+                  {self.view_add_group_button(u)}
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         }
     }
@@ -193,7 +208,11 @@ impl Component for UserDetails {
                       {self.view_messages(error)}
                       {self.view_group_memberships(u)}
                       <div>
-                        <NavButton route=AppRoute::ChangePassword(u.id.clone())>{"Change password"}</NavButton>
+                        <NavButton
+                          route=AppRoute::ChangePassword(u.id.clone())
+                          classes="btn btn-primary">
+                            {"Change password"}
+                        </NavButton>
                       </div>
                     </div>
                 }

@@ -53,9 +53,9 @@ impl CreateUserForm {
                         email: get_element("email")
                             .filter(not_empty)
                             .ok_or_else(|| anyhow!("Missing email"))?,
-                        displayName: get_element("displayname").filter(not_empty),
-                        firstName: get_element("firstname").filter(not_empty),
-                        lastName: get_element("lastname").filter(not_empty),
+                        displayName: get_element("display-name").filter(not_empty),
+                        firstName: get_element("first-name").filter(not_empty),
+                        lastName: get_element("last-name").filter(not_empty),
                     },
                 };
                 self._task = Some(HostService::graphql_query::<CreateUser>(
@@ -175,39 +175,107 @@ impl Component for CreateUserForm {
 
     fn view(&self) -> Html {
         html! {
-            <form ref=self.node_ref.clone() onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::SubmitForm })>
-                <div>
-                    <label for="username">{"User name:"}</label>
-                    <input type="text" id="username" required=true />
+            <>
+            <form
+              class="form"
+              ref=self.node_ref.clone()
+              onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::SubmitForm })>
+              <div class="form-group row">
+                <label for="username"
+                  class="form-label col-sm-2 col-form-label">
+                  {"User name*:"}
+                </label>
+                <div class="col-sm-10">
+                  <input
+                    type="text"
+                    id="username"
+                    class="form-control"
+                    autocomplete="username"
+                    required=true />
                 </div>
-                <div>
-                    <label for="email">{"Email:"}</label>
-                    <input type="email" id="email" required=true />
+              </div>
+              <div class="form-group row">
+                <label for="email"
+                  class="form-label col-sm-2 col-form-label">
+                  {"Email*:"}
+                </label>
+                <div class="col-sm-10">
+                  <input
+                    type="email"
+                    id="email"
+                    class="form-control"
+                    autocomplete="email"
+                    required=true />
                 </div>
-                <div>
-                    <label for="displayname">{"Display name:"}</label>
-                    <input type="text" id="displayname" />
+              </div>
+              <div class="form-group row">
+                <label for="display-name"
+                  class="form-label col-sm-2 col-form-label">
+                  {"Display name*:"}
+                </label>
+                <div class="col-sm-10">
+                  <input
+                    type="text"
+                    autocomplete="name"
+                    class="form-control"
+                    id="display-name" />
+                  </div>
+              </div>
+              <div class="form-group row">
+                <label for="first-name"
+                  class="form-label col-sm-2 col-form-label">
+                  {"First name:"}
+                </label>
+                <div class="col-sm-10">
+                  <input
+                    type="text"
+                    autocomplete="given-name"
+                    class="form-control"
+                    id="first-name" />
                 </div>
-                <div>
-                    <label for="firstname">{"First name:"}</label>
-                    <input type="text" id="firstname" />
+              </div>
+              <div class="form-group row">
+                <label for="last-name"
+                  class="form-label col-sm-2 col-form-label">
+                  {"Last name:"}
+                </label>
+                <div class="col-sm-10">
+                  <input
+                    type="text"
+                    autocomplete="family-name"
+                    class="form-control"
+                    id="last-name" />
                 </div>
-                <div>
-                    <label for="lastname">{"Last name:"}</label>
-                    <input type="text" id="lastname" />
+              </div>
+              <div class="form-group row">
+                <label for="password"
+                  class="form-label col-sm-2 col-form-label">
+                  {"Password:"}
+                </label>
+                <div class="col-sm-10">
+                  <input
+                    type="password"
+                    id="password"
+                    class="form-control"
+                    autocomplete="new-password"
+                    minlength="8" />
                 </div>
-                <div>
-                    <label for="password">{"Password:"}</label>
-                    <input type="password" id="password" autocomplete="new-password" minlength="8" />
-                </div>
-                <button type="submit">{"Submit"}</button>
-                <div>
-                { if let Some(e) = &self.error {
-                    html! { e.to_string() }
-                  } else { html! {} }
-                }
-                </div>
+              </div>
+              <div class="form-group row">
+                <button
+                  class="btn btn-primary col-sm-1 col-form-label"
+                  type="submit">{"Submit"}</button>
+              </div>
             </form>
+            { if let Some(e) = &self.error {
+                html! {
+                  <div class="alert alert-danger">
+                    {e.to_string() }
+                  </div>
+                }
+              } else { html! {} }
+            }
+            </>
         }
     }
 }
