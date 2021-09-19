@@ -1,9 +1,11 @@
 use crate::infra::api::HostService;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{bail, Context, Result};
 use graphql_client::GraphQLQuery;
 use lldap_auth::{opaque, registration};
+use validator_derive::Validate;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
+use yew_form_derive::Model;
 use yew_router::{
     agent::{RouteAgentDispatcher, RouteRequest},
     route::Route,
@@ -21,41 +23,70 @@ pub struct CreateUser;
 pub struct CreateUserForm {
     link: ComponentLink<Self>,
     route_dispatcher: RouteAgentDispatcher,
-    node_ref: NodeRef,
+    form: yew_form::Form<CreateUserModel>,
     error: Option<anyhow::Error>,
-    registration_start: Option<opaque::client::registration::ClientRegistration>,
     // Used to keep the request alive long enough.
     _task: Option<FetchTask>,
 }
 
+#[derive(Model, Validate, PartialEq, Clone, Default)]
+pub struct CreateUserModel {
+    #[validate(length(min = 1, message = "Username is required"))]
+    username: String,
+    #[validate(email)]
+    email: String,
+    #[validate(length(min = 1, message = "Display name is required"))]
+    display_name: String,
+    first_name: String,
+    last_name: String,
+    #[validate(custom(
+        function = "empty_or_long",
+        message = "Password should be longer than 8 characters (or left empty)"
+    ))]
+    password: String,
+    #[validate(must_match(other = "password", message = "Passwords must match"))]
+    confirm_password: String,
+}
+
+fn empty_or_long(value: &str) -> Result<(), validator::ValidationError> {
+    if value.is_empty() || value.len() >= 8 {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new(""))
+    }
+}
+
 pub enum Msg {
-    CreateUserResponse(Result<create_user::ResponseData>),
+    Update,
     SubmitForm,
+    CreateUserResponse(Result<create_user::ResponseData>),
     SuccessfulCreation,
-    RegistrationStartResponse(Result<Box<registration::ServerRegistrationStartResponse>>),
+    RegistrationStartResponse(
+        (
+            opaque::client::registration::ClientRegistration,
+            Result<Box<registration::ServerRegistrationStartResponse>>,
+        ),
+    ),
     RegistrationFinishResponse(Result<()>),
 }
 
-#[allow(clippy::ptr_arg)]
-fn not_empty(s: &String) -> bool {
-    !s.is_empty()
-}
-
 impl CreateUserForm {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<()> {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
+            Msg::Update => Ok(true),
             Msg::SubmitForm => {
+                if !self.form.validate() {
+                    bail!("Check the form for errors");
+                }
+                let model = self.form.model();
+                let to_option = |s: String| if s.is_empty() { None } else { Some(s) };
                 let req = create_user::Variables {
                     user: create_user::CreateUserInput {
-                        id: get_element("username")
-                            .filter(not_empty)
-                            .ok_or_else(|| anyhow!("Missing username"))?,
-                        email: get_element("email")
-                            .filter(not_empty)
-                            .ok_or_else(|| anyhow!("Missing email"))?,
-                        displayName: get_element("display-name").filter(not_empty),
-                        firstName: get_element("first-name").filter(not_empty),
-                        lastName: get_element("last-name").filter(not_empty),
+                        id: model.username,
+                        email: model.email,
+                        displayName: to_option(model.display_name),
+                        firstName: to_option(model.first_name),
+                        lastName: to_option(model.last_name),
                     },
                 };
                 self._task = Some(HostService::graphql_query::<CreateUser>(
@@ -63,6 +94,7 @@ impl CreateUserForm {
                     self.link.callback(Msg::CreateUserResponse),
                     "Error trying to create user",
                 )?);
+                Ok(true)
             }
             Msg::CreateUserResponse(r) => {
                 match r {
@@ -72,36 +104,38 @@ impl CreateUserForm {
                         &r.create_user.id, &r.create_user.creation_date
                     )),
                 };
-                let user_id = get_element("username")
-                    .filter(not_empty)
-                    .ok_or_else(|| anyhow!("Missing username"))?;
-                if let Some(password) = get_element("password").filter(not_empty) {
+                let model = self.form.model();
+                let user_id = model.username;
+                let password = model.password;
+                if !password.is_empty() {
                     // User was successfully created, let's register the password.
                     let mut rng = rand::rngs::OsRng;
-                    let client_registration_start =
-                        opaque::client::registration::start_registration(&password, &mut rng)?;
-                    self.registration_start = Some(client_registration_start.state);
+                    let opaque::client::registration::ClientRegistrationStartResult {
+                        state,
+                        message,
+                    } = opaque::client::registration::start_registration(&password, &mut rng)?;
                     let req = registration::ClientRegistrationStartRequest {
                         username: user_id,
-                        registration_start_request: client_registration_start.message,
+                        registration_start_request: message,
                     };
                     self._task = Some(
                         HostService::register_start(
                             req,
-                            self.link.callback(Msg::RegistrationStartResponse),
+                            self.link
+                                .callback_once(move |r| Msg::RegistrationStartResponse((state, r))),
                         )
                         .context("Error trying to create user")?,
                     );
                 } else {
                     self.update(Msg::SuccessfulCreation);
                 }
+                Ok(false)
             }
-            Msg::RegistrationStartResponse(response) => {
-                debug_assert!(self.registration_start.is_some());
+            Msg::RegistrationStartResponse((registration_start, response)) => {
                 let response = response?;
                 let mut rng = rand::rngs::OsRng;
                 let registration_upload = opaque::client::registration::finish_registration(
-                    self.registration_start.take().unwrap(),
+                    registration_start,
                     response.registration_response,
                     &mut rng,
                 )?;
@@ -116,33 +150,21 @@ impl CreateUserForm {
                     )
                     .context("Error trying to register user")?,
                 );
+                Ok(false)
             }
             Msg::RegistrationFinishResponse(response) => {
-                if response.is_err() {
-                    return response;
-                }
-                self.update(Msg::SuccessfulCreation);
+                response?;
+                self.handle_msg(Msg::SuccessfulCreation)
             }
             Msg::SuccessfulCreation => {
                 self.route_dispatcher
                     .send(RouteRequest::ChangeRoute(Route::new_no_state(
                         "/list_users",
                     )));
+                Ok(true)
             }
         }
-        Ok(())
     }
-}
-fn get_element(name: &str) -> Option<String> {
-    use wasm_bindgen::JsCast;
-    Some(
-        web_sys::window()?
-            .document()?
-            .get_element_by_id(name)?
-            .dyn_into::<web_sys::HtmlInputElement>()
-            .ok()?
-            .value(),
-    )
 }
 
 impl Component for CreateUserForm {
@@ -153,20 +175,22 @@ impl Component for CreateUserForm {
         Self {
             link,
             route_dispatcher: RouteAgentDispatcher::new(),
-            node_ref: NodeRef::default(),
+            form: yew_form::Form::<CreateUserModel>::new(CreateUserModel::default()),
             error: None,
-            registration_start: None,
             _task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         self.error = None;
-        if let Err(e) = self.handle_msg(msg) {
-            ConsoleService::error(&e.to_string());
-            self.error = Some(e);
+        match self.handle_msg(msg) {
+            Err(e) => {
+                ConsoleService::error(&e.to_string());
+                self.error = Some(e);
+                true
+            }
+            Ok(b) => b,
         }
-        true
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -174,24 +198,28 @@ impl Component for CreateUserForm {
     }
 
     fn view(&self) -> Html {
+        type Field = yew_form::Field<CreateUserModel>;
         html! {
             <>
             <form
-              class="form"
-              ref=self.node_ref.clone()
-              onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::SubmitForm })>
+              class="form">
               <div class="form-group row">
                 <label for="username"
                   class="form-label col-sm-2 col-form-label">
                   {"User name*:"}
                 </label>
                 <div class="col-sm-10">
-                  <input
-                    type="text"
-                    id="username"
+                  <Field
+                    form=&self.form
+                    field_name="username"
                     class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
                     autocomplete="username"
-                    required=true />
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("username")}
+                  </div>
                 </div>
               </div>
               <div class="form-group row">
@@ -200,12 +228,18 @@ impl Component for CreateUserForm {
                   {"Email*:"}
                 </label>
                 <div class="col-sm-10">
-                  <input
-                    type="email"
-                    id="email"
+                  <Field
+                    form=&self.form
+                    input_type="email"
+                    field_name="email"
                     class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
                     autocomplete="email"
-                    required=true />
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("email")}
+                  </div>
                 </div>
               </div>
               <div class="form-group row">
@@ -214,12 +248,18 @@ impl Component for CreateUserForm {
                   {"Display name*:"}
                 </label>
                 <div class="col-sm-10">
-                  <input
-                    type="text"
+                  <Field
+                    form=&self.form
                     autocomplete="name"
                     class="form-control"
-                    id="display-name" />
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    field_name="display_name"
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("display_name")}
                   </div>
+                </div>
               </div>
               <div class="form-group row">
                 <label for="first-name"
@@ -227,11 +267,17 @@ impl Component for CreateUserForm {
                   {"First name:"}
                 </label>
                 <div class="col-sm-10">
-                  <input
-                    type="text"
+                  <Field
+                    form=&self.form
                     autocomplete="given-name"
                     class="form-control"
-                    id="first-name" />
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    field_name="first_name"
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("first_name")}
+                  </div>
                 </div>
               </div>
               <div class="form-group row">
@@ -240,11 +286,17 @@ impl Component for CreateUserForm {
                   {"Last name:"}
                 </label>
                 <div class="col-sm-10">
-                  <input
-                    type="text"
+                  <Field
+                    form=&self.form
                     autocomplete="family-name"
                     class="form-control"
-                    id="last-name" />
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    field_name="last_name"
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("last_name")}
+                  </div>
                 </div>
               </div>
               <div class="form-group row">
@@ -253,18 +305,47 @@ impl Component for CreateUserForm {
                   {"Password:"}
                 </label>
                 <div class="col-sm-10">
-                  <input
-                    type="password"
-                    id="password"
+                  <Field
+                    form=&self.form
+                    input_type="password"
+                    field_name="password"
                     class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
                     autocomplete="new-password"
-                    minlength="8" />
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("password")}
+                  </div>
+                </div>
+              </div>
+              <div class="form-group row">
+                <label for="confirm_password"
+                  class="form-label col-sm-2 col-form-label">
+                  {"Confirm password:"}
+                </label>
+                <div class="col-sm-10">
+                  <Field
+                    form=&self.form
+                    input_type="password"
+                    field_name="confirm_password"
+                    class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    autocomplete="new-password"
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("confirm_password")}
+                  </div>
                 </div>
               </div>
               <div class="form-group row">
                 <button
                   class="btn btn-primary col-sm-1 col-form-label"
-                  type="submit">{"Submit"}</button>
+                  type="button"
+                  onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
+                  {"Submit"}
+                </button>
               </div>
             </form>
             { if let Some(e) = &self.error {
