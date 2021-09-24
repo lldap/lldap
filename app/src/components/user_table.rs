@@ -1,8 +1,11 @@
 use crate::{
-    components::router::{AppRoute, Link},
+    components::{
+        delete_user::DeleteUser,
+        router::{AppRoute, Link},
+    },
     infra::api::HostService,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
 use yew::services::{fetch::FetchTask, ConsoleService};
@@ -22,13 +25,16 @@ type User = list_users_query::ListUsersQueryUsers;
 
 pub struct UserTable {
     link: ComponentLink<Self>,
-    users: Option<Result<Vec<User>>>,
+    users: Option<Vec<User>>,
+    error: Option<Error>,
     // Used to keep the request alive long enough.
     _task: Option<FetchTask>,
 }
 
 pub enum Msg {
     ListUsersResponse(Result<ResponseData>),
+    OnUserDeleted(String),
+    OnError(Error),
 }
 
 impl UserTable {
@@ -55,21 +61,21 @@ impl Component for UserTable {
             link,
             _task: None,
             users: None,
+            error: None,
         };
         table.get_users(None);
         table
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        match msg {
-            Msg::ListUsersResponse(Ok(users)) => {
-                self.users = Some(Ok(users.users.into_iter().collect()));
+        self.error = None;
+        match self.handle_msg(msg) {
+            Err(e) => {
+                ConsoleService::error(&e.to_string());
+                self.error = Some(e);
                 true
             }
-            Msg::ListUsersResponse(Err(e)) => {
-                self.users = Some(Err(anyhow!("Error listing users: {}", e)));
-                true
-            }
+            Ok(b) => b,
         }
     }
 
@@ -78,18 +84,32 @@ impl Component for UserTable {
     }
 
     fn view(&self) -> Html {
-        let make_user_row = |user: &User| {
-            html! {
-                <tr>
-                    <td><Link route=AppRoute::UserDetails(user.id.clone())>{&user.id}</Link></td>
-                    <td>{&user.email}</td>
-                    <td>{&user.display_name}</td>
-                    <td>{&user.first_name}</td>
-                    <td>{&user.last_name}</td>
-                    <td>{&user.creation_date.with_timezone(&chrono::Local)}</td>
-                </tr>
+        html! {
+            <div>
+              {self.view_users()}
+              {self.view_errors()}
+            </div>
+        }
+    }
+}
+
+impl UserTable {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+        match msg {
+            Msg::ListUsersResponse(users) => {
+                self.users = Some(users?.users.into_iter().collect());
+                Ok(true)
             }
-        };
+            Msg::OnError(e) => Err(e),
+            Msg::OnUserDeleted(user_id) => {
+                debug_assert!(self.users.is_some());
+                self.users.as_mut().unwrap().retain(|u| u.id != user_id);
+                Ok(true)
+            }
+        }
+    }
+
+    fn view_users(&self) -> Html {
         let make_table = |users: &Vec<User>| {
             html! {
                 <div class="table-responsive">
@@ -102,10 +122,11 @@ impl Component for UserTable {
                         <th>{"First name"}</th>
                         <th>{"Last name"}</th>
                         <th>{"Creation date"}</th>
+                        <th>{"Delete"}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {users.iter().map(make_user_row).collect::<Vec<_>>()}
+                      {users.iter().map(|u| self.view_user(u)).collect::<Vec<_>>()}
                     </tbody>
                   </table>
                 </div>
@@ -113,8 +134,33 @@ impl Component for UserTable {
         };
         match &self.users {
             None => html! {{"Loading..."}},
-            Some(Err(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
-            Some(Ok(users)) => make_table(users),
+            Some(users) => make_table(users),
+        }
+    }
+
+    fn view_user(&self, user: &User) -> Html {
+        html! {
+          <tr key=user.id.clone()>
+              <td><Link route=AppRoute::UserDetails(user.id.clone())>{&user.id}</Link></td>
+              <td>{&user.email}</td>
+              <td>{&user.display_name}</td>
+              <td>{&user.first_name}</td>
+              <td>{&user.last_name}</td>
+              <td>{&user.creation_date.with_timezone(&chrono::Local)}</td>
+              <td>
+                <DeleteUser
+                  username=user.id.clone()
+                  on_user_deleted=self.link.callback(Msg::OnUserDeleted)
+                  on_error=self.link.callback(Msg::OnError)/>
+              </td>
+          </tr>
+        }
+    }
+
+    fn view_errors(&self) -> Html {
+        match &self.error {
+            None => html! {},
+            Some(e) => html! {<div>{"Error: "}{e.to_string()}</div>},
         }
     }
 }
