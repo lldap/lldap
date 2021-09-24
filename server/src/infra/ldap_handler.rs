@@ -29,6 +29,31 @@ fn parse_distinguished_name(dn: &str) -> Result<Vec<(String, String)>> {
         .collect()
 }
 
+fn get_group_id_from_distinguished_name(
+    dn: &str,
+    base_tree: &[(String, String)],
+    base_dn_str: &str,
+) -> Result<String> {
+    let parts = parse_distinguished_name(dn)?;
+    if !is_subtree(&parts, base_tree) {
+        bail!("Not a subtree of the base tree");
+    }
+    if parts.len() == base_tree.len() + 2 {
+        if parts[1].0 != "ou" || parts[1].1 != "groups" || parts[0].0 != "cn" {
+            bail!(
+                r#"Unexpected user DN format. Expected: "cn=groupname,ou=groups,{}""#,
+                base_dn_str
+            );
+        }
+        Ok(parts[0].1.to_string())
+    } else {
+        bail!(
+            r#"Unexpected user DN format. Expected: "cn=groupname,ou=groups,{}""#,
+            base_dn_str
+        );
+    }
+}
+
 fn get_user_id_from_distinguished_name(
     dn: &str,
     base_tree: &[(String, String)],
@@ -128,22 +153,6 @@ fn map_field(field: &str) -> Result<String> {
     })
 }
 
-fn convert_filter(filter: &LdapFilter) -> Result<RequestFilter> {
-    match filter {
-        LdapFilter::And(filters) => Ok(RequestFilter::And(
-            filters.iter().map(convert_filter).collect::<Result<_>>()?,
-        )),
-        LdapFilter::Or(filters) => Ok(RequestFilter::Or(
-            filters.iter().map(convert_filter).collect::<Result<_>>()?,
-        )),
-        LdapFilter::Not(filter) => Ok(RequestFilter::Not(Box::new(convert_filter(&*filter)?))),
-        LdapFilter::Equality(field, value) => {
-            Ok(RequestFilter::Equality(map_field(field)?, value.clone()))
-        }
-        _ => bail!("Unsupported filter"),
-    }
-}
-
 pub struct LdapHandler<Backend: BackendHandler + LoginHandler> {
     dn: String,
     backend_handler: Backend,
@@ -214,12 +223,12 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
             // Search path is not in our tree, just return an empty success.
             return vec![lsr.gen_success()];
         }
-        let filters = match convert_filter(&lsr.filter) {
+        let filters = match self.convert_filter(&lsr.filter) {
             Ok(f) => Some(f),
-            Err(_) => {
+            Err(e) => {
                 return vec![lsr.gen_error(
                     LdapResultCode::UnwillingToPerform,
-                    "Unsupported filter".to_string(),
+                    format!("Unsupported filter: {}", e),
                 )]
             }
         };
@@ -262,6 +271,47 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
             ServerOps::Whoami(wr) => vec![self.do_whoami(&wr)],
         };
         Some(result)
+    }
+
+    fn convert_filter(&self, filter: &LdapFilter) -> Result<RequestFilter> {
+        match filter {
+            LdapFilter::And(filters) => Ok(RequestFilter::And(
+                filters
+                    .iter()
+                    .map(|f| self.convert_filter(f))
+                    .collect::<Result<_>>()?,
+            )),
+            LdapFilter::Or(filters) => Ok(RequestFilter::Or(
+                filters
+                    .iter()
+                    .map(|f| self.convert_filter(f))
+                    .collect::<Result<_>>()?,
+            )),
+            LdapFilter::Not(filter) => {
+                Ok(RequestFilter::Not(Box::new(self.convert_filter(&*filter)?)))
+            }
+            LdapFilter::Equality(field, value) => {
+                if field == "memberOf" {
+                    let group_name = get_group_id_from_distinguished_name(
+                        value,
+                        &self.base_dn,
+                        &self.base_dn_str,
+                    )?;
+                    Ok(RequestFilter::MemberOf(group_name))
+                } else {
+                    Ok(RequestFilter::Equality(map_field(field)?, value.clone()))
+                }
+            }
+            LdapFilter::Present(field) => {
+                // Check that it's a field we support.
+                if field == "objectclass" || map_field(field).is_ok() {
+                    Ok(RequestFilter::And(Vec::new()))
+                } else {
+                    Ok(RequestFilter::Not(Box::new(RequestFilter::And(Vec::new()))))
+                }
+            }
+            _ => bail!("Unsupported filter: {:?}", filter),
+        }
     }
 }
 

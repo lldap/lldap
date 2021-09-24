@@ -48,6 +48,8 @@ pub enum RequestFilter {
     Or(Vec<RequestFilter>),
     Not(Box<RequestFilter>),
     Equality(String, String),
+    // Check if a user belongs to a group.
+    MemberOf(String),
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
