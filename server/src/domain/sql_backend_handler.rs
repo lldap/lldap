@@ -18,24 +18,53 @@ impl SqlBackendHandler {
     }
 }
 
-fn get_filter_expr(filter: RequestFilter) -> SimpleExpr {
+struct RequiresGroup(bool);
+
+// Returns the condition for the SQL query, and whether it requires joining with the groups table.
+fn get_filter_expr(filter: RequestFilter) -> (RequiresGroup, SimpleExpr) {
     use RequestFilter::*;
     fn get_repeated_filter(
         fs: Vec<RequestFilter>,
         field: &dyn Fn(SimpleExpr, SimpleExpr) -> SimpleExpr,
-    ) -> SimpleExpr {
+    ) -> (RequiresGroup, SimpleExpr) {
+        let mut requires_group = false;
         let mut it = fs.into_iter();
         let first_expr = match it.next() {
-            None => return Expr::value(true),
-            Some(f) => get_filter_expr(f),
+            None => return (RequiresGroup(false), Expr::value(true)),
+            Some(f) => {
+                let (group, filter) = get_filter_expr(f);
+                requires_group |= group.0;
+                filter
+            }
         };
-        it.fold(first_expr, |e, f| field(e, get_filter_expr(f)))
+        let filter = it.fold(first_expr, |e, f| {
+            let (group, filters) = get_filter_expr(f);
+            requires_group |= group.0;
+            field(e, filters)
+        });
+        (RequiresGroup(requires_group), filter)
     }
     match filter {
         And(fs) => get_repeated_filter(fs, &SimpleExpr::and),
         Or(fs) => get_repeated_filter(fs, &SimpleExpr::or),
-        Not(f) => Expr::not(Expr::expr(get_filter_expr(*f))),
-        Equality(s1, s2) => Expr::expr(Expr::cust(&s1)).eq(s2),
+        Not(f) => {
+            let (requires_group, filters) = get_filter_expr(*f);
+            (requires_group, Expr::not(Expr::expr(filters)))
+        }
+        Equality(s1, s2) => (
+            RequiresGroup(false),
+            if s1 == Users::DisplayName.to_string() {
+                Expr::col((Users::Table, Users::DisplayName)).eq(s2)
+            } else if s1 == Users::UserId.to_string() {
+                Expr::col((Users::Table, Users::UserId)).eq(s2)
+            } else {
+                Expr::expr(Expr::cust(&s1)).eq(s2)
+            },
+        ),
+        MemberOf(group) => (
+            RequiresGroup(true),
+            Expr::col((Groups::Table, Groups::DisplayName)).eq(group),
+        ),
     }
 }
 
@@ -44,21 +73,38 @@ impl BackendHandler for SqlBackendHandler {
     async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>> {
         let query = {
             let mut query_builder = Query::select()
-                .column(Users::UserId)
+                .column((Users::Table, Users::UserId))
                 .column(Users::Email)
-                .column(Users::DisplayName)
+                .column((Users::Table, Users::DisplayName))
                 .column(Users::FirstName)
                 .column(Users::LastName)
                 .column(Users::Avatar)
                 .column(Users::CreationDate)
                 .from(Users::Table)
-                .order_by(Users::UserId, Order::Asc)
+                .order_by((Users::Table, Users::UserId), Order::Asc)
                 .to_owned();
             if let Some(filter) = filters {
+                if filter == RequestFilter::Not(Box::new(RequestFilter::And(Vec::new()))) {
+                    return Ok(Vec::new());
+                }
                 if filter != RequestFilter::And(Vec::new())
                     && filter != RequestFilter::Or(Vec::new())
                 {
-                    query_builder.and_where(get_filter_expr(filter));
+                    let (RequiresGroup(requires_group), condition) = get_filter_expr(filter);
+                    query_builder.and_where(condition);
+                    if requires_group {
+                        query_builder
+                            .left_join(
+                                Memberships::Table,
+                                Expr::tbl(Users::Table, Users::UserId)
+                                    .equals(Memberships::Table, Memberships::UserId),
+                            )
+                            .left_join(
+                                Groups::Table,
+                                Expr::tbl(Memberships::Table, Memberships::GroupId)
+                                    .equals(Groups::Table, Groups::GroupId),
+                            );
+                    }
                 }
             }
 
