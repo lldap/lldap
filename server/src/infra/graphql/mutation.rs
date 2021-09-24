@@ -131,4 +131,12 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         context.handler.delete_user(&user_id).await?;
         Ok(Success::new())
     }
+
+    async fn delete_group(context: &Context<Handler>, group_id: i32) -> FieldResult<Success> {
+        if !context.validation_result.is_admin {
+            return Err("Unauthorized group deletion".into());
+        }
+        context.handler.delete_group(GroupId(group_id)).await?;
+        Ok(Success::new())
+    }
 }

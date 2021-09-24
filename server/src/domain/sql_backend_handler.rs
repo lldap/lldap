@@ -251,6 +251,15 @@ impl BackendHandler for SqlBackendHandler {
         Ok(GroupId(row.get::<i32, _>(&*Groups::GroupId.to_string())))
     }
 
+    async fn delete_group(&self, group_id: GroupId) -> Result<()> {
+        let delete_query = Query::delete()
+            .from_table(Groups::Table)
+            .and_where(Expr::col(Groups::GroupId).eq(group_id))
+            .to_string(DbQueryBuilder {});
+        sqlx::query(&delete_query).execute(&self.sql_pool).await?;
+        Ok(())
+    }
+
     async fn add_user_to_group(&self, user_id: &str, group_id: GroupId) -> Result<()> {
         let query = Query::insert()
             .into_table(Memberships::Table)
