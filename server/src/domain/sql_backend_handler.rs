@@ -65,6 +65,10 @@ fn get_filter_expr(filter: RequestFilter) -> (RequiresGroup, SimpleExpr) {
             RequiresGroup(true),
             Expr::col((Groups::Table, Groups::DisplayName)).eq(group),
         ),
+        MemberOfId(group_id) => (
+            RequiresGroup(true),
+            Expr::col((Groups::Table, Groups::GroupId)).eq(group_id),
+        ),
     }
 }
 

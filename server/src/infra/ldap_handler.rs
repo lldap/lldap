@@ -318,8 +318,7 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::handler::BindRequest;
-    use crate::domain::handler::MockTestBackendHandler;
+    use crate::domain::handler::{BindRequest, MockTestBackendHandler};
     use mockall::predicate::eq;
     use tokio;
 
@@ -665,14 +664,17 @@ mod tests {
             msgid: 2,
             base: "ou=people,dc=example,dc=com".to_string(),
             scope: LdapSearchScope::Base,
-            filter: LdapFilter::Present("uid".to_string()),
+            filter: LdapFilter::Substring(
+                "uid".to_string(),
+                ldap3_server::proto::LdapSubstringFilter::default(),
+            ),
             attrs: vec!["objectClass".to_string()],
         };
         assert_eq!(
             ldap_handler.do_search(&request).await,
             vec![request.gen_error(
                 LdapResultCode::UnwillingToPerform,
-                "Unsupported filter".to_string()
+                "Unsupported filter: Unsupported filter: Substring(\"uid\", LdapSubstringFilter { initial: None, any: [], final_: None })".to_string()
             )]
         );
     }

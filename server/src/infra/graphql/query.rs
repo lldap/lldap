@@ -1,4 +1,4 @@
-use crate::domain::handler::{BackendHandler, GroupIdAndName};
+use crate::domain::handler::{BackendHandler, GroupId, GroupIdAndName};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -16,6 +16,8 @@ pub struct RequestFilter {
     all: Option<Vec<RequestFilter>>,
     not: Option<Box<RequestFilter>>,
     eq: Option<EqualityConstraint>,
+    member_of: Option<String>,
+    member_of_id: Option<i32>,
 }
 
 impl TryInto<DomainRequestFilter> for RequestFilter {
@@ -32,6 +34,12 @@ impl TryInto<DomainRequestFilter> for RequestFilter {
             field_count += 1;
         }
         if self.eq.is_some() {
+            field_count += 1;
+        }
+        if self.member_of.is_some() {
+            field_count += 1;
+        }
+        if self.member_of_id.is_some() {
             field_count += 1;
         }
         if field_count == 0 {
@@ -59,6 +67,12 @@ impl TryInto<DomainRequestFilter> for RequestFilter {
         }
         if let Some(c) = self.not {
             return Ok(DomainRequestFilter::Not(Box::new((*c).try_into()?)));
+        }
+        if let Some(group) = self.member_of {
+            return Ok(DomainRequestFilter::MemberOf(group));
+        }
+        if let Some(group_id) = self.member_of_id {
+            return Ok(DomainRequestFilter::MemberOfId(GroupId(group_id)));
         }
         unreachable!();
     }
@@ -239,10 +253,7 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        domain::handler::{GroupId, GroupIdAndName, MockTestBackendHandler},
-        infra::auth_service::ValidationResults,
-    };
+    use crate::{domain::handler::MockTestBackendHandler, infra::auth_service::ValidationResults};
     use juniper::{
         execute, graphql_value, DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType,
         RootNode, Variables,
