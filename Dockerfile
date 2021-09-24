@@ -1,5 +1,5 @@
 # Build image
-FROM rust:alpine AS builder
+FROM rust:alpine AS chef
 
 RUN set -x \
     # Add user
@@ -17,14 +17,26 @@ USER app
 WORKDIR /app
 RUN set -x \
     # Install build tools
-    && RUSTFLAGS=-Ctarget-feature=-crt-static cargo install wasm-pack \
-    && npm install rollup
-# Build
-COPY --chown=app:app . /app
+    && RUSTFLAGS=-Ctarget-feature=-crt-static cargo install wasm-pack cargo-chef \
+    && npm install rollup \
+    && rustup target add wasm32-unknown-unknown
+
+# Prepare the dependency list.
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Build dependencies
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release -p lldap --recipe-path recipe.json \
+  && cargo chef cook --release -p lldap_app --target wasm32-unknown-unknown
+
+# Copy the source and build the app.
+COPY --chown=app:app . .
 RUN cargo build --release -p lldap
 # TODO: release mode.
 RUN ./app/build.sh
-
 
 # Final image
 FROM alpine
