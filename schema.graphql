@@ -9,6 +9,7 @@ type Mutation {
   addUserToGroup(userId: String!, groupId: Int!): Success!
   removeUserFromGroup(userId: String!, groupId: Int!): Success!
   deleteUser(userId: String!): Success!
+  deleteGroup(groupId: Int!): Success!
 }
 
 type Group {

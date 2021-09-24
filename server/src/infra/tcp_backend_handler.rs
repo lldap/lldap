@@ -34,6 +34,7 @@ mockall::mock! {
         async fn update_user(&self, request: UpdateUserRequest) -> DomainResult<()>;
         async fn delete_user(&self, user_id: &str) -> DomainResult<()>;
         async fn create_group(&self, group_name: &str) -> DomainResult<GroupId>;
+        async fn delete_group(&self, group_id: GroupId) -> DomainResult<()>;
         async fn add_user_to_group(&self, user_id: &str, group_id: GroupId) -> DomainResult<()>;
         async fn remove_user_from_group(&self, user_id: &str, group_id: GroupId) -> DomainResult<()>;
     }
