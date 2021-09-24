@@ -6,6 +6,7 @@ input EqualityConstraint {
 type Mutation {
   createUser(user: CreateUserInput!): User!
   updateUser(user: UpdateUserInput!): Success!
+  updateGroup(group: UpdateGroupInput!): Success!
   addUserToGroup(userId: String!, groupId: Int!): Success!
   removeUserFromGroup(userId: String!, groupId: Int!): Success!
   deleteUser(userId: String!): Success!
@@ -32,6 +33,12 @@ input RequestFilter {
 
 "DateTime"
 scalar DateTimeUtc
+
+"The fields that can be updated for a group."
+input UpdateGroupInput {
+  id: Int!
+  displayName: String
+}
 
 type Query {
   apiVersion: String!

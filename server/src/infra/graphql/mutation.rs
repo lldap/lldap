@@ -1,4 +1,6 @@
-use crate::domain::handler::{BackendHandler, CreateUserRequest, GroupId, UpdateUserRequest};
+use crate::domain::handler::{
+    BackendHandler, CreateUserRequest, GroupId, UpdateGroupRequest, UpdateUserRequest,
+};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
 
 use super::api::Context;
@@ -35,6 +37,13 @@ pub struct UpdateUserInput {
     display_name: Option<String>,
     first_name: Option<String>,
     last_name: Option<String>,
+}
+
+#[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
+/// The fields that can be updated for a group.
+pub struct UpdateGroupInput {
+    id: i32,
+    display_name: Option<String>,
 }
 
 #[derive(PartialEq, Eq, Debug, GraphQLObject)]
@@ -89,6 +98,23 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
                 display_name: user.display_name,
                 first_name: user.first_name,
                 last_name: user.last_name,
+            })
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn update_group(
+        context: &Context<Handler>,
+        group: UpdateGroupInput,
+    ) -> FieldResult<Success> {
+        if !context.validation_result.is_admin {
+            return Err("Unauthorized group update".into());
+        }
+        context
+            .handler
+            .update_group(UpdateGroupRequest {
+                group_id: GroupId(group.id),
+                display_name: group.display_name,
             })
             .await?;
         Ok(Success::new())
