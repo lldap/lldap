@@ -29,6 +29,8 @@ input RequestFilter {
   all: [RequestFilter!]
   not: RequestFilter
   eq: EqualityConstraint
+  memberOf: String
+  memberOfId: Int
 }
 
 "DateTime"
