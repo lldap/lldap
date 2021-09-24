@@ -123,4 +123,12 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             .await?;
         Ok(Success::new())
     }
+
+    async fn delete_user(context: &Context<Handler>, user_id: String) -> FieldResult<Success> {
+        if !context.validation_result.is_admin {
+            return Err("Unauthorized user deletion".into());
+        }
+        context.handler.delete_user(&user_id).await?;
+        Ok(Success::new())
+    }
 }
