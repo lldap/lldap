@@ -226,6 +226,23 @@ impl BackendHandler for SqlBackendHandler {
         Ok(())
     }
 
+    async fn update_group(&self, request: UpdateGroupRequest) -> Result<()> {
+        let mut values = Vec::new();
+        if let Some(display_name) = request.display_name {
+            values.push((Groups::DisplayName, display_name.into()));
+        }
+        if values.is_empty() {
+            return Ok(());
+        }
+        let query = Query::update()
+            .table(Groups::Table)
+            .values(values)
+            .and_where(Expr::col(Groups::GroupId).eq(request.group_id))
+            .to_string(DbQueryBuilder {});
+        sqlx::query(&query).execute(&self.sql_pool).await?;
+        Ok(())
+    }
+
     async fn delete_user(&self, user_id: &str) -> Result<()> {
         let delete_query = Query::delete()
             .from_table(Users::Table)
