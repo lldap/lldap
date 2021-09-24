@@ -110,6 +110,9 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         if !context.validation_result.is_admin {
             return Err("Unauthorized group update".into());
         }
+        if group.id == 1 {
+            return Err("Cannot change admin group details".into());
+        }
         context
             .handler
             .update_group(UpdateGroupRequest {
@@ -143,6 +146,9 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         if !context.validation_result.is_admin {
             return Err("Unauthorized group membership modification".into());
         }
+        if context.validation_result.user == user_id && group_id == 1 {
+            return Err("Cannot remove admin rights for current user".into());
+        }
         context
             .handler
             .remove_user_from_group(&user_id, GroupId(group_id))
@@ -154,6 +160,9 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         if !context.validation_result.is_admin {
             return Err("Unauthorized user deletion".into());
         }
+        if context.validation_result.user == user_id {
+            return Err("Cannot delete current user".into());
+        }
         context.handler.delete_user(&user_id).await?;
         Ok(Success::new())
     }
@@ -161,6 +170,9 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
     async fn delete_group(context: &Context<Handler>, group_id: i32) -> FieldResult<Success> {
         if !context.validation_result.is_admin {
             return Err("Unauthorized group deletion".into());
+        }
+        if group_id == 1 {
+            return Err("Cannot delete admin group".into());
         }
         context.handler.delete_group(GroupId(group_id)).await?;
         Ok(Success::new())
