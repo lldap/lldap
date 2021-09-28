@@ -7,6 +7,7 @@ use crate::{
         router::{AppRoute, NavButton},
         user_details::UserDetails,
         user_table::UserTable,
+        group_table::GroupTable,
     },
     infra::cookies::get_cookie,
 };
@@ -112,6 +113,13 @@ impl Component for App {
                                 <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
                                 <UserTable />
                                 <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
+                              </div>
+                          },
+                          AppRoute::ListGroups => html! {
+                              <div>
+                                <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
+                                <GroupTable />
+                                //<NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
                               </div>
                           },
                           AppRoute::UserDetails(username) => html! {
