@@ -15,6 +15,8 @@ pub enum AppRoute {
     ChangePassword(String),
     #[to = "/user/{user_id}"]
     UserDetails(String),
+    #[to = "/groups"]
+    ListGroups,
     #[to = "/"]
     Index,
 }
