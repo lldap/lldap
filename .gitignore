@@ -14,5 +14,10 @@
 *.db-shm
 *.db-wal
 
+# Output of `npm install rollup`
+node_modules/
+package-lock.json
+package.json
+
 # Server private key
 server_key
