@@ -163,7 +163,7 @@ impl Component for LoginForm {
                     form=&self.form
                     field_name="password"
                     input_type="password"
-                    placeholder="Email"
+                    placeholder="Password"
                     autocomplete="current-password" />
                 </div>
                 <div class="form-group">
