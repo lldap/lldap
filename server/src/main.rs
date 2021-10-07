@@ -11,7 +11,7 @@ use crate::{
     infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler},
 };
 use actix::Actor;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use futures_util::TryFutureExt;
 use log::*;
 
@@ -19,6 +19,9 @@ mod domain;
 mod infra;
 
 async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) -> Result<()> {
+    if config.ldap_user_pass.len() < 8 {
+        bail!("Minimum password length is 8 characters");
+    }
     handler
         .create_user(CreateUserRequest {
             user_id: config.ldap_user_dn.clone(),

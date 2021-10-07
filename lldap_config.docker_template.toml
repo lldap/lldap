@@ -38,6 +38,7 @@
 ## Admin password.
 ## Password for the admin account, both for the LDAP bind and for the
 ## administration interface.
+## It should be minimum 8 characters long.
 ## You can set it with the LDAP_USER_PASS environment variable.
 ## Note: you can create another admin user for LDAP/administration, this
 ## is just the default one.
