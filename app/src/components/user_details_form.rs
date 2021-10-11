@@ -185,7 +185,7 @@ impl Component for UserDetailsForm {
               {"Creation date: "}
               </label>
               <div class="col-sm-10">
-                <span id="creationDate" class="form-constrol-static">{&self.props.user.creation_date.with_timezone(&chrono::Local)}</span>
+                <span id="creationDate" class="form-constrol-static">{&self.props.user.creation_date.date().naive_local()}</span>
               </div>
             </div>
             <div class="form-group row">
