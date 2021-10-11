@@ -1,8 +1,8 @@
 use crate::{
-    //components::{
-    //    delete_group::DeleteGroup,
-    //    router::{AppRoute, Link},
-    //},
+    components::{
+        delete_group::DeleteGroup,
+        router::{AppRoute, Link},
+    },
     infra::api::HostService,
 };
 use anyhow::{Error, Result};
@@ -14,14 +14,14 @@ use yew::services::{fetch::FetchTask, ConsoleService};
 #[graphql(
     schema_path = "../schema.graphql",
     query_path = "queries/get_group_list.graphql",
-    response_derives = "Debug",
+    response_derives = "Debug,Clone,PartialEq",
     custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct GetGroupList;
 
 use get_group_list::ResponseData;
 
-type Group = get_group_list::GetGroupListGroups;
+pub type Group = get_group_list::GetGroupListGroups;
 
 pub struct GroupTable {
     link: ComponentLink<Self>,
@@ -116,9 +116,8 @@ impl GroupTable {
                   <table class="table table-striped">
                     <thead>
                       <tr>
-                        <th>{"Group ID"}</th>
-                        <th>{"Display name"}</th>
-                        //<th>{"Delete"}</th>
+                        <th>{"Groups"}</th>
+                        <th>{"Delete"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -136,16 +135,18 @@ impl GroupTable {
 
     fn view_group(&self, group: &Group) -> Html {
         html! {
-          <tr key=group.id.clone()>
-              //<td><Link route=AppRoute::GroupDetails(group.id.clone())>{&group.id}</Link></td>
-              <td>{&group.id}</td>
-              <td>{&group.display_name}</td>
-              //<td>
-              //  <DeleteGroup
-              //    groupname=group.id.clone()
-              //    on_group_deleted=self.link.callback(Msg::OnGroupDeleted)
-              //    on_error=self.link.callback(Msg::OnError)/>
-              //</td>
+          <tr key=group.id>
+              <td>
+                <Link route=AppRoute::GroupDetails(group.id)>
+                  {&group.display_name}
+                </Link>
+              </td>
+              <td>
+                <DeleteGroup
+                  group=group.clone()
+                  on_group_deleted=self.link.callback(Msg::OnGroupDeleted)
+                  on_error=self.link.callback(Msg::OnError)/>
+              </td>
           </tr>
         }
     }

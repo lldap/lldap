@@ -17,6 +17,8 @@ pub enum AppRoute {
     UserDetails(String),
     #[to = "/groups"]
     ListGroups,
+    #[to = "/group/{group_id}"]
+    GroupDetails(i64),
     #[to = "/"]
     Index,
 }
