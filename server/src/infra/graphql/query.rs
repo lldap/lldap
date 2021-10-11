@@ -139,6 +139,17 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
             .await
             .map(|v| v.into_iter().map(Into::into).collect())?)
     }
+
+    async fn group(context: &Context<Handler>, group_id: i32) -> FieldResult<Group<Handler>> {
+        if !context.validation_result.is_admin {
+            return Err("Unauthorized access to group data".into());
+        }
+        Ok(context
+            .handler
+            .get_group_details(GroupId(group_id))
+            .await
+            .map(Into::into)?)
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]

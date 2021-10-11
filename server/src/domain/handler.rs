@@ -88,7 +88,7 @@ pub trait LoginHandler: Clone + Send {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GroupId(pub i32);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::FromRow)]
 pub struct GroupIdAndName(pub GroupId, pub String);
 
 #[async_trait]
@@ -96,6 +96,7 @@ pub trait BackendHandler: Clone + Send {
     async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>>;
     async fn list_groups(&self) -> Result<Vec<Group>>;
     async fn get_user_details(&self, user_id: &str) -> Result<User>;
+    async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
@@ -118,6 +119,7 @@ mockall::mock! {
         async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>>;
         async fn list_groups(&self) -> Result<Vec<Group>>;
         async fn get_user_details(&self, user_id: &str) -> Result<User>;
+        async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
         async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
         async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
