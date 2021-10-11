@@ -1,6 +1,7 @@
 use crate::{
     components::{
         change_password::ChangePasswordForm,
+        create_group::CreateGroupForm,
         create_user::CreateUserForm,
         group_details::GroupDetails,
         group_table::GroupTable,
@@ -113,10 +114,13 @@ impl Component for App {
                                 <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
                               </div>
                           },
+                          AppRoute::CreateGroup => html! {
+                              <CreateGroupForm/>
+                          },
                           AppRoute::ListGroups => html! {
                               <div>
                                 <GroupTable />
-                                //<NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
+                                <NavButton classes="btn btn-primary" route=AppRoute::CreateGroup>{"Create a group"}</NavButton>
                               </div>
                           },
                           AppRoute::GroupDetails(group_id) => html! {

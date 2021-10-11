@@ -1,4 +1,4 @@
-use crate::infra::api::HostService;
+use crate::{components::router::AppRoute, infra::api::HostService};
 use anyhow::{bail, Context, Result};
 use graphql_client::GraphQLQuery;
 use lldap_auth::{opaque, registration};
@@ -158,9 +158,7 @@ impl CreateUserForm {
             }
             Msg::SuccessfulCreation => {
                 self.route_dispatcher
-                    .send(RouteRequest::ChangeRoute(Route::new_no_state(
-                        "/list_users",
-                    )));
+                    .send(RouteRequest::ChangeRoute(Route::from(AppRoute::ListUsers)));
                 Ok(true)
             }
         }
