@@ -131,36 +131,32 @@ impl GroupDetails {
             }
         };
         html! {
-        <div>
-          <h3>{"Members"}</h3>
-          <div class="table-responsive">
-            <table class="table table-striped">
-              <thead>
-                <tr key="headerRow">
-                  <th>{"User Id"}</th>
-                  <th>{"Display name"}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {if g.users.is_empty() {
-                  html! {
-                    <tr key="EmptyRow">
-                      <td>{"No members"}</td>
-                      <td/>
-                    </tr>
-                  }
-                } else {
-                  html! {<>{g.users.iter().map(make_user_row).collect::<Vec<_>>()}</>}
-                }}
-                <hr/>
-                <tr key="groupToAddRow">
-                  {self.view_add_user_button(g)}
-                </tr>
-              </tbody>
-            </table>
+          <div>
+            <h3>{"Members"}</h3>
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr key="headerRow">
+                    <th>{"User Id"}</th>
+                    <th>{"Display name"}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {if g.users.is_empty() {
+                    html! {
+                      <tr key="EmptyRow">
+                        <td>{"No members"}</td>
+                        <td/>
+                      </tr>
+                    }
+                  } else {
+                    html! {<>{g.users.iter().map(make_user_row).collect::<Vec<_>>()}</>}
+                  }}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         }
     }
 
@@ -222,12 +218,8 @@ impl Component for GroupDetails {
             (Some(u), error) => {
                 html! {
                     <div>
-                        /*
-                      <GroupDetailsForm
-                        user=u.clone()
-                        on_error=self.link.callback(Msg::OnError)/>
-                        */
                       {self.view_user_list(u)}
+                      {self.view_add_user_button(u)}
                       {self.view_messages(error)}
                     </div>
                 }
