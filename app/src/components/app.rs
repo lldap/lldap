@@ -2,12 +2,13 @@ use crate::{
     components::{
         change_password::ChangePasswordForm,
         create_user::CreateUserForm,
+        group_details::GroupDetails,
+        group_table::GroupTable,
         login::LoginForm,
         logout::LogoutButton,
         router::{AppRoute, NavButton},
         user_details::UserDetails,
         user_table::UserTable,
-        group_table::GroupTable,
     },
     infra::cookies::get_cookie,
 };
@@ -104,36 +105,28 @@ impl Component for App {
                               <LoginForm on_logged_in=link.callback(Msg::Login)/>
                           },
                           AppRoute::CreateUser => html! {
-                              <div>
-                                <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
-                                <CreateUserForm/>
-                              </div>
+                              <CreateUserForm/>
                           },
                           AppRoute::Index | AppRoute::ListUsers => html! {
                               <div>
-                                <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
                                 <UserTable />
                                 <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
                               </div>
                           },
                           AppRoute::ListGroups => html! {
                               <div>
-                                <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
                                 <GroupTable />
                                 //<NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
                               </div>
                           },
+                          AppRoute::GroupDetails(group_id) => html! {
+                              <GroupDetails group_id=group_id />
+                          },
                           AppRoute::UserDetails(username) => html! {
-                              <div>
-                                <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
-                                <UserDetails username=username.clone() is_admin=is_admin />
-                              </div>
+                              <UserDetails username=username.clone() is_admin=is_admin />
                           },
                           AppRoute::ChangePassword(username) => html! {
-                              <div>
-                                <LogoutButton on_logged_out=link.callback(|_| Msg::Logout) />
-                                <ChangePasswordForm username=username.clone() is_admin=is_admin />
-                              </div>
+                              <ChangePasswordForm username=username.clone() is_admin=is_admin />
                           }
                       }
                   })
@@ -182,10 +175,9 @@ impl App {
     }
 
     fn view_banner(&self) -> Html {
-        if !self.is_admin() {
-            html!{}
-        } else {
-            html!{
+        html! {
+          <>
+            {if self.is_admin() { html! {
               <>
                 <div>
                   <NavButton
@@ -202,7 +194,11 @@ impl App {
                   </NavButton>
                 </div>
               </>
-            }
+            } } else { html!{} } }
+            {if self.user_info.is_some() { html! {
+              <LogoutButton on_logged_out=self.link.callback(|_| Msg::Logout) />
+            }} else { html! {} }}
+          </>
         }
     }
 

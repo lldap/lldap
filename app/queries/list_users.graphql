@@ -8,3 +8,9 @@ query ListUsersQuery($filters: RequestFilter) {
     creationDate
   }
 }
+query ListUserNames($filters: RequestFilter) {
+  users(filters: $filters) {
+    id
+    displayName
+  }
+}

@@ -2,7 +2,7 @@ use crate::{
     components::{
         add_user_to_group::AddUserToGroupComponent,
         remove_user_from_group::RemoveUserFromGroupComponent,
-        router::{AppRoute, NavButton},
+        router::{AppRoute, Link, NavButton},
         user_details_form::UserDetailsForm,
     },
     infra::api::HostService,
@@ -45,7 +45,7 @@ pub enum Msg {
     UserDetailsResponse(Result<get_user_details::ResponseData>),
     OnError(Error),
     OnUserAddedToGroup(Group),
-    OnUserRemovedFromGroup(Group),
+    OnUserRemovedFromGroup((String, i64)),
 }
 
 #[derive(yew::Properties, Clone, PartialEq)]
@@ -83,8 +83,12 @@ impl UserDetails {
             Msg::OnUserAddedToGroup(group) => {
                 self.user.as_mut().unwrap().groups.push(group);
             }
-            Msg::OnUserRemovedFromGroup(group) => {
-                self.user.as_mut().unwrap().groups.retain(|g| g != &group);
+            Msg::OnUserRemovedFromGroup((_, group_id)) => {
+                self.user
+                    .as_mut()
+                    .unwrap()
+                    .groups
+                    .retain(|g| g.id != group_id);
             }
         }
         Ok(true)
@@ -107,12 +111,24 @@ impl UserDetails {
             let display_name = group.display_name.clone();
             html! {
               <tr key="groupRow_".to_string() + &display_name>
-                <RemoveUserFromGroupComponent
-                  username=u.id.clone()
-                  group=group.clone()
-                  is_admin=self.props.is_admin
-                  on_user_removed_from_group=self.link.callback(Msg::OnUserRemovedFromGroup)
-                  on_error=self.link.callback(Msg::OnError)/>
+                {if self.props.is_admin { html! {
+                  <>
+                    <td>
+                      <Link route=AppRoute::GroupDetails(group.id)>
+                        {&group.display_name}
+                      </Link>
+                    </td>
+                    <td>
+                      <RemoveUserFromGroupComponent
+                        username=u.id.clone()
+                        group_id=group.id
+                        on_user_removed_from_group=self.link.callback(Msg::OnUserRemovedFromGroup)
+                        on_error=self.link.callback(Msg::OnError)/>
+                    </td>
+                  </>
+                } } else { html! {
+                  <td>{&group.display_name}</td>
+                } } }
               </tr>
             }
         };

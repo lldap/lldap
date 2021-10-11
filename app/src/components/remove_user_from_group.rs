@@ -1,4 +1,4 @@
-use crate::{components::user_details::Group, infra::api::HostService};
+use crate::infra::api::HostService;
 use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
 use yew::{
@@ -26,9 +26,8 @@ pub struct RemoveUserFromGroupComponent {
 #[derive(yew::Properties, Clone, PartialEq)]
 pub struct Props {
     pub username: String,
-    pub group: Group,
-    pub is_admin: bool,
-    pub on_user_removed_from_group: Callback<Group>,
+    pub group_id: i64,
+    pub on_user_removed_from_group: Callback<(String, i64)>,
     pub on_error: Callback<Error>,
 }
 
@@ -39,7 +38,7 @@ pub enum Msg {
 
 impl RemoveUserFromGroupComponent {
     fn submit_remove_group(&mut self) -> Result<bool> {
-        let group = self.props.group.id;
+        let group = self.props.group_id;
         self._task = HostService::graphql_query::<RemoveUserFromGroup>(
             remove_user_from_group::Variables {
                 user: self.props.username.clone(),
@@ -63,7 +62,7 @@ impl RemoveUserFromGroupComponent {
                 response?;
                 self.props
                     .on_user_removed_from_group
-                    .emit(self.props.group.clone());
+                    .emit((self.props.username.clone(), self.props.group_id));
             }
         }
         Ok(true)
@@ -97,21 +96,12 @@ impl Component for RemoveUserFromGroupComponent {
     }
 
     fn view(&self) -> Html {
-        let group = &self.props.group;
         html! {
-          <>
-            <td>{&group.display_name}</td>
-            { if self.props.is_admin { html! {
-                <td>
-                  <button
-                    class="btn btn-danger"
-                    onclick=self.link.callback(|_| Msg::SubmitRemoveGroup)>
-                    <i class="bi-x-circle-fill" aria-label="Remove user from group" />
-                  </button>
-                </td>
-              }} else { html!{} }
-            }
-          </>
+          <button
+            class="btn btn-danger"
+            onclick=self.link.callback(|_| Msg::SubmitRemoveGroup)>
+            <i class="bi-x-circle-fill" aria-label="Remove user from group" />
+          </button>
         }
     }
 }

@@ -1,0 +1,10 @@
+query GetGroupDetails($id: Int!) {
+  group(groupId: $id) {
+    id
+    displayName
+    users {
+      id
+      displayName
+    }
+  }
+}
