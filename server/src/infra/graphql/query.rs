@@ -235,7 +235,13 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
         if !context.validation_result.is_admin {
             return Err("Unauthorized access to group data".into());
         }
-        unimplemented!()
+        Ok(context
+            .handler
+            .list_users(Some(DomainRequestFilter::MemberOfId(GroupId(
+                self.group_id,
+            ))))
+            .await
+            .map(|v| v.into_iter().map(Into::into).collect())?)
     }
 }
 
