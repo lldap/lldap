@@ -186,6 +186,19 @@ impl BackendHandler for SqlBackendHandler {
             .await?)
     }
 
+    async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName> {
+        let query = Query::select()
+            .column(Groups::GroupId)
+            .column(Groups::DisplayName)
+            .from(Groups::Table)
+            .and_where(Expr::col(Groups::GroupId).eq(group_id))
+            .to_string(DbQueryBuilder {});
+
+        Ok(sqlx::query_as::<_, GroupIdAndName>(&query)
+            .fetch_one(&self.sql_pool)
+            .await?)
+    }
+
     async fn get_user_groups(&self, user: &str) -> Result<HashSet<GroupIdAndName>> {
         if user == self.config.ldap_user_dn {
             let mut groups = HashSet::new();

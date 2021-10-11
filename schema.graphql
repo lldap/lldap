@@ -47,6 +47,7 @@ type Query {
   user(userId: String!): User!
   users(filters: RequestFilter): [User!]!
   groups: [Group!]!
+  group(groupId: Int!): Group!
 }
 
 "The details required to create a user."
