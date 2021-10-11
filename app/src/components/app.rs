@@ -96,6 +96,7 @@ impl Component for App {
         html! {
             <div class="container">
                 <h1>{ "LLDAP" }</h1>
+                {self.view_banner()}
                 <Router<AppRoute>
                   render = Router::render(move |switch: AppRoute| {
                       match switch {
@@ -177,6 +178,31 @@ impl App {
                     }
                 }
             },
+        }
+    }
+
+    fn view_banner(&self) -> Html {
+        if !self.is_admin() {
+            html!{}
+        } else {
+            html!{
+              <>
+                <div>
+                  <NavButton
+                    classes="btn btn-primary"
+                    route=AppRoute::ListUsers>
+                    {"Users"}
+                  </NavButton>
+                </div>
+                <div>
+                  <NavButton
+                    classes="btn btn-primary"
+                    route=AppRoute::ListGroups>
+                    {"Groups"}
+                  </NavButton>
+                </div>
+              </>
+            }
         }
     }
 
