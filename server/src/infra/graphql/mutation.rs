@@ -83,6 +83,21 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             .map(Into::into)?)
     }
 
+    async fn create_group(
+        context: &Context<Handler>,
+        name: String,
+    ) -> FieldResult<super::query::Group<Handler>> {
+        if !context.validation_result.is_admin {
+            return Err("Unauthorized group creation".into());
+        }
+        let group_id = context.handler.create_group(&name).await?;
+        Ok(context
+            .handler
+            .get_group_details(group_id)
+            .await
+            .map(Into::into)?)
+    }
+
     async fn update_user(
         context: &Context<Handler>,
         user: UpdateUserInput,
