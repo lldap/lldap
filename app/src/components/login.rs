@@ -13,7 +13,7 @@ pub struct LoginForm {
     error: Option<anyhow::Error>,
     form: Form<FormModel>,
     // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
+    task: Option<FetchTask>,
 }
 
 /// The fields of the form, with the constraints.
@@ -59,12 +59,12 @@ impl LoginForm {
                     username,
                     login_start_request: message,
                 };
-                self._task = Some(HostService::login_start(
+                self.task = Some(HostService::login_start(
                     req,
                     self.link
                         .callback_once(move |r| Msg::AuthenticationStartResponse((state, r))),
                 )?);
-                Ok(false)
+                Ok(true)
             }
             Msg::AuthenticationStartResponse((login_start, res)) => {
                 let res = res.context("Could not log in (invalid response to login start)")?;
@@ -84,13 +84,14 @@ impl LoginForm {
                     server_data: res.server_data,
                     credential_finalization: login_finish.message,
                 };
-                self._task = Some(HostService::login_finish(
+                self.task = Some(HostService::login_finish(
                     req,
                     self.link.callback_once(Msg::AuthenticationFinishResponse),
                 )?);
                 Ok(false)
             }
             Msg::AuthenticationFinishResponse(user_info) => {
+                self.task = None;
                 self.on_logged_in
                     .emit(user_info.context("Could not log in")?);
                 Ok(true)
@@ -109,7 +110,7 @@ impl Component for LoginForm {
             on_logged_in: props.on_logged_in,
             error: None,
             form: Form::<FormModel>::new(FormModel::default()),
-            _task: None,
+            task: None,
         }
     }
 
@@ -119,6 +120,7 @@ impl Component for LoginForm {
             Err(e) => {
                 ConsoleService::error(&e.to_string());
                 self.error = Some(e);
+                self.task = None;
                 true
             }
             Ok(b) => b,
@@ -170,6 +172,7 @@ impl Component for LoginForm {
                   <button
                     type="submit"
                     class="btn btn-primary"
+                    disabled=self.task.is_some()
                     onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
                     {"Login"}
                   </button>
