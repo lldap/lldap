@@ -33,7 +33,7 @@ pub struct CreateUserForm {
 pub struct CreateUserModel {
     #[validate(length(min = 1, message = "Username is required"))]
     username: String,
-    #[validate(email)]
+    #[validate(email(message = "A valid email is required"))]
     email: String,
     #[validate(length(min = 1, message = "Display name is required"))]
     display_name: String,
