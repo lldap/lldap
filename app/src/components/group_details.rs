@@ -147,6 +147,7 @@ impl GroupDetails {
                   html! {
                     <tr key="EmptyRow">
                       <td>{"No members"}</td>
+                      <td/>
                     </tr>
                   }
                 } else {
