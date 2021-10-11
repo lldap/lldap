@@ -124,11 +124,12 @@ impl AddUserToGroupComponent {
                 self.props.on_user_added_to_group.emit(group);
             }
             Msg::SelectionChanged(option_props) => {
+                let was_some = self.selected_group.is_some();
                 self.selected_group = option_props.map(|props| Group {
                     id: props.value.parse::<i64>().unwrap(),
                     display_name: props.text,
                 });
-                return Ok(false);
+                return Ok(self.selected_group.is_some() != was_some);
             }
         }
         Ok(true)
@@ -183,8 +184,8 @@ impl Component for AddUserToGroupComponent {
                 }
             };
             html! {
-            <>
-              <td>
+            <div class="row">
+              <div class="col-sm-3">
                 <Select on_selection_change=self.link.callback(Msg::SelectionChanged)>
                   {
                     to_add_group_list
@@ -193,22 +194,20 @@ impl Component for AddUserToGroupComponent {
                         .collect::<Vec<_>>()
                   }
                 </Select>
-              </td>
-                  <td>
-                    <button
-                      class="btn btn-success"
-                      onclick=self.link.callback(|_| Msg::SubmitAddGroup)>
-                      {"Add"}
-                    </button>
-                  </td>
-            </>
+              </div>
+              <div class="col-sm-1">
+                <button
+                  class="btn btn-success"
+                  disabled=self.selected_group.is_none()
+                  onclick=self.link.callback(|_| Msg::SubmitAddGroup)>
+                  {"Add"}
+                </button>
+              </div>
+            </div>
             }
         } else {
             html! {
-              <>
-                <td>{"Loading groups"}</td>
-                <td></td>
-              </>
+              {"Loading groups"}
             }
         }
     }

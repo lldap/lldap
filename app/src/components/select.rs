@@ -69,6 +69,7 @@ impl Component for Select {
         html! {
             <select
               ref=self.node_ref.clone()
+              disabled=self.props.children.is_empty()
               onchange=self.link.callback(SelectMsg::OnSelectChange)>
             { self.props.children.clone() }
             </select>

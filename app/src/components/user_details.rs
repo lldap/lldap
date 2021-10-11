@@ -153,10 +153,6 @@ impl UserDetails {
                 } else {
                   html! {<>{u.groups.iter().map(make_group_row).collect::<Vec<_>>()}</>}
                 }}
-                <hr/>
-                <tr key="groupToAddRow">
-                  {self.view_add_group_button(u)}
-                </tr>
               </tbody>
             </table>
           </div>
@@ -222,6 +218,7 @@ impl Component for UserDetails {
                         user=u.clone()
                         on_error=self.link.callback(Msg::OnError)/>
                       {self.view_group_memberships(u)}
+                      {self.view_add_group_button(u)}
                       <div>
                         <NavButton
                           route=AppRoute::ChangePassword(u.id.clone())
