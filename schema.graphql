@@ -5,6 +5,7 @@ input EqualityConstraint {
 
 type Mutation {
   createUser(user: CreateUserInput!): User!
+  createGroup(name: String!): Group!
   updateUser(user: UpdateUserInput!): Success!
   updateGroup(group: UpdateGroupInput!): Success!
   addUserToGroup(userId: String!, groupId: Int!): Success!
