@@ -40,7 +40,7 @@ pub struct AddGroupMemberComponent {
     /// The currently selected user.
     selected_user: Option<User>,
     // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
+    task: Option<FetchTask>,
 }
 
 pub enum Msg {
@@ -60,7 +60,7 @@ pub struct Props {
 
 impl AddGroupMemberComponent {
     fn get_user_list(&mut self) {
-        self._task = HostService::graphql_query::<ListUserNames>(
+        self.task = HostService::graphql_query::<ListUserNames>(
             list_user_names::Variables { filters: None },
             self.link.callback(Msg::UserListResponse),
             "Error trying to fetch user list",
@@ -77,7 +77,7 @@ impl AddGroupMemberComponent {
             None => return Ok(false),
             Some(user) => user.id,
         };
-        self._task = HostService::graphql_query::<AddUserToGroup>(
+        self.task = HostService::graphql_query::<AddUserToGroup>(
             add_user_to_group::Variables {
                 user: user_id,
                 group: self.props.group_id,
@@ -97,10 +97,12 @@ impl AddGroupMemberComponent {
         match msg {
             Msg::UserListResponse(response) => {
                 self.user_list = Some(response?.users);
+                self.task = None;
             }
             Msg::SubmitAddMember => return self.submit_add_member(),
             Msg::AddMemberResponse(response) => {
                 response?;
+                self.task = None;
                 let user = self
                     .selected_user
                     .as_ref()
@@ -140,7 +142,7 @@ impl Component for AddGroupMemberComponent {
             props,
             user_list: None,
             selected_user: None,
-            _task: None,
+            task: None,
         };
         res.get_user_list();
         res
@@ -151,6 +153,7 @@ impl Component for AddGroupMemberComponent {
             Err(e) => {
                 ConsoleService::error(&e.to_string());
                 self.props.on_error.emit(e);
+                self.task = None;
                 true
             }
             Ok(b) => b,
@@ -185,7 +188,7 @@ impl Component for AddGroupMemberComponent {
               <div class="col-sm-1">
                 <button
                   class="btn btn-success"
-                  disabled=self.selected_user.is_none()
+                  disabled=self.selected_user.is_none() || self.task.is_some()
                   onclick=self.link.callback(|_| Msg::SubmitAddMember)>
                   {"Add"}
                 </button>

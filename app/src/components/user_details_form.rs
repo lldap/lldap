@@ -37,7 +37,7 @@ pub struct UserDetailsForm {
     form: yew_form::Form<UserModel>,
     /// True if we just successfully updated the user, to display a success message.
     just_updated: bool,
-    _task: Option<FetchTask>,
+    task: Option<FetchTask>,
 }
 
 pub enum Msg {
@@ -73,7 +73,7 @@ impl Component for UserDetailsForm {
             form: yew_form::Form::new(model),
             props,
             just_updated: false,
-            _task: None,
+            task: None,
         }
     }
 
@@ -83,6 +83,7 @@ impl Component for UserDetailsForm {
             Err(e) => {
                 ConsoleService::error(&e.to_string());
                 self.props.on_error.emit(e);
+                self.task = None;
                 true
             }
             Ok(b) => b,
@@ -192,8 +193,9 @@ impl Component for UserDetailsForm {
               <button
                 type="button"
                 class="btn btn-primary col-sm-1 col-form-label"
+                disabled=self.task.is_some()
                 onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})>
-                <b>{"Update"}</b>
+                {"Update"}
               </button>
             </div>
           </form>
@@ -246,7 +248,7 @@ impl UserDetailsForm {
             return Ok(false);
         }
         let req = update_user::Variables { user: user_input };
-        self._task = Some(HostService::graphql_query::<UpdateUser>(
+        self.task = Some(HostService::graphql_query::<UpdateUser>(
             req,
             self.link.callback(Msg::UserUpdated),
             "Error trying to update user",
@@ -255,6 +257,7 @@ impl UserDetailsForm {
     }
 
     fn user_update_finished(&mut self, r: Result<update_user::ResponseData>) -> Result<bool> {
+        self.task = None;
         match r {
             Err(e) => return Err(e),
             Ok(_) => {

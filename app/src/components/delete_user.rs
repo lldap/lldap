@@ -19,7 +19,7 @@ pub struct DeleteUser {
     props: DeleteUserProps,
     node_ref: NodeRef,
     modal: Option<Modal>,
-    _task: Option<FetchTask>,
+    task: Option<FetchTask>,
 }
 
 #[derive(yew::Properties, Clone, PartialEq, Debug)]
@@ -46,7 +46,7 @@ impl Component for DeleteUser {
             props,
             node_ref: NodeRef::default(),
             modal: None,
-            _task: None,
+            task: None,
         }
     }
 
@@ -67,7 +67,7 @@ impl Component for DeleteUser {
             }
             Msg::ConfirmDeleteUser => {
                 self.update(Msg::DismissModal);
-                self._task = HostService::graphql_query::<DeleteUserQuery>(
+                self.task = HostService::graphql_query::<DeleteUserQuery>(
                     delete_user_query::Variables {
                         user: self.props.username.clone(),
                     },
@@ -81,6 +81,7 @@ impl Component for DeleteUser {
                 self.modal.as_ref().expect("modal not initialized").hide();
             }
             Msg::DeleteUserResponse(response) => {
+                self.task = None;
                 if let Err(e) = response {
                     self.props.on_error.emit(e);
                 } else {
@@ -100,6 +101,7 @@ impl Component for DeleteUser {
           <>
           <button
             class="btn btn-danger"
+            disabled=self.task.is_some()
             onclick=self.link.callback(|_| Msg::ClickedDeleteUser)>
             <i class="bi-x-circle-fill" aria-label="Delete user" />
           </button>
@@ -114,16 +116,16 @@ impl DeleteUser {
         html! {
           <div
             class="modal fade"
-            id="exampleModal".to_string() + &self.props.username
+            id="deleteUserModal".to_string() + &self.props.username
             tabindex="-1"
             //role="dialog"
-            aria-labelledby="exampleModalLabel"
+            aria-labelledby="deleteUserModalLabel"
             aria-hidden="true"
             ref=self.node_ref.clone()>
             <div class="modal-dialog" /*role="document"*/>
               <div class="modal-content">
                 <div class="modal-header">
-                  <h5 class="modal-title" id="exampleModalLabel">{"Delete user?"}</h5>
+                  <h5 class="modal-title" id="deleteUserModalLabel">{"Delete user?"}</h5>
                   <button
                     type="button"
                     class="btn-close"

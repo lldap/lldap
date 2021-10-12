@@ -20,7 +20,7 @@ pub struct RemoveUserFromGroupComponent {
     link: ComponentLink<Self>,
     props: Props,
     // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
+    task: Option<FetchTask>,
 }
 
 #[derive(yew::Properties, Clone, PartialEq)]
@@ -39,7 +39,7 @@ pub enum Msg {
 impl RemoveUserFromGroupComponent {
     fn submit_remove_group(&mut self) -> Result<bool> {
         let group = self.props.group_id;
-        self._task = HostService::graphql_query::<RemoveUserFromGroup>(
+        self.task = HostService::graphql_query::<RemoveUserFromGroup>(
             remove_user_from_group::Variables {
                 user: self.props.username.clone(),
                 group,
@@ -60,6 +60,7 @@ impl RemoveUserFromGroupComponent {
             Msg::SubmitRemoveGroup => return self.submit_remove_group(),
             Msg::RemoveGroupResponse(response) => {
                 response?;
+                self.task = None;
                 self.props
                     .on_user_removed_from_group
                     .emit((self.props.username.clone(), self.props.group_id));
@@ -77,13 +78,14 @@ impl Component for RemoveUserFromGroupComponent {
         Self {
             link,
             props,
-            _task: None,
+            task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match self.handle_msg(msg) {
             Err(e) => {
+                self.task = None;
                 self.props.on_error.emit(e);
                 true
             }
@@ -99,6 +101,7 @@ impl Component for RemoveUserFromGroupComponent {
         html! {
           <button
             class="btn btn-danger"
+            disabled=self.task.is_some()
             onclick=self.link.callback(|_| Msg::SubmitRemoveGroup)>
             <i class="bi-x-circle-fill" aria-label="Remove user from group" />
           </button>

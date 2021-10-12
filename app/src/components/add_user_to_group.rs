@@ -52,7 +52,7 @@ pub struct AddUserToGroupComponent {
     /// The currently selected group.
     selected_group: Option<Group>,
     // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
+    task: Option<FetchTask>,
 }
 
 pub enum Msg {
@@ -72,7 +72,7 @@ pub struct Props {
 
 impl AddUserToGroupComponent {
     fn get_group_list(&mut self) {
-        self._task = HostService::graphql_query::<GetGroupList>(
+        self.task = HostService::graphql_query::<GetGroupList>(
             get_group_list::Variables,
             self.link.callback(Msg::GroupListResponse),
             "Error trying to fetch group list",
@@ -89,7 +89,7 @@ impl AddUserToGroupComponent {
             None => return Ok(false),
             Some(group) => group.id,
         };
-        self._task = HostService::graphql_query::<AddUserToGroup>(
+        self.task = HostService::graphql_query::<AddUserToGroup>(
             add_user_to_group::Variables {
                 user: self.props.username.clone(),
                 group: group_id,
@@ -109,10 +109,12 @@ impl AddUserToGroupComponent {
         match msg {
             Msg::GroupListResponse(response) => {
                 self.group_list = Some(response?.groups.into_iter().map(Into::into).collect());
+                self.task = None;
             }
             Msg::SubmitAddGroup => return self.submit_add_group(),
             Msg::AddGroupResponse(response) => {
                 response?;
+                self.task = None;
                 // Adding the user to the group succeeded, we're not in the process of adding a
                 // group anymore.
                 let group = self
@@ -154,7 +156,7 @@ impl Component for AddUserToGroupComponent {
             props,
             group_list: None,
             selected_group: None,
-            _task: None,
+            task: None,
         };
         res.get_group_list();
         res
@@ -164,6 +166,7 @@ impl Component for AddUserToGroupComponent {
             Err(e) => {
                 ConsoleService::error(&e.to_string());
                 self.props.on_error.emit(e);
+                self.task = None;
                 true
             }
             Ok(b) => b,
@@ -198,7 +201,7 @@ impl Component for AddUserToGroupComponent {
               <div class="col-sm-1">
                 <button
                   class="btn btn-success"
-                  disabled=self.selected_group.is_none()
+                  disabled=self.selected_group.is_none() || self.task.is_some()
                   onclick=self.link.callback(|_| Msg::SubmitAddGroup)>
                   {"Add"}
                 </button>
