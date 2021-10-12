@@ -22,7 +22,7 @@ pub struct DeleteGroup {
     props: DeleteGroupProps,
     node_ref: NodeRef,
     modal: Option<Modal>,
-    _task: Option<FetchTask>,
+    task: Option<FetchTask>,
 }
 
 #[derive(yew::Properties, Clone, PartialEq, Debug)]
@@ -49,7 +49,7 @@ impl Component for DeleteGroup {
             props,
             node_ref: NodeRef::default(),
             modal: None,
-            _task: None,
+            task: None,
         }
     }
 
@@ -70,7 +70,7 @@ impl Component for DeleteGroup {
             }
             Msg::ConfirmDeleteGroup => {
                 self.update(Msg::DismissModal);
-                self._task = HostService::graphql_query::<DeleteGroupQuery>(
+                self.task = HostService::graphql_query::<DeleteGroupQuery>(
                     delete_group_query::Variables {
                         group_id: self.props.group.id,
                     },
@@ -84,6 +84,7 @@ impl Component for DeleteGroup {
                 self.modal.as_ref().expect("modal not initialized").hide();
             }
             Msg::DeleteGroupResponse(response) => {
+                self.task = None;
                 if let Err(e) = response {
                     self.props.on_error.emit(e);
                 } else {
@@ -103,6 +104,7 @@ impl Component for DeleteGroup {
           <>
           <button
             class="btn btn-danger"
+            disabled=self.task.is_some()
             onclick=self.link.callback(|_| Msg::ClickedDeleteGroup)>
             <i class="bi-x-circle-fill" aria-label="Delete group" />
           </button>
@@ -117,15 +119,15 @@ impl DeleteGroup {
         html! {
           <div
             class="modal fade"
-            id="exampleModal".to_string() + &self.props.group.id.to_string()
+            id="deleteGroupModal".to_string() + &self.props.group.id.to_string()
             tabindex="-1"
-            aria-labelledby="exampleModalLabel"
+            aria-labelledby="deleteGroupModalLabel"
             aria-hidden="true"
             ref=self.node_ref.clone()>
             <div class="modal-dialog">
               <div class="modal-content">
                 <div class="modal-header">
-                  <h5 class="modal-title" id="exampleModalLabel">{"Delete group?"}</h5>
+                  <h5 class="modal-title" id="deleteGroupModalLabel">{"Delete group?"}</h5>
                   <button
                     type="button"
                     class="btn-close"

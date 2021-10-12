@@ -25,7 +25,7 @@ pub struct CreateGroupForm {
     form: yew_form::Form<CreateGroupModel>,
     error: Option<anyhow::Error>,
     // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
+    task: Option<FetchTask>,
 }
 
 #[derive(Model, Validate, PartialEq, Clone, Default)]
@@ -52,21 +52,18 @@ impl CreateGroupForm {
                 let req = create_group::Variables {
                     name: model.groupname,
                 };
-                self._task = Some(HostService::graphql_query::<CreateGroup>(
+                self.task = Some(HostService::graphql_query::<CreateGroup>(
                     req,
                     self.link.callback(Msg::CreateGroupResponse),
                     "Error trying to create group",
                 )?);
                 Ok(true)
             }
-            Msg::CreateGroupResponse(r) => {
-                match r {
-                    Err(e) => return Err(e),
-                    Ok(r) => ConsoleService::log(&format!(
-                        "Created group '{}'",
-                        &r.create_group.display_name
-                    )),
-                };
+            Msg::CreateGroupResponse(response) => {
+                ConsoleService::log(&format!(
+                    "Created group '{}'",
+                    &response?.create_group.display_name
+                ));
                 self.route_dispatcher
                     .send(RouteRequest::ChangeRoute(Route::from(AppRoute::ListGroups)));
                 Ok(true)
@@ -85,7 +82,7 @@ impl Component for CreateGroupForm {
             route_dispatcher: RouteAgentDispatcher::new(),
             form: yew_form::Form::<CreateGroupModel>::new(CreateGroupModel::default()),
             error: None,
-            _task: None,
+            task: None,
         }
     }
 
@@ -95,6 +92,7 @@ impl Component for CreateGroupForm {
             Err(e) => {
                 ConsoleService::error(&e.to_string());
                 self.error = Some(e);
+                self.task = None;
                 true
             }
             Ok(b) => b,
@@ -134,6 +132,7 @@ impl Component for CreateGroupForm {
                 <button
                   class="btn btn-primary col-sm-1 col-form-label"
                   type="button"
+                  disabled=self.task.is_some()
                   onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
                   {"Submit"}
                 </button>

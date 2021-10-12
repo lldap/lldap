@@ -26,7 +26,7 @@ pub struct CreateUserForm {
     form: yew_form::Form<CreateUserModel>,
     error: Option<anyhow::Error>,
     // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
+    task: Option<FetchTask>,
 }
 
 #[derive(Model, Validate, PartialEq, Clone, Default)]
@@ -89,7 +89,7 @@ impl CreateUserForm {
                         lastName: to_option(model.last_name),
                     },
                 };
-                self._task = Some(HostService::graphql_query::<CreateUser>(
+                self.task = Some(HostService::graphql_query::<CreateUser>(
                     req,
                     self.link.callback(Msg::CreateUserResponse),
                     "Error trying to create user",
@@ -118,7 +118,7 @@ impl CreateUserForm {
                         username: user_id,
                         registration_start_request: message,
                     };
-                    self._task = Some(
+                    self.task = Some(
                         HostService::register_start(
                             req,
                             self.link
@@ -143,7 +143,7 @@ impl CreateUserForm {
                     server_data: response.server_data,
                     registration_upload: registration_upload.message,
                 };
-                self._task = Some(
+                self.task = Some(
                     HostService::register_finish(
                         req,
                         self.link.callback(Msg::RegistrationFinishResponse),
@@ -175,7 +175,7 @@ impl Component for CreateUserForm {
             route_dispatcher: RouteAgentDispatcher::new(),
             form: yew_form::Form::<CreateUserModel>::new(CreateUserModel::default()),
             error: None,
-            _task: None,
+            task: None,
         }
     }
 
@@ -185,6 +185,7 @@ impl Component for CreateUserForm {
             Err(e) => {
                 ConsoleService::error(&e.to_string());
                 self.error = Some(e);
+                self.task = None;
                 true
             }
             Ok(b) => b,
@@ -340,6 +341,7 @@ impl Component for CreateUserForm {
               <div class="form-group row">
                 <button
                   class="btn btn-primary col-sm-1 col-form-label"
+                  disabled=self.task.is_some()
                   type="submit"
                   onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
                   {"Submit"}
