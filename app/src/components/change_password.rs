@@ -4,10 +4,16 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use lldap_auth::*;
-use wasm_bindgen::JsCast;
+use validator_derive::Validate;
 use yew::{
     prelude::*,
     services::{fetch::FetchTask, ConsoleService},
+};
+use yew_form::Form;
+use yew_form_derive::Model;
+use yew_router::{
+    agent::{RouteAgentDispatcher, RouteRequest},
+    route::Route,
 };
 
 #[derive(PartialEq, Eq)]
@@ -29,16 +35,37 @@ impl OpaqueData {
     }
 }
 
+/// The fields of the form, with the constraints.
+#[derive(Model, Validate, PartialEq, Clone, Default)]
+pub struct FormModel {
+    #[validate(custom(
+        function = "empty_or_long",
+        message = "Password should be longer than 8 characters"
+    ))]
+    old_password: String,
+    #[validate(length(min = 8, message = "Invalid password. Min length: 8"))]
+    password: String,
+    #[validate(must_match(other = "password", message = "Passwords must match"))]
+    confirm_password: String,
+}
+
+fn empty_or_long(value: &str) -> Result<(), validator::ValidationError> {
+    if value.is_empty() || value.len() >= 8 {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new(""))
+    }
+}
+
 pub struct ChangePasswordForm {
     link: ComponentLink<Self>,
-    username: String,
+    props: Props,
     error: Option<anyhow::Error>,
-    node_ref: NodeRef,
+    form: Form<FormModel>,
     opaque_data: OpaqueData,
-    successfully_changed_password: bool,
-    is_admin: bool,
     // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
+    task: Option<FetchTask>,
+    route_dispatcher: RouteAgentDispatcher,
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -48,6 +75,7 @@ pub struct Props {
 }
 
 pub enum Msg {
+    FormUpdate,
     Submit,
     AuthenticationStartResponse(Result<Box<login::ServerLoginStartResponse>>),
     SubmitNewPassword,
@@ -55,71 +83,37 @@ pub enum Msg {
     RegistrationFinishResponse(Result<()>),
 }
 
-fn get_form_field(field_id: &str) -> Option<String> {
-    let document = web_sys::window()?.document()?;
-    Some(
-        document
-            .get_element_by_id(field_id)?
-            .dyn_into::<web_sys::HtmlInputElement>()
-            .ok()?
-            .value(),
-    )
-}
-
-fn clear_form_fields() -> Option<()> {
-    let document = web_sys::window()?.document()?;
-
-    let clear_field = |id| {
-        document
-            .get_element_by_id(id)?
-            .dyn_into::<web_sys::HtmlInputElement>()
-            .ok()?
-            .set_value("");
-        Some(())
-    };
-    clear_field("oldPassword");
-    clear_field("newPassword");
-    clear_field("confirmPassword");
-    None
-}
-
 impl ChangePasswordForm {
-    fn set_error(&mut self, error: anyhow::Error) {
-        ConsoleService::error(&error.to_string());
-        self.error = Some(error);
-    }
-
     fn call_backend<M, Req, C, Resp>(&mut self, method: M, req: Req, callback: C) -> Result<()>
     where
         M: Fn(Req, Callback<Resp>) -> Result<FetchTask>,
         C: Fn(Resp) -> <Self as Component>::Message + 'static,
     {
-        self._task = Some(method(req, self.link.callback(callback))?);
+        self.task = Some(method(req, self.link.callback(callback))?);
         Ok(())
     }
 
-    fn handle_message(&mut self, msg: <Self as Component>::Message) -> Result<()> {
+    fn handle_message(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
+            Msg::FormUpdate => Ok(true),
             Msg::Submit => {
-                let old_password = get_form_field("oldPassword")
-                    .ok_or_else(|| anyhow!("Could not get old password from form"))?;
-                let new_password = get_form_field("newPassword")
-                    .ok_or_else(|| anyhow!("Could not get new password from form"))?;
-                let confirm_password = get_form_field("confirmPassword")
-                    .ok_or_else(|| anyhow!("Could not get confirmation password from form"))?;
-                if new_password != confirm_password {
-                    bail!("Confirmation password doesn't match");
+                if !self.form.validate() {
+                    bail!("Check the form for errors");
                 }
-                if self.is_admin {
+                if self.props.is_admin {
                     self.handle_message(Msg::SubmitNewPassword)
                 } else {
+                    let old_password = self.form.model().old_password;
+                    if old_password.is_empty() {
+                        bail!("Current password should not be empty");
+                    }
                     let mut rng = rand::rngs::OsRng;
                     let login_start_request =
                         opaque::client::login::start_login(&old_password, &mut rng)
                             .context("Could not initialize login")?;
                     self.opaque_data = OpaqueData::Login(login_start_request.state);
                     let req = login::ClientLoginStartRequest {
-                        username: self.username.clone(),
+                        username: self.props.username.clone(),
                         login_start_request: login_start_request.message,
                     };
                     self.call_backend(
@@ -127,7 +121,7 @@ impl ChangePasswordForm {
                         req,
                         Msg::AuthenticationStartResponse,
                     )?;
-                    Ok(())
+                    Ok(true)
                 }
             }
             Msg::AuthenticationStartResponse(res) => {
@@ -152,13 +146,12 @@ impl ChangePasswordForm {
             }
             Msg::SubmitNewPassword => {
                 let mut rng = rand::rngs::OsRng;
-                let new_password = get_form_field("newPassword")
-                    .ok_or_else(|| anyhow!("Could not get new password from form"))?;
+                let new_password = self.form.model().password;
                 let registration_start_request =
                     opaque::client::registration::start_registration(&new_password, &mut rng)
                         .context("Could not initiate password change")?;
                 let req = registration::ClientRegistrationStartRequest {
-                    username: self.username.clone(),
+                    username: self.props.username.clone(),
                     registration_start_request: registration_start_request.message,
                 };
                 self.opaque_data = OpaqueData::Registration(registration_start_request.state);
@@ -167,7 +160,7 @@ impl ChangePasswordForm {
                     req,
                     Msg::RegistrationStartResponse,
                 )?;
-                Ok(())
+                Ok(true)
             }
             Msg::RegistrationStartResponse(res) => {
                 let res = res.context("Could not initiate password change")?;
@@ -192,14 +185,19 @@ impl ChangePasswordForm {
                         )
                     }
                     _ => panic!("Unexpected data in opaque_data field"),
-                }
+                }?;
+                Ok(false)
             }
             Msg::RegistrationFinishResponse(response) => {
+                self.task = None;
                 if response.is_ok() {
-                    self.successfully_changed_password = true;
-                    clear_form_fields();
+                    self.route_dispatcher
+                        .send(RouteRequest::ChangeRoute(Route::from(
+                            AppRoute::UserDetails(self.props.username.clone()),
+                        )));
                 }
-                response
+                response?;
+                Ok(true)
             }
         }
     }
@@ -212,23 +210,26 @@ impl Component for ChangePasswordForm {
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         ChangePasswordForm {
             link,
-            username: props.username,
+            props,
             error: None,
-            node_ref: NodeRef::default(),
+            form: yew_form::Form::<FormModel>::new(FormModel::default()),
             opaque_data: OpaqueData::None,
-            successfully_changed_password: false,
-            is_admin: props.is_admin,
-            _task: None,
+            task: None,
+            route_dispatcher: RouteAgentDispatcher::new(),
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        self.successfully_changed_password = false;
         self.error = None;
-        if let Err(e) = self.handle_message(msg) {
-            self.set_error(e);
+        match self.handle_message(msg) {
+            Err(e) => {
+                ConsoleService::error(&e.to_string());
+                self.error = Some(e);
+                self.task = None;
+                true
+            }
+            Ok(b) => b,
         }
-        true
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -236,38 +237,97 @@ impl Component for ChangePasswordForm {
     }
 
     fn view(&self) -> Html {
-        let is_admin = self.is_admin;
+        let is_admin = self.props.is_admin;
+        type Field = yew_form::Field<FormModel>;
         html! {
-            <form ref=self.node_ref.clone() onsubmit=self.link.callback(|e: FocusEvent| { e.prevent_default(); Msg::Submit })>
-                <div>
-                    <label for="oldPassword">{"Old password:"}</label>
-                    <input type="password" id="oldPassword" autocomplete="current-password" required=true disabled=is_admin />
+          <>
+            <form
+              class="form">
+              {if !is_admin { html! {
+                <div class="form-group row">
+                  <label for="old_password"
+                    class="form-label col-sm-2 col-form-label">
+                    {"Current password*:"}
+                  </label>
+                  <div class="col-sm-10">
+                    <Field
+                      form=&self.form
+                      field_name="old_password"
+                      class="form-control"
+                      class_invalid="is-invalid has-error"
+                      class_valid="has-success"
+                      autocomplete="current-password"
+                      oninput=self.link.callback(|_| Msg::FormUpdate) />
+                    <div class="invalid-feedback">
+                      {&self.form.field_message("old_password")}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                    <label for="newPassword">{"New password:"}</label>
-                    <input type="password" id="newPassword" autocomplete="new-password" required=true minlength="8" />
+              }} else { html! {} }}
+              <div class="form-group row">
+                <label for="new_password"
+                  class="form-label col-sm-2 col-form-label">
+                  {"New password*:"}
+                </label>
+                <div class="col-sm-10">
+                  <Field
+                    form=&self.form
+                    field_name="password"
+                    class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    autocomplete="new-password"
+                    oninput=self.link.callback(|_| Msg::FormUpdate) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("password")}
+                  </div>
                 </div>
-                <div>
-                    <label for="confirmPassword">{"Confirm new password:"}</label>
-                    <input type="password" id="confirmPassword" autocomplete="new-password" required=true minlength="8" />
+              </div>
+              <div class="form-group row">
+                <label for="confirm_password"
+                  class="form-label col-sm-2 col-form-label">
+                  {"Confirm password*:"}
+                </label>
+                <div class="col-sm-10">
+                  <Field
+                    form=&self.form
+                    field_name="confirm_password"
+                    class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    autocomplete="new-password"
+                    oninput=self.link.callback(|_| Msg::FormUpdate) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("confirm_password")}
+                  </div>
                 </div>
-                <button type="submit">{"Submit"}</button>
-                <div>
-                { if let Some(e) = &self.error {
-                    html! { e.to_string() }
-                  } else if self.successfully_changed_password {
-                    html! {
-                      <div>
-                        <span>{"Successfully changed the password"}</span>
-                      </div>
-                    }
-                  } else { html! {} }
-                }
-                </div>
-                <div>
-                  <NavButton route=AppRoute::UserDetails(self.username.clone())>{"Back"}</NavButton>
-                </div>
+              </div>
+              <div class="form-group row">
+                <button
+                  class="btn btn-primary col-sm-1 col-form-label"
+                  type="submit"
+                  disabled=self.task.is_some()
+                  onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                  {"Submit"}
+                </button>
+              </div>
             </form>
+            { if let Some(e) = &self.error {
+                html! {
+                  <div class="alert alert-danger">
+                    {e.to_string() }
+                  </div>
+                }
+              } else { html! {} }
+            }
+            <div>
+              <NavButton
+                classes="btn btn-primary"
+                route=AppRoute::UserDetails(self.props.username.clone())>
+                {"Back"}
+              </NavButton>
+            </div>
+          </>
         }
     }
 }
