@@ -340,7 +340,7 @@ impl Component for CreateUserForm {
               <div class="form-group row">
                 <button
                   class="btn btn-primary col-sm-1 col-form-label"
-                  type="button"
+                  type="submit"
                   onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
                   {"Submit"}
                 </button>

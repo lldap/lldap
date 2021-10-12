@@ -2,8 +2,10 @@ use crate::infra::api::HostService;
 use anyhow::{anyhow, bail, Context, Result};
 use lldap_auth::*;
 use validator_derive::Validate;
-use yew::prelude::*;
-use yew::services::{fetch::FetchTask, ConsoleService};
+use yew::{
+    prelude::*,
+    services::{fetch::FetchTask, ConsoleService},
+};
 use yew_form::Form;
 use yew_form_derive::Model;
 
@@ -48,7 +50,7 @@ impl LoginForm {
             Msg::Update => Ok(true),
             Msg::Submit => {
                 if !self.form.validate() {
-                    bail!("Invalid inputs");
+                    bail!("Check the form for errors");
                 }
                 let FormModel { username, password } = self.form.model();
                 let mut rng = rand::rngs::OsRng;
