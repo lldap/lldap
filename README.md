@@ -1,11 +1,16 @@
 # lldap - Light LDAP implementation for authentication
 
-WARNING: This project is still WIP, it's still missing core functionality. For
-updates, follow [@nitnelave1](https://twitter.com/nitnelave1).
+WARNING: This project is still in alpha, with the basic core functionality
+implemented but still very rough. For updates, follow
+[@nitnelave1](https://twitter.com/nitnelave1) or join our [Discord
+server](https://discord.gg/h5PEdRMNyP)!
+
 
 This project is an lightweight authentication server that provides an
 opinionated, simplified LDAP interface for authentication: clients that can
 only speak LDAP protocol can talk to it and use it as an authentication server.
+
+![Screenshot of the user list page](screenshot.png)
 
 The goal is _not_ to provide a full LDAP server; if you're interested in that,
 check out OpenLDAP. This server is made to be:
@@ -20,12 +25,13 @@ authentication.
 
 ## Architecture
 
-The server is entirely written in Rust, using [actix](https://actix.rs) and
-[yew](https://yew.rs) for the frontend.
+The server is entirely written in Rust, using [actix](https://actix.rs) for the
+backend and [yew](https://yew.rs) for the frontend.
 
 Backend:
 * Listens on a port for LDAP protocol.
   * Only a small, read-only subset of the LDAP protocol is supported.
+  * An extension to allow resetting the password through LDAP will be added.
 * Listens on another port for HTTP traffic.
   * The authentication API, based on JWTs, is under "/auth".
   * The user management API is a GraphQL API under "/api/graphql". The schema
@@ -54,6 +60,9 @@ Data storage:
   interface between front and back-end. In particular, it contains the OPAQUE
   structures and the JWT format.
 * `app/`: The frontend.
+  * `src/components`: The elements containing the business and display logic of
+    the various pages and their components.
+  * `src/infra`: Various tools and utilities.
 * `server/`: The backend.
   * `src/domain/`: Domain-specific logic: users, groups, checking passwords...
   * `src/infra/`: API, both GraphQL and LDAP
@@ -67,7 +76,13 @@ storage. They are hashed using a secret provided in the configuration (which
 can be given as environment variable or command line argument as well): this
 should be kept secret and shouldn't change (it would invalidate all passwords).
 
-TODO: Add client-side password hashing.
+Authentication is done via the OPAQUE protocol, meaning that the passwords are
+never sent to the server, but instead the client proves that they know the
+correct password (zero-knowledge proof). This is likely overkill, especially
+considered that the LDAP interface requires sending the password to the server,
+but it's one less potential flaw (especially since the LDAP interface can be
+restricted to an internal docker-only network while the web app is exposed to
+the Internet).
 
 ### JWTs and refresh tokens
 
@@ -99,7 +114,12 @@ Contributions are welcome! Just fork and open a PR. Or just file a bug.
 We don't have a code of conduct, just be respectful and remember that it's just
 normal people doing this for free on their free time.
 
-Make sure that you run `cargo fmt` from the root before creating the PR.
+Make sure that you run `cargo fmt` from the root before creating the PR. And if
+you change the GraphQL interface, you'll need to regenerate the schema by
+running `./export_schema.sh`.
+
+Join our [Discord server](https://discord.gg/h5PEdRMNyP) if you have any
+questions!
 
 ### Setup
 

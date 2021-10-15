@@ -19,3 +19,4 @@ lldap_config.toml
 server_key
 users.db*
 .gitignore
+screenshot.png
