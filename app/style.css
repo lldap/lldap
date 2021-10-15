@@ -1,0 +1,12 @@
+header h1 {
+  font-family: 'Bebas Neue', cursive;
+}
+
+.table>tbody {
+    vertical-align: middle;
+}
+
+.table>tbody a {
+  font-weight: 700;
+  text-decoration: none;
+}

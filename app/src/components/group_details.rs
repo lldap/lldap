@@ -131,8 +131,9 @@ impl GroupDetails {
             }
         };
         html! {
-          <div>
-            <h3>{"Members"}</h3>
+          <>
+            <h3>{g.display_name.to_string()}</h3>
+            <h5 class="fw-bold">{"Members"}</h5>
             <div class="table-responsive">
               <table class="table table-striped">
                 <thead>
@@ -156,7 +157,7 @@ impl GroupDetails {
                 </tbody>
               </table>
             </div>
-          </div>
+          </>
         }
     }
 

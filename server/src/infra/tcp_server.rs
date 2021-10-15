@@ -56,7 +56,7 @@ fn http_config<Backend>(
     }))
     // Serve index.html and main.js, and default to index.html.
     .route(
-        "/{filename:(index\\.html|main\\.js)?}",
+        "/{filename:(index\\.html|main\\.js|style\\.css)?}",
         web::get().to(index),
     )
     .service(web::scope("/auth").configure(auth_service::configure_server::<Backend>))
