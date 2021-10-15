@@ -106,15 +106,17 @@ impl Component for CreateGroupForm {
     fn view(&self) -> Html {
         type Field = yew_form::Field<CreateGroupModel>;
         html! {
-            <>
-            <form
-              class="form">
-              <div class="form-group row">
+          <div class="row justify-content-center">
+            <form class="form shadow-sm py-3" style="max-width: 636px">
+              <div class="row mb-3">
+                <h5 class="fw-bold">{"Create a group"}</h5>
+              </div>
+              <div class="form-group row mb-3">
                 <label for="groupname"
-                  class="form-label col-sm-2 col-form-label">
+                  class="form-label col-4 col-form-label">
                   {"Group name*:"}
                 </label>
-                <div class="col-sm-10">
+                <div class="col-8">
                   <Field
                     form=&self.form
                     field_name="groupname"
@@ -128,10 +130,10 @@ impl Component for CreateGroupForm {
                   </div>
                 </div>
               </div>
-              <div class="form-group row">
+              <div class="form-group row justify-content-center">
                 <button
-                  class="btn btn-primary col-sm-1 col-form-label"
-                  type="button"
+                  class="btn btn-primary col-auto col-form-label"
+                  type="submit"
                   disabled=self.task.is_some()
                   onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
                   {"Submit"}
@@ -146,7 +148,7 @@ impl Component for CreateGroupForm {
                 }
               } else { html! {} }
             }
-            </>
+          </div>
         }
     }
 }

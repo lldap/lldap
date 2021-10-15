@@ -66,7 +66,7 @@ impl Component for LogoutButton {
     fn view(&self) -> Html {
         html! {
             <button
-              class="btn btn-primary"
+              class="dropdown-item"
               onclick=self.link.callback(|_| Msg::LogoutRequested)>
               {"Logout"}
             </button>

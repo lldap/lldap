@@ -7,7 +7,7 @@ use crate::{
         group_table::GroupTable,
         login::LoginForm,
         logout::LogoutButton,
-        router::{AppRoute, NavButton},
+        router::{AppRoute, Link, NavButton},
         user_details::UserDetails,
         user_table::UserTable,
     },
@@ -96,45 +96,48 @@ impl Component for App {
         let link = self.link.clone();
         let is_admin = self.is_admin();
         html! {
-            <div class="container">
-                <h1>{ "LLDAP" }</h1>
-                {self.view_banner()}
-                <Router<AppRoute>
-                  render = Router::render(move |switch: AppRoute| {
-                      match switch {
-                          AppRoute::Login => html! {
-                              <LoginForm on_logged_in=link.callback(Msg::Login)/>
-                          },
-                          AppRoute::CreateUser => html! {
-                              <CreateUserForm/>
-                          },
-                          AppRoute::Index | AppRoute::ListUsers => html! {
-                              <div>
-                                <UserTable />
-                                <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
-                              </div>
-                          },
-                          AppRoute::CreateGroup => html! {
-                              <CreateGroupForm/>
-                          },
-                          AppRoute::ListGroups => html! {
-                              <div>
-                                <GroupTable />
-                                <NavButton classes="btn btn-primary" route=AppRoute::CreateGroup>{"Create a group"}</NavButton>
-                              </div>
-                          },
-                          AppRoute::GroupDetails(group_id) => html! {
-                              <GroupDetails group_id=group_id />
-                          },
-                          AppRoute::UserDetails(username) => html! {
-                              <UserDetails username=username.clone() is_admin=is_admin />
-                          },
-                          AppRoute::ChangePassword(username) => html! {
-                              <ChangePasswordForm username=username.clone() is_admin=is_admin />
-                          }
-                      }
-                  })
-                />
+            <div class="container shadow-sm py-3">
+              {self.view_banner()}
+              <div class="row justify-content-center">
+                <div class="shadow-sm py-3" style="max-width: 1000px">
+                  <Router<AppRoute>
+                    render = Router::render(move |switch: AppRoute| {
+                        match switch {
+                            AppRoute::Login => html! {
+                                <LoginForm on_logged_in=link.callback(Msg::Login)/>
+                            },
+                            AppRoute::CreateUser => html! {
+                                <CreateUserForm/>
+                            },
+                            AppRoute::Index | AppRoute::ListUsers => html! {
+                                <div>
+                                  <UserTable />
+                                  <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
+                                </div>
+                            },
+                            AppRoute::CreateGroup => html! {
+                                <CreateGroupForm/>
+                            },
+                            AppRoute::ListGroups => html! {
+                                <div>
+                                  <GroupTable />
+                                  <NavButton classes="btn btn-primary" route=AppRoute::CreateGroup>{"Create a group"}</NavButton>
+                                </div>
+                            },
+                            AppRoute::GroupDetails(group_id) => html! {
+                                <GroupDetails group_id=group_id />
+                            },
+                            AppRoute::UserDetails(username) => html! {
+                                <UserDetails username=username.clone() is_admin=is_admin />
+                            },
+                            AppRoute::ChangePassword(username) => html! {
+                                <ChangePasswordForm username=username.clone() is_admin=is_admin />
+                            }
+                        }
+                    })
+                  />
+                </div>
+              </div>
             </div>
         }
     }
@@ -180,29 +183,72 @@ impl App {
 
     fn view_banner(&self) -> Html {
         html! {
-          <>
-            {if self.is_admin() { html! {
-              <>
-                <div>
-                  <NavButton
-                    classes="btn btn-primary"
-                    route=AppRoute::ListUsers>
-                    {"Users"}
-                  </NavButton>
+          <header class="p-3 mb-4 border-bottom shadow-sm">
+            <div class="container">
+              <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
+                <a href="/" class="d-flex align-items-center mb-2 mb-lg-0 me-md-5 text-dark text-decoration-none">
+                  <h1>{"LLDAP"}</h1>
+                </a>
+
+                <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0">
+                  {if self.is_admin() { html! {
+                    <>
+                      <li>
+                        <Link
+                          classes="nav-link px-2 link-dark h4"
+                          route=AppRoute::ListUsers>
+                          {"Users"}
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          classes="nav-link px-2 link-dark h4"
+                          route=AppRoute::ListGroups>
+                          {"Groups"}
+                        </Link>
+                      </li>
+                    </>
+                  } } else { html!{} } }
+                </ul>
+
+                <div class="dropdown text-end">
+                  <a href="#"
+                    class="d-block link-dark text-decoration-none dropdown-toggle"
+                    id="dropdownUser"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                      width="32"
+                      height="32"
+                      fill="currentColor"
+                      class="bi bi-person-circle"
+                      viewBox="0 0 16 16">
+                      <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+                      <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
+                    </svg>
+                  </a>
+                  {if let Some((user_id, _)) = &self.user_info { html! {
+                    <ul
+                      class="dropdown-menu text-small dropdown-menu-lg-end"
+                      aria-labelledby="dropdownUser1"
+                      style="">
+                      <li>
+                        <Link
+                          classes="dropdown-item"
+                          route=AppRoute::UserDetails(user_id.clone())>
+                          {"Profile"}
+                        </Link>
+                      </li>
+                      <li><hr class="dropdown-divider" /></li>
+                      <li>
+                        <LogoutButton on_logged_out=self.link.callback(|_| Msg::Logout) />
+                      </li>
+                    </ul>
+                  } } else { html!{} } }
                 </div>
-                <div>
-                  <NavButton
-                    classes="btn btn-primary"
-                    route=AppRoute::ListGroups>
-                    {"Groups"}
-                  </NavButton>
-                </div>
-              </>
-            } } else { html!{} } }
-            {if self.user_info.is_some() { html! {
-              <LogoutButton on_logged_out=self.link.callback(|_| Msg::Logout) />
-            }} else { html! {} }}
-          </>
+              </div>
+            </div>
+          </header>
         }
     }
 

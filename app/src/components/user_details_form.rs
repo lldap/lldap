@@ -97,112 +97,112 @@ impl Component for UserDetailsForm {
     fn view(&self) -> Html {
         type Field = yew_form::Field<UserModel>;
         html! {
-          <>
-          <form class="form">
-            <div class="form-group row">
-              <label for="userId"
-                class="form-label col-sm-2 col-form-label">
-                {"User ID: "}
-              </label>
-              <div class="col-sm-10">
-                <span id="userId" class="form-constrol-static">{&self.props.user.id}</span>
-              </div>
-            </div>
-            <div class="form-group row">
-              <label for="email"
-                class="form-label col-sm-2 col-form-label">
-                {"Email*: "}
-              </label>
-              <div class="col-sm-10">
-                <Field
-                  class="form-control"
-                  class_invalid="is-invalid has-error"
-                  class_valid="has-success"
-                  form=&self.form
-                  field_name="email"
-                  autocomplete="email"
-                  oninput=self.link.callback(|_| Msg::Update) />
-                <div class="invalid-feedback">
-                  {&self.form.field_message("email")}
+          <div class="py-3">
+            <form class="form">
+              <div class="form-group row mb-3">
+                <label for="userId"
+                  class="form-label col-4 col-form-label">
+                  {"User ID: "}
+                </label>
+                <div class="col-8">
+                  <span id="userId" class="form-constrol-static">{&self.props.user.id}</span>
                 </div>
               </div>
-            </div>
-            <div class="form-group row">
-              <label for="display_name"
-                class="form-label col-sm-2 col-form-label">
-                {"Display Name*: "}
-              </label>
-              <div class="col-sm-10">
-                <Field
-                  class="form-control"
-                  class_invalid="is-invalid has-error"
-                  class_valid="has-success"
-                  form=&self.form
-                  field_name="display_name"
-                  autocomplete="name"
-                  oninput=self.link.callback(|_| Msg::Update) />
-                <div class="invalid-feedback">
-                  {&self.form.field_message("display_name")}
+              <div class="form-group row mb-3">
+                <label for="email"
+                  class="form-label col-4 col-form-label">
+                  {"Email*: "}
+                </label>
+                <div class="col-8">
+                  <Field
+                    class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    form=&self.form
+                    field_name="email"
+                    autocomplete="email"
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("email")}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="form-group row">
-              <label for="first_name"
-                class="form-label col-sm-2 col-form-label">
-                {"First Name: "}
-              </label>
-              <div class="col-sm-10">
-                <Field
-                  class="form-control"
-                  form=&self.form
-                  field_name="first_name"
-                  autocomplete="given-name"
-                  oninput=self.link.callback(|_| Msg::Update) />
-                <div class="invalid-feedback">
-                  {&self.form.field_message("first_name")}
+              <div class="form-group row mb-3">
+                <label for="display_name"
+                  class="form-label col-4 col-form-label">
+                  {"Display Name*: "}
+                </label>
+                <div class="col-8">
+                  <Field
+                    class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    form=&self.form
+                    field_name="display_name"
+                    autocomplete="name"
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("display_name")}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="form-group row">
-              <label for="last_name"
-                class="form-label col-sm-2 col-form-label">
-                {"Last Name: "}
-              </label>
-              <div class="col-sm-10">
-                <Field
-                  class="form-control"
-                  form=&self.form
-                  field_name="last_name"
-                  autocomplete="family-name"
-                  oninput=self.link.callback(|_| Msg::Update) />
-                <div class="invalid-feedback">
-                  {&self.form.field_message("last_name")}
+              <div class="form-group row mb-3">
+                <label for="first_name"
+                  class="form-label col-4 col-form-label">
+                  {"First Name: "}
+                </label>
+                <div class="col-8">
+                  <Field
+                    class="form-control"
+                    form=&self.form
+                    field_name="first_name"
+                    autocomplete="given-name"
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("first_name")}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="form-group row">
-              <label for="creationDate"
-              class="form-label col-sm-2 col-form-label">
-              {"Creation date: "}
-              </label>
-              <div class="col-sm-10">
-                <span id="creationDate" class="form-constrol-static">{&self.props.user.creation_date.date().naive_local()}</span>
+              <div class="form-group row mb-3">
+                <label for="last_name"
+                  class="form-label col-4 col-form-label">
+                  {"Last Name: "}
+                </label>
+                <div class="col-8">
+                  <Field
+                    class="form-control"
+                    form=&self.form
+                    field_name="last_name"
+                    autocomplete="family-name"
+                    oninput=self.link.callback(|_| Msg::Update) />
+                  <div class="invalid-feedback">
+                    {&self.form.field_message("last_name")}
+                  </div>
+                </div>
               </div>
+              <div class="form-group row mb-3">
+                <label for="creationDate"
+                class="form-label col-4 col-form-label">
+                {"Creation date: "}
+                </label>
+                <div class="col-8">
+                  <span id="creationDate" class="form-constrol-static">{&self.props.user.creation_date.date().naive_local()}</span>
+                </div>
+              </div>
+              <div class="form-group row justify-content-center">
+                <button
+                  type="submit"
+                  class="btn btn-primary col-auto col-form-label"
+                  disabled=self.task.is_some()
+                  onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})>
+                  {"Update"}
+                </button>
+              </div>
+            </form>
+            <div hidden=!self.just_updated>
+              <span>{"User successfully updated!"}</span>
             </div>
-            <div class="form-group row">
-              <button
-                type="button"
-                class="btn btn-primary col-sm-1 col-form-label"
-                disabled=self.task.is_some()
-                onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})>
-                {"Update"}
-              </button>
-            </div>
-          </form>
-          <div hidden=!self.just_updated>
-            <span>{"User successfully updated!"}</span>
           </div>
-          </>
         }
     }
 }

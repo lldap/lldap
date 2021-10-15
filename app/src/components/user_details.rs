@@ -133,30 +133,30 @@ impl UserDetails {
             }
         };
         html! {
-        <div>
-          <h3>{"Group memberships"}</h3>
-          <div class="table-responsive">
-            <table class="table table-striped">
-              <thead>
-                <tr key="headerRow">
-                  <th>{"Group"}</th>
-                  { if self.props.is_admin { html!{ <th></th> }} else { html!{} }}
-                </tr>
-              </thead>
-              <tbody>
-                {if u.groups.is_empty() {
-                  html! {
-                    <tr key="EmptyRow">
-                      <td>{"Not member of any group"}</td>
-                    </tr>
-                  }
-                } else {
-                  html! {<>{u.groups.iter().map(make_group_row).collect::<Vec<_>>()}</>}
-                }}
-              </tbody>
-            </table>
-          </div>
-        </div>
+          <>
+            <h5 class="row m-3 fw-bold">{"Group memberships"}</h5>
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr key="headerRow">
+                    <th>{"Group"}</th>
+                    { if self.props.is_admin { html!{ <th></th> }} else { html!{} }}
+                  </tr>
+                </thead>
+                <tbody>
+                  {if u.groups.is_empty() {
+                    html! {
+                      <tr key="EmptyRow">
+                        <td>{"Not member of any group"}</td>
+                      </tr>
+                    }
+                  } else {
+                    html! {<>{u.groups.iter().map(make_group_row).collect::<Vec<_>>()}</>}
+                  }}
+                </tbody>
+              </table>
+            </div>
+          </>
         }
     }
 
@@ -213,21 +213,22 @@ impl Component for UserDetails {
             (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
             (Some(u), error) => {
                 html! {
-                    <div>
-                      <UserDetailsForm
-                        user=u.clone()
-                        on_error=self.link.callback(Msg::OnError)/>
-                      {self.view_group_memberships(u)}
-                      {self.view_add_group_button(u)}
-                      <div>
-                        <NavButton
-                          route=AppRoute::ChangePassword(u.id.clone())
-                          classes="btn btn-primary">
-                            {"Change password"}
-                        </NavButton>
-                      </div>
-                      {self.view_messages(error)}
+                  <>
+                    <h3>{u.id.to_string()}</h3>
+                    <UserDetailsForm
+                      user=u.clone()
+                      on_error=self.link.callback(Msg::OnError)/>
+                    <div class="row justify-content-center">
+                      <NavButton
+                        route=AppRoute::ChangePassword(u.id.clone())
+                        classes="btn btn-primary col-auto">
+                          {"Change password"}
+                      </NavButton>
                     </div>
+                    {self.view_group_memberships(u)}
+                    {self.view_add_group_button(u)}
+                    {self.view_messages(error)}
+                  </>
                 }
             }
         }

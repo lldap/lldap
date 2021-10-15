@@ -199,15 +199,17 @@ impl Component for CreateUserForm {
     fn view(&self) -> Html {
         type Field = yew_form::Field<CreateUserModel>;
         html! {
-            <>
-            <form
-              class="form">
-              <div class="form-group row">
+          <div class="row justify-content-center">
+            <form class="form shadow-sm py-3" style="max-width: 636px">
+              <div class="row mb-3">
+                <h5 class="fw-bold">{"Create a user"}</h5>
+              </div>
+              <div class="form-group row mb-3">
                 <label for="username"
-                  class="form-label col-sm-2 col-form-label">
+                  class="form-label col-4 col-form-label">
                   {"User name*:"}
                 </label>
-                <div class="col-sm-10">
+                <div class="col-8">
                   <Field
                     form=&self.form
                     field_name="username"
@@ -221,12 +223,12 @@ impl Component for CreateUserForm {
                   </div>
                 </div>
               </div>
-              <div class="form-group row">
+              <div class="form-group row mb-3">
                 <label for="email"
-                  class="form-label col-sm-2 col-form-label">
+                  class="form-label col-4 col-form-label">
                   {"Email*:"}
                 </label>
-                <div class="col-sm-10">
+                <div class="col-8">
                   <Field
                     form=&self.form
                     input_type="email"
@@ -241,12 +243,12 @@ impl Component for CreateUserForm {
                   </div>
                 </div>
               </div>
-              <div class="form-group row">
+              <div class="form-group row mb-3">
                 <label for="display-name"
-                  class="form-label col-sm-2 col-form-label">
+                  class="form-label col-4 col-form-label">
                   {"Display name*:"}
                 </label>
-                <div class="col-sm-10">
+                <div class="col-8">
                   <Field
                     form=&self.form
                     autocomplete="name"
@@ -260,12 +262,12 @@ impl Component for CreateUserForm {
                   </div>
                 </div>
               </div>
-              <div class="form-group row">
+              <div class="form-group row mb-3">
                 <label for="first-name"
-                  class="form-label col-sm-2 col-form-label">
+                  class="form-label col-4 col-form-label">
                   {"First name:"}
                 </label>
-                <div class="col-sm-10">
+                <div class="col-8">
                   <Field
                     form=&self.form
                     autocomplete="given-name"
@@ -279,12 +281,12 @@ impl Component for CreateUserForm {
                   </div>
                 </div>
               </div>
-              <div class="form-group row">
+              <div class="form-group row mb-3">
                 <label for="last-name"
-                  class="form-label col-sm-2 col-form-label">
+                  class="form-label col-4 col-form-label">
                   {"Last name:"}
                 </label>
-                <div class="col-sm-10">
+                <div class="col-8">
                   <Field
                     form=&self.form
                     autocomplete="family-name"
@@ -298,12 +300,12 @@ impl Component for CreateUserForm {
                   </div>
                 </div>
               </div>
-              <div class="form-group row">
+              <div class="form-group row mb-3">
                 <label for="password"
-                  class="form-label col-sm-2 col-form-label">
+                  class="form-label col-4 col-form-label">
                   {"Password:"}
                 </label>
-                <div class="col-sm-10">
+                <div class="col-8">
                   <Field
                     form=&self.form
                     input_type="password"
@@ -318,12 +320,12 @@ impl Component for CreateUserForm {
                   </div>
                 </div>
               </div>
-              <div class="form-group row">
+              <div class="form-group row mb-3">
                 <label for="confirm_password"
-                  class="form-label col-sm-2 col-form-label">
+                  class="form-label col-4 col-form-label">
                   {"Confirm password:"}
                 </label>
-                <div class="col-sm-10">
+                <div class="col-8">
                   <Field
                     form=&self.form
                     input_type="password"
@@ -338,9 +340,9 @@ impl Component for CreateUserForm {
                   </div>
                 </div>
               </div>
-              <div class="form-group row">
+              <div class="form-group row justify-content-center">
                 <button
-                  class="btn btn-primary col-sm-1 col-form-label"
+                  class="btn btn-primary col-auto col-form-label mt-4"
                   disabled=self.task.is_some()
                   type="submit"
                   onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
@@ -356,7 +358,7 @@ impl Component for CreateUserForm {
                 }
               } else { html! {} }
             }
-            </>
+          </div>
         }
     }
 }
