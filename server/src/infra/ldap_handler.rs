@@ -41,14 +41,14 @@ fn get_group_id_from_distinguished_name(
     if parts.len() == base_tree.len() + 2 {
         if parts[1].0 != "ou" || parts[1].1 != "groups" || parts[0].0 != "cn" {
             bail!(
-                r#"Unexpected user DN format. Expected: "cn=groupname,ou=groups,{}""#,
+                r#"Unexpected group DN format. Expected: "cn=groupname,ou=groups,{}""#,
                 base_dn_str
             );
         }
         Ok(parts[0].1.to_string())
     } else {
         bail!(
-            r#"Unexpected user DN format. Expected: "cn=groupname,ou=groups,{}""#,
+            r#"Unexpected group DN format. Expected: "cn=groupname,ou=groups,{}""#,
             base_dn_str
         );
     }

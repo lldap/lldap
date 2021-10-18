@@ -23,6 +23,76 @@ It mostly targets self-hosting servers, with open-source components like
 Nextcloud, Airsonic and so on that only support LDAP as a source of external
 authentication.
 
+## Setup
+
+### With Docker
+
+The image is available at `nitnelave/lldap`. You should persist the `/data`
+folder, which contains your configuration, the database and the private key
+file (unless you move them in the config).
+
+Configure the server by copying the `lldap_config.docker_template.toml` to
+`/data/lldap_config.toml` and updating the configuration values (especially the
+`jwt_secret` and `ldap_user_pass`, unless you override them with env variables).
+
+Example for docker compose:
+
+```yaml
+volumes:
+  lldap_data:
+    driver: local
+
+services:
+  lldap:
+    image: nitnelave/lldap
+    ports:
+      # For LDAP
+      - "3890:3890"
+      # For the web front-end
+      - "17170:17170"
+    volumes:
+      - "lldap_data:/data"
+    environment:
+      - JWT_SECRET=REPLACE_WITH_RANDOM
+      - LDAP_USER_PASS=REPLACE_WITH_PASSWORD
+      - LDAP_BASE_DN=dc=example,dc=com
+```
+
+Then the service will listen on two ports, one for LDAP and one for the web
+front-end.
+
+To configure the services that will talk to LLDAP, here are the values:
+  - The LDAP user DN is from the configuration. By default,
+    `cn=admin,dc=example,dc=com`.
+  - The LDAP password is from the configuration (same as to log in to the web
+    UI).
+  - The users are all located in `ou=people,` + the base DN, so by default user
+    `bob` is at `cn=bob,ou=people,dc=example,dc=com`.
+  - Similarly, the groups are located in `ou=groups`, so the group `family`
+    will be at `cn=family,ou=groups,dc=example,dc=com`.
+
+Testing group membership through `membeOf` is supported, so you can have a
+filter like: `(memberOf=cn=admins,ou=groups,dc=example,dc=com)`.
+
+The administrator group for LLDAP is `lldap_admin`: anyone in this group has
+admin rights in the Web UI.
+
+### From source
+
+To bring up the server, you'll need to compile the frontend. In addition to
+cargo, you'll need:
+
+* WASM-pack: `cargo install wasm-pack`
+* rollup.js: `npm install rollup`
+
+Then you can build the frontend files with `./app/build.sh` (you'll need to run
+this after every front-end change to update the WASM package served).
+
+To bring up the server, just run `cargo run`. The default config is in
+`src/infra/configuration.rs`, but you can override it by creating an
+`lldap_config.toml`, setting environment variables or passing arguments to
+`cargo run`.
+
 ## Architecture
 
 The server is entirely written in Rust, using [actix](https://actix.rs) for the
@@ -120,57 +190,3 @@ running `./export_schema.sh`.
 
 Join our [Discord server](https://discord.gg/h5PEdRMNyP) if you have any
 questions!
-
-### Setup
-
-#### With Docker
-
-The image is available at `nitnelave/lldap`. You should persist the `/data`
-folder, which contains your configuration, the database and the private key
-file (unless you move them in the config).
-
-Configure the server by copying the `lldap_config.docker_template.toml` to
-`/data/lldap_config.toml` and updating the configuration values (especially the
-`jwt_secret` and `ldap_user_pass`, unless you override them with env variables).
-
-Example for docker compose:
-
-```yaml
-volumes:
-  lldap_data:
-    driver: local
-
-services:
-  lldap:
-    image: nitnelave/lldap
-    ports:
-      # For LDAP
-      - "3890:3890"
-      # For the web front-end
-      - "17170:17170"
-    volumes:
-      - "lldap_data:/data"
-    environment:
-      - JWT_SECRET=REPLACE_WITH_RANDOM
-      - LDAP_USER_PASS=REPLACE_WITH_PASSWORD
-      - LDAP_BASE_DN=dc=example,dc=com
-```
-
-Then the service will listen on two ports, one for LDAP and one for the web
-front-end.
-
-#### From source
-
-To bring up the server, you'll need to compile the frontend. In addition to
-cargo, you'll need:
-
-* WASM-pack: `cargo install wasm-pack`
-* rollup.js: `npm install rollup`
-
-Then you can build the frontend files with `./app/build.sh` (you'll need to run
-this after every front-end change to update the WASM package served).
-
-To bring up the server, just run `cargo run`. The default config is in
-`src/infra/configuration.rs`, but you can override it by creating an
-`lldap_config.toml`, setting environment variables or passing arguments to
-`cargo run`.
