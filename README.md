@@ -1,5 +1,9 @@
 # lldap - Light LDAP implementation for authentication
 
+![Build](https://github.com/nitnelave/lldap/actions/workflows/rust.yml/badge.svg)
+![Discord](https://img.shields.io/discord/898492935446876200)
+![Twitter Follow](https://img.shields.io/twitter/follow/nitnelave1?style=social)
+
 WARNING: This project is still in alpha, with the basic core functionality
 implemented but still very rough. For updates, follow
 [@nitnelave1](https://twitter.com/nitnelave1) or join our [Discord
@@ -13,7 +17,7 @@ only speak LDAP protocol can talk to it and use it as an authentication server.
 ![Screenshot of the user list page](screenshot.png)
 
 The goal is _not_ to provide a full LDAP server; if you're interested in that,
-check out OpenLDAP. This server is made to be:
+check out OpenLDAP. This server is a user management system that is:
 * simple to setup (no messing around with `slapd`)
 * simple to manage (friendly web UI)
 * opinionated with basic defaults so you don't have to understand the
@@ -22,6 +26,10 @@ check out OpenLDAP. This server is made to be:
 It mostly targets self-hosting servers, with open-source components like
 Nextcloud, Airsonic and so on that only support LDAP as a source of external
 authentication.
+
+For more features (OAuth/OpenID support, reverse proxy, ...) you can install
+other components (KeyCloak, Authelia, ...) using this server as the source of
+truth for users, via LDAP.
 
 ## Setup
 
@@ -61,22 +69,6 @@ services:
 Then the service will listen on two ports, one for LDAP and one for the web
 front-end.
 
-To configure the services that will talk to LLDAP, here are the values:
-  - The LDAP user DN is from the configuration. By default,
-    `cn=admin,dc=example,dc=com`.
-  - The LDAP password is from the configuration (same as to log in to the web
-    UI).
-  - The users are all located in `ou=people,` + the base DN, so by default user
-    `bob` is at `cn=bob,ou=people,dc=example,dc=com`.
-  - Similarly, the groups are located in `ou=groups`, so the group `family`
-    will be at `cn=family,ou=groups,dc=example,dc=com`.
-
-Testing group membership through `membeOf` is supported, so you can have a
-filter like: `(memberOf=cn=admins,ou=groups,dc=example,dc=com)`.
-
-The administrator group for LLDAP is `lldap_admin`: anyone in this group has
-admin rights in the Web UI.
-
 ### From source
 
 To bring up the server, you'll need to compile the frontend. In addition to
@@ -92,6 +84,24 @@ To bring up the server, just run `cargo run`. The default config is in
 `src/infra/configuration.rs`, but you can override it by creating an
 `lldap_config.toml`, setting environment variables or passing arguments to
 `cargo run`.
+
+## Client configuration
+
+To configure the services that will talk to LLDAP, here are the values:
+  - The LDAP user DN is from the configuration. By default,
+    `cn=admin,dc=example,dc=com`.
+  - The LDAP password is from the configuration (same as to log in to the web
+    UI).
+  - The users are all located in `ou=people,` + the base DN, so by default user
+    `bob` is at `cn=bob,ou=people,dc=example,dc=com`.
+  - Similarly, the groups are located in `ou=groups`, so the group `family`
+    will be at `cn=family,ou=groups,dc=example,dc=com`.
+
+Testing group membership through `membeOf` is supported, so you can have a
+filter like: `(memberOf=cn=admins,ou=groups,dc=example,dc=com)`.
+
+The administrator group for LLDAP is `lldap_admin`: anyone in this group has
+admin rights in the Web UI.
 
 ## Architecture
 
