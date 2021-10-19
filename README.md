@@ -97,7 +97,7 @@ To configure the services that will talk to LLDAP, here are the values:
   - Similarly, the groups are located in `ou=groups`, so the group `family`
     will be at `cn=family,ou=groups,dc=example,dc=com`.
 
-Testing group membership through `membeOf` is supported, so you can have a
+Testing group membership through `memberOf` is supported, so you can have a
 filter like: `(memberOf=cn=admins,ou=groups,dc=example,dc=com)`.
 
 The administrator group for LLDAP is `lldap_admin`: anyone in this group has
