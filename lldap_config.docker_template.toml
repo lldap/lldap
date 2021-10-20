@@ -1,6 +1,7 @@
 ## Default configuration for Docker.
-## All the values can be overridden through environment variables. For
-## instance, "ldap_port" can be overridden with the "LDAP_PORT" variable.
+## All the values can be overridden through environment variables, prefixed
+## with "LLDAP_". For instance, "ldap_port" can be overridden with the
+## "LLDAP_LDAP_PORT" variable.
 
 ## The port on which to have the LDAP server.
 #ldap_port = 3890
@@ -14,7 +15,7 @@
 ## servers that need to consume the JWTs.
 ## Changing this secret will invalidate all user sessions and require
 ## them to re-login.
-## You should probably set it through the JWT_SECRET environment
+## You should probably set it through the LLDAP_JWT_SECRET environment
 ## variable from a secret ".env" file.
 ## You can generate it with (on linux):
 ## LC_ALL=C tr -dc 'A-Za-z0-9!"#%&'\''()*+,-./:;<=>?@[\]^_{|}~' </dev/urandom | head -c 32; echo ''
@@ -39,7 +40,7 @@
 ## Password for the admin account, both for the LDAP bind and for the
 ## administration interface.
 ## It should be minimum 8 characters long.
-## You can set it with the LDAP_USER_PASS environment variable.
+## You can set it with the LLDAP_LDAP_USER_PASS environment variable.
 ## Note: you can create another admin user for LDAP/administration, this
 ## is just the default one.
 #ldap_user_pass = "REPLACE_WITH_PASSWORD"
