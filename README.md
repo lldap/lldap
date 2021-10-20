@@ -42,6 +42,8 @@ file (unless you move them in the config).
 Configure the server by copying the `lldap_config.docker_template.toml` to
 `/data/lldap_config.toml` and updating the configuration values (especially the
 `jwt_secret` and `ldap_user_pass`, unless you override them with env variables).
+Environment variables should be prefixed with `LLDAP_` to override the
+configuration.
 
 Example for docker compose:
 
@@ -61,9 +63,9 @@ services:
     volumes:
       - "lldap_data:/data"
     environment:
-      - JWT_SECRET=REPLACE_WITH_RANDOM
-      - LDAP_USER_PASS=REPLACE_WITH_PASSWORD
-      - LDAP_BASE_DN=dc=example,dc=com
+      - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
+      - LLDAP_LDAP_USER_PASS=REPLACE_WITH_PASSWORD
+      - LLDAP_LDAP_BASE_DN=dc=example,dc=com
 ```
 
 Then the service will listen on two ports, one for LDAP and one for the web
