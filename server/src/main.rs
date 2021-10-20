@@ -11,7 +11,7 @@ use crate::{
     infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler},
 };
 use actix::Actor;
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use futures_util::TryFutureExt;
 use log::*;
 
@@ -19,9 +19,11 @@ mod domain;
 mod infra;
 
 async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) -> Result<()> {
-    if config.ldap_user_pass.len() < 8 {
-        bail!("Minimum password length is 8 characters");
-    }
+    assert!(
+        config.ldap_user_pass.len() >= 8,
+        "Minimum password length is 8 characters, got {} characters",
+        config.ldap_user_pass.len()
+    );
     handler
         .create_user(CreateUserRequest {
             user_id: config.ldap_user_dn.clone(),
@@ -48,9 +50,12 @@ async fn run_server(config: Configuration) -> Result<()> {
         .await?;
     domain::sql_tables::init_table(&sql_pool).await?;
     let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
-    create_admin_user(&backend_handler, &config)
-        .await
-        .unwrap_or_else(|e| warn!("Error setting up admin login/account: {}", e));
+    if let Err(e) = backend_handler.get_user_details(&config.ldap_user_dn).await {
+        warn!("Could not get admin user, trying to create it: {:#}", e);
+        create_admin_user(&backend_handler, &config)
+            .await
+            .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))?;
+    }
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,
         backend_handler.clone(),
