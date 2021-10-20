@@ -32,7 +32,7 @@
 
 ## Admin username.
 ## For the LDAP interface, a value of "admin" here will create the LDAP
-## user "cn=admin,dc=example,dc=com" (with the base DN above).
+## user "cn=admin,ou=people,dc=example,dc=com" (with the base DN above).
 ## For the administration interface, this is the username.
 #ldap_user_dn = "admin"
 
