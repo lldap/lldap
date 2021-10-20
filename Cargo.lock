@@ -1697,7 +1697,7 @@ checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
 
 [[package]]
 name = "lldap"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "actix",
  "actix-files",
@@ -1749,7 +1749,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1773,7 +1773,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_auth"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "curve25519-dalek",
