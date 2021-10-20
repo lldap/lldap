@@ -15,6 +15,11 @@ pub type KeyPair = opaque_ke::keypair::KeyPair<<DefaultSuite as CipherSuite>::Gr
 /// A wrapper around argon2 to provide the [`opaque_ke::slow_hash::SlowHash`] trait.
 pub struct ArgonHasher;
 
+/// The Argon hasher used for bruteforce protection.
+///
+/// Note that it isn't used to "hash the passwords", so it doesn't need a variable salt. Instead,
+/// it's used as part of the OPAQUE protocol to add a slow hashing method, making bruteforce
+/// attacks prohibitively more expensive.
 impl ArgonHasher {
     /// Fixed salt, doesn't affect the security. It is only used to make attacks more
     /// computationally intensive, it doesn't serve any security purpose.
