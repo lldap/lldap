@@ -91,7 +91,7 @@ To bring up the server, just run `cargo run`. The default config is in
 
 To configure the services that will talk to LLDAP, here are the values:
   - The LDAP user DN is from the configuration. By default,
-    `cn=admin,dc=example,dc=com`.
+    `cn=admin,ou=people,dc=example,dc=com`.
   - The LDAP password is from the configuration (same as to log in to the web
     UI).
   - The users are all located in `ou=people,` + the base DN, so by default user
