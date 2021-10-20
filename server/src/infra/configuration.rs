@@ -4,6 +4,7 @@ use figment::{
     Figment,
 };
 use lldap_auth::opaque::{server::ServerSetup, KeyPair};
+use log::*;
 use serde::{Deserialize, Serialize};
 
 use crate::infra::cli::RunOpts;
@@ -109,6 +110,8 @@ fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
 
 pub fn init(cli_opts: RunOpts) -> Result<Configuration> {
     let config_file = cli_opts.config_file.clone();
+
+    info!("Loading configuration from {}", cli_opts.config_file);
 
     let config: Configuration = Figment::from(Serialized::defaults(Configuration::default()))
         .merge(Toml::file(config_file))
