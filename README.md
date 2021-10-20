@@ -103,6 +103,25 @@ filter like: `(memberOf=cn=admins,ou=groups,dc=example,dc=com)`.
 The administrator group for LLDAP is `lldap_admin`: anyone in this group has
 admin rights in the Web UI.
 
+## I can't log in!
+
+If you just set up the server, can get to the login page but the password you
+set isn't working, try the following:
+
+  - (For docker): Make sure that the `/data` folder is persistent, either to a
+   docker volume or mounted from the host filesystem.
+  - Check if there is a `lldap_config.toml` file (either in `/data` for docker
+    or in the current directory). If there isn't, copy
+    `lldap_config.docker_template.toml` there, and fill in the various values
+    (passwords, secrets, ...).
+  - Check if there is a `users.db` file (either in `/data` for docker or where
+    you specified the DB URL, which defaults to the current directory). If
+    there isn't, check that the user running the command (user with ID 10001
+    for docker) has the rights to write to the `/data` folder. If in doubt, you
+    can `chmod 777 /data` (or whatever the folder) to make it world-writeable.
+  - Make sure you restart the server.
+  - If it's still not working, join the [Discord server](https://discord.gg/h5PEdRMNyP) to ask for help.
+
 ## Architecture
 
 The server is entirely written in Rust, using [actix](https://actix.rs) for the
