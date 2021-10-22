@@ -17,6 +17,7 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1
       - name: Build
         run: cargo build --verbose --workspace
       - name: Run tests
@@ -42,6 +43,8 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+      - uses: Swatinem/rust-cache@v1
+
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
@@ -63,8 +66,37 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+      - uses: Swatinem/rust-cache@v1
+
       - name: Run cargo fmt
         uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
+
+  coverage:
+    name: Code coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        run: rustup toolchain install nightly --component llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        run: curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz | tar xzf - -C ~/.cargo/bin
+
+      - uses: Swatinem/rust-cache@v1
+
+      - name: clean
+        run: cargo llvm-cov clean --workspace
+      - name: Generate code coverage for unit test
+        run: cargo llvm-cov  --workspace --no-report
+      - name: Aggregate reports
+        run: cargo llvm-cov --no-run --lcov --output-path lcov.info
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
+        with:
+          files: lcov.info
+          fail_ci_if_error: true
