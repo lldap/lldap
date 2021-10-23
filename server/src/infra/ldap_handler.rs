@@ -1,6 +1,11 @@
-use crate::domain::handler::{BackendHandler, LoginHandler, RequestFilter, User};
+use crate::domain::handler::{
+    BackendHandler, Group, GroupIdAndName, LoginHandler, RequestFilter, User,
+};
 use anyhow::{bail, Result};
+use futures::stream::StreamExt;
+use futures_util::TryStreamExt;
 use ldap3_server::simple::*;
+use log::*;
 
 fn make_dn_pair<I>(mut iter: I) -> Result<(String, String)>
 where
@@ -41,14 +46,16 @@ fn get_group_id_from_distinguished_name(
     if parts.len() == base_tree.len() + 2 {
         if parts[1].0 != "ou" || parts[1].1 != "groups" || parts[0].0 != "cn" {
             bail!(
-                r#"Unexpected group DN format. Expected: "cn=groupname,ou=groups,{}""#,
+                r#"Unexpected group DN format. Got "{}", expected: "cn=groupname,ou=groups,{}""#,
+                dn,
                 base_dn_str
             );
         }
         Ok(parts[0].1.to_string())
     } else {
         bail!(
-            r#"Unexpected group DN format. Expected: "cn=groupname,ou=groups,{}""#,
+            r#"Unexpected group DN format. Got "{}", expected: "cn=groupname,ou=groups,{}""#,
+            dn,
             base_dn_str
         );
     }
@@ -58,62 +65,94 @@ fn get_user_id_from_distinguished_name(
     dn: &str,
     base_tree: &[(String, String)],
     base_dn_str: &str,
-    ldap_user_dn: &str,
 ) -> Result<String> {
     let parts = parse_distinguished_name(dn)?;
     if !is_subtree(&parts, base_tree) {
         bail!("Not a subtree of the base tree");
     }
-    if parts.len() == base_tree.len() + 1 {
-        if dn != ldap_user_dn {
-            bail!(r#"Wrong admin DN. Expected: "{}""#, ldap_user_dn);
-        }
-        Ok(parts[0].1.to_string())
-    } else if parts.len() == base_tree.len() + 2 {
+    if parts.len() == base_tree.len() + 2 {
         if parts[1].0 != "ou" || parts[1].1 != "people" || parts[0].0 != "cn" {
             bail!(
-                r#"Unexpected user DN format. Expected: "cn=username,ou=people,{}""#,
+                r#"Unexpected user DN format. Got "{}", expected: "cn=username,ou=people,{}""#,
+                dn,
                 base_dn_str
             );
         }
         Ok(parts[0].1.to_string())
     } else {
         bail!(
-            r#"Unexpected user DN format. Expected: "cn=username,ou=people,{}""#,
+            r#"Unexpected user DN format. Got "{}", expected: "cn=username,ou=people,{}""#,
+            dn,
             base_dn_str
         );
     }
 }
 
-fn get_attribute(user: &User, attribute: &str) -> Result<Vec<String>> {
+fn get_user_attribute(user: &User, attribute: &str) -> Result<Vec<String>> {
     match attribute {
         "objectClass" => Ok(vec![
             "inetOrgPerson".to_string(),
             "posixAccount".to_string(),
             "mailAccount".to_string(),
+            "person".to_string(),
         ]),
         "uid" => Ok(vec![user.user_id.clone()]),
         "mail" => Ok(vec![user.email.clone()]),
         "givenName" => Ok(vec![user.first_name.clone()]),
         "sn" => Ok(vec![user.last_name.clone()]),
         "cn" => Ok(vec![user.display_name.clone()]),
-        _ => bail!("Unsupported attribute: {}", attribute),
+        "displayName" => Ok(vec![user.display_name.clone()]),
+        "supportedExtension" => Ok(vec![]),
+        _ => bail!("Unsupported user attribute: {}", attribute),
     }
 }
 
-fn make_ldap_search_result_entry(
+fn make_ldap_search_user_result_entry(
     user: User,
     base_dn_str: &str,
     attributes: &[String],
 ) -> Result<LdapSearchResultEntry> {
     Ok(LdapSearchResultEntry {
-        dn: format!("cn={},{}", user.user_id, base_dn_str),
+        dn: format!("cn={},ou=people,{}", user.user_id, base_dn_str),
         attributes: attributes
             .iter()
             .map(|a| {
                 Ok(LdapPartialAttribute {
                     atype: a.to_string(),
-                    vals: get_attribute(&user, a)?,
+                    vals: get_user_attribute(&user, a)?,
+                })
+            })
+            .collect::<Result<Vec<LdapPartialAttribute>>>()?,
+    })
+}
+
+fn get_group_attribute(group: &Group, base_dn_str: &str, attribute: &str) -> Result<Vec<String>> {
+    match attribute {
+        "objectClass" => Ok(vec!["groupOfUniqueNames".to_string()]),
+        "cn" => Ok(vec![group.display_name.clone()]),
+        "uniqueMember" => Ok(group
+            .users
+            .iter()
+            .map(|u| format!("cn={},ou=people,{}", u, base_dn_str))
+            .collect()),
+        "supportedExtension" => Ok(vec![]),
+        _ => bail!("Unsupported group attribute: {}", attribute),
+    }
+}
+
+fn make_ldap_search_group_result_entry(
+    group: Group,
+    base_dn_str: &str,
+    attributes: &[String],
+) -> Result<LdapSearchResultEntry> {
+    Ok(LdapSearchResultEntry {
+        dn: format!("cn={},ou=groups,{}", group.display_name, base_dn_str),
+        attributes: attributes
+            .iter()
+            .map(|a| {
+                Ok(LdapPartialAttribute {
+                    atype: a.to_string(),
+                    vals: get_group_attribute(&group, base_dn_str, a)?,
                 })
             })
             .collect::<Result<Vec<LdapPartialAttribute>>>()?,
@@ -138,7 +177,7 @@ fn map_field(field: &str) -> Result<String> {
         "user_id".to_string()
     } else if field == "mail" {
         "email".to_string()
-    } else if field == "cn" {
+    } else if field == "cn" || field == "displayName" {
         "display_name".to_string()
     } else if field == "givenName" {
         "first_name".to_string()
@@ -172,21 +211,18 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
                     ldap_base_dn
                 )
             }),
-            ldap_user_dn: format!("cn={},{}", ldap_user_dn, &ldap_base_dn),
+            ldap_user_dn: format!("cn={},ou=people,{}", ldap_user_dn, &ldap_base_dn),
             base_dn_str: ldap_base_dn,
         }
     }
 
     pub async fn do_bind(&mut self, sbr: &SimpleBindRequest) -> LdapMsg {
-        let user_id = match get_user_id_from_distinguished_name(
-            &sbr.dn,
-            &self.base_dn,
-            &self.base_dn_str,
-            &self.ldap_user_dn,
-        ) {
-            Ok(s) => s,
-            Err(e) => return sbr.gen_error(LdapResultCode::NamingViolation, e.to_string()),
-        };
+        info!(r#"Received bind request for "{}""#, &sbr.dn);
+        let user_id =
+            match get_user_id_from_distinguished_name(&sbr.dn, &self.base_dn, &self.base_dn_str) {
+                Ok(s) => s,
+                Err(e) => return sbr.gen_error(LdapResultCode::NamingViolation, e.to_string()),
+            };
         match self
             .backend_handler
             .bind(crate::domain::handler::BindRequest {
@@ -204,31 +240,55 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
     }
 
     pub async fn do_search(&mut self, lsr: &SearchRequest) -> Vec<LdapMsg> {
+        info!("Received search request with filters: {:?}", &lsr.filter);
         if self.dn != self.ldap_user_dn {
             return vec![lsr.gen_error(
                 LdapResultCode::InsufficentAccessRights,
-                r#"Current user is not allowed to query LDAP"#.to_string(),
+                format!(
+                    r#"Current user `{}` is not allowed to query LDAP, expected {}"#,
+                    &self.dn, &self.ldap_user_dn
+                ),
             )];
         }
-        let dn_parts = match parse_distinguished_name(&lsr.base) {
-            Ok(dn) => dn,
-            Err(_) => {
-                return vec![lsr.gen_error(
-                    LdapResultCode::OperationsError,
-                    format!(r#"Could not parse base DN: "{}""#, lsr.base),
-                )]
+        let dn_parts = if lsr.base.is_empty() {
+            self.base_dn.clone()
+        } else {
+            match parse_distinguished_name(&lsr.base) {
+                Ok(dn) => dn,
+                Err(_) => {
+                    return vec![lsr.gen_error(
+                        LdapResultCode::OperationsError,
+                        format!(r#"Could not parse base DN: "{}""#, lsr.base),
+                    )]
+                }
             }
         };
         if !is_subtree(&dn_parts, &self.base_dn) {
             // Search path is not in our tree, just return an empty success.
             return vec![lsr.gen_success()];
         }
-        let filters = match self.convert_filter(&lsr.filter) {
+        let mut results = Vec::new();
+        if dn_parts.len() == self.base_dn.len()
+            || (dn_parts.len() == self.base_dn.len() + 1
+                && dn_parts[0] == ("ou".to_string(), "people".to_string()))
+        {
+            results.extend(self.get_user_list(lsr).await);
+        }
+        if dn_parts.len() == self.base_dn.len() + 1
+            && dn_parts[0] == ("ou".to_string(), "groups".to_string())
+        {
+            results.extend(self.get_groups_list(lsr).await);
+        }
+        results
+    }
+
+    async fn get_user_list(&self, lsr: &SearchRequest) -> Vec<LdapMsg> {
+        let filters = match self.convert_user_filter(&lsr.filter) {
             Ok(f) => Some(f),
             Err(e) => {
                 return vec![lsr.gen_error(
                     LdapResultCode::UnwillingToPerform,
-                    format!("Unsupported filter: {}", e),
+                    format!("Unsupported user filter: {}", e),
                 )]
             }
         };
@@ -237,14 +297,84 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
             Err(e) => {
                 return vec![lsr.gen_error(
                     LdapResultCode::Other,
-                    format!(r#"Error during search for "{}": {}"#, lsr.base, e),
+                    format!(r#"Error during searching user "{}": {}"#, lsr.base, e),
                 )]
             }
         };
 
         users
             .into_iter()
-            .map(|u| make_ldap_search_result_entry(u, &self.base_dn_str, &lsr.attrs))
+            .map(|u| make_ldap_search_user_result_entry(u, &self.base_dn_str, &lsr.attrs))
+            .map(|entry| Ok(lsr.gen_result_entry(entry?)))
+            // If the processing succeeds, add a success message at the end.
+            .chain(std::iter::once(Ok(lsr.gen_success())))
+            .collect::<Result<Vec<_>>>()
+            .unwrap_or_else(|e| vec![lsr.gen_error(LdapResultCode::NoSuchAttribute, e.to_string())])
+    }
+
+    async fn get_groups_list(&self, lsr: &SearchRequest) -> Vec<LdapMsg> {
+        let for_user = match self.get_group_filter(&lsr.filter) {
+            Ok(u) => u,
+            Err(e) => {
+                return vec![lsr.gen_error(
+                    LdapResultCode::UnwillingToPerform,
+                    format!("Unsupported group filter: {}", e),
+                )]
+            }
+        };
+
+        async fn get_users_for_group<Backend: BackendHandler>(
+            backend_handler: &Backend,
+            g: &GroupIdAndName,
+        ) -> Result<Group> {
+            let users = backend_handler
+                .list_users(Some(RequestFilter::MemberOfId(g.0)))
+                .await?;
+            Ok(Group {
+                id: g.0,
+                display_name: g.1.clone(),
+                users: users.into_iter().map(|u| u.user_id).collect(),
+            })
+        }
+
+        let groups: Vec<Group> = if let Some(user) = for_user {
+            let groups_without_users = match self.backend_handler.get_user_groups(&user).await {
+                Ok(groups) => groups,
+                Err(e) => {
+                    return vec![lsr.gen_error(
+                        LdapResultCode::Other,
+                        format!(r#"Error while listing user groups: "{}": {}"#, lsr.base, e),
+                    )]
+                }
+            };
+            match tokio_stream::iter(groups_without_users.iter())
+                .then(|g| async move { get_users_for_group::<Backend>(&self.backend_handler, g).await })
+                .try_collect::<Vec<Group>>()
+                .await
+            {
+                Ok(groups) => groups,
+                Err(e) => {
+                    return vec![lsr.gen_error(
+                        LdapResultCode::Other,
+                        format!(r#"Error while listing user groups: "{}": {}"#, lsr.base, e),
+                    )]
+                }
+            }
+        } else {
+            match self.backend_handler.list_groups().await {
+                Ok(groups) => groups,
+                Err(e) => {
+                    return vec![lsr.gen_error(
+                        LdapResultCode::Other,
+                        format!(r#"Error while listing groups "{}": {}"#, lsr.base, e),
+                    )]
+                }
+            }
+        };
+
+        groups
+            .into_iter()
+            .map(|u| make_ldap_search_group_result_entry(u, &self.base_dn_str, &lsr.attrs))
             .map(|entry| Ok(lsr.gen_result_entry(entry?)))
             // If the processing succeeds, add a success message at the end.
             .chain(std::iter::once(Ok(lsr.gen_success())))
@@ -261,7 +391,7 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
     }
 
     pub async fn handle_ldap_message(&mut self, server_op: ServerOps) -> Option<Vec<LdapMsg>> {
-        let result = match server_op {
+        Some(match server_op {
             ServerOps::SimpleBind(sbr) => vec![self.do_bind(&sbr).await],
             ServerOps::Search(sr) => self.do_search(&sr).await,
             ServerOps::Unbind(_) => {
@@ -269,27 +399,46 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
                 return None;
             }
             ServerOps::Whoami(wr) => vec![self.do_whoami(&wr)],
-        };
-        Some(result)
+        })
     }
 
-    fn convert_filter(&self, filter: &LdapFilter) -> Result<RequestFilter> {
+    fn get_group_filter(&self, filter: &LdapFilter) -> Result<Option<String>> {
+        match filter {
+            LdapFilter::Equality(field, value) => {
+                if field == "member" || field == "uniqueMember" {
+                    let user_name = get_user_id_from_distinguished_name(
+                        value,
+                        &self.base_dn,
+                        &self.base_dn_str,
+                    )?;
+                    Ok(Some(user_name))
+                } else if field == "objectClass" && value == "groupOfUniqueNames" {
+                    Ok(None)
+                } else {
+                    bail!("Unsupported group filter: {:?}", filter)
+                }
+            }
+            _ => bail!("Unsupported group filter: {:?}", filter),
+        }
+    }
+
+    fn convert_user_filter(&self, filter: &LdapFilter) -> Result<RequestFilter> {
         match filter {
             LdapFilter::And(filters) => Ok(RequestFilter::And(
                 filters
                     .iter()
-                    .map(|f| self.convert_filter(f))
+                    .map(|f| self.convert_user_filter(f))
                     .collect::<Result<_>>()?,
             )),
             LdapFilter::Or(filters) => Ok(RequestFilter::Or(
                 filters
                     .iter()
-                    .map(|f| self.convert_filter(f))
+                    .map(|f| self.convert_user_filter(f))
                     .collect::<Result<_>>()?,
             )),
-            LdapFilter::Not(filter) => {
-                Ok(RequestFilter::Not(Box::new(self.convert_filter(&*filter)?)))
-            }
+            LdapFilter::Not(filter) => Ok(RequestFilter::Not(Box::new(
+                self.convert_user_filter(&*filter)?,
+            ))),
             LdapFilter::Equality(field, value) => {
                 if field == "memberOf" {
                     let group_name = get_group_id_from_distinguished_name(
@@ -298,19 +447,29 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
                         &self.base_dn_str,
                     )?;
                     Ok(RequestFilter::MemberOf(group_name))
+                } else if field == "objectClass" {
+                    if value == "person"
+                        || value == "inetOrgPerson"
+                        || value == "posixAccount"
+                        || value == "mailAccount"
+                    {
+                        Ok(RequestFilter::And(vec![]))
+                    } else {
+                        Ok(RequestFilter::Not(Box::new(RequestFilter::And(vec![]))))
+                    }
                 } else {
                     Ok(RequestFilter::Equality(map_field(field)?, value.clone()))
                 }
             }
             LdapFilter::Present(field) => {
                 // Check that it's a field we support.
-                if field == "objectclass" || map_field(field).is_ok() {
-                    Ok(RequestFilter::And(Vec::new()))
+                if field == "objectClass" || map_field(field).is_ok() {
+                    Ok(RequestFilter::And(vec![]))
                 } else {
-                    Ok(RequestFilter::Not(Box::new(RequestFilter::And(Vec::new()))))
+                    Ok(RequestFilter::Not(Box::new(RequestFilter::And(vec![]))))
                 }
             }
-            _ => bail!("Unsupported filter: {:?}", filter),
+            _ => bail!("Unsupported user filter: {:?}", filter),
         }
     }
 }
@@ -335,10 +494,10 @@ mod tests {
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
         let request = SimpleBindRequest {
             msgid: 1,
-            dn: "cn=test,dc=example,dc=com".to_string(),
+            dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
             pw: "pass".to_string(),
         };
-        ldap_handler.do_bind(&request).await;
+        assert_eq!(ldap_handler.do_bind(&request).await, request.gen_success());
         ldap_handler
     }
 
@@ -396,7 +555,7 @@ mod tests {
 
         let request = SimpleBindRequest {
             msgid: 2,
-            dn: "cn=test,dc=example,dc=com".to_string(),
+            dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
             pw: "pass".to_string(),
         };
         assert_eq!(ldap_handler.do_bind(&request).await, request.gen_success());
@@ -404,7 +563,7 @@ mod tests {
         let request = WhoamiRequest { msgid: 3 };
         assert_eq!(
             ldap_handler.do_whoami(&request),
-            request.gen_success("dn: cn=test,dc=example,dc=com")
+            request.gen_success("dn: cn=test,ou=people,dc=example,dc=com")
         );
     }
 
@@ -451,7 +610,7 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![request.gen_error(
                 LdapResultCode::InsufficentAccessRights,
-                r#"Current user is not allowed to query LDAP"#.to_string()
+                r#"Current user `cn=test,ou=people,dc=example,dc=com` is not allowed to query LDAP, expected cn=admin,ou=people,dc=example,dc=com"#.to_string()
             )]
         );
     }
@@ -471,7 +630,7 @@ mod tests {
             ldap_handler.do_bind(&request).await,
             request.gen_error(
                 LdapResultCode::NamingViolation,
-                r#"Wrong admin DN. Expected: "cn=admin,dc=example,dc=com""#.to_string()
+                r#"Unexpected user DN format. Got "cn=bob,dc=example,dc=com", expected: "cn=username,ou=people,dc=example,dc=com""#.to_string()
             )
         );
         let request = SimpleBindRequest {
@@ -483,7 +642,7 @@ mod tests {
             ldap_handler.do_bind(&request).await,
             request.gen_error(
                 LdapResultCode::NamingViolation,
-                r#"Unexpected user DN format. Expected: "cn=username,ou=people,dc=example,dc=com""#
+                r#"Unexpected user DN format. Got "cn=bob,ou=groups,dc=example,dc=com", expected: "cn=username,ou=people,dc=example,dc=com""#
                     .to_string()
             )
         );
@@ -559,14 +718,15 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![
                 request.gen_result_entry(LdapSearchResultEntry {
-                    dn: "cn=bob_1,dc=example,dc=com".to_string(),
+                    dn: "cn=bob_1,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
                             vals: vec![
                                 "inetOrgPerson".to_string(),
                                 "posixAccount".to_string(),
-                                "mailAccount".to_string()
+                                "mailAccount".to_string(),
+                                "person".to_string()
                             ]
                         },
                         LdapPartialAttribute {
@@ -592,14 +752,15 @@ mod tests {
                     ],
                 }),
                 request.gen_result_entry(LdapSearchResultEntry {
-                    dn: "cn=jim,dc=example,dc=com".to_string(),
+                    dn: "cn=jim,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
                             vals: vec![
                                 "inetOrgPerson".to_string(),
                                 "posixAccount".to_string(),
-                                "mailAccount".to_string()
+                                "mailAccount".to_string(),
+                                "person".to_string()
                             ]
                         },
                         LdapPartialAttribute {
@@ -674,7 +835,7 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![request.gen_error(
                 LdapResultCode::UnwillingToPerform,
-                "Unsupported filter: Unsupported filter: Substring(\"uid\", LdapSubstringFilter { initial: None, any: [], final_: None })".to_string()
+                "Unsupported user filter: Unsupported user filter: Substring(\"uid\", LdapSubstringFilter { initial: None, any: [], final_: None })".to_string()
             )]
         );
     }

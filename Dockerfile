@@ -24,6 +24,7 @@ RUN set -x \
 # Prepare the dependency list.
 FROM chef AS planner
 COPY . .
+USER root
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Build dependencies
