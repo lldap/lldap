@@ -22,7 +22,10 @@ where
 {
     use futures_util::SinkExt;
     use std::convert::TryFrom;
-    let server_op = match msg.map_err(|_e| ()).and_then(ServerOps::try_from) {
+    let server_op = match msg
+        .map_err(|e| warn!("Error while receiving LDAP op: {:#}", e))
+        .and_then(ServerOps::try_from)
+    {
         Ok(a_value) => a_value,
         Err(an_error) => {
             let _err = resp
