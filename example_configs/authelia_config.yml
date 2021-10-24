@@ -1,0 +1,46 @@
+###############################################################
+#                   Authelia configuration                    #
+###############################################################
+
+# This is just the LDAP part of the Authelia configuration!
+
+
+authentication_backend:
+  # Passwort reset through authelia does not work at the moment
+  disable_reset_password: false 
+  # How often authelia should check if there is an user update in LDAP
+  refresh_interval: 1m 
+  ldap:
+    implementation: custom
+    # Pattern is ldap://HOSTNAME-OR-IP:PORT
+    # Normal ldap port is 389, standard in LLDAP is 3890
+    url: ldap://lldap:3890
+    # The dial timeout for LDAP.
+    timeout: 5s
+    # Use StartTLS with the LDAP connection, TLS not supported right now
+    start_tls: false
+    #tls:
+    #  skip_verify: false
+    #  minimum_version: TLS1.2
+    # Set base dn, like dc=google,dc.com
+    base_dn: dc=example,dc=com
+    username_attribute: uid
+    # You need to set this to ou=people, because all users are stored in this ou!
+    additional_users_dn: ou=people
+    # To allow sign in both with username and email, one can use a filter like
+    # (&(|({username_attribute}={input})({mail_attribute}={input}))(objectClass=person))
+    users_filter: (&({username_attribute}={input})(objectClass=person))
+    # Set this to ou=groups, because all groups are stored in this ou
+    additional_groups_dn: ou=groups
+    # Only this filter is supported right now
+    groups_filter: (member={dn})
+    # The attribute holding the name of the group.
+    group_name_attribute: cn
+    # Email attribute
+    mail_attribute: mail
+    # The attribute holding the display name of the user. This will be used to greet an authenticated user.
+    display_name_attribute: displayName
+    # The username and password of the admin user.
+    user: cn=admin,ou=people,dc=example,dc=com
+    # Password can also be set using a secret: https://www.authelia.com/docs/configuration/secrets.html
+    password: 'testtest'
