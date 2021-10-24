@@ -7,7 +7,7 @@
 
 authentication_backend:
   # Passwort reset through authelia does not work at the moment
-  disable_reset_password: false 
+  disable_reset_password: true 
   # How often authelia should check if there is an user update in LDAP
   refresh_interval: 1m 
   ldap:
@@ -41,6 +41,7 @@ authentication_backend:
     # The attribute holding the display name of the user. This will be used to greet an authenticated user.
     display_name_attribute: displayName
     # The username and password of the admin user.
+    # "admin" should be the admin username you set in the LLDAP configuration
     user: cn=admin,ou=people,dc=example,dc=com
     # Password can also be set using a secret: https://www.authelia.com/docs/configuration/secrets.html
-    password: 'testtest'
+    password: 'REPLACE_ME'
