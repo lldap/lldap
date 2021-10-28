@@ -78,6 +78,7 @@ impl LoginForm {
                             // simple one to the user.
                             ConsoleService::error(&format!("Invalid username or password: {}", e));
                             self.error = Some(anyhow!("Invalid username or password"));
+                            self.task = None;
                             return Ok(true);
                         }
                         Ok(l) => l,
