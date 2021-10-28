@@ -1,11 +1,19 @@
-use crate::domain::handler::{
-    BackendHandler, Group, GroupIdAndName, LoginHandler, RequestFilter, User,
+use crate::domain::{
+    handler::{
+        BackendHandler, BindRequest, Group, GroupIdAndName, LoginHandler, RequestFilter, User,
+    },
+    opaque_handler::OpaqueHandler,
 };
 use anyhow::{bail, Result};
 use futures::stream::StreamExt;
 use futures_util::TryStreamExt;
-use ldap3_server::simple::*;
+use ldap3_server::proto::{
+    LdapBindCred, LdapBindRequest, LdapBindResponse, LdapExtendedRequest, LdapExtendedResponse,
+    LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest, LdapResult,
+    LdapResultCode, LdapSearchRequest, LdapSearchResultEntry, LdapSearchScope,
+};
 use log::*;
+use std::convert::TryFrom;
 
 fn make_dn_pair<I>(mut iter: I) -> Result<(String, String)>
 where
@@ -103,7 +111,6 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Vec<Stri
         "sn" => Ok(vec![user.last_name.clone()]),
         "cn" => Ok(vec![user.display_name.clone()]),
         "displayName" => Ok(vec![user.display_name.clone()]),
-        "supportedExtension" => Ok(vec![]),
         _ => bail!("Unsupported user attribute: {}", attribute),
     }
 }
@@ -131,13 +138,16 @@ fn make_ldap_search_user_result_entry(
 fn get_group_attribute(group: &Group, base_dn_str: &str, attribute: &str) -> Result<Vec<String>> {
     match attribute {
         "objectClass" => Ok(vec!["groupOfUniqueNames".to_string()]),
+        "dn" => Ok(vec![format!(
+            "cn={},ou=groups,{}",
+            group.display_name, base_dn_str
+        )]),
         "cn" => Ok(vec![group.display_name.clone()]),
-        "uniqueMember" => Ok(group
+        "member" | "uniqueMember" => Ok(group
             .users
             .iter()
             .map(|u| format!("cn={},ou=people,{}", u, base_dn_str))
             .collect()),
-        "supportedExtension" => Ok(vec![]),
         _ => bail!("Unsupported group attribute: {}", attribute),
     }
 }
@@ -194,7 +204,65 @@ fn map_field(field: &str) -> Result<String> {
     })
 }
 
-pub struct LdapHandler<Backend: BackendHandler + LoginHandler> {
+fn make_search_success() -> LdapOp {
+    make_search_error(LdapResultCode::Success, "".to_string())
+}
+
+fn make_search_error(code: LdapResultCode, message: String) -> LdapOp {
+    LdapOp::SearchResultDone(LdapResult {
+        code,
+        matcheddn: "".to_string(),
+        message,
+        referral: vec![],
+    })
+}
+
+fn make_extended_response(code: LdapResultCode, message: String) -> LdapOp {
+    LdapOp::ExtendedResponse(LdapExtendedResponse {
+        res: LdapResult {
+            code,
+            matcheddn: "".to_string(),
+            message,
+            referral: vec![],
+        },
+        name: None,
+        value: None,
+    })
+}
+
+fn root_dse_response(base_dn: &str) -> LdapOp {
+    LdapOp::SearchResultEntry(LdapSearchResultEntry {
+        dn: "".to_string(),
+        attributes: vec![
+            LdapPartialAttribute {
+                atype: "objectClass".to_string(),
+                vals: vec!["top".to_string()],
+            },
+            LdapPartialAttribute {
+                atype: "vendorName".to_string(),
+                vals: vec!["LLDAP".to_string()],
+            },
+            LdapPartialAttribute {
+                atype: "vendorVersion".to_string(),
+                vals: vec!["lldap_0.2.0".to_string()],
+            },
+            LdapPartialAttribute {
+                atype: "supportedLDAPVersion".to_string(),
+                vals: vec!["3".to_string()],
+            },
+            LdapPartialAttribute {
+                atype: "supportedExtension".to_string(),
+                vals: vec!["1.3.6.1.4.1.4203.1.11.1".to_string()],
+            },
+            LdapPartialAttribute {
+                atype: "defaultnamingcontext".to_string(),
+                vals: vec![base_dn.to_string()],
+            },
+        ],
+    })
+}
+
+pub struct LdapHandler<Backend: BackendHandler + LoginHandler + OpaqueHandler> {
     dn: String,
     backend_handler: Backend,
     pub base_dn: Vec<(String, String)>,
@@ -202,7 +270,7 @@ pub struct LdapHandler<Backend: BackendHandler + LoginHandler> {
     ldap_user_dn: String,
 }
 
-impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
+impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
     pub fn new(backend_handler: Backend, ldap_base_dn: String, ldap_user_dn: String) -> Self {
         Self {
             dn: "Unauthenticated".to_string(),
@@ -218,33 +286,102 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
         }
     }
 
-    pub async fn do_bind(&mut self, sbr: &SimpleBindRequest) -> LdapMsg {
-        info!(r#"Received bind request for "{}""#, &sbr.dn);
-        let user_id =
-            match get_user_id_from_distinguished_name(&sbr.dn, &self.base_dn, &self.base_dn_str) {
-                Ok(s) => s,
-                Err(e) => return sbr.gen_error(LdapResultCode::NamingViolation, e.to_string()),
-            };
+    pub async fn do_bind(&mut self, request: &LdapBindRequest) -> (LdapResultCode, String) {
+        info!(r#"Received bind request for "{}""#, &request.dn);
+        let user_id = match get_user_id_from_distinguished_name(
+            &request.dn,
+            &self.base_dn,
+            &self.base_dn_str,
+        ) {
+            Ok(s) => s,
+            Err(e) => return (LdapResultCode::NamingViolation, e.to_string()),
+        };
+        let LdapBindCred::Simple(password) = &request.cred;
         match self
             .backend_handler
-            .bind(crate::domain::handler::BindRequest {
+            .bind(BindRequest {
                 name: user_id,
-                password: sbr.pw.clone(),
+                password: password.clone(),
             })
             .await
         {
             Ok(()) => {
-                self.dn = sbr.dn.clone();
-                sbr.gen_success()
+                self.dn = request.dn.clone();
+                (LdapResultCode::Success, "".to_string())
             }
-            Err(_) => sbr.gen_invalid_cred(),
+            Err(_) => (LdapResultCode::InvalidCredentials, "".to_string()),
         }
     }
 
-    pub async fn do_search(&mut self, lsr: &SearchRequest) -> Vec<LdapMsg> {
-        info!("Received search request with filters: {:?}", &lsr.filter);
+    async fn change_password(&mut self, user: &str, password: &str) -> Result<()> {
+        use lldap_auth::*;
+        let mut rng = rand::rngs::OsRng;
+        let registration_start_request =
+            opaque::client::registration::start_registration(password, &mut rng)?;
+        let req = registration::ClientRegistrationStartRequest {
+            username: user.to_string(),
+            registration_start_request: registration_start_request.message,
+        };
+        let registration_start_response = self.backend_handler.registration_start(req).await?;
+        let registration_finish = opaque::client::registration::finish_registration(
+            registration_start_request.state,
+            registration_start_response.registration_response,
+            &mut rng,
+        )?;
+        let req = registration::ClientRegistrationFinishRequest {
+            server_data: registration_start_response.server_data,
+            registration_upload: registration_finish.message,
+        };
+        self.backend_handler.registration_finish(req).await?;
+        Ok(())
+    }
+
+    async fn do_password_modification(
+        &mut self,
+        request: &LdapPasswordModifyRequest,
+    ) -> Vec<LdapOp> {
+        match (&request.user_identity, &request.new_password) {
+            (Some(user), Some(password)) => {
+                match get_user_id_from_distinguished_name(user, &self.base_dn, &self.base_dn_str) {
+                    Ok(uid) => {
+                        if let Err(e) = self.change_password(&uid, password).await {
+                            vec![make_extended_response(
+                                LdapResultCode::Other,
+                                format!("Error while changing the password: {:#?}", e),
+                            )]
+                        } else {
+                            vec![make_extended_response(
+                                LdapResultCode::Success,
+                                "".to_string(),
+                            )]
+                        }
+                    }
+                    Err(e) => vec![make_extended_response(
+                        LdapResultCode::InvalidDNSyntax,
+                        format!("Invalid username: {} ({:#?})", user, e),
+                    )],
+                }
+            }
+            _ => vec![make_extended_response(
+                LdapResultCode::ConstraintViolation,
+                "Missing either user_id or password".to_string(),
+            )],
+        }
+    }
+
+    async fn do_extended_request(&mut self, request: &LdapExtendedRequest) -> Vec<LdapOp> {
+        match LdapPasswordModifyRequest::try_from(request) {
+            Ok(password_request) => self.do_password_modification(&password_request).await,
+            Err(_) => vec![make_extended_response(
+                LdapResultCode::UnwillingToPerform,
+                format!("Unsupported extended operation: {}", &request.name),
+            )],
+        }
+    }
+
+    pub async fn do_search(&mut self, request: &LdapSearchRequest) -> Vec<LdapOp> {
         if self.dn != self.ldap_user_dn {
-            return vec![lsr.gen_error(
+            return vec![make_search_error(
                 LdapResultCode::InsufficentAccessRights,
                 format!(
                     r#"Current user `{}` is not allowed to query LDAP, expected {}"#,
@@ -252,43 +389,47 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
                 ),
             )];
         }
-        let dn_parts = if lsr.base.is_empty() {
-            self.base_dn.clone()
-        } else {
-            match parse_distinguished_name(&lsr.base) {
-                Ok(dn) => dn,
-                Err(_) => {
-                    return vec![lsr.gen_error(
-                        LdapResultCode::OperationsError,
-                        format!(r#"Could not parse base DN: "{}""#, lsr.base),
-                    )]
-                }
+        if request.base.is_empty()
+            && request.scope == LdapSearchScope::Base
+            && request.filter == LdapFilter::Present("objectClass".to_string())
+        {
+            info!("Received rootDSE request");
+            return vec![root_dse_response(&self.base_dn_str), make_search_success()];
+        }
+        info!("Received search request: {:?}", &request);
+        let dn_parts = match parse_distinguished_name(&request.base) {
+            Ok(dn) => dn,
+            Err(_) => {
+                return vec![make_search_error(
+                    LdapResultCode::OperationsError,
+                    format!(r#"Could not parse base DN: "{}""#, request.base),
+                )]
             }
         };
         if !is_subtree(&dn_parts, &self.base_dn) {
             // Search path is not in our tree, just return an empty success.
-            return vec![lsr.gen_success()];
+            return vec![make_search_success()];
         }
         let mut results = Vec::new();
         if dn_parts.len() == self.base_dn.len()
             || (dn_parts.len() == self.base_dn.len() + 1
                 && dn_parts[0] == ("ou".to_string(), "people".to_string()))
         {
-            results.extend(self.get_user_list(lsr).await);
+            results.extend(self.get_user_list(request).await);
         }
         if dn_parts.len() == self.base_dn.len() + 1
             && dn_parts[0] == ("ou".to_string(), "groups".to_string())
         {
-            results.extend(self.get_groups_list(lsr).await);
+            results.extend(self.get_groups_list(request).await);
         }
         results
     }
 
-    async fn get_user_list(&self, lsr: &SearchRequest) -> Vec<LdapMsg> {
-        let filters = match self.convert_user_filter(&lsr.filter) {
+    async fn get_user_list(&self, request: &LdapSearchRequest) -> Vec<LdapOp> {
+        let filters = match self.convert_user_filter(&request.filter) {
             Ok(f) => Some(f),
             Err(e) => {
-                return vec![lsr.gen_error(
+                return vec![make_search_error(
                     LdapResultCode::UnwillingToPerform,
                     format!("Unsupported user filter: {}", e),
                 )]
@@ -297,28 +438,33 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
         let users = match self.backend_handler.list_users(filters).await {
             Ok(users) => users,
             Err(e) => {
-                return vec![lsr.gen_error(
+                return vec![make_search_error(
                     LdapResultCode::Other,
-                    format!(r#"Error during searching user "{}": {}"#, lsr.base, e),
+                    format!(r#"Error during searching user "{}": {}"#, request.base, e),
                 )]
             }
         };
 
         users
             .into_iter()
-            .map(|u| make_ldap_search_user_result_entry(u, &self.base_dn_str, &lsr.attrs))
-            .map(|entry| Ok(lsr.gen_result_entry(entry?)))
+            .map(|u| make_ldap_search_user_result_entry(u, &self.base_dn_str, &request.attrs))
+            .map(|entry| Ok(LdapOp::SearchResultEntry(entry?)))
             // If the processing succeeds, add a success message at the end.
-            .chain(std::iter::once(Ok(lsr.gen_success())))
+            .chain(std::iter::once(Ok(make_search_success())))
             .collect::<Result<Vec<_>>>()
-            .unwrap_or_else(|e| vec![lsr.gen_error(LdapResultCode::NoSuchAttribute, e.to_string())])
+            .unwrap_or_else(|e| {
+                vec![make_search_error(
+                    LdapResultCode::NoSuchAttribute,
+                    e.to_string(),
+                )]
+            })
     }
 
-    async fn get_groups_list(&self, lsr: &SearchRequest) -> Vec<LdapMsg> {
-        let for_user = match self.get_group_filter(&lsr.filter) {
+    async fn get_groups_list(&self, request: &LdapSearchRequest) -> Vec<LdapOp> {
+        let for_user = match self.get_group_filter(&request.filter) {
             Ok(u) => u,
             Err(e) => {
-                return vec![lsr.gen_error(
+                return vec![make_search_error(
                     LdapResultCode::UnwillingToPerform,
                     format!("Unsupported group filter: {}", e),
                 )]
@@ -343,9 +489,12 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
             let groups_without_users = match self.backend_handler.get_user_groups(&user).await {
                 Ok(groups) => groups,
                 Err(e) => {
-                    return vec![lsr.gen_error(
+                    return vec![make_search_error(
                         LdapResultCode::Other,
-                        format!(r#"Error while listing user groups: "{}": {}"#, lsr.base, e),
+                        format!(
+                            r#"Error while listing user groups: "{}": {}"#,
+                            request.base, e
+                        ),
                     )]
                 }
             };
@@ -356,9 +505,9 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
             {
                 Ok(groups) => groups,
                 Err(e) => {
-                    return vec![lsr.gen_error(
+                    return vec![make_search_error(
                         LdapResultCode::Other,
-                        format!(r#"Error while listing user groups: "{}": {}"#, lsr.base, e),
+                        format!(r#"Error while listing user groups: "{}": {}"#, request.base, e),
                     )]
                 }
             }
@@ -366,9 +515,9 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
             match self.backend_handler.list_groups().await {
                 Ok(groups) => groups,
                 Err(e) => {
-                    return vec![lsr.gen_error(
+                    return vec![make_search_error(
                         LdapResultCode::Other,
-                        format!(r#"Error while listing groups "{}": {}"#, lsr.base, e),
+                        format!(r#"Error while listing groups "{}": {}"#, request.base, e),
                     )]
                 }
             }
@@ -376,31 +525,44 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
 
         groups
             .into_iter()
-            .map(|u| make_ldap_search_group_result_entry(u, &self.base_dn_str, &lsr.attrs))
-            .map(|entry| Ok(lsr.gen_result_entry(entry?)))
+            .map(|u| make_ldap_search_group_result_entry(u, &self.base_dn_str, &request.attrs))
+            .map(|entry| Ok(LdapOp::SearchResultEntry(entry?)))
             // If the processing succeeds, add a success message at the end.
-            .chain(std::iter::once(Ok(lsr.gen_success())))
+            .chain(std::iter::once(Ok(make_search_success())))
             .collect::<Result<Vec<_>>>()
-            .unwrap_or_else(|e| vec![lsr.gen_error(LdapResultCode::NoSuchAttribute, e.to_string())])
+            .unwrap_or_else(|e| {
+                vec![make_search_error(
+                    LdapResultCode::NoSuchAttribute,
+                    e.to_string(),
+                )]
+            })
     }
 
-    pub fn do_whoami(&mut self, wr: &WhoamiRequest) -> LdapMsg {
-        if self.dn == "Unauthenticated" {
-            wr.gen_operror("Unauthenticated")
-        } else {
-            wr.gen_success(format!("dn: {}", self.dn).as_str())
-        }
-    }
-
-    pub async fn handle_ldap_message(&mut self, server_op: ServerOps) -> Option<Vec<LdapMsg>> {
-        Some(match server_op {
-            ServerOps::SimpleBind(sbr) => vec![self.do_bind(&sbr).await],
-            ServerOps::Search(sr) => self.do_search(&sr).await,
-            ServerOps::Unbind(_) => {
+    pub async fn handle_ldap_message(&mut self, ldap_op: LdapOp) -> Option<Vec<LdapOp>> {
+        Some(match ldap_op {
+            LdapOp::BindRequest(request) => {
+                let (code, message) = self.do_bind(&request).await;
+                vec![LdapOp::BindResponse(LdapBindResponse {
+                    res: LdapResult {
+                        code,
+                        matcheddn: "".to_string(),
+                        message,
+                        referral: vec![],
+                    },
+                    saslcreds: None,
+                })]
+            }
+            LdapOp::SearchRequest(request) => self.do_search(&request).await,
+            LdapOp::UnbindRequest => {
+                self.dn = "Unauthenticated".to_string();
                 // No need to notify on unbind (per rfc4511)
                 return None;
             }
-            ServerOps::Whoami(wr) => vec![self.do_whoami(&wr)],
+            LdapOp::ExtendedRequest(request) => self.do_extended_request(&request).await,
+            op => vec![make_extended_response(
+                LdapResultCode::UnwillingToPerform,
+                format!("Unsupported operation: {:#?}", op),
+            )],
         })
     }
 
@@ -420,6 +582,7 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
                     bail!("Unsupported group filter: {:?}", filter)
                 }
             }
+            LdapFilter::And(v) if v.is_empty() => Ok(None),
             _ => bail!("Unsupported group filter: {:?}", filter),
         }
     }
@@ -479,9 +642,79 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::handler::{BindRequest, MockTestBackendHandler};
+    use crate::domain::{error::Result, handler::*, opaque_handler::*};
+    use async_trait::async_trait;
+    use ldap3_server::proto::{LdapDerefAliases, LdapSearchScope};
     use mockall::predicate::eq;
+    use std::collections::HashSet;
     use tokio;
+
+    mockall::mock! {
+        pub TestBackendHandler{}
+        impl Clone for TestBackendHandler {
+            fn clone(&self) -> Self;
+        }
+        #[async_trait]
+        impl LoginHandler for TestBackendHandler {
+            async fn bind(&self, request: BindRequest) -> Result<()>;
+        }
+        #[async_trait]
+        impl BackendHandler for TestBackendHandler {
+            async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>>;
+            async fn list_groups(&self) -> Result<Vec<Group>>;
+            async fn get_user_details(&self, user_id: &str) -> Result<User>;
+            async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
+            async fn get_user_groups(&self, user: &str) -> Result<HashSet<GroupIdAndName>>;
+            async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
+            async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
+            async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
+            async fn delete_user(&self, user_id: &str) -> Result<()>;
+            async fn create_group(&self, group_name: &str) -> Result<GroupId>;
+            async fn delete_group(&self, group_id: GroupId) -> Result<()>;
+            async fn add_user_to_group(&self, user_id: &str, group_id: GroupId) -> Result<()>;
+            async fn remove_user_from_group(&self, user_id: &str, group_id: GroupId) -> Result<()>;
+        }
+        #[async_trait]
+        impl OpaqueHandler for TestBackendHandler {
+            async fn login_start(
+                &self,
+                request: login::ClientLoginStartRequest
+            ) -> Result<login::ServerLoginStartResponse>;
+            async fn login_finish(&self, request: login::ClientLoginFinishRequest) -> Result<String>;
+            async fn registration_start(
+                &self,
+                request: registration::ClientRegistrationStartRequest
+            ) -> Result<registration::ServerRegistrationStartResponse>;
+            async fn registration_finish(
+                &self,
+                request: registration::ClientRegistrationFinishRequest
+            ) -> Result<()>;
+        }
+    }
+
+    fn make_search_request<S: Into<String>>(
+        base: &str,
+        filter: LdapFilter,
+        attrs: Vec<S>,
+    ) -> LdapSearchRequest {
+        LdapSearchRequest {
+            base: base.to_string(),
+            scope: LdapSearchScope::Base,
+            aliases: LdapDerefAliases::Never,
+            sizelimit: 0,
+            timelimit: 0,
+            typesonly: false,
+            filter,
+            attrs: attrs.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    fn make_user_search_request<S: Into<String>>(
+        filter: LdapFilter,
+        attrs: Vec<S>,
+    ) -> LdapSearchRequest {
+        make_search_request::<S>("ou=people,dc=example,dc=com", filter, attrs)
+    }
 
     async fn setup_bound_handler(
         mut mock: MockTestBackendHandler,
@@ -494,12 +727,14 @@ mod tests {
             .return_once(|_| Ok(()));
         let mut ldap_handler =
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
-        let request = SimpleBindRequest {
-            msgid: 1,
+        let request = LdapBindRequest {
             dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
-            pw: "pass".to_string(),
+            cred: LdapBindCred::Simple("pass".to_string()),
         };
-        assert_eq!(ldap_handler.do_bind(&request).await, request.gen_success());
+        assert_eq!(
+            ldap_handler.do_bind(&request).await.0,
+            LdapResultCode::Success
+        );
         ldap_handler
     }
 
@@ -516,23 +751,13 @@ mod tests {
         let mut ldap_handler =
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
 
-        let request = WhoamiRequest { msgid: 1 };
-        assert_eq!(
-            ldap_handler.do_whoami(&request),
-            request.gen_operror("Unauthenticated")
-        );
-
-        let request = SimpleBindRequest {
-            msgid: 2,
+        let request = LdapBindRequest {
             dn: "cn=bob,ou=people,dc=example,dc=com".to_string(),
-            pw: "pass".to_string(),
+            cred: LdapBindCred::Simple("pass".to_string()),
         };
-        assert_eq!(ldap_handler.do_bind(&request).await, request.gen_success());
-
-        let request = WhoamiRequest { msgid: 3 };
         assert_eq!(
-            ldap_handler.do_whoami(&request),
-            request.gen_success("dn: cn=bob,ou=people,dc=example,dc=com")
+            ldap_handler.do_bind(&request).await.0,
+            LdapResultCode::Success
         );
     }
 
@@ -549,23 +774,13 @@ mod tests {
         let mut ldap_handler =
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
 
-        let request = WhoamiRequest { msgid: 1 };
-        assert_eq!(
-            ldap_handler.do_whoami(&request),
-            request.gen_operror("Unauthenticated")
-        );
-
-        let request = SimpleBindRequest {
-            msgid: 2,
+        let request = LdapBindRequest {
             dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
-            pw: "pass".to_string(),
+            cred: LdapBindCred::Simple("pass".to_string()),
         };
-        assert_eq!(ldap_handler.do_bind(&request).await, request.gen_success());
-
-        let request = WhoamiRequest { msgid: 3 };
         assert_eq!(
-            ldap_handler.do_whoami(&request),
-            request.gen_success("dn: cn=test,ou=people,dc=example,dc=com")
+            ldap_handler.do_bind(&request).await.0,
+            LdapResultCode::Success
         );
     }
 
@@ -582,35 +797,19 @@ mod tests {
         let mut ldap_handler =
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), "admin".to_string());
 
-        let request = WhoamiRequest { msgid: 1 };
-        assert_eq!(
-            ldap_handler.do_whoami(&request),
-            request.gen_operror("Unauthenticated")
-        );
-
-        let request = SimpleBindRequest {
-            msgid: 2,
+        let request = LdapBindRequest {
             dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
-            pw: "pass".to_string(),
+            cred: LdapBindCred::Simple("pass".to_string()),
         };
-        assert_eq!(ldap_handler.do_bind(&request).await, request.gen_success());
-
-        let request = WhoamiRequest { msgid: 3 };
         assert_eq!(
-            ldap_handler.do_whoami(&request),
-            request.gen_success("dn: cn=test,ou=people,dc=example,dc=com")
+            ldap_handler.do_bind(&request).await.0,
+            LdapResultCode::Success
         );
 
-        let request = SearchRequest {
-            msgid: 2,
-            base: "ou=people,dc=example,dc=com".to_string(),
-            scope: LdapSearchScope::Base,
-            filter: LdapFilter::And(vec![]),
-            attrs: vec![],
-        };
+        let request = make_user_search_request::<String>(LdapFilter::And(vec![]), vec![]);
         assert_eq!(
             ldap_handler.do_search(&request).await,
-            vec![request.gen_error(
+            vec![make_search_error(
                 LdapResultCode::InsufficentAccessRights,
                 r#"Current user `cn=test,ou=people,dc=example,dc=com` is not allowed to query LDAP, expected cn=admin,ou=people,dc=example,dc=com"#.to_string()
             )]
@@ -623,30 +822,21 @@ mod tests {
         let mut ldap_handler =
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), "admin".to_string());
 
-        let request = SimpleBindRequest {
-            msgid: 2,
+        let request = LdapBindRequest {
             dn: "cn=bob,dc=example,dc=com".to_string(),
-            pw: "pass".to_string(),
+            cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
-            ldap_handler.do_bind(&request).await,
-            request.gen_error(
-                LdapResultCode::NamingViolation,
-                r#"Unexpected user DN format. Got "cn=bob,dc=example,dc=com", expected: "cn=username,ou=people,dc=example,dc=com""#.to_string()
-            )
+            ldap_handler.do_bind(&request).await.0,
+            LdapResultCode::NamingViolation,
         );
-        let request = SimpleBindRequest {
-            msgid: 2,
+        let request = LdapBindRequest {
             dn: "cn=bob,ou=groups,dc=example,dc=com".to_string(),
-            pw: "pass".to_string(),
+            cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
-            ldap_handler.do_bind(&request).await,
-            request.gen_error(
-                LdapResultCode::NamingViolation,
-                r#"Unexpected user DN format. Got "cn=bob,ou=groups,dc=example,dc=com", expected: "cn=username,ou=people,dc=example,dc=com""#
-                    .to_string()
-            )
+            ldap_handler.do_bind(&request).await.0,
+            LdapResultCode::NamingViolation,
         );
     }
 
@@ -679,7 +869,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_search() {
+    async fn test_search_users() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users().times(1).return_once(|_| {
             Ok(vec![
@@ -702,25 +892,14 @@ mod tests {
             ])
         });
         let mut ldap_handler = setup_bound_handler(mock).await;
-        let request = SearchRequest {
-            msgid: 2,
-            base: "ou=people,dc=example,dc=com".to_string(),
-            scope: LdapSearchScope::Base,
-            filter: LdapFilter::And(vec![]),
-            attrs: vec![
-                "objectClass".to_string(),
-                "dn".to_string(),
-                "uid".to_string(),
-                "mail".to_string(),
-                "givenName".to_string(),
-                "sn".to_string(),
-                "cn".to_string(),
-            ],
-        };
+        let request = make_user_search_request(
+            LdapFilter::And(vec![]),
+            vec!["objectClass", "dn", "uid", "mail", "givenName", "sn", "cn"],
+        );
         assert_eq!(
             ldap_handler.do_search(&request).await,
             vec![
-                request.gen_result_entry(LdapSearchResultEntry {
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "cn=bob_1,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
@@ -758,7 +937,7 @@ mod tests {
                         }
                     ],
                 }),
-                request.gen_result_entry(LdapSearchResultEntry {
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "cn=jim,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
@@ -796,7 +975,127 @@ mod tests {
                         }
                     ],
                 }),
-                request.gen_success()
+                make_search_success(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_groups() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_groups().times(1).return_once(|| {
+            Ok(vec![
+                Group {
+                    id: GroupId(1),
+                    display_name: "group_1".to_string(),
+                    users: vec!["bob".to_string(), "john".to_string()],
+                },
+                Group {
+                    id: GroupId(3),
+                    display_name: "bestgroup".to_string(),
+                    users: vec!["john".to_string()],
+                },
+            ])
+        });
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = make_search_request(
+            "ou=groups,dc=example,dc=com",
+            LdapFilter::And(vec![]),
+            vec!["objectClass", "dn", "cn", "uniqueMember"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                    attributes: vec![
+                        LdapPartialAttribute {
+                            atype: "objectClass".to_string(),
+                            vals: vec!["groupOfUniqueNames".to_string(),]
+                        },
+                        LdapPartialAttribute {
+                            atype: "dn".to_string(),
+                            vals: vec!["cn=group_1,ou=groups,dc=example,dc=com".to_string()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "cn".to_string(),
+                            vals: vec!["group_1".to_string()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "uniqueMember".to_string(),
+                            vals: vec![
+                                "cn=bob,ou=people,dc=example,dc=com".to_string(),
+                                "cn=john,ou=people,dc=example,dc=com".to_string(),
+                            ]
+                        },
+                    ],
+                }),
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=bestgroup,ou=groups,dc=example,dc=com".to_string(),
+                    attributes: vec![
+                        LdapPartialAttribute {
+                            atype: "objectClass".to_string(),
+                            vals: vec!["groupOfUniqueNames".to_string(),]
+                        },
+                        LdapPartialAttribute {
+                            atype: "dn".to_string(),
+                            vals: vec!["cn=bestgroup,ou=groups,dc=example,dc=com".to_string()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "cn".to_string(),
+                            vals: vec!["bestgroup".to_string()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "uniqueMember".to_string(),
+                            vals: vec!["cn=john,ou=people,dc=example,dc=com".to_string()]
+                        },
+                    ],
+                }),
+                make_search_success(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_groups_filter() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_user_groups()
+            .with(eq("bob"))
+            .times(1)
+            .return_once(|_| {
+                let mut set = HashSet::new();
+                set.insert(GroupIdAndName(GroupId(1), "group_1".to_string()));
+                Ok(set)
+            });
+        mock.expect_list_users()
+            .with(eq(Some(RequestFilter::MemberOfId(GroupId(1)))))
+            .times(1)
+            .return_once(|_| {
+                Ok(vec![User {
+                    user_id: "bob".to_string(),
+                    ..Default::default()
+                }])
+            });
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = make_search_request(
+            "ou=groups,dc=example,dc=com",
+            LdapFilter::Equality(
+                "uniqueMember".to_string(),
+                "cn=bob,ou=people,dc=example,dc=com".to_string(),
+            ),
+            vec!["cn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                    attributes: vec![LdapPartialAttribute {
+                        atype: "cn".to_string(),
+                        vals: vec!["group_1".to_string()]
+                    },],
+                }),
+                make_search_success(),
             ]
         );
     }
@@ -814,40 +1113,56 @@ mod tests {
             .times(1)
             .return_once(|_| Ok(vec![]));
         let mut ldap_handler = setup_bound_handler(mock).await;
-        let request = SearchRequest {
-            msgid: 2,
-            base: "ou=people,dc=example,dc=com".to_string(),
-            scope: LdapSearchScope::Base,
-            filter: LdapFilter::And(vec![LdapFilter::Or(vec![LdapFilter::Not(Box::new(
+        let request = make_user_search_request(
+            LdapFilter::And(vec![LdapFilter::Or(vec![LdapFilter::Not(Box::new(
                 LdapFilter::Equality("uid".to_string(), "bob".to_string()),
             ))])]),
-            attrs: vec!["objectClass".to_string()],
-        };
+            vec!["objectClass"],
+        );
         assert_eq!(
             ldap_handler.do_search(&request).await,
-            vec![request.gen_success()]
+            vec![make_search_success()]
         );
     }
 
     #[tokio::test]
     async fn test_search_unsupported_filters() {
         let mut ldap_handler = setup_bound_handler(MockTestBackendHandler::new()).await;
-        let request = SearchRequest {
-            msgid: 2,
-            base: "ou=people,dc=example,dc=com".to_string(),
-            scope: LdapSearchScope::Base,
-            filter: LdapFilter::Substring(
+        let request = make_user_search_request(
+            LdapFilter::Substring(
                 "uid".to_string(),
                 ldap3_server::proto::LdapSubstringFilter::default(),
             ),
-            attrs: vec!["objectClass".to_string()],
-        };
+            vec!["objectClass"],
+        );
         assert_eq!(
             ldap_handler.do_search(&request).await,
-            vec![request.gen_error(
+            vec![make_search_error(
                 LdapResultCode::UnwillingToPerform,
                 "Unsupported user filter: Unsupported user filter: Substring(\"uid\", LdapSubstringFilter { initial: None, any: [], final_: None })".to_string()
             )]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_root_dse() {
+        let mut ldap_handler = setup_bound_handler(MockTestBackendHandler::new()).await;
+        let request = LdapSearchRequest {
+            base: "".to_string(),
+            scope: LdapSearchScope::Base,
+            aliases: LdapDerefAliases::Never,
+            sizelimit: 0,
+            timelimit: 0,
+            typesonly: false,
+            filter: LdapFilter::Present("objectClass".to_string()),
+            attrs: vec!["supportedExtension".to_string()],
+        };
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![
+                root_dse_response("dc=example,dc=com"),
+                make_search_success()
+            ]
         );
     }
 }
