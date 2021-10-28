@@ -1,6 +1,10 @@
-use crate::domain::handler::{BackendHandler, LoginHandler};
-use crate::infra::configuration::Configuration;
-use crate::infra::ldap_handler::LdapHandler;
+use crate::{
+    domain::{
+        handler::{BackendHandler, LoginHandler},
+        opaque_handler::OpaqueHandler,
+    },
+    infra::{configuration::Configuration, ldap_handler::LdapHandler},
+};
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{fn_service, ServiceFactoryExt};
@@ -17,7 +21,7 @@ async fn handle_incoming_message<Backend>(
     session: &mut LdapHandler<Backend>,
 ) -> Result<bool>
 where
-    Backend: BackendHandler + LoginHandler,
+    Backend: BackendHandler + LoginHandler + OpaqueHandler,
 {
     use futures_util::SinkExt;
     let msg = msg.map_err(|e| anyhow!("Error while receiving LDAP op: {:#}", e))?;
@@ -51,7 +55,7 @@ pub fn build_ldap_server<Backend>(
     server_builder: ServerBuilder,
 ) -> Result<ServerBuilder>
 where
-    Backend: BackendHandler + LoginHandler + 'static,
+    Backend: BackendHandler + LoginHandler + OpaqueHandler + 'static,
 {
     use futures_util::StreamExt;
 

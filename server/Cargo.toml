@@ -26,7 +26,7 @@ futures-util = "*"
 hmac = "0.10"
 http = "*"
 jwt = "0.13"
-ldap3_server = "*"
+ldap3_server = ">=0.1.9"
 lldap_auth = { path = "../auth" }
 log = "*"
 orion = "0.16"
