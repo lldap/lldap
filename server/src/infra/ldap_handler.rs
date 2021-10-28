@@ -106,7 +106,6 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Vec<Stri
         "sn" => Ok(vec![user.last_name.clone()]),
         "cn" => Ok(vec![user.display_name.clone()]),
         "displayName" => Ok(vec![user.display_name.clone()]),
-        "supportedExtension" => Ok(vec![]),
         _ => bail!("Unsupported user attribute: {}", attribute),
     }
 }
@@ -140,7 +139,6 @@ fn get_group_attribute(group: &Group, base_dn_str: &str, attribute: &str) -> Res
             .iter()
             .map(|u| format!("cn={},ou=people,{}", u, base_dn_str))
             .collect()),
-        "supportedExtension" => Ok(vec![]),
         _ => bail!("Unsupported group attribute: {}", attribute),
     }
 }
@@ -210,6 +208,38 @@ fn make_search_error(code: LdapResultCode, message: String) -> LdapOp {
     })
 }
 
+fn root_dse_response(base_dn: &str) -> LdapOp {
+    LdapOp::SearchResultEntry(LdapSearchResultEntry {
+        dn: "".to_string(),
+        attributes: vec![
+            LdapPartialAttribute {
+                atype: "objectClass".to_string(),
+                vals: vec!["top".to_string()],
+            },
+            LdapPartialAttribute {
+                atype: "vendorName".to_string(),
+                vals: vec!["LLDAP".to_string()],
+            },
+            LdapPartialAttribute {
+                atype: "vendorVersion".to_string(),
+                vals: vec!["lldap_0.2.0".to_string()],
+            },
+            LdapPartialAttribute {
+                atype: "supportedLDAPVersion".to_string(),
+                vals: vec!["3".to_string()],
+            },
+            LdapPartialAttribute {
+                atype: "supportedExtension".to_string(),
+                vals: vec!["1.3.6.1.4.1.4203.1.11.1".to_string()],
+            },
+            LdapPartialAttribute {
+                atype: "defaultnamingcontext".to_string(),
+                vals: vec![base_dn.to_string()],
+            },
+        ],
+    })
+}
+
 pub struct LdapHandler<Backend: BackendHandler + LoginHandler> {
     dn: String,
     backend_handler: Backend,
@@ -275,17 +305,21 @@ impl<Backend: BackendHandler + LoginHandler> LdapHandler<Backend> {
                 ),
             )];
         }
-        let dn_parts = if request.base.is_empty() {
-            self.base_dn.clone()
-        } else {
-            match parse_distinguished_name(&request.base) {
-                Ok(dn) => dn,
-                Err(_) => {
-                    return vec![make_search_error(
-                        LdapResultCode::OperationsError,
-                        format!(r#"Could not parse base DN: "{}""#, request.base),
-                    )]
-                }
+        if request.base.is_empty()
+            && request.scope == LdapSearchScope::Base
+            && request.filter == LdapFilter::Present("objectClass".to_string())
+        {
+            info!("Received rootDSE request");
+            return vec![root_dse_response(&self.base_dn_str), make_search_success()];
+        }
+        info!("Received search request: {:?}", &request);
+        let dn_parts = match parse_distinguished_name(&request.base) {
+            Ok(dn) => dn,
+            Err(_) => {
+                return vec![make_search_error(
+                    LdapResultCode::OperationsError,
+                    format!(r#"Could not parse base DN: "{}""#, request.base),
+                )]
             }
         };
         if !is_subtree(&dn_parts, &self.base_dn) {
@@ -854,6 +888,28 @@ mod tests {
                 LdapResultCode::UnwillingToPerform,
                 "Unsupported user filter: Unsupported user filter: Substring(\"uid\", LdapSubstringFilter { initial: None, any: [], final_: None })".to_string()
             )]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_root_dse() {
+        let mut ldap_handler = setup_bound_handler(MockTestBackendHandler::new()).await;
+        let request = LdapSearchRequest {
+            base: "".to_string(),
+            scope: LdapSearchScope::Base,
+            aliases: LdapDerefAliases::Never,
+            sizelimit: 0,
+            timelimit: 0,
+            typesonly: false,
+            filter: LdapFilter::Present("objectClass".to_string()),
+            attrs: vec!["supportedExtension".to_string()],
+        };
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![
+                root_dse_response("dc=example,dc=com"),
+                make_search_success()
+            ]
         );
     }
 }
