@@ -88,7 +88,7 @@ fn get_user_id_from_distinguished_name(
     }
 }
 
-fn get_user_attribute(user: &User, attribute: &str) -> Result<Vec<String>> {
+fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Vec<String>> {
     match attribute {
         "objectClass" => Ok(vec![
             "inetOrgPerson".to_string(),
@@ -96,6 +96,7 @@ fn get_user_attribute(user: &User, attribute: &str) -> Result<Vec<String>> {
             "mailAccount".to_string(),
             "person".to_string(),
         ]),
+        "dn" => Ok(vec![dn.to_string()]),
         "uid" => Ok(vec![user.user_id.clone()]),
         "mail" => Ok(vec![user.email.clone()]),
         "givenName" => Ok(vec![user.first_name.clone()]),
@@ -112,14 +113,15 @@ fn make_ldap_search_user_result_entry(
     base_dn_str: &str,
     attributes: &[String],
 ) -> Result<LdapSearchResultEntry> {
+    let dn = format!("cn={},ou=people,{}", user.user_id, base_dn_str);
     Ok(LdapSearchResultEntry {
-        dn: format!("cn={},ou=people,{}", user.user_id, base_dn_str),
+        dn: dn.clone(),
         attributes: attributes
             .iter()
             .map(|a| {
                 Ok(LdapPartialAttribute {
                     atype: a.to_string(),
-                    vals: get_user_attribute(&user, a)?,
+                    vals: get_user_attribute(&user, a, &dn)?,
                 })
             })
             .collect::<Result<Vec<LdapPartialAttribute>>>()?,
@@ -707,6 +709,7 @@ mod tests {
             filter: LdapFilter::And(vec![]),
             attrs: vec![
                 "objectClass".to_string(),
+                "dn".to_string(),
                 "uid".to_string(),
                 "mail".to_string(),
                 "givenName".to_string(),
@@ -728,6 +731,10 @@ mod tests {
                                 "mailAccount".to_string(),
                                 "person".to_string()
                             ]
+                        },
+                        LdapPartialAttribute {
+                            atype: "dn".to_string(),
+                            vals: vec!["cn=bob_1,ou=people,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),
@@ -762,6 +769,10 @@ mod tests {
                                 "mailAccount".to_string(),
                                 "person".to_string()
                             ]
+                        },
+                        LdapPartialAttribute {
+                            atype: "dn".to_string(),
+                            vals: vec!["cn=jim,ou=people,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),
