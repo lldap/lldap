@@ -1,14 +1,14 @@
 use crate::{
     components::router::{AppRoute, NavButton},
-    infra::api::HostService,
+    infra::{
+        api::HostService,
+        common_component::{CommonComponent, CommonComponentParts},
+    },
 };
 use anyhow::{anyhow, bail, Context, Result};
 use lldap_auth::*;
 use validator_derive::Validate;
-use yew::{
-    prelude::*,
-    services::{fetch::FetchTask, ConsoleService},
-};
+use yew::{prelude::*, services::ConsoleService};
 use yew_form::Form;
 use yew_form_derive::Model;
 use yew_router::{
@@ -58,13 +58,9 @@ fn empty_or_long(value: &str) -> Result<(), validator::ValidationError> {
 }
 
 pub struct ChangePasswordForm {
-    link: ComponentLink<Self>,
-    props: Props,
-    error: Option<anyhow::Error>,
+    common: CommonComponentParts<Self>,
     form: Form<FormModel>,
     opaque_data: OpaqueData,
-    // Used to keep the request alive long enough.
-    task: Option<FetchTask>,
     route_dispatcher: RouteAgentDispatcher,
 }
 
@@ -83,25 +79,16 @@ pub enum Msg {
     RegistrationFinishResponse(Result<()>),
 }
 
-impl ChangePasswordForm {
-    fn call_backend<M, Req, C, Resp>(&mut self, method: M, req: Req, callback: C) -> Result<()>
-    where
-        M: Fn(Req, Callback<Resp>) -> Result<FetchTask>,
-        C: Fn(Resp) -> <Self as Component>::Message + 'static,
-    {
-        self.task = Some(method(req, self.link.callback(callback))?);
-        Ok(())
-    }
-
-    fn handle_message(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::FormUpdate => Ok(true),
             Msg::Submit => {
                 if !self.form.validate() {
                     bail!("Check the form for errors");
                 }
-                if self.props.is_admin {
-                    self.handle_message(Msg::SubmitNewPassword)
+                if self.common.is_admin {
+                    self.handle_msg(Msg::SubmitNewPassword)
                 } else {
                     let old_password = self.form.model().old_password;
                     if old_password.is_empty() {
@@ -113,10 +100,10 @@ impl ChangePasswordForm {
                             .context("Could not initialize login")?;
                     self.opaque_data = OpaqueData::Login(login_start_request.state);
                     let req = login::ClientLoginStartRequest {
-                        username: self.props.username.clone(),
+                        username: self.common.username.clone(),
                         login_start_request: login_start_request.message,
                     };
-                    self.call_backend(
+                    self.common.call_backend(
                         HostService::login_start,
                         req,
                         Msg::AuthenticationStartResponse,
@@ -142,7 +129,7 @@ impl ChangePasswordForm {
                     }
                     _ => panic!("Unexpected data in opaque_data field"),
                 };
-                self.handle_message(Msg::SubmitNewPassword)
+                self.handle_msg(Msg::SubmitNewPassword)
             }
             Msg::SubmitNewPassword => {
                 let mut rng = rand::rngs::OsRng;
@@ -151,11 +138,11 @@ impl ChangePasswordForm {
                     opaque::client::registration::start_registration(&new_password, &mut rng)
                         .context("Could not initiate password change")?;
                 let req = registration::ClientRegistrationStartRequest {
-                    username: self.props.username.clone(),
+                    username: self.common.username.clone(),
                     registration_start_request: registration_start_request.message,
                 };
                 self.opaque_data = OpaqueData::Registration(registration_start_request.state);
-                self.call_backend(
+                self.common.call_backend(
                     HostService::register_start,
                     req,
                     Msg::RegistrationStartResponse,
@@ -178,7 +165,7 @@ impl ChangePasswordForm {
                             server_data: res.server_data,
                             registration_upload: registration_finish.message,
                         };
-                        self.call_backend(
+                        self.common.call_backend(
                             HostService::register_finish,
                             req,
                             Msg::RegistrationFinishResponse,
@@ -189,17 +176,21 @@ impl ChangePasswordForm {
                 Ok(false)
             }
             Msg::RegistrationFinishResponse(response) => {
-                self.task = None;
+                self.common.task = None;
                 if response.is_ok() {
                     self.route_dispatcher
                         .send(RouteRequest::ChangeRoute(Route::from(
-                            AppRoute::UserDetails(self.props.username.clone()),
+                            AppRoute::UserDetails(self.common.username.clone()),
                         )));
                 }
                 response?;
                 Ok(true)
             }
         }
+    }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
     }
 }
 
@@ -209,27 +200,15 @@ impl Component for ChangePasswordForm {
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         ChangePasswordForm {
-            link,
-            props,
-            error: None,
+            common: CommonComponentParts::<Self>::create(props, link),
             form: yew_form::Form::<FormModel>::new(FormModel::default()),
             opaque_data: OpaqueData::None,
-            task: None,
             route_dispatcher: RouteAgentDispatcher::new(),
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        self.error = None;
-        match self.handle_message(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.error = Some(e);
-                self.task = None;
-                true
-            }
-            Ok(b) => b,
-        }
+        CommonComponentParts::<Self>::update(self, msg)
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -237,7 +216,7 @@ impl Component for ChangePasswordForm {
     }
 
     fn view(&self) -> Html {
-        let is_admin = self.props.is_admin;
+        let is_admin = self.common.is_admin;
         type Field = yew_form::Field<FormModel>;
         html! {
           <>
@@ -257,7 +236,7 @@ impl Component for ChangePasswordForm {
                       class_invalid="is-invalid has-error"
                       class_valid="has-success"
                       autocomplete="current-password"
-                      oninput=self.link.callback(|_| Msg::FormUpdate) />
+                      oninput=self.common.link.callback(|_| Msg::FormUpdate) />
                     <div class="invalid-feedback">
                       {&self.form.field_message("old_password")}
                     </div>
@@ -277,7 +256,7 @@ impl Component for ChangePasswordForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.link.callback(|_| Msg::FormUpdate) />
+                    oninput=self.common.link.callback(|_| Msg::FormUpdate) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("password")}
                   </div>
@@ -296,7 +275,7 @@ impl Component for ChangePasswordForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.link.callback(|_| Msg::FormUpdate) />
+                    oninput=self.common.link.callback(|_| Msg::FormUpdate) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("confirm_password")}
                   </div>
@@ -306,13 +285,13 @@ impl Component for ChangePasswordForm {
                 <button
                   class="btn btn-primary col-sm-1 col-form-label"
                   type="submit"
-                  disabled=self.task.is_some()
-                  onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                  disabled=self.common.task.is_some()
+                  onclick=self.common.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
                   {"Submit"}
                 </button>
               </div>
             </form>
-            { if let Some(e) = &self.error {
+            { if let Some(e) = &self.common.error {
                 html! {
                   <div class="alert alert-danger">
                     {e.to_string() }
@@ -323,7 +302,7 @@ impl Component for ChangePasswordForm {
             <div>
               <NavButton
                 classes="btn btn-primary"
-                route=AppRoute::UserDetails(self.props.username.clone())>
+                route=AppRoute::UserDetails(self.common.username.clone())>
                 {"Back"}
               </NavButton>
             </div>
