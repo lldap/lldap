@@ -53,6 +53,15 @@ itertools = "0.10.1"
 git = "https://github.com/novifinancial/opaque-ke"
 rev = "eb59676a940b15f77871aefe1e46d7b5bf85f40a"
 
+[dependencies.lettre]
+version = "0.10.0-rc.3"
+features = [
+  "builder",
+  "smtp-transport",
+  "tokio1-native-tls",
+  "tokio1",
+]
+
 [dependencies.sqlx]
 version = "0.5.1"
 features = [
