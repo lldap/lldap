@@ -4,13 +4,16 @@ use crate::{
         remove_user_from_group::RemoveUserFromGroupComponent,
         router::{AppRoute, Link},
     },
-    infra::api::HostService,
+    infra::{
+        common_component::{CommonComponent, CommonComponentParts},
+        api::HostService,
+    }
 };
 use anyhow::{bail, Error, Result};
 use graphql_client::GraphQLQuery;
 use yew::{
     prelude::*,
-    services::{fetch::FetchTask, ConsoleService},
+    services::ConsoleService,
 };
 
 #[derive(GraphQLQuery)]
@@ -27,15 +30,10 @@ pub type User = get_group_details::GetGroupDetailsGroupUsers;
 pub type AddGroupMemberUser = add_group_member::User;
 
 pub struct GroupDetails {
-    link: ComponentLink<Self>,
-    props: Props,
+    common: CommonComponentParts<Self>,
     /// The group info. If none, the error is in `error`. If `error` is None, then we haven't
     /// received the server response yet.
     group: Option<Group>,
-    /// Error message displayed to the user.
-    error: Option<Error>,
-    // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
 }
 
 /// State machine describing the possible transitions of the component state.
@@ -55,11 +53,11 @@ pub struct Props {
 
 impl GroupDetails {
     fn get_group_details(&mut self) {
-        self._task = HostService::graphql_query::<GetGroupDetails>(
+        self.common.task = HostService::graphql_query::<GetGroupDetails>(
             get_group_details::Variables {
-                id: self.props.group_id,
+                id: self.common.group_id,
             },
-            self.link.callback(Msg::GroupDetailsResponse),
+            self.common.link.callback(Msg::GroupDetailsResponse),
             "Error trying to fetch group details",
         )
         .map_err(|e| {
@@ -67,33 +65,6 @@ impl GroupDetails {
             e
         })
         .ok();
-    }
-
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
-        match msg {
-            Msg::GroupDetailsResponse(response) => match response {
-                Ok(group) => self.group = Some(group.group),
-                Err(e) => {
-                    self.group = None;
-                    bail!("Error getting user details: {}", e);
-                }
-            },
-            Msg::OnError(e) => return Err(e),
-            Msg::OnUserAddedToGroup(user) => {
-                self.group.as_mut().unwrap().users.push(User {
-                    id: user.id,
-                    display_name: user.display_name,
-                });
-            }
-            Msg::OnUserRemovedFromGroup((user_id, _)) => {
-                self.group
-                    .as_mut()
-                    .unwrap()
-                    .users
-                    .retain(|u| u.id != user_id);
-            }
-        }
-        Ok(true)
     }
 
     fn view_messages(&self, error: &Option<Error>) -> Html {
@@ -124,8 +95,8 @@ impl GroupDetails {
                   <RemoveUserFromGroupComponent
                     username=user_id
                     group_id=g.id
-                    on_user_removed_from_group=self.link.callback(Msg::OnUserRemovedFromGroup)
-                    on_error=self.link.callback(Msg::OnError)/>
+                    on_user_removed_from_group=self.common.link.callback(Msg::OnUserRemovedFromGroup)
+                    on_error=self.common.link.callback(Msg::OnError)/>
                 </td>
               </tr>
             }
@@ -174,9 +145,42 @@ impl GroupDetails {
             <AddGroupMemberComponent
                 group_id=g.id
                 users=users
-                on_error=self.link.callback(Msg::OnError)
-                on_user_added_to_group=self.link.callback(Msg::OnUserAddedToGroup)/>
+                on_error=self.common.link.callback(Msg::OnError)
+                on_user_added_to_group=self.common.link.callback(Msg::OnUserAddedToGroup)/>
         }
+    }
+}
+
+impl CommonComponent<GroupDetails> for GroupDetails {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+        match msg {
+            Msg::GroupDetailsResponse(response) => match response {
+                Ok(group) => self.group = Some(group.group),
+                Err(e) => {
+                    self.group = None;
+                    bail!("Error getting user details: {}", e);
+                }
+            },
+            Msg::OnError(e) => return Err(e),
+            Msg::OnUserAddedToGroup(user) => {
+                self.group.as_mut().unwrap().users.push(User {
+                    id: user.id,
+                    display_name: user.display_name,
+                });
+            }
+            Msg::OnUserRemovedFromGroup((user_id, _)) => {
+                self.group
+                    .as_mut()
+                    .unwrap()
+                    .users
+                    .retain(|u| u.id != user_id);
+            }
+        }
+        Ok(true)
+    }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
     }
 }
 
@@ -186,26 +190,15 @@ impl Component for GroupDetails {
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut table = Self {
-            link,
-            props,
-            _task: None,
+            common: CommonComponentParts::<Self>::create(props, link),
             group: None,
-            error: None,
         };
         table.get_group_details();
         table
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        self.error = None;
-        match self.handle_msg(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.error = Some(e);
-                true
-            }
-            Ok(b) => b,
-        }
+        CommonComponentParts::<Self>::update(self, msg)
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -213,7 +206,7 @@ impl Component for GroupDetails {
     }
 
     fn view(&self) -> Html {
-        match (&self.group, &self.error) {
+        match (&self.group, &self.common.error) {
             (None, None) => html! {{"Loading..."}},
             (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
             (Some(u), error) => {
