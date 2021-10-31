@@ -6,7 +6,6 @@ use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
 use std::collections::HashSet;
 use yew::prelude::*;
-use yewtil::NeqAssign;
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -69,7 +68,7 @@ impl CommonComponent<AddGroupMemberComponent> for AddGroupMemberComponent {
                     .expect("Could not get selected user")
                     .clone();
                 // Remove the user from the dropdown.
-                self.common.props.on_user_added_to_group.emit(user);
+                self.common.on_user_added_to_group.emit(user);
             }
             Msg::SelectionChanged(option_props) => {
                 let was_some = self.selected_user.is_some();
@@ -105,7 +104,7 @@ impl AddGroupMemberComponent {
         self.common.call_graphql::<AddUserToGroup, _>(
             add_user_to_group::Variables {
                 user: user_id,
-                group: self.common.props.group_id,
+                group: self.common.group_id,
             },
             Msg::AddMemberResponse,
             "Error trying to initiate adding the user to a group",
@@ -114,7 +113,7 @@ impl AddGroupMemberComponent {
     }
 
     fn get_selectable_user_list(&self, user_list: &[User]) -> Vec<User> {
-        let user_groups = self.common.props.users.iter().collect::<HashSet<_>>();
+        let user_groups = self.common.users.iter().collect::<HashSet<_>>();
         user_list
             .iter()
             .filter(|u| !user_groups.contains(u))
@@ -141,12 +140,12 @@ impl Component for AddGroupMemberComponent {
         CommonComponentParts::<Self>::update_and_report_error(
             self,
             msg,
-            self.common.props.on_error.clone(),
+            self.common.on_error.clone(),
         )
     }
 
     fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.props.neq_assign(props)
+        self.common.change(props)
     }
 
     fn view(&self) -> Html {

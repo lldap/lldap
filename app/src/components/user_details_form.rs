@@ -92,7 +92,7 @@ impl Component for UserDetailsForm {
         CommonComponentParts::<Self>::update_and_report_error(
             self,
             msg,
-            self.common.props.on_error.clone(),
+            self.common.on_error.clone(),
         )
     }
 
@@ -111,7 +111,7 @@ impl Component for UserDetailsForm {
                   {"User ID: "}
                 </label>
                 <div class="col-8">
-                  <span id="userId" class="form-constrol-static">{&self.common.props.user.id}</span>
+                  <span id="userId" class="form-constrol-static">{&self.common.user.id}</span>
                 </div>
               </div>
               <div class="form-group row mb-3">
@@ -192,7 +192,7 @@ impl Component for UserDetailsForm {
                 {"Creation date: "}
                 </label>
                 <div class="col-8">
-                  <span id="creationDate" class="form-constrol-static">{&self.common.props.user.creation_date.date().naive_local()}</span>
+                  <span id="creationDate" class="form-constrol-static">{&self.common.user.creation_date.date().naive_local()}</span>
                 </div>
               </div>
               <div class="form-group row justify-content-center">
@@ -218,9 +218,9 @@ impl UserDetailsForm {
         if !self.form.validate() {
             bail!("Invalid inputs");
         }
-        let base_user = &self.common.props.user;
+        let base_user = &self.common.user;
         let mut user_input = update_user::UpdateUserInput {
-            id: self.common.props.user.id.clone(),
+            id: self.common.user.id.clone(),
             email: None,
             displayName: None,
             firstName: None,
@@ -260,14 +260,14 @@ impl UserDetailsForm {
             Err(e) => return Err(e),
             Ok(_) => {
                 let model = self.form.model();
-                self.common.props.user = User {
-                    id: self.common.props.user.id.clone(),
+                self.common.user = User {
+                    id: self.common.user.id.clone(),
                     email: model.email,
                     display_name: model.display_name,
                     first_name: model.first_name,
                     last_name: model.last_name,
-                    creation_date: self.common.props.user.creation_date,
-                    groups: self.common.props.user.groups.clone(),
+                    creation_date: self.common.user.creation_date,
+                    groups: self.common.user.groups.clone(),
                 };
                 self.just_updated = true;
             }

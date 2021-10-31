@@ -80,7 +80,7 @@ impl UserDetails {
     fn get_user_details(&mut self) {
         self.common.call_graphql::<GetUserDetails, _>(
             get_user_details::Variables {
-                id: self.common.props.username.clone(),
+                id: self.common.username.clone(),
             },
             Msg::UserDetailsResponse,
             "Error trying to fetch user details",
@@ -104,7 +104,7 @@ impl UserDetails {
             let display_name = group.display_name.clone();
             html! {
               <tr key="groupRow_".to_string() + &display_name>
-                {if self.common.props.is_admin { html! {
+                {if self.common.is_admin { html! {
                   <>
                     <td>
                       <Link route=AppRoute::GroupDetails(group.id)>
@@ -133,7 +133,7 @@ impl UserDetails {
                 <thead>
                   <tr key="headerRow">
                     <th>{"Group"}</th>
-                    { if self.common.props.is_admin { html!{ <th></th> }} else { html!{} }}
+                    { if self.common.is_admin { html!{ <th></th> }} else { html!{} }}
                   </tr>
                 </thead>
                 <tbody>
@@ -154,7 +154,7 @@ impl UserDetails {
     }
 
     fn view_add_group_button(&self, u: &User) -> Html {
-        if self.common.props.is_admin {
+        if self.common.is_admin {
             html! {
                 <AddUserToGroupComponent
                     username=u.id.clone()

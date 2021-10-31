@@ -82,7 +82,7 @@ impl CommonComponent<AddUserToGroupComponent> for AddUserToGroupComponent {
                     .expect("Could not get selected group")
                     .clone();
                 // Remove the group from the dropdown.
-                self.common.props.on_user_added_to_group.emit(group);
+                self.common.on_user_added_to_group.emit(group);
             }
             Msg::SelectionChanged(option_props) => {
                 let was_some = self.selected_group.is_some();
@@ -117,7 +117,7 @@ impl AddUserToGroupComponent {
         };
         self.common.call_graphql::<AddUserToGroup, _>(
             add_user_to_group::Variables {
-                user: self.common.props.username.clone(),
+                user: self.common.username.clone(),
                 group: group_id,
             },
             Msg::AddGroupResponse,
@@ -127,7 +127,7 @@ impl AddUserToGroupComponent {
     }
 
     fn get_selectable_group_list(&self, group_list: &[Group]) -> Vec<Group> {
-        let user_groups = self.common.props.groups.iter().collect::<HashSet<_>>();
+        let user_groups = self.common.groups.iter().collect::<HashSet<_>>();
         group_list
             .iter()
             .filter(|g| !user_groups.contains(g))
@@ -153,7 +153,7 @@ impl Component for AddUserToGroupComponent {
         CommonComponentParts::<Self>::update_and_report_error(
             self,
             msg,
-            self.common.props.on_error.clone(),
+            self.common.on_error.clone(),
         )
     }
 
