@@ -5,6 +5,7 @@ use yew::{
     prelude::*,
     services::{fetch::FetchTask, ConsoleService},
 };
+use yewtil::NeqAssign;
 
 pub trait CommonComponent<C: Component + CommonComponent<C>>: Component {
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool>;
@@ -42,10 +43,34 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
             Err(e) => {
                 ConsoleService::error(&e.to_string());
                 com.mut_common().error = Some(e);
+                com.mut_common().cancel_task();
                 true
             }
             Ok(b) => b,
         }
+    }
+
+    pub fn update_and_report_error(
+        com: &mut C,
+        msg: <C as Component>::Message,
+        report_fn: Callback<Error>,
+    ) -> ShouldRender {
+        let should_render = Self::update(com, msg);
+        com.mut_common()
+            .error
+            .take()
+            .map(|e| {
+                report_fn.emit(e);
+                true
+            })
+            .unwrap_or(should_render)
+    }
+
+    pub fn change(&mut self, props: <C as Component>::Properties) -> ShouldRender
+    where
+        <C as yew::Component>::Properties: std::cmp::PartialEq,
+    {
+        self.props.neq_assign(props)
     }
 
     pub fn callback<F, IN, M>(&self, function: F) -> Callback<IN>

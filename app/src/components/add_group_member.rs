@@ -1,14 +1,11 @@
 use crate::{
     components::select::{Select, SelectOption, SelectOptionProps},
-    infra::api::HostService,
+    infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
 use std::collections::HashSet;
-use yew::{
-    prelude::*,
-    services::{fetch::FetchTask, ConsoleService},
-};
+use yew::prelude::*;
 use yewtil::NeqAssign;
 
 #[derive(GraphQLQuery)]
@@ -33,14 +30,11 @@ pub struct ListUserNames;
 pub type User = list_user_names::ListUserNamesUsers;
 
 pub struct AddGroupMemberComponent {
-    link: ComponentLink<Self>,
-    props: Props,
+    common: CommonComponentParts<Self>,
     /// The list of existing users, initially not loaded.
     user_list: Option<Vec<User>>,
     /// The currently selected user.
     selected_user: Option<User>,
-    // Used to keep the request alive long enough.
-    task: Option<FetchTask>,
 }
 
 pub enum Msg {
@@ -58,58 +52,24 @@ pub struct Props {
     pub on_error: Callback<Error>,
 }
 
-impl AddGroupMemberComponent {
-    fn get_user_list(&mut self) {
-        self.task = HostService::graphql_query::<ListUserNames>(
-            list_user_names::Variables { filters: None },
-            self.link.callback(Msg::UserListResponse),
-            "Error trying to fetch user list",
-        )
-        .map_err(|e| {
-            ConsoleService::log(&e.to_string());
-            e
-        })
-        .ok();
-    }
-
-    fn submit_add_member(&mut self) -> Result<bool> {
-        let user_id = match self.selected_user.clone() {
-            None => return Ok(false),
-            Some(user) => user.id,
-        };
-        self.task = HostService::graphql_query::<AddUserToGroup>(
-            add_user_to_group::Variables {
-                user: user_id,
-                group: self.props.group_id,
-            },
-            self.link.callback(Msg::AddMemberResponse),
-            "Error trying to initiate adding the user to a group",
-        )
-        .map_err(|e| {
-            ConsoleService::log(&e.to_string());
-            e
-        })
-        .ok();
-        Ok(true)
-    }
-
+impl CommonComponent<AddGroupMemberComponent> for AddGroupMemberComponent {
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::UserListResponse(response) => {
                 self.user_list = Some(response?.users);
-                self.task = None;
+                self.common.cancel_task();
             }
             Msg::SubmitAddMember => return self.submit_add_member(),
             Msg::AddMemberResponse(response) => {
                 response?;
-                self.task = None;
+                self.common.cancel_task();
                 let user = self
                     .selected_user
                     .as_ref()
                     .expect("Could not get selected user")
                     .clone();
                 // Remove the user from the dropdown.
-                self.props.on_user_added_to_group.emit(user);
+                self.common.props.on_user_added_to_group.emit(user);
             }
             Msg::SelectionChanged(option_props) => {
                 let was_some = self.selected_user.is_some();
@@ -123,8 +83,38 @@ impl AddGroupMemberComponent {
         Ok(true)
     }
 
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
+    }
+}
+
+impl AddGroupMemberComponent {
+    fn get_user_list(&mut self) {
+        self.common.call_graphql::<ListUserNames, _>(
+            list_user_names::Variables { filters: None },
+            Msg::UserListResponse,
+            "Error trying to fetch user list",
+        );
+    }
+
+    fn submit_add_member(&mut self) -> Result<bool> {
+        let user_id = match self.selected_user.clone() {
+            None => return Ok(false),
+            Some(user) => user.id,
+        };
+        self.common.call_graphql::<AddUserToGroup, _>(
+            add_user_to_group::Variables {
+                user: user_id,
+                group: self.common.props.group_id,
+            },
+            Msg::AddMemberResponse,
+            "Error trying to initiate adding the user to a group",
+        );
+        Ok(true)
+    }
+
     fn get_selectable_user_list(&self, user_list: &[User]) -> Vec<User> {
-        let user_groups = self.props.users.iter().collect::<HashSet<_>>();
+        let user_groups = self.common.props.users.iter().collect::<HashSet<_>>();
         user_list
             .iter()
             .filter(|u| !user_groups.contains(u))
@@ -136,32 +126,27 @@ impl AddGroupMemberComponent {
 impl Component for AddGroupMemberComponent {
     type Message = Msg;
     type Properties = Props;
+
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut res = Self {
-            link,
-            props,
+            common: CommonComponentParts::<Self>::create(props, link),
             user_list: None,
             selected_user: None,
-            task: None,
         };
         res.get_user_list();
         res
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        match self.handle_msg(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.props.on_error.emit(e);
-                self.task = None;
-                true
-            }
-            Ok(b) => b,
-        }
+        CommonComponentParts::<Self>::update_and_report_error(
+            self,
+            msg,
+            self.common.props.on_error.clone(),
+        )
     }
 
     fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.props.neq_assign(props)
+        self.common.props.neq_assign(props)
     }
 
     fn view(&self) -> Html {
@@ -176,7 +161,7 @@ impl Component for AddGroupMemberComponent {
             html! {
             <div class="row">
               <div class="col-sm-3">
-                <Select on_selection_change=self.link.callback(Msg::SelectionChanged)>
+                <Select on_selection_change=self.common.callback(Msg::SelectionChanged)>
                   {
                     to_add_user_list
                         .into_iter()
@@ -188,8 +173,8 @@ impl Component for AddGroupMemberComponent {
               <div class="col-sm-1">
                 <button
                   class="btn btn-success"
-                  disabled=self.selected_user.is_none() || self.task.is_some()
-                  onclick=self.link.callback(|_| Msg::SubmitAddMember)>
+                  disabled=self.selected_user.is_none() || self.common.is_task_running()
+                  onclick=self.common.callback(|_| Msg::SubmitAddMember)>
                   {"Add"}
                 </button>
               </div>
