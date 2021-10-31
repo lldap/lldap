@@ -4,17 +4,11 @@ use crate::{
         remove_user_from_group::RemoveUserFromGroupComponent,
         router::{AppRoute, Link},
     },
-    infra::{
-        common_component::{CommonComponent, CommonComponentParts},
-        api::HostService,
-    }
+    infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{bail, Error, Result};
 use graphql_client::GraphQLQuery;
-use yew::{
-    prelude::*,
-    services::ConsoleService,
-};
+use yew::prelude::*;
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -53,18 +47,13 @@ pub struct Props {
 
 impl GroupDetails {
     fn get_group_details(&mut self) {
-        self.common.task = HostService::graphql_query::<GetGroupDetails>(
+        self.common.call_graphql::<GetGroupDetails, _>(
             get_group_details::Variables {
                 id: self.common.group_id,
             },
-            self.common.link.callback(Msg::GroupDetailsResponse),
+            Msg::GroupDetailsResponse,
             "Error trying to fetch group details",
-        )
-        .map_err(|e| {
-            ConsoleService::log(&e.to_string());
-            e
-        })
-        .ok();
+        );
     }
 
     fn view_messages(&self, error: &Option<Error>) -> Html {
@@ -95,8 +84,8 @@ impl GroupDetails {
                   <RemoveUserFromGroupComponent
                     username=user_id
                     group_id=g.id
-                    on_user_removed_from_group=self.common.link.callback(Msg::OnUserRemovedFromGroup)
-                    on_error=self.common.link.callback(Msg::OnError)/>
+                    on_user_removed_from_group=self.common.callback(Msg::OnUserRemovedFromGroup)
+                    on_error=self.common.callback(Msg::OnError)/>
                 </td>
               </tr>
             }
@@ -145,8 +134,8 @@ impl GroupDetails {
             <AddGroupMemberComponent
                 group_id=g.id
                 users=users
-                on_error=self.common.link.callback(Msg::OnError)
-                on_user_added_to_group=self.common.link.callback(Msg::OnUserAddedToGroup)/>
+                on_error=self.common.callback(Msg::OnError)
+                on_user_added_to_group=self.common.callback(Msg::OnUserAddedToGroup)/>
         }
     }
 }

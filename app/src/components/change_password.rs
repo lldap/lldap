@@ -176,7 +176,7 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                 Ok(false)
             }
             Msg::RegistrationFinishResponse(response) => {
-                self.common.task = None;
+                self.common.cancel_task();
                 if response.is_ok() {
                     self.route_dispatcher
                         .send(RouteRequest::ChangeRoute(Route::from(
@@ -236,7 +236,7 @@ impl Component for ChangePasswordForm {
                       class_invalid="is-invalid has-error"
                       class_valid="has-success"
                       autocomplete="current-password"
-                      oninput=self.common.link.callback(|_| Msg::FormUpdate) />
+                      oninput=self.common.callback(|_| Msg::FormUpdate) />
                     <div class="invalid-feedback">
                       {&self.form.field_message("old_password")}
                     </div>
@@ -256,7 +256,7 @@ impl Component for ChangePasswordForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.common.link.callback(|_| Msg::FormUpdate) />
+                    oninput=self.common.callback(|_| Msg::FormUpdate) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("password")}
                   </div>
@@ -275,7 +275,7 @@ impl Component for ChangePasswordForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.common.link.callback(|_| Msg::FormUpdate) />
+                    oninput=self.common.callback(|_| Msg::FormUpdate) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("confirm_password")}
                   </div>
@@ -285,8 +285,8 @@ impl Component for ChangePasswordForm {
                 <button
                   class="btn btn-primary col-sm-1 col-form-label"
                   type="submit"
-                  disabled=self.common.task.is_some()
-                  onclick=self.common.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                  disabled=self.common.is_task_running()
+                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
                   {"Submit"}
                 </button>
               </div>
