@@ -5,14 +5,11 @@ use crate::{
         router::{AppRoute, Link, NavButton},
         user_details_form::UserDetailsForm,
     },
-    infra::api::HostService,
+    infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{bail, Error, Result};
 use graphql_client::GraphQLQuery;
-use yew::{
-    prelude::*,
-    services::{fetch::FetchTask, ConsoleService},
-};
+use yew::prelude::*;
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -27,15 +24,10 @@ pub type User = get_user_details::GetUserDetailsUser;
 pub type Group = get_user_details::GetUserDetailsUserGroups;
 
 pub struct UserDetails {
-    link: ComponentLink<Self>,
-    props: Props,
+    common: CommonComponentParts<Self>,
     /// The user info. If none, the error is in `error`. If `error` is None, then we haven't
     /// received the server response yet.
     user: Option<User>,
-    /// Error message displayed to the user.
-    error: Option<Error>,
-    // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
 }
 
 /// State machine describing the possible transitions of the component state.
@@ -54,22 +46,7 @@ pub struct Props {
     pub is_admin: bool,
 }
 
-impl UserDetails {
-    fn get_user_details(&mut self) {
-        self._task = HostService::graphql_query::<GetUserDetails>(
-            get_user_details::Variables {
-                id: self.props.username.clone(),
-            },
-            self.link.callback(Msg::UserDetailsResponse),
-            "Error trying to fetch user details",
-        )
-        .map_err(|e| {
-            ConsoleService::log(&e.to_string());
-            e
-        })
-        .ok();
-    }
-
+impl CommonComponent<UserDetails> for UserDetails {
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::UserDetailsResponse(response) => match response {
@@ -94,6 +71,22 @@ impl UserDetails {
         Ok(true)
     }
 
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
+    }
+}
+
+impl UserDetails {
+    fn get_user_details(&mut self) {
+        self.common.call_graphql::<GetUserDetails, _>(
+            get_user_details::Variables {
+                id: self.common.props.username.clone(),
+            },
+            Msg::UserDetailsResponse,
+            "Error trying to fetch user details",
+        );
+    }
+
     fn view_messages(&self, error: &Option<Error>) -> Html {
         if let Some(e) = error {
             html! {
@@ -111,7 +104,7 @@ impl UserDetails {
             let display_name = group.display_name.clone();
             html! {
               <tr key="groupRow_".to_string() + &display_name>
-                {if self.props.is_admin { html! {
+                {if self.common.props.is_admin { html! {
                   <>
                     <td>
                       <Link route=AppRoute::GroupDetails(group.id)>
@@ -122,8 +115,8 @@ impl UserDetails {
                       <RemoveUserFromGroupComponent
                         username=u.id.clone()
                         group_id=group.id
-                        on_user_removed_from_group=self.link.callback(Msg::OnUserRemovedFromGroup)
-                        on_error=self.link.callback(Msg::OnError)/>
+                        on_user_removed_from_group=self.common.callback(Msg::OnUserRemovedFromGroup)
+                        on_error=self.common.callback(Msg::OnError)/>
                     </td>
                   </>
                 } } else { html! {
@@ -140,7 +133,7 @@ impl UserDetails {
                 <thead>
                   <tr key="headerRow">
                     <th>{"Group"}</th>
-                    { if self.props.is_admin { html!{ <th></th> }} else { html!{} }}
+                    { if self.common.props.is_admin { html!{ <th></th> }} else { html!{} }}
                   </tr>
                 </thead>
                 <tbody>
@@ -161,13 +154,13 @@ impl UserDetails {
     }
 
     fn view_add_group_button(&self, u: &User) -> Html {
-        if self.props.is_admin {
+        if self.common.props.is_admin {
             html! {
                 <AddUserToGroupComponent
                     username=u.id.clone()
                     groups=u.groups.clone()
-                    on_error=self.link.callback(Msg::OnError)
-                    on_user_added_to_group=self.link.callback(Msg::OnUserAddedToGroup)/>
+                    on_error=self.common.callback(Msg::OnError)
+                    on_user_added_to_group=self.common.callback(Msg::OnUserAddedToGroup)/>
             }
         } else {
             html! {}
@@ -181,26 +174,15 @@ impl Component for UserDetails {
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut table = Self {
-            link,
-            props,
-            _task: None,
+            common: CommonComponentParts::<Self>::create(props, link),
             user: None,
-            error: None,
         };
         table.get_user_details();
         table
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        self.error = None;
-        match self.handle_msg(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.error = Some(e);
-                true
-            }
-            Ok(b) => b,
-        }
+        CommonComponentParts::<Self>::update(self, msg)
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -208,7 +190,7 @@ impl Component for UserDetails {
     }
 
     fn view(&self) -> Html {
-        match (&self.user, &self.error) {
+        match (&self.user, &self.common.error) {
             (None, None) => html! {{"Loading..."}},
             (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
             (Some(u), error) => {
@@ -217,7 +199,7 @@ impl Component for UserDetails {
                     <h3>{u.id.to_string()}</h3>
                     <UserDetailsForm
                       user=u.clone()
-                      on_error=self.link.callback(Msg::OnError)/>
+                      on_error=self.common.callback(Msg::OnError)/>
                     <div class="row justify-content-center">
                       <NavButton
                         route=AppRoute::ChangePassword(u.id.clone())
