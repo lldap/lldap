@@ -1,10 +1,16 @@
-use crate::{components::router::AppRoute, infra::api::HostService};
+use crate::{
+    components::router::AppRoute,
+    infra::{
+        api::HostService,
+        common_component::{CommonComponent, CommonComponentParts},
+    },
+};
 use anyhow::{bail, Context, Result};
 use graphql_client::GraphQLQuery;
 use lldap_auth::{opaque, registration};
 use validator_derive::Validate;
 use yew::prelude::*;
-use yew::services::{fetch::FetchTask, ConsoleService};
+use yew::services::ConsoleService;
 use yew_form_derive::Model;
 use yew_router::{
     agent::{RouteAgentDispatcher, RouteRequest},
@@ -21,12 +27,9 @@ use yew_router::{
 pub struct CreateUser;
 
 pub struct CreateUserForm {
-    link: ComponentLink<Self>,
+    common: CommonComponentParts<Self>,
     route_dispatcher: RouteAgentDispatcher,
     form: yew_form::Form<CreateUserModel>,
-    error: Option<anyhow::Error>,
-    // Used to keep the request alive long enough.
-    task: Option<FetchTask>,
 }
 
 #[derive(Model, Validate, PartialEq, Clone, Default)]
@@ -70,7 +73,7 @@ pub enum Msg {
     RegistrationFinishResponse(Result<()>),
 }
 
-impl CreateUserForm {
+impl CommonComponent<CreateUserForm> for CreateUserForm {
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
@@ -89,11 +92,11 @@ impl CreateUserForm {
                         lastName: to_option(model.last_name),
                     },
                 };
-                self.task = Some(HostService::graphql_query::<CreateUser>(
+                self.common.call_graphql::<CreateUser, _>(
                     req,
-                    self.link.callback(Msg::CreateUserResponse),
+                    Msg::CreateUserResponse,
                     "Error trying to create user",
-                )?);
+                );
                 Ok(true)
             }
             Msg::CreateUserResponse(r) => {
@@ -118,14 +121,11 @@ impl CreateUserForm {
                         username: user_id,
                         registration_start_request: message,
                     };
-                    self.task = Some(
-                        HostService::register_start(
-                            req,
-                            self.link
-                                .callback_once(move |r| Msg::RegistrationStartResponse((state, r))),
-                        )
-                        .context("Error trying to create user")?,
-                    );
+                    self.common
+                        .call_backend(HostService::register_start, req, move |r| {
+                            Msg::RegistrationStartResponse((state, r))
+                        })
+                        .context("Error trying to create user")?;
                 } else {
                     self.update(Msg::SuccessfulCreation);
                 }
@@ -143,13 +143,13 @@ impl CreateUserForm {
                     server_data: response.server_data,
                     registration_upload: registration_upload.message,
                 };
-                self.task = Some(
-                    HostService::register_finish(
+                self.common
+                    .call_backend(
+                        HostService::register_finish,
                         req,
-                        self.link.callback(Msg::RegistrationFinishResponse),
+                        Msg::RegistrationFinishResponse,
                     )
-                    .context("Error trying to register user")?,
-                );
+                    .context("Error trying to register user")?;
                 Ok(false)
             }
             Msg::RegistrationFinishResponse(response) => {
@@ -163,33 +163,26 @@ impl CreateUserForm {
             }
         }
     }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
+    }
 }
 
 impl Component for CreateUserForm {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         Self {
-            link,
+            common: CommonComponentParts::<Self>::create(props, link),
             route_dispatcher: RouteAgentDispatcher::new(),
             form: yew_form::Form::<CreateUserModel>::new(CreateUserModel::default()),
-            error: None,
-            task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        self.error = None;
-        match self.handle_msg(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.error = Some(e);
-                self.task = None;
-                true
-            }
-            Ok(b) => b,
-        }
+        CommonComponentParts::<Self>::update(self, msg)
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -217,7 +210,7 @@ impl Component for CreateUserForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="username"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("username")}
                   </div>
@@ -237,7 +230,7 @@ impl Component for CreateUserForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="email"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("email")}
                   </div>
@@ -256,7 +249,7 @@ impl Component for CreateUserForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     field_name="display_name"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("display_name")}
                   </div>
@@ -275,7 +268,7 @@ impl Component for CreateUserForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     field_name="first_name"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("first_name")}
                   </div>
@@ -294,7 +287,7 @@ impl Component for CreateUserForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     field_name="last_name"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("last_name")}
                   </div>
@@ -314,7 +307,7 @@ impl Component for CreateUserForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("password")}
                   </div>
@@ -334,7 +327,7 @@ impl Component for CreateUserForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("confirm_password")}
                   </div>
@@ -343,14 +336,14 @@ impl Component for CreateUserForm {
               <div class="form-group row justify-content-center">
                 <button
                   class="btn btn-primary col-auto col-form-label mt-4"
-                  disabled=self.task.is_some()
+                  disabled=self.common.is_task_running()
                   type="submit"
-                  onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
+                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
                   {"Submit"}
                 </button>
               </div>
             </form>
-            { if let Some(e) = &self.error {
+            { if let Some(e) = &self.common.error {
                 html! {
                   <div class="alert alert-danger">
                     {e.to_string() }
