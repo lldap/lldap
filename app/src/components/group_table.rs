@@ -3,12 +3,11 @@ use crate::{
         delete_group::DeleteGroup,
         router::{AppRoute, Link},
     },
-    infra::api::HostService,
+    infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
-use yew::services::{fetch::FetchTask, ConsoleService};
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -24,11 +23,8 @@ use get_group_list::ResponseData;
 pub type Group = get_group_list::GetGroupListGroups;
 
 pub struct GroupTable {
-    link: ComponentLink<Self>,
+    common: CommonComponentParts<Self>,
     groups: Option<Vec<Group>>,
-    error: Option<Error>,
-    // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
 }
 
 pub enum Msg {
@@ -37,18 +33,24 @@ pub enum Msg {
     OnError(Error),
 }
 
-impl GroupTable {
-    fn get_groups(&mut self) {
-        self._task = HostService::graphql_query::<GetGroupList>(
-            get_group_list::Variables {},
-            self.link.callback(Msg::ListGroupsResponse),
-            "Error trying to fetch groups",
-        )
-        .map_err(|e| {
-            ConsoleService::log(&e.to_string());
-            e
-        })
-        .ok();
+impl CommonComponent<GroupTable> for GroupTable {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+        match msg {
+            Msg::ListGroupsResponse(groups) => {
+                self.groups = Some(groups?.groups.into_iter().collect());
+                Ok(true)
+            }
+            Msg::OnError(e) => Err(e),
+            Msg::OnGroupDeleted(group_id) => {
+                debug_assert!(self.groups.is_some());
+                self.groups.as_mut().unwrap().retain(|u| u.id != group_id);
+                Ok(true)
+            }
+        }
+    }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
     }
 }
 
@@ -56,27 +58,21 @@ impl Component for GroupTable {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut table = GroupTable {
-            link,
-            _task: None,
+            common: CommonComponentParts::<Self>::create(props, link),
             groups: None,
-            error: None,
         };
-        table.get_groups();
+        table.common.call_graphql::<GetGroupList, _>(
+            get_group_list::Variables {},
+            Msg::ListGroupsResponse,
+            "Error trying to fetch groups",
+        );
         table
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        self.error = None;
-        match self.handle_msg(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.error = Some(e);
-                true
-            }
-            Ok(b) => b,
-        }
+        CommonComponentParts::<Self>::update(self, msg)
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -94,21 +90,6 @@ impl Component for GroupTable {
 }
 
 impl GroupTable {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
-        match msg {
-            Msg::ListGroupsResponse(groups) => {
-                self.groups = Some(groups?.groups.into_iter().collect());
-                Ok(true)
-            }
-            Msg::OnError(e) => Err(e),
-            Msg::OnGroupDeleted(group_id) => {
-                debug_assert!(self.groups.is_some());
-                self.groups.as_mut().unwrap().retain(|u| u.id != group_id);
-                Ok(true)
-            }
-        }
-    }
-
     fn view_groups(&self) -> Html {
         let make_table = |groups: &Vec<Group>| {
             html! {
@@ -144,15 +125,15 @@ impl GroupTable {
               <td>
                 <DeleteGroup
                   group=group.clone()
-                  on_group_deleted=self.link.callback(Msg::OnGroupDeleted)
-                  on_error=self.link.callback(Msg::OnError)/>
+                  on_group_deleted=self.common.callback(Msg::OnGroupDeleted)
+                  on_error=self.common.callback(Msg::OnError)/>
               </td>
           </tr>
         }
     }
 
     fn view_errors(&self) -> Html {
-        match &self.error {
+        match &self.common.error {
             None => html! {},
             Some(e) => html! {<div>{"Error: "}{e.to_string()}</div>},
         }
