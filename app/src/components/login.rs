@@ -1,21 +1,17 @@
-use crate::infra::api::HostService;
+use crate::infra::{
+    api::HostService,
+    common_component::{CommonComponent, CommonComponentParts},
+};
 use anyhow::{anyhow, bail, Context, Result};
 use lldap_auth::*;
 use validator_derive::Validate;
-use yew::{
-    prelude::*,
-    services::{fetch::FetchTask, ConsoleService},
-};
+use yew::{prelude::*, services::ConsoleService};
 use yew_form::Form;
 use yew_form_derive::Model;
 
 pub struct LoginForm {
-    link: ComponentLink<Self>,
-    on_logged_in: Callback<(String, bool)>,
-    error: Option<anyhow::Error>,
+    common: CommonComponentParts<Self>,
     form: Form<FormModel>,
-    // Used to keep the request alive long enough.
-    task: Option<FetchTask>,
 }
 
 /// The fields of the form, with the constraints.
@@ -44,8 +40,8 @@ pub enum Msg {
     AuthenticationFinishResponse(Result<(String, bool)>),
 }
 
-impl LoginForm {
-    fn handle_message(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+impl CommonComponent<LoginForm> for LoginForm {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
             Msg::Submit => {
@@ -61,11 +57,10 @@ impl LoginForm {
                     username,
                     login_start_request: message,
                 };
-                self.task = Some(HostService::login_start(
-                    req,
-                    self.link
-                        .callback_once(move |r| Msg::AuthenticationStartResponse((state, r))),
-                )?);
+                self.common
+                    .call_backend(HostService::login_start, req, move |r| {
+                        Msg::AuthenticationStartResponse((state, r))
+                    })?;
                 Ok(true)
             }
             Msg::AuthenticationStartResponse((login_start, res)) => {
@@ -77,8 +72,8 @@ impl LoginForm {
                             // Common error, we want to print a full error to the console but only a
                             // simple one to the user.
                             ConsoleService::error(&format!("Invalid username or password: {}", e));
-                            self.error = Some(anyhow!("Invalid username or password"));
-                            self.task = None;
+                            self.common.error = Some(anyhow!("Invalid username or password"));
+                            self.common.cancel_task();
                             return Ok(true);
                         }
                         Ok(l) => l,
@@ -87,19 +82,25 @@ impl LoginForm {
                     server_data: res.server_data,
                     credential_finalization: login_finish.message,
                 };
-                self.task = Some(HostService::login_finish(
+                self.common.call_backend(
+                    HostService::login_finish,
                     req,
-                    self.link.callback_once(Msg::AuthenticationFinishResponse),
-                )?);
+                    Msg::AuthenticationFinishResponse,
+                )?;
                 Ok(false)
             }
             Msg::AuthenticationFinishResponse(user_info) => {
-                self.task = None;
-                self.on_logged_in
+                self.common.cancel_task();
+                self.common
+                    .on_logged_in
                     .emit(user_info.context("Could not log in")?);
                 Ok(true)
             }
         }
+    }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
     }
 }
 
@@ -109,25 +110,13 @@ impl Component for LoginForm {
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         LoginForm {
-            link,
-            on_logged_in: props.on_logged_in,
-            error: None,
+            common: CommonComponentParts::<Self>::create(props, link),
             form: Form::<FormModel>::new(FormModel::default()),
-            task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        self.error = None;
-        match self.handle_message(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.error = Some(e);
-                self.task = None;
-                true
-            }
-            Ok(b) => b,
-        }
+        CommonComponentParts::<Self>::update(self, msg)
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -153,7 +142,7 @@ impl Component for LoginForm {
                     field_name="username"
                     placeholder="Username"
                     autocomplete="username"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                 </div>
                 <div class="input-group">
                   <div class="input-group-prepend">
@@ -175,13 +164,13 @@ impl Component for LoginForm {
                   <button
                     type="submit"
                     class="btn btn-primary"
-                    disabled=self.task.is_some()
-                    onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                    disabled=self.common.is_task_running()
+                    onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
                     {"Login"}
                   </button>
                 </div>
                 <div class="form-group">
-                { if let Some(e) = &self.error {
+                { if let Some(e) = &self.common.error {
                     html! { e.to_string() }
                   } else { html! {} }
                 }
