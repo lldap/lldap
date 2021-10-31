@@ -1,13 +1,13 @@
-use crate::infra::{api::HostService, cookies::delete_cookie};
+use crate::infra::{
+    api::HostService,
+    common_component::{CommonComponent, CommonComponentParts},
+    cookies::delete_cookie,
+};
 use anyhow::Result;
 use yew::prelude::*;
-use yew::services::{fetch::FetchTask, ConsoleService};
 
 pub struct LogoutButton {
-    link: ComponentLink<Self>,
-    on_logged_out: Callback<()>,
-    // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
+    common: CommonComponentParts<Self>,
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -20,43 +20,39 @@ pub enum Msg {
     LogoutCompleted(Result<()>),
 }
 
+impl CommonComponent<LogoutButton> for LogoutButton {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+        match msg {
+            Msg::LogoutRequested => {
+                self.common
+                    .call_backend(HostService::logout, (), Msg::LogoutCompleted)?;
+            }
+            Msg::LogoutCompleted(res) => {
+                res?;
+                delete_cookie("user_id")?;
+                self.common.props.on_logged_out.emit(());
+            }
+        }
+        Ok(false)
+    }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
+    }
+}
+
 impl Component for LogoutButton {
     type Message = Msg;
     type Properties = Props;
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         LogoutButton {
-            link,
-            on_logged_out: props.on_logged_out,
-            _task: None,
+            common: CommonComponentParts::<Self>::create(props, link),
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        match msg {
-            Msg::LogoutRequested => {
-                match HostService::logout(self.link.callback(Msg::LogoutCompleted)) {
-                    Ok(task) => self._task = Some(task),
-                    Err(e) => ConsoleService::error(&e.to_string()),
-                };
-                false
-            }
-            Msg::LogoutCompleted(res) => {
-                if let Err(e) = res {
-                    ConsoleService::error(&e.to_string());
-                }
-                match delete_cookie("user_id") {
-                    Err(e) => {
-                        ConsoleService::error(&e.to_string());
-                        false
-                    }
-                    Ok(()) => {
-                        self.on_logged_out.emit(());
-                        true
-                    }
-                }
-            }
-        }
+        CommonComponentParts::<Self>::update(self, msg)
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -67,7 +63,7 @@ impl Component for LogoutButton {
         html! {
             <button
               class="dropdown-item"
-              onclick=self.link.callback(|_| Msg::LogoutRequested)>
+              onclick=self.common.callback(|_| Msg::LogoutRequested)>
               {"Logout"}
             </button>
         }
