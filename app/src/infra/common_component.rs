@@ -1,4 +1,6 @@
+use crate::infra::api::HostService;
 use anyhow::{Error, Result};
+use graphql_client::GraphQLQuery;
 use yew::{
     prelude::*,
     services::{fetch::FetchTask, ConsoleService},
@@ -10,13 +12,21 @@ pub trait CommonComponent<C: Component + CommonComponent<C>>: Component {
 }
 
 pub struct CommonComponentParts<C: CommonComponent<C>> {
-    pub link: ComponentLink<C>,
+    link: ComponentLink<C>,
     pub props: <C as Component>::Properties,
     pub error: Option<Error>,
-    pub task: Option<FetchTask>,
+    task: Option<FetchTask>,
 }
 
 impl<C: CommonComponent<C>> CommonComponentParts<C> {
+    pub fn is_task_running(&self) -> bool {
+        self.task.is_some()
+    }
+
+    pub fn cancel_task(&mut self) {
+        self.task = None;
+    }
+
     pub fn create(props: <C as Component>::Properties, link: ComponentLink<C>) -> Self {
         Self {
             link,
@@ -38,6 +48,14 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         }
     }
 
+    pub fn callback<F, IN, M>(&self, function: F) -> Callback<IN>
+    where
+        M: Into<C::Message>,
+        F: Fn(IN) -> M + 'static,
+    {
+        self.link.callback(function)
+    }
+
     pub fn call_backend<M, Req, Cb, Resp>(
         &mut self,
         method: M,
@@ -46,10 +64,31 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
     ) -> Result<()>
     where
         M: Fn(Req, Callback<Resp>) -> Result<FetchTask>,
-        Cb: Fn(Resp) -> <C as Component>::Message + 'static,
+        Cb: FnOnce(Resp) -> <C as Component>::Message + 'static,
     {
-        self.task = Some(method(req, self.link.callback(callback))?);
+        self.task = Some(method(req, self.link.callback_once(callback))?);
         Ok(())
+    }
+
+    pub fn call_graphql<QueryType, EnumCallback>(
+        &mut self,
+        variables: QueryType::Variables,
+        enum_callback: EnumCallback,
+        error_message: &'static str,
+    ) where
+        QueryType: GraphQLQuery + 'static,
+        EnumCallback: Fn(Result<QueryType::ResponseData>) -> <C as Component>::Message + 'static,
+    {
+        self.task = HostService::graphql_query::<QueryType>(
+            variables,
+            self.link.callback(enum_callback),
+            error_message,
+        )
+        .map_err::<(), _>(|e| {
+            ConsoleService::log(&e.to_string());
+            self.error = Some(e);
+        })
+        .ok();
     }
 }
 
