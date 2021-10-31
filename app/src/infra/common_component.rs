@@ -1,3 +1,26 @@
+//! Common Component module.
+//! This is used to factor out some common functionality that is recurrent in modules all over the
+//! application. In particular:
+//!   - error handling
+//!   - task handling
+//!   - storing props
+//!
+//! The pattern used is the
+//! [CRTP](https://en.wikipedia.org/wiki/Curiously_recurring_template_pattern) pattern: The
+//! [`CommonComponent`] trait must be implemented with `Self` as the parameter, e.g.
+//!
+//! ```ignore
+//! struct MyComponent;
+//! impl CommonComponent<MyComponent> for MyComponent { ... }
+//! ```
+//!
+//! The component should also have a `CommonComponentParts<Self>` as a field, usually named
+//! `common`.
+//!
+//! Then the [`yew::prelude::Component::update`] method can delegate to
+//! [`CommonComponentParts::update`]. This will in turn call [`CommonComponent::handle_msg`] and
+//! take care of error and task handling.
+
 use crate::infra::api::HostService;
 use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
@@ -7,11 +30,18 @@ use yew::{
 };
 use yewtil::NeqAssign;
 
+/// Trait required for common components.
 pub trait CommonComponent<C: Component + CommonComponent<C>>: Component {
+    /// Handle the incoming message. If an error is returned here, any running task will be
+    /// cancelled, the error will be written to the [`CommonComponentParts::error`] and the
+    /// component will be refreshed.
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool>;
+    /// Get a mutable reference to the inner component parts, necessary for the CRTP.
     fn mut_common(&mut self) -> &mut CommonComponentParts<C>;
 }
 
+/// Structure that contains the common parts needed by most components.
+/// The fields of [`props`] are directly accessible through a `Deref` implementation.
 pub struct CommonComponentParts<C: CommonComponent<C>> {
     link: ComponentLink<C>,
     pub props: <C as Component>::Properties,
@@ -20,10 +50,12 @@ pub struct CommonComponentParts<C: CommonComponent<C>> {
 }
 
 impl<C: CommonComponent<C>> CommonComponentParts<C> {
+    /// Whether there is a currently running task in the background.
     pub fn is_task_running(&self) -> bool {
         self.task.is_some()
     }
 
+    /// Cancel any background task.
     pub fn cancel_task(&mut self) {
         self.task = None;
     }
@@ -37,6 +69,8 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         }
     }
 
+    /// This should be called from the [`yew::prelude::Component::update`]: it will in turn call
+    /// [`CommonComponent::handle_msg`] and handle any resulting error.
     pub fn update(com: &mut C, msg: <C as Component>::Message) -> ShouldRender {
         com.mut_common().error = None;
         match com.handle_msg(msg) {
@@ -50,6 +84,7 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         }
     }
 
+    /// Same as above, but the resulting error is instead passed to the reporting function.
     pub fn update_and_report_error(
         com: &mut C,
         msg: <C as Component>::Message,
@@ -66,6 +101,8 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
             .unwrap_or(should_render)
     }
 
+    /// This can be called from [`yew::prelude::Component::update`]: it will check if the
+    /// properties have changed and return whether the component should update.
     pub fn change(&mut self, props: <C as Component>::Properties) -> ShouldRender
     where
         <C as yew::Component>::Properties: std::cmp::PartialEq,
@@ -73,6 +110,7 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         self.props.neq_assign(props)
     }
 
+    /// Create a callback from the link.
     pub fn callback<F, IN, M>(&self, function: F) -> Callback<IN>
     where
         M: Into<C::Message>,
@@ -81,6 +119,8 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         self.link.callback(function)
     }
 
+    /// Call `method` from the backend with the given `request`, and pass the `callback` for the
+    /// result. Returns whether _starting the call_ failed.
     pub fn call_backend<M, Req, Cb, Resp>(
         &mut self,
         method: M,
@@ -95,6 +135,9 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         Ok(())
     }
 
+    /// Call the backend with a GraphQL query.
+    ///
+    /// `EnumCallback` should usually be left as `_`.
     pub fn call_graphql<QueryType, EnumCallback>(
         &mut self,
         variables: QueryType::Variables,
