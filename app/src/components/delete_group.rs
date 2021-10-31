@@ -48,7 +48,7 @@ impl CommonComponent<DeleteGroup> for DeleteGroup {
                 self.update(Msg::DismissModal);
                 self.common.call_graphql::<DeleteGroupQuery, _>(
                     delete_group_query::Variables {
-                        group_id: self.common.props.group.id,
+                        group_id: self.common.group.id,
                     },
                     Msg::DeleteGroupResponse,
                     "Error trying to delete group",
@@ -63,7 +63,7 @@ impl CommonComponent<DeleteGroup> for DeleteGroup {
                 self.common
                     .props
                     .on_group_deleted
-                    .emit(self.common.props.group.id);
+                    .emit(self.common.group.id);
             }
         }
         Ok(true)
@@ -100,7 +100,7 @@ impl Component for DeleteGroup {
         CommonComponentParts::<Self>::update_and_report_error(
             self,
             msg,
-            self.common.props.on_error.clone(),
+            self.common.on_error.clone(),
         )
     }
 
@@ -128,7 +128,7 @@ impl DeleteGroup {
         html! {
           <div
             class="modal fade"
-            id="deleteGroupModal".to_string() + &self.common.props.group.id.to_string()
+            id="deleteGroupModal".to_string() + &self.common.group.id.to_string()
             tabindex="-1"
             aria-labelledby="deleteGroupModalLabel"
             aria-hidden="true"
@@ -146,7 +146,7 @@ impl DeleteGroup {
                 <div class="modal-body">
                 <span>
                   {"Are you sure you want to delete group "}
-                  <b>{&self.common.props.group.display_name}</b>{"?"}
+                  <b>{&self.common.group.display_name}</b>{"?"}
                 </span>
                 </div>
                 <div class="modal-footer">

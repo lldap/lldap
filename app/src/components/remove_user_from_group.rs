@@ -37,10 +37,9 @@ impl CommonComponent<RemoveUserFromGroupComponent> for RemoveUserFromGroupCompon
             Msg::RemoveGroupResponse(response) => {
                 response?;
                 self.common.cancel_task();
-                self.common.props.on_user_removed_from_group.emit((
-                    self.common.props.username.clone(),
-                    self.common.props.group_id,
-                ));
+                self.common
+                    .on_user_removed_from_group
+                    .emit((self.common.username.clone(), self.common.group_id));
             }
         }
         Ok(true)
@@ -55,8 +54,8 @@ impl RemoveUserFromGroupComponent {
     fn submit_remove_group(&mut self) {
         self.common.call_graphql::<RemoveUserFromGroup, _>(
             remove_user_from_group::Variables {
-                user: self.common.props.username.clone(),
-                group: self.common.props.group_id,
+                user: self.common.username.clone(),
+                group: self.common.group_id,
             },
             Msg::RemoveGroupResponse,
             "Error trying to initiate removing the user from a group",
@@ -78,7 +77,7 @@ impl Component for RemoveUserFromGroupComponent {
         CommonComponentParts::<Self>::update_and_report_error(
             self,
             msg,
-            self.common.props.on_error.clone(),
+            self.common.on_error.clone(),
         )
     }
 

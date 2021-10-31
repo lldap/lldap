@@ -30,7 +30,7 @@ impl CommonComponent<LogoutButton> for LogoutButton {
             Msg::LogoutCompleted(res) => {
                 res?;
                 delete_cookie("user_id")?;
-                self.common.props.on_logged_out.emit(());
+                self.common.on_logged_out.emit(());
             }
         }
         Ok(false)

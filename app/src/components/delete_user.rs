@@ -45,7 +45,7 @@ impl CommonComponent<DeleteUser> for DeleteUser {
                 self.update(Msg::DismissModal);
                 self.common.call_graphql::<DeleteUserQuery, _>(
                     delete_user_query::Variables {
-                        user: self.common.props.username.clone(),
+                        user: self.common.username.clone(),
                     },
                     Msg::DeleteUserResponse,
                     "Error trying to delete user",
@@ -60,7 +60,7 @@ impl CommonComponent<DeleteUser> for DeleteUser {
                 self.common
                     .props
                     .on_user_deleted
-                    .emit(self.common.props.username.clone());
+                    .emit(self.common.username.clone());
             }
         }
         Ok(true)
@@ -97,7 +97,7 @@ impl Component for DeleteUser {
         CommonComponentParts::<Self>::update_and_report_error(
             self,
             msg,
-            self.common.props.on_error.clone(),
+            self.common.on_error.clone(),
         )
     }
 
@@ -125,7 +125,7 @@ impl DeleteUser {
         html! {
           <div
             class="modal fade"
-            id="deleteUserModal".to_string() + &self.common.props.username
+            id="deleteUserModal".to_string() + &self.common.username
             tabindex="-1"
             //role="dialog"
             aria-labelledby="deleteUserModalLabel"
@@ -144,7 +144,7 @@ impl DeleteUser {
                 <div class="modal-body">
                 <span>
                   {"Are you sure you want to delete user "}
-                  <b>{&self.common.props.username}</b>{"?"}
+                  <b>{&self.common.username}</b>{"?"}
                 </span>
                 </div>
                 <div class="modal-footer">
