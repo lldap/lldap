@@ -223,7 +223,8 @@ impl HostService {
         )
     }
 
-    pub fn logout(callback: Callback<Result<()>>) -> Result<FetchTask> {
+    // The `_request` parameter is to make it the same shape as the other functions.
+    pub fn logout(_request: (), callback: Callback<Result<()>>) -> Result<FetchTask> {
         call_server_empty_response_with_error_message(
             "/auth/logout",
             yew::format::Nothing,
