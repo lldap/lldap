@@ -1,9 +1,10 @@
-use crate::infra::{api::HostService, modal::Modal};
+use crate::infra::{
+    common_component::{CommonComponent, CommonComponentParts},
+    modal::Modal,
+};
 use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
-use yew::services::fetch::FetchTask;
-use yewtil::NeqAssign;
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -15,11 +16,9 @@ use yewtil::NeqAssign;
 pub struct DeleteUserQuery;
 
 pub struct DeleteUser {
-    link: ComponentLink<Self>,
-    props: DeleteUserProps,
+    common: CommonComponentParts<Self>,
     node_ref: NodeRef,
     modal: Option<Modal>,
-    task: Option<FetchTask>,
 }
 
 #[derive(yew::Properties, Clone, PartialEq, Debug)]
@@ -36,17 +35,51 @@ pub enum Msg {
     DeleteUserResponse(Result<delete_user_query::ResponseData>),
 }
 
+impl CommonComponent<DeleteUser> for DeleteUser {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+        match msg {
+            Msg::ClickedDeleteUser => {
+                self.modal.as_ref().expect("modal not initialized").show();
+            }
+            Msg::ConfirmDeleteUser => {
+                self.update(Msg::DismissModal);
+                self.common.call_graphql::<DeleteUserQuery, _>(
+                    delete_user_query::Variables {
+                        user: self.common.props.username.clone(),
+                    },
+                    Msg::DeleteUserResponse,
+                    "Error trying to delete user",
+                );
+            }
+            Msg::DismissModal => {
+                self.modal.as_ref().expect("modal not initialized").hide();
+            }
+            Msg::DeleteUserResponse(response) => {
+                self.common.cancel_task();
+                response?;
+                self.common
+                    .props
+                    .on_user_deleted
+                    .emit(self.common.props.username.clone());
+            }
+        }
+        Ok(true)
+    }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
+    }
+}
+
 impl Component for DeleteUser {
     type Message = Msg;
     type Properties = DeleteUserProps;
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         Self {
-            link,
-            props,
+            common: CommonComponentParts::<Self>::create(props, link),
             node_ref: NodeRef::default(),
             modal: None,
-            task: None,
         }
     }
 
@@ -61,39 +94,15 @@ impl Component for DeleteUser {
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        match msg {
-            Msg::ClickedDeleteUser => {
-                self.modal.as_ref().expect("modal not initialized").show();
-            }
-            Msg::ConfirmDeleteUser => {
-                self.update(Msg::DismissModal);
-                self.task = HostService::graphql_query::<DeleteUserQuery>(
-                    delete_user_query::Variables {
-                        user: self.props.username.clone(),
-                    },
-                    self.link.callback(Msg::DeleteUserResponse),
-                    "Error trying to delete user",
-                )
-                .map_err(|e| self.props.on_error.emit(e))
-                .ok();
-            }
-            Msg::DismissModal => {
-                self.modal.as_ref().expect("modal not initialized").hide();
-            }
-            Msg::DeleteUserResponse(response) => {
-                self.task = None;
-                if let Err(e) = response {
-                    self.props.on_error.emit(e);
-                } else {
-                    self.props.on_user_deleted.emit(self.props.username.clone());
-                }
-            }
-        }
-        true
+        CommonComponentParts::<Self>::update_and_report_error(
+            self,
+            msg,
+            self.common.props.on_error.clone(),
+        )
     }
 
     fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.props.neq_assign(props)
+        self.common.change(props)
     }
 
     fn view(&self) -> Html {
@@ -101,8 +110,8 @@ impl Component for DeleteUser {
           <>
           <button
             class="btn btn-danger"
-            disabled=self.task.is_some()
-            onclick=self.link.callback(|_| Msg::ClickedDeleteUser)>
+            disabled=self.common.is_task_running()
+            onclick=self.common.callback(|_| Msg::ClickedDeleteUser)>
             <i class="bi-x-circle-fill" aria-label="Delete user" />
           </button>
           {self.show_modal()}
@@ -116,7 +125,7 @@ impl DeleteUser {
         html! {
           <div
             class="modal fade"
-            id="deleteUserModal".to_string() + &self.props.username
+            id="deleteUserModal".to_string() + &self.common.props.username
             tabindex="-1"
             //role="dialog"
             aria-labelledby="deleteUserModalLabel"
@@ -130,24 +139,24 @@ impl DeleteUser {
                     type="button"
                     class="btn-close"
                     aria-label="Close"
-                    onclick=self.link.callback(|_| Msg::DismissModal) />
+                    onclick=self.common.callback(|_| Msg::DismissModal) />
                 </div>
                 <div class="modal-body">
                 <span>
                   {"Are you sure you want to delete user "}
-                  <b>{&self.props.username}</b>{"?"}
+                  <b>{&self.common.props.username}</b>{"?"}
                 </span>
                 </div>
                 <div class="modal-footer">
                   <button
                     type="button"
                     class="btn btn-secondary"
-                    onclick=self.link.callback(|_| Msg::DismissModal)>
+                    onclick=self.common.callback(|_| Msg::DismissModal)>
                       {"Cancel"}
                   </button>
                   <button
                     type="button"
-                    onclick=self.link.callback(|_| Msg::ConfirmDeleteUser)
+                    onclick=self.common.callback(|_| Msg::ConfirmDeleteUser)
                     class="btn btn-danger">{"Yes, I'm sure"}</button>
                 </div>
               </div>
