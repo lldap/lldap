@@ -3,12 +3,11 @@ use crate::{
         delete_user::DeleteUser,
         router::{AppRoute, Link},
     },
-    infra::api::HostService,
+    infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
-use yew::services::{fetch::FetchTask, ConsoleService};
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -24,11 +23,8 @@ use list_users_query::{RequestFilter, ResponseData};
 type User = list_users_query::ListUsersQueryUsers;
 
 pub struct UserTable {
-    link: ComponentLink<Self>,
+    common: CommonComponentParts<Self>,
     users: Option<Vec<User>>,
-    error: Option<Error>,
-    // Used to keep the request alive long enough.
-    _task: Option<FetchTask>,
 }
 
 pub enum Msg {
@@ -37,18 +33,34 @@ pub enum Msg {
     OnError(Error),
 }
 
+impl CommonComponent<UserTable> for UserTable {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+        match msg {
+            Msg::ListUsersResponse(users) => {
+                self.users = Some(users?.users.into_iter().collect());
+                Ok(true)
+            }
+            Msg::OnError(e) => Err(e),
+            Msg::OnUserDeleted(user_id) => {
+                debug_assert!(self.users.is_some());
+                self.users.as_mut().unwrap().retain(|u| u.id != user_id);
+                Ok(true)
+            }
+        }
+    }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
+    }
+}
+
 impl UserTable {
     fn get_users(&mut self, req: Option<RequestFilter>) {
-        self._task = HostService::graphql_query::<ListUsersQuery>(
+        self.common.call_graphql::<ListUsersQuery, _>(
             list_users_query::Variables { filters: req },
-            self.link.callback(Msg::ListUsersResponse),
+            Msg::ListUsersResponse,
             "Error trying to fetch users",
-        )
-        .map_err(|e| {
-            ConsoleService::log(&e.to_string());
-            e
-        })
-        .ok();
+        );
     }
 }
 
@@ -56,27 +68,17 @@ impl Component for UserTable {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         let mut table = UserTable {
-            link,
-            _task: None,
+            common: CommonComponentParts::<Self>::create(props, link),
             users: None,
-            error: None,
         };
         table.get_users(None);
         table
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        self.error = None;
-        match self.handle_msg(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.error = Some(e);
-                true
-            }
-            Ok(b) => b,
-        }
+        CommonComponentParts::<Self>::update(self, msg)
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -94,21 +96,6 @@ impl Component for UserTable {
 }
 
 impl UserTable {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
-        match msg {
-            Msg::ListUsersResponse(users) => {
-                self.users = Some(users?.users.into_iter().collect());
-                Ok(true)
-            }
-            Msg::OnError(e) => Err(e),
-            Msg::OnUserDeleted(user_id) => {
-                debug_assert!(self.users.is_some());
-                self.users.as_mut().unwrap().retain(|u| u.id != user_id);
-                Ok(true)
-            }
-        }
-    }
-
     fn view_users(&self) -> Html {
         let make_table = |users: &Vec<User>| {
             html! {
@@ -150,15 +137,15 @@ impl UserTable {
               <td>
                 <DeleteUser
                   username=user.id.clone()
-                  on_user_deleted=self.link.callback(Msg::OnUserDeleted)
-                  on_error=self.link.callback(Msg::OnError)/>
+                  on_user_deleted=self.common.callback(Msg::OnUserDeleted)
+                  on_error=self.common.callback(Msg::OnError)/>
               </td>
           </tr>
         }
     }
 
     fn view_errors(&self) -> Html {
-        match &self.error {
+        match &self.common.error {
             None => html! {},
             Some(e) => html! {<div>{"Error: "}{e.to_string()}</div>},
         }
