@@ -1,11 +1,11 @@
-use crate::{components::user_details::User, infra::api::HostService};
+use crate::{
+    components::user_details::User,
+    infra::common_component::{CommonComponent, CommonComponentParts},
+};
 use anyhow::{bail, Error, Result};
 use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
-use yew::{
-    prelude::*,
-    services::{fetch::FetchTask, ConsoleService},
-};
+use yew::prelude::*;
 use yew_form_derive::Model;
 
 /// The fields of the form, with the editable details and the constraints.
@@ -32,12 +32,10 @@ pub struct UpdateUser;
 
 /// A [yew::Component] to display the user details, with a form allowing to edit them.
 pub struct UserDetailsForm {
-    link: ComponentLink<Self>,
-    props: Props,
+    common: CommonComponentParts<Self>,
     form: yew_form::Form<UserModel>,
     /// True if we just successfully updated the user, to display a success message.
     just_updated: bool,
-    task: Option<FetchTask>,
 }
 
 pub enum Msg {
@@ -57,6 +55,20 @@ pub struct Props {
     pub on_error: Callback<Error>,
 }
 
+impl CommonComponent<UserDetailsForm> for UserDetailsForm {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+        match msg {
+            Msg::Update => Ok(true),
+            Msg::SubmitClicked => self.submit_user_update_form(),
+            Msg::UserUpdated(response) => self.user_update_finished(response),
+        }
+    }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
+    }
+}
+
 impl Component for UserDetailsForm {
     type Message = Msg;
     type Properties = Props;
@@ -69,25 +81,19 @@ impl Component for UserDetailsForm {
             last_name: props.user.last_name.clone(),
         };
         Self {
-            link,
+            common: CommonComponentParts::<Self>::create(props, link),
             form: yew_form::Form::new(model),
-            props,
             just_updated: false,
-            task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         self.just_updated = false;
-        match self.handle_msg(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.props.on_error.emit(e);
-                self.task = None;
-                true
-            }
-            Ok(b) => b,
-        }
+        CommonComponentParts::<Self>::update_and_report_error(
+            self,
+            msg,
+            self.common.props.on_error.clone(),
+        )
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -105,7 +111,7 @@ impl Component for UserDetailsForm {
                   {"User ID: "}
                 </label>
                 <div class="col-8">
-                  <span id="userId" class="form-constrol-static">{&self.props.user.id}</span>
+                  <span id="userId" class="form-constrol-static">{&self.common.props.user.id}</span>
                 </div>
               </div>
               <div class="form-group row mb-3">
@@ -121,7 +127,7 @@ impl Component for UserDetailsForm {
                     form=&self.form
                     field_name="email"
                     autocomplete="email"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("email")}
                   </div>
@@ -140,7 +146,7 @@ impl Component for UserDetailsForm {
                     form=&self.form
                     field_name="display_name"
                     autocomplete="name"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("display_name")}
                   </div>
@@ -157,7 +163,7 @@ impl Component for UserDetailsForm {
                     form=&self.form
                     field_name="first_name"
                     autocomplete="given-name"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("first_name")}
                   </div>
@@ -174,7 +180,7 @@ impl Component for UserDetailsForm {
                     form=&self.form
                     field_name="last_name"
                     autocomplete="family-name"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("last_name")}
                   </div>
@@ -186,15 +192,15 @@ impl Component for UserDetailsForm {
                 {"Creation date: "}
                 </label>
                 <div class="col-8">
-                  <span id="creationDate" class="form-constrol-static">{&self.props.user.creation_date.date().naive_local()}</span>
+                  <span id="creationDate" class="form-constrol-static">{&self.common.props.user.creation_date.date().naive_local()}</span>
                 </div>
               </div>
               <div class="form-group row justify-content-center">
                 <button
                   type="submit"
                   class="btn btn-primary col-auto col-form-label"
-                  disabled=self.task.is_some()
-                  onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})>
+                  disabled=self.common.is_task_running()
+                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})>
                   {"Update"}
                 </button>
               </div>
@@ -208,21 +214,13 @@ impl Component for UserDetailsForm {
 }
 
 impl UserDetailsForm {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
-        match msg {
-            Msg::Update => Ok(true),
-            Msg::SubmitClicked => self.submit_user_update_form(),
-            Msg::UserUpdated(response) => self.user_update_finished(response),
-        }
-    }
-
     fn submit_user_update_form(&mut self) -> Result<bool> {
         if !self.form.validate() {
             bail!("Invalid inputs");
         }
-        let base_user = &self.props.user;
+        let base_user = &self.common.props.user;
         let mut user_input = update_user::UpdateUserInput {
-            id: self.props.user.id.clone(),
+            id: self.common.props.user.id.clone(),
             email: None,
             displayName: None,
             firstName: None,
@@ -248,28 +246,28 @@ impl UserDetailsForm {
             return Ok(false);
         }
         let req = update_user::Variables { user: user_input };
-        self.task = Some(HostService::graphql_query::<UpdateUser>(
+        self.common.call_graphql::<UpdateUser, _>(
             req,
-            self.link.callback(Msg::UserUpdated),
+            Msg::UserUpdated,
             "Error trying to update user",
-        )?);
+        );
         Ok(false)
     }
 
     fn user_update_finished(&mut self, r: Result<update_user::ResponseData>) -> Result<bool> {
-        self.task = None;
+        self.common.cancel_task();
         match r {
             Err(e) => return Err(e),
             Ok(_) => {
                 let model = self.form.model();
-                self.props.user = User {
-                    id: self.props.user.id.clone(),
+                self.common.props.user = User {
+                    id: self.common.props.user.id.clone(),
                     email: model.email,
                     display_name: model.display_name,
                     first_name: model.first_name,
                     last_name: model.last_name,
-                    creation_date: self.props.user.creation_date,
-                    groups: self.props.user.groups.clone(),
+                    creation_date: self.common.props.user.creation_date,
+                    groups: self.common.props.user.groups.clone(),
                 };
                 self.just_updated = true;
             }
