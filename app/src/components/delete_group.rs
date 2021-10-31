@@ -1,12 +1,13 @@
 use crate::{
     components::group_table::Group,
-    infra::{api::HostService, modal::Modal},
+    infra::{
+        common_component::{CommonComponent, CommonComponentParts},
+        modal::Modal,
+    },
 };
 use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
-use yew::services::fetch::FetchTask;
-use yewtil::NeqAssign;
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -18,11 +19,9 @@ use yewtil::NeqAssign;
 pub struct DeleteGroupQuery;
 
 pub struct DeleteGroup {
-    link: ComponentLink<Self>,
-    props: DeleteGroupProps,
+    common: CommonComponentParts<Self>,
     node_ref: NodeRef,
     modal: Option<Modal>,
-    task: Option<FetchTask>,
 }
 
 #[derive(yew::Properties, Clone, PartialEq, Debug)]
@@ -39,17 +38,51 @@ pub enum Msg {
     DeleteGroupResponse(Result<delete_group_query::ResponseData>),
 }
 
+impl CommonComponent<DeleteGroup> for DeleteGroup {
+    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+        match msg {
+            Msg::ClickedDeleteGroup => {
+                self.modal.as_ref().expect("modal not initialized").show();
+            }
+            Msg::ConfirmDeleteGroup => {
+                self.update(Msg::DismissModal);
+                self.common.call_graphql::<DeleteGroupQuery, _>(
+                    delete_group_query::Variables {
+                        group_id: self.common.props.group.id,
+                    },
+                    Msg::DeleteGroupResponse,
+                    "Error trying to delete group",
+                );
+            }
+            Msg::DismissModal => {
+                self.modal.as_ref().expect("modal not initialized").hide();
+            }
+            Msg::DeleteGroupResponse(response) => {
+                self.common.cancel_task();
+                response?;
+                self.common
+                    .props
+                    .on_group_deleted
+                    .emit(self.common.props.group.id);
+            }
+        }
+        Ok(true)
+    }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
+    }
+}
+
 impl Component for DeleteGroup {
     type Message = Msg;
     type Properties = DeleteGroupProps;
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         Self {
-            link,
-            props,
+            common: CommonComponentParts::<Self>::create(props, link),
             node_ref: NodeRef::default(),
             modal: None,
-            task: None,
         }
     }
 
@@ -64,39 +97,15 @@ impl Component for DeleteGroup {
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        match msg {
-            Msg::ClickedDeleteGroup => {
-                self.modal.as_ref().expect("modal not initialized").show();
-            }
-            Msg::ConfirmDeleteGroup => {
-                self.update(Msg::DismissModal);
-                self.task = HostService::graphql_query::<DeleteGroupQuery>(
-                    delete_group_query::Variables {
-                        group_id: self.props.group.id,
-                    },
-                    self.link.callback(Msg::DeleteGroupResponse),
-                    "Error trying to delete group",
-                )
-                .map_err(|e| self.props.on_error.emit(e))
-                .ok();
-            }
-            Msg::DismissModal => {
-                self.modal.as_ref().expect("modal not initialized").hide();
-            }
-            Msg::DeleteGroupResponse(response) => {
-                self.task = None;
-                if let Err(e) = response {
-                    self.props.on_error.emit(e);
-                } else {
-                    self.props.on_group_deleted.emit(self.props.group.id);
-                }
-            }
-        }
-        true
+        CommonComponentParts::<Self>::update_and_report_error(
+            self,
+            msg,
+            self.common.props.on_error.clone(),
+        )
     }
 
     fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.props.neq_assign(props)
+        self.common.change(props)
     }
 
     fn view(&self) -> Html {
@@ -104,8 +113,8 @@ impl Component for DeleteGroup {
           <>
           <button
             class="btn btn-danger"
-            disabled=self.task.is_some()
-            onclick=self.link.callback(|_| Msg::ClickedDeleteGroup)>
+            disabled=self.common.is_task_running()
+            onclick=self.common.callback(|_| Msg::ClickedDeleteGroup)>
             <i class="bi-x-circle-fill" aria-label="Delete group" />
           </button>
           {self.show_modal()}
@@ -119,7 +128,7 @@ impl DeleteGroup {
         html! {
           <div
             class="modal fade"
-            id="deleteGroupModal".to_string() + &self.props.group.id.to_string()
+            id="deleteGroupModal".to_string() + &self.common.props.group.id.to_string()
             tabindex="-1"
             aria-labelledby="deleteGroupModalLabel"
             aria-hidden="true"
@@ -132,24 +141,24 @@ impl DeleteGroup {
                     type="button"
                     class="btn-close"
                     aria-label="Close"
-                    onclick=self.link.callback(|_| Msg::DismissModal) />
+                    onclick=self.common.callback(|_| Msg::DismissModal) />
                 </div>
                 <div class="modal-body">
                 <span>
                   {"Are you sure you want to delete group "}
-                  <b>{&self.props.group.display_name}</b>{"?"}
+                  <b>{&self.common.props.group.display_name}</b>{"?"}
                 </span>
                 </div>
                 <div class="modal-footer">
                   <button
                     type="button"
                     class="btn btn-secondary"
-                    onclick=self.link.callback(|_| Msg::DismissModal)>
+                    onclick=self.common.callback(|_| Msg::DismissModal)>
                       {"Cancel"}
                   </button>
                   <button
                     type="button"
-                    onclick=self.link.callback(|_| Msg::ConfirmDeleteGroup)
+                    onclick=self.common.callback(|_| Msg::ConfirmDeleteGroup)
                     class="btn btn-danger">{"Yes, I'm sure"}</button>
                 </div>
               </div>
