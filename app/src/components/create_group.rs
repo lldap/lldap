@@ -1,9 +1,12 @@
-use crate::{components::router::AppRoute, infra::api::HostService};
+use crate::{
+    components::router::AppRoute,
+    infra::common_component::{CommonComponent, CommonComponentParts},
+};
 use anyhow::{bail, Result};
 use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
 use yew::prelude::*;
-use yew::services::{fetch::FetchTask, ConsoleService};
+use yew::services::ConsoleService;
 use yew_form_derive::Model;
 use yew_router::{
     agent::{RouteAgentDispatcher, RouteRequest},
@@ -20,12 +23,9 @@ use yew_router::{
 pub struct CreateGroup;
 
 pub struct CreateGroupForm {
-    link: ComponentLink<Self>,
+    common: CommonComponentParts<Self>,
     route_dispatcher: RouteAgentDispatcher,
     form: yew_form::Form<CreateGroupModel>,
-    error: Option<anyhow::Error>,
-    // Used to keep the request alive long enough.
-    task: Option<FetchTask>,
 }
 
 #[derive(Model, Validate, PartialEq, Clone, Default)]
@@ -40,7 +40,7 @@ pub enum Msg {
     CreateGroupResponse(Result<create_group::ResponseData>),
 }
 
-impl CreateGroupForm {
+impl CommonComponent<CreateGroupForm> for CreateGroupForm {
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
@@ -52,11 +52,11 @@ impl CreateGroupForm {
                 let req = create_group::Variables {
                     name: model.groupname,
                 };
-                self.task = Some(HostService::graphql_query::<CreateGroup>(
+                self.common.call_graphql::<CreateGroup, _>(
                     req,
-                    self.link.callback(Msg::CreateGroupResponse),
+                    Msg::CreateGroupResponse,
                     "Error trying to create group",
-                )?);
+                );
                 Ok(true)
             }
             Msg::CreateGroupResponse(response) => {
@@ -70,33 +70,26 @@ impl CreateGroupForm {
             }
         }
     }
+
+    fn mut_common(&mut self) -> &mut CommonComponentParts<Self> {
+        &mut self.common
+    }
 }
 
 impl Component for CreateGroupForm {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
         Self {
-            link,
+            common: CommonComponentParts::<Self>::create(props, link),
             route_dispatcher: RouteAgentDispatcher::new(),
             form: yew_form::Form::<CreateGroupModel>::new(CreateGroupModel::default()),
-            error: None,
-            task: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        self.error = None;
-        match self.handle_msg(msg) {
-            Err(e) => {
-                ConsoleService::error(&e.to_string());
-                self.error = Some(e);
-                self.task = None;
-                true
-            }
-            Ok(b) => b,
-        }
+        CommonComponentParts::<Self>::update(self, msg)
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -124,7 +117,7 @@ impl Component for CreateGroupForm {
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="groupname"
-                    oninput=self.link.callback(|_| Msg::Update) />
+                    oninput=self.common.callback(|_| Msg::Update) />
                   <div class="invalid-feedback">
                     {&self.form.field_message("groupname")}
                   </div>
@@ -134,13 +127,13 @@ impl Component for CreateGroupForm {
                 <button
                   class="btn btn-primary col-auto col-form-label"
                   type="submit"
-                  disabled=self.task.is_some()
-                  onclick=self.link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
+                  disabled=self.common.is_task_running()
+                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
                   {"Submit"}
                 </button>
               </div>
             </form>
-            { if let Some(e) = &self.error {
+            { if let Some(e) = &self.common.error {
                 html! {
                   <div class="alert alert-danger">
                     {e.to_string() }
