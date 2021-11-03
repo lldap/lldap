@@ -87,7 +87,10 @@ where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Sync + 'static,
 {
     let jwt_secret = config.jwt_secret.clone();
-    let jwt_blacklist = backend_handler.get_jwt_blacklist().await?;
+    let jwt_blacklist = backend_handler
+        .get_jwt_blacklist()
+        .await
+        .context("while getting the jwt blacklist")?;
     server_builder
         .bind("http", ("0.0.0.0", config.http_port), move || {
             let backend_handler = backend_handler.clone();
