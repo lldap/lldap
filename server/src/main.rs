@@ -47,27 +47,38 @@ async fn run_server(config: Configuration) -> Result<()> {
     let sql_pool = PoolOptions::new()
         .max_connections(5)
         .connect(&config.database_url)
-        .await?;
-    domain::sql_tables::init_table(&sql_pool).await?;
+        .await
+        .context("while connecting to the DB")?;
+    domain::sql_tables::init_table(&sql_pool)
+        .await
+        .context("while creating the tables")?;
     let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
     if let Err(e) = backend_handler.get_user_details(&config.ldap_user_dn).await {
         warn!("Could not get admin user, trying to create it: {:#}", e);
         create_admin_user(&backend_handler, &config)
             .await
-            .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))?;
+            .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))
+            .context("while creating the admin user")?;
     }
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,
         backend_handler.clone(),
         actix_server::Server::build(),
-    )?;
+    )
+    .context("while binding the LDAP server")?;
     infra::jwt_sql_tables::init_table(&sql_pool).await?;
     let server_builder =
-        infra::tcp_server::build_tcp_server(&config, backend_handler, server_builder).await?;
+        infra::tcp_server::build_tcp_server(&config, backend_handler, server_builder)
+            .await
+            .context("while binding the TCP server")?;
     // Run every hour.
     let scheduler = Scheduler::new("0 0 * * * * *", sql_pool);
     scheduler.start();
-    server_builder.workers(1).run().await?;
+    server_builder
+        .workers(1)
+        .run()
+        .await
+        .context("while starting the server")?;
     Ok(())
 }
 
@@ -81,7 +92,7 @@ fn run_server_command(opts: RunOpts) -> Result<()> {
     debug!("Configuration: {:#?}", config);
 
     actix::run(
-        run_server(config).unwrap_or_else(|e| error!("Could not bring up the servers: {:?}", e)),
+        run_server(config).unwrap_or_else(|e| error!("Could not bring up the servers: {:#}", e)),
     )?;
 
     info!("End.");

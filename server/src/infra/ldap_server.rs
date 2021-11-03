@@ -8,7 +8,7 @@ use crate::{
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{fn_service, ServiceFactoryExt};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use futures_util::future::ok;
 use ldap3_server::{proto::LdapMsg, LdapCodec};
 use log::*;
@@ -43,9 +43,9 @@ where
                 .context("while sending a response: {:#}")?
             }
 
-            if let Err(e) = resp.flush().await {
-                bail!("Error while flushing responses: {:?}", e);
-            }
+            resp.flush()
+                .await
+                .context("while flushing responses: {:#}")?
         }
     }
     Ok(true)
@@ -63,8 +63,8 @@ where
 
     let ldap_base_dn = config.ldap_base_dn.clone();
     let ldap_user_dn = config.ldap_user_dn.clone();
-    Ok(
-        server_builder.bind("ldap", ("0.0.0.0", config.ldap_port), move || {
+    server_builder
+        .bind("ldap", ("0.0.0.0", config.ldap_port), move || {
             let backend_handler = backend_handler.clone();
             let ldap_base_dn = ldap_base_dn.clone();
             let ldap_user_dn = ldap_user_dn.clone();
@@ -81,7 +81,10 @@ where
                     let mut session = LdapHandler::new(backend_handler, ldap_base_dn, ldap_user_dn);
 
                     while let Some(msg) = requests.next().await {
-                        if !handle_incoming_message(msg, &mut resp, &mut session).await? {
+                        if !handle_incoming_message(msg, &mut resp, &mut session)
+                            .await
+                            .context("while handling incoming messages")?
+                        {
                             break;
                         }
                     }
@@ -89,12 +92,11 @@ where
                     Ok(stream)
                 }
             })
-            .map_err(|err: anyhow::Error| error!("Service Error: {:?}", err))
-            // catch
+            .map_err(|err: anyhow::Error| error!("Service Error: {:#}", err))
             .and_then(move |_| {
                 // finally
                 ok(())
             })
-        })?,
-    )
+        })
+        .with_context(|| format!("while binding to the port {}", config.ldap_port))
 }
