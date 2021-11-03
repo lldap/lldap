@@ -1,13 +1,39 @@
+use crate::infra::cli::RunOpts;
 use anyhow::{Context, Result};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
+use lettre::message::Mailbox;
 use lldap_auth::opaque::{server::ServerSetup, KeyPair};
-use log::*;
 use serde::{Deserialize, Serialize};
 
-use crate::infra::cli::RunOpts;
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[builder(pattern = "owned")]
+pub struct MailOptions {
+    #[builder(default = "false")]
+    pub enable_password_reset: bool,
+    #[builder(default = "None")]
+    pub from: Option<Mailbox>,
+    #[builder(default = "None")]
+    pub reply_to: Option<Mailbox>,
+    #[builder(default = r#""localhost".to_string()"#)]
+    pub server: String,
+    #[builder(default = "587")]
+    pub port: u16,
+    #[builder(default = r#""admin".to_string()"#)]
+    pub user: String,
+    #[builder(default = r#""".to_string()"#)]
+    pub password: String,
+    #[builder(default = "true")]
+    pub tls_required: bool,
+}
+
+impl std::default::Default for MailOptions {
+    fn default() -> Self {
+        MailOptionsBuilder::default().build().unwrap()
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
 #[builder(
@@ -35,9 +61,17 @@ pub struct Configuration {
     pub verbose: bool,
     #[builder(default = r#"String::from("server_key")"#)]
     pub key_file: String,
+    #[builder(default)]
+    pub smtp_options: MailOptions,
     #[serde(skip)]
     #[builder(field(private), setter(strip_option))]
     server_setup: Option<ServerSetup>,
+}
+
+impl std::default::Default for Configuration {
+    fn default() -> Self {
+        ConfigurationBuilder::default().build().unwrap()
+    }
 }
 
 impl ConfigurationBuilder {
@@ -77,6 +111,10 @@ impl Configuration {
             self.ldaps_port = port;
         }
 
+        if let Some(port) = cli_opts.http_port {
+            self.http_port = port;
+        }
+
         self
     }
 }
@@ -108,7 +146,7 @@ pub fn init(cli_opts: RunOpts) -> Result<Configuration> {
         ConfigurationBuilder::default().build().unwrap(),
     ))
     .merge(Toml::file(config_file))
-    .merge(Env::prefixed("LLDAP_"))
+    .merge(Env::prefixed("LLDAP_").split("__"))
     .extract()?;
 
     let mut config = config.merge_with_cli(cli_opts);

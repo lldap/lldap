@@ -21,7 +21,7 @@ pub enum Command {
 
 #[derive(Debug, Clap, Clone)]
 pub struct RunOpts {
-    /// Change config file name
+    /// Change config file name.
     #[clap(short, long, default_value = "lldap_config.toml")]
     pub config_file: String,
 
@@ -33,7 +33,11 @@ pub struct RunOpts {
     #[clap(long)]
     pub ldaps_port: Option<u16>,
 
-    /// Set verbose logging
+    /// Change HTTP API port. Default: 17170
+    #[clap(long)]
+    pub http_port: Option<u16>,
+
+    /// Set verbose logging.
     #[clap(short, long)]
     pub verbose: bool,
 }
