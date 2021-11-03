@@ -8,7 +8,7 @@ use crate::{
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{fn_service, ServiceFactoryExt};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Context, Result};
 use futures_util::future::ok;
 use ldap3_server::{proto::LdapMsg, LdapCodec};
 use log::*;
@@ -24,21 +24,20 @@ where
     Backend: BackendHandler + LoginHandler + OpaqueHandler,
 {
     use futures_util::SinkExt;
-    let msg = msg.map_err(|e| anyhow!("Error while receiving LDAP op: {:#}", e))?;
+    let msg = msg.context("while receiving LDAP op")?;
+    debug!("Received LDAP message: {:?}", &msg);
     match session.handle_ldap_message(msg.op).await {
         None => return Ok(false),
         Some(result) => {
             for result_op in result.into_iter() {
-                if let Err(e) = resp
-                    .send(LdapMsg {
-                        msgid: msg.msgid,
-                        op: result_op,
-                        ctrl: vec![],
-                    })
-                    .await
-                {
-                    bail!("Error while sending a response: {:?}", e);
-                }
+                debug!("Replying with LDAP op: {:?}", &result_op);
+                resp.send(LdapMsg {
+                    msgid: msg.msgid,
+                    op: result_op,
+                    ctrl: vec![],
+                })
+                .await
+                .context("while sending a response: {:#}")?
             }
 
             if let Err(e) = resp.flush().await {
