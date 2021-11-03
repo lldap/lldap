@@ -13,6 +13,7 @@ pub fn init(config: Configuration) -> anyhow::Result<()> {
         .finish();
     LogTracer::init().context("Failed to set logger")?;
     set_global_default(subscriber).context("Failed to set subscriber")?;
+    // TODO: Only log SQL statements >= warn unless verbose.
     Ok(())
 }
 
