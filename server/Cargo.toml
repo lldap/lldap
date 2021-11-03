@@ -57,6 +57,7 @@ rev = "eb59676a940b15f77871aefe1e46d7b5bf85f40a"
 version = "0.10.0-rc.3"
 features = [
   "builder",
+  "serde",
   "smtp-transport",
   "tokio1-native-tls",
   "tokio1",
