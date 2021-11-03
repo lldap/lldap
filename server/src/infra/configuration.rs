@@ -12,19 +12,28 @@ use crate::infra::cli::RunOpts;
 #[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
 #[builder(
     pattern = "owned",
-    default = "Configuration::default()",
     build_fn(name = "private_build", validate = "Self::validate")
 )]
 pub struct Configuration {
+    #[builder(default = "3890")]
     pub ldap_port: u16,
+    #[builder(default = "6360")]
     pub ldaps_port: u16,
+    #[builder(default = "17170")]
     pub http_port: u16,
+    #[builder(default = r#"String::from("secretjwtsecret")"#)]
     pub jwt_secret: String,
+    #[builder(default = r#"String::from("dc=example,dc=com")"#)]
     pub ldap_base_dn: String,
+    #[builder(default = r#"String::from("admin")"#)]
     pub ldap_user_dn: String,
+    #[builder(default = r#"String::from("password")"#)]
     pub ldap_user_pass: String,
+    #[builder(default = r#"String::from("sqlite://users.db?mode=rwc")"#)]
     pub database_url: String,
+    #[builder(default = "false")]
     pub verbose: bool,
+    #[builder(default = r#"String::from("server_key")"#)]
     pub key_file: String,
     #[serde(skip)]
     #[builder(field(private), setter(strip_option))]
@@ -32,7 +41,6 @@ pub struct Configuration {
 }
 
 impl ConfigurationBuilder {
-    #[cfg(test)]
     pub fn build(self) -> Result<Configuration> {
         let server_setup = get_server_setup(self.key_file.as_deref().unwrap_or("server_key"))?;
         Ok(self.server_setup(server_setup).private_build()?)
@@ -71,23 +79,6 @@ impl Configuration {
 
         self
     }
-
-    pub(super) fn default() -> Self {
-        Configuration {
-            ldap_port: 3890,
-            ldaps_port: 6360,
-            http_port: 17170,
-            jwt_secret: String::from("secretjwtsecret"),
-            ldap_base_dn: String::from("dc=example,dc=com"),
-            // cn=admin,dc=example,dc=com
-            ldap_user_dn: String::from("admin"),
-            ldap_user_pass: String::from("password"),
-            database_url: String::from("sqlite://users.db?mode=rwc"),
-            verbose: false,
-            key_file: String::from("server_key"),
-            server_setup: None,
-        }
-    }
 }
 
 fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
@@ -111,14 +102,22 @@ fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
 pub fn init(cli_opts: RunOpts) -> Result<Configuration> {
     let config_file = cli_opts.config_file.clone();
 
-    info!("Loading configuration from {}", cli_opts.config_file);
+    println!("Loading configuration from {}", cli_opts.config_file);
 
-    let config: Configuration = Figment::from(Serialized::defaults(Configuration::default()))
-        .merge(Toml::file(config_file))
-        .merge(Env::prefixed("LLDAP_"))
-        .extract()?;
+    let config: Configuration = Figment::from(Serialized::defaults(
+        ConfigurationBuilder::default().build().unwrap(),
+    ))
+    .merge(Toml::file(config_file))
+    .merge(Env::prefixed("LLDAP_"))
+    .extract()?;
 
     let mut config = config.merge_with_cli(cli_opts);
     config.server_setup = Some(get_server_setup(&config.key_file)?);
+    if config.jwt_secret == "secretjwtsecret" {
+        println!("WARNING: Default JWT secret used! This is highly unsafe and can allow attackers to log in as admin.");
+    }
+    if config.ldap_user_pass == "password" {
+        println!("WARNING: Unsecure default admin password is used.");
+    }
     Ok(config)
 }

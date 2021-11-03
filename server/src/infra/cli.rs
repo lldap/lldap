@@ -25,11 +25,11 @@ pub struct RunOpts {
     #[clap(short, long, default_value = "lldap_config.toml")]
     pub config_file: String,
 
-    /// Change ldap port. Default: 389
+    /// Change ldap port. Default: 3890
     #[clap(long)]
     pub ldap_port: Option<u16>,
 
-    /// Change ldap ssl port. Default: 636
+    /// Change ldap ssl port. Default: 6360
     #[clap(long)]
     pub ldaps_port: Option<u16>,
 
