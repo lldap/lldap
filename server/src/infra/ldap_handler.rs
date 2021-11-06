@@ -109,8 +109,8 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Vec<Stri
         "mail" => Ok(vec![user.email.clone()]),
         "givenName" => Ok(vec![user.first_name.clone()]),
         "sn" => Ok(vec![user.last_name.clone()]),
-        "cn" => Ok(vec![user.display_name.clone()]),
-        "displayName" => Ok(vec![user.display_name.clone()]),
+        "cn" | "displayName" => Ok(vec![user.display_name.clone()]),
+        "createTimestamp" | "modifyTimestamp" => Ok(vec![user.creation_date.to_rfc3339()]),
         _ => bail!("Unsupported user attribute: {}", attribute),
     }
 }
@@ -870,6 +870,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_users() {
+        use chrono::prelude::*;
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users().times(1).return_once(|_| {
             Ok(vec![
@@ -887,14 +888,23 @@ mod tests {
                     display_name: "Jimminy Cricket".to_string(),
                     first_name: "Jim".to_string(),
                     last_name: "Cricket".to_string(),
-                    ..Default::default()
+                    creation_date: Utc.ymd(2014, 7, 8).and_hms(9, 10, 11),
                 },
             ])
         });
         let mut ldap_handler = setup_bound_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::And(vec![]),
-            vec!["objectClass", "dn", "uid", "mail", "givenName", "sn", "cn"],
+            vec![
+                "objectClass",
+                "dn",
+                "uid",
+                "mail",
+                "givenName",
+                "sn",
+                "cn",
+                "createTimestamp",
+            ],
         );
         assert_eq!(
             ldap_handler.do_search(&request).await,
@@ -934,6 +944,10 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
                             vals: vec!["Bôb Böbberson".to_string()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "createTimestamp".to_string(),
+                            vals: vec!["1970-01-01T00:00:00+00:00".to_string()]
                         }
                     ],
                 }),
@@ -972,6 +986,10 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
                             vals: vec!["Jimminy Cricket".to_string()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "createTimestamp".to_string(),
+                            vals: vec!["2014-07-08T09:10:11+00:00".to_string()]
                         }
                     ],
                 }),
