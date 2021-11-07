@@ -585,7 +585,9 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     bail!("Unsupported group filter: {:?}", filter)
                 }
             }
-            LdapFilter::And(v) if v.is_empty() => Ok(None),
+            LdapFilter::And(v) => v
+                .iter()
+                .fold(Ok(None), |o, f| Ok(o?.xor(self.get_group_filter(f)?))),
             _ => bail!("Unsupported group filter: {:?}", filter),
         }
     }
