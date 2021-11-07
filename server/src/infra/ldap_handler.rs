@@ -97,8 +97,8 @@ fn get_user_id_from_distinguished_name(
 }
 
 fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Vec<String>> {
-    match attribute {
-        "objectClass" => Ok(vec![
+    match attribute.to_lowercase().as_str() {
+        "objectclass" => Ok(vec![
             "inetOrgPerson".to_string(),
             "posixAccount".to_string(),
             "mailAccount".to_string(),
@@ -107,10 +107,10 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Vec<Stri
         "dn" => Ok(vec![dn.to_string()]),
         "uid" => Ok(vec![user.user_id.clone()]),
         "mail" => Ok(vec![user.email.clone()]),
-        "givenName" => Ok(vec![user.first_name.clone()]),
+        "givenname" => Ok(vec![user.first_name.clone()]),
         "sn" => Ok(vec![user.last_name.clone()]),
-        "cn" | "displayName" => Ok(vec![user.display_name.clone()]),
-        "createTimestamp" | "modifyTimestamp" => Ok(vec![user.creation_date.to_rfc3339()]),
+        "cn" | "displayname" => Ok(vec![user.display_name.clone()]),
+        "createtimestamp" | "modifytimestamp" => Ok(vec![user.creation_date.to_rfc3339()]),
         _ => bail!("Unsupported user attribute: {}", attribute),
     }
 }
@@ -136,14 +136,14 @@ fn make_ldap_search_user_result_entry(
 }
 
 fn get_group_attribute(group: &Group, base_dn_str: &str, attribute: &str) -> Result<Vec<String>> {
-    match attribute {
-        "objectClass" => Ok(vec!["groupOfUniqueNames".to_string()]),
+    match attribute.to_lowercase().as_str() {
+        "objectclass" => Ok(vec!["groupOfUniqueNames".to_string()]),
         "dn" => Ok(vec![format!(
             "cn={},ou=groups,{}",
             group.display_name, base_dn_str
         )]),
-        "cn" => Ok(vec![group.display_name.clone()]),
-        "member" | "uniqueMember" => Ok(group
+        "cn" | "uid" => Ok(vec![group.display_name.clone()]),
+        "member" | "uniquemember" => Ok(group
             .users
             .iter()
             .map(|u| format!("cn={},ou=people,{}", u, base_dn_str))
@@ -189,15 +189,18 @@ fn map_field(field: &str) -> Result<String> {
         "user_id".to_string()
     } else if field == "mail" {
         "email".to_string()
-    } else if field == "cn" || field == "displayName" {
+    } else if field == "cn" || field.to_lowercase() == "displayname" {
         "display_name".to_string()
-    } else if field == "givenName" {
+    } else if field.to_lowercase() == "givenname" {
         "first_name".to_string()
     } else if field == "sn" {
         "last_name".to_string()
     } else if field == "avatar" {
         "avatar".to_string()
-    } else if field == "creationDate" {
+    } else if field.to_lowercase() == "creationdate"
+        || field.to_lowercase() == "createtimestamp"
+        || field.to_lowercase() == "modifytimestamp"
+    {
         "creation_date".to_string()
     } else {
         bail!("Unknown field: {}", field);
@@ -569,14 +572,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     fn get_group_filter(&self, filter: &LdapFilter) -> Result<Option<String>> {
         match filter {
             LdapFilter::Equality(field, value) => {
-                if field == "member" || field == "uniqueMember" {
+                if field == "member" || field.to_lowercase() == "uniquemember" {
                     let user_name = get_user_id_from_distinguished_name(
                         value,
                         &self.base_dn,
                         &self.base_dn_str,
                     )?;
                     Ok(Some(user_name))
-                } else if field == "objectClass" && value == "groupOfUniqueNames" {
+                } else if field.to_lowercase() == "objectclass" && value == "groupOfUniqueNames" {
                     Ok(None)
                 } else {
                     bail!("Unsupported group filter: {:?}", filter)
@@ -605,14 +608,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 self.convert_user_filter(&*filter)?,
             ))),
             LdapFilter::Equality(field, value) => {
-                if field == "memberOf" {
+                if field.to_lowercase() == "memberof" {
                     let group_name = get_group_id_from_distinguished_name(
                         value,
                         &self.base_dn,
                         &self.base_dn_str,
                     )?;
                     Ok(RequestFilter::MemberOf(group_name))
-                } else if field == "objectClass" {
+                } else if field.to_lowercase() == "objectclass" {
                     if value == "person"
                         || value == "inetOrgPerson"
                         || value == "posixAccount"
@@ -628,7 +631,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             }
             LdapFilter::Present(field) => {
                 // Check that it's a field we support.
-                if field == "objectClass" || map_field(field).is_ok() {
+                if field.to_lowercase() == "objectclass" || map_field(field).is_ok() {
                     Ok(RequestFilter::And(vec![]))
                 } else {
                     Ok(RequestFilter::Not(Box::new(RequestFilter::And(vec![]))))
@@ -1140,6 +1143,123 @@ mod tests {
         assert_eq!(
             ldap_handler.do_search(&request).await,
             vec![make_search_success()]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_filters_lowercase() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(RequestFilter::And(vec![RequestFilter::Or(vec![
+                RequestFilter::Not(Box::new(RequestFilter::Equality(
+                    "first_name".to_string(),
+                    "bob".to_string(),
+                ))),
+            ])]))))
+            .times(1)
+            .return_once(|_| {
+                Ok(vec![User {
+                    user_id: "bob_1".to_string(),
+                    ..Default::default()
+                }])
+            });
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = make_user_search_request(
+            LdapFilter::And(vec![LdapFilter::Or(vec![LdapFilter::Not(Box::new(
+                LdapFilter::Equality("givenname".to_string(), "bob".to_string()),
+            ))])]),
+            vec!["objectclass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=bob_1,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![LdapPartialAttribute {
+                        atype: "objectclass".to_string(),
+                        vals: vec![
+                            "inetOrgPerson".to_string(),
+                            "posixAccount".to_string(),
+                            "mailAccount".to_string(),
+                            "person".to_string()
+                        ]
+                    },]
+                }),
+                make_search_success()
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_both() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users().times(1).return_once(|_| {
+            Ok(vec![User {
+                user_id: "bob_1".to_string(),
+                email: "bob@bobmail.bob".to_string(),
+                display_name: "Bôb Böbberson".to_string(),
+                first_name: "Bôb".to_string(),
+                last_name: "Böbberson".to_string(),
+                ..Default::default()
+            }])
+        });
+        mock.expect_list_groups().times(1).return_once(|| {
+            Ok(vec![Group {
+                id: GroupId(1),
+                display_name: "group_1".to_string(),
+                users: vec!["bob".to_string(), "john".to_string()],
+            }])
+        });
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = make_search_request(
+            "dc=example,dc=com",
+            LdapFilter::And(vec![]),
+            vec!["objectClass", "dn", "cn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=bob_1,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![
+                        LdapPartialAttribute {
+                            atype: "objectClass".to_string(),
+                            vals: vec![
+                                "inetOrgPerson".to_string(),
+                                "posixAccount".to_string(),
+                                "mailAccount".to_string(),
+                                "person".to_string()
+                            ]
+                        },
+                        LdapPartialAttribute {
+                            atype: "dn".to_string(),
+                            vals: vec!["cn=bob_1,ou=people,dc=example,dc=com".to_string()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "cn".to_string(),
+                            vals: vec!["Bôb Böbberson".to_string()]
+                        },
+                    ],
+                }),
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                    attributes: vec![
+                        LdapPartialAttribute {
+                            atype: "objectClass".to_string(),
+                            vals: vec!["groupOfUniqueNames".to_string(),]
+                        },
+                        LdapPartialAttribute {
+                            atype: "dn".to_string(),
+                            vals: vec!["cn=group_1,ou=groups,dc=example,dc=com".to_string()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "cn".to_string(),
+                            vals: vec!["group_1".to_string()]
+                        },
+                    ],
+                }),
+                make_search_success(),
+            ]
         );
     }
 
