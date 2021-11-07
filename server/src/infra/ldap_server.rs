@@ -29,6 +29,9 @@ where
     match session.handle_ldap_message(msg.op).await {
         None => return Ok(false),
         Some(result) => {
+            if result.is_empty() {
+                debug!("No response");
+            }
             for result_op in result.into_iter() {
                 debug!("Replying with LDAP op: {:?}", &result_op);
                 resp.send(LdapMsg {
