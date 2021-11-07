@@ -12,7 +12,7 @@ use ldap3_server::proto::{
     LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest, LdapResult,
     LdapResultCode, LdapSearchRequest, LdapSearchResultEntry, LdapSearchScope,
 };
-use log::*;
+use log::{debug, warn};
 use std::convert::TryFrom;
 
 fn make_dn_pair<I>(mut iter: I) -> Result<(String, String)>
@@ -290,7 +290,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     pub async fn do_bind(&mut self, request: &LdapBindRequest) -> (LdapResultCode, String) {
-        info!(r#"Received bind request for "{}""#, &request.dn);
+        debug!(r#"Received bind request for "{}""#, &request.dn);
         let user_id = match get_user_id_from_distinguished_name(
             &request.dn,
             &self.base_dn,
@@ -396,10 +396,10 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             && request.scope == LdapSearchScope::Base
             && request.filter == LdapFilter::Present("objectClass".to_string())
         {
-            info!("Received rootDSE request");
+            debug!("Received rootDSE request");
             return vec![root_dse_response(&self.base_dn_str), make_search_success()];
         }
-        info!("Received search request: {:?}", &request);
+        debug!("Received search request: {:?}", &request);
         let dn_parts = match parse_distinguished_name(&request.base) {
             Ok(dn) => dn,
             Err(_) => {
@@ -411,6 +411,10 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         };
         if !is_subtree(&dn_parts, &self.base_dn) {
             // Search path is not in our tree, just return an empty success.
+            warn!(
+                "The specified search tree {:?} is not under the common subtree {:?}",
+                &dn_parts, &self.base_dn
+            );
             return vec![make_search_success()];
         }
         let mut results = Vec::new();
@@ -1275,6 +1279,20 @@ mod tests {
                 }),
                 make_search_success(),
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_wrong_base() {
+        let mut ldap_handler = setup_bound_handler(MockTestBackendHandler::new()).await;
+        let request = make_search_request(
+            "ou=users,dc=example,dc=com",
+            LdapFilter::And(vec![]),
+            vec!["objectClass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![make_search_success()]
         );
     }
 
