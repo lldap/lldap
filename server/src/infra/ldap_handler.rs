@@ -414,16 +414,30 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             return vec![make_search_success()];
         }
         let mut results = Vec::new();
+        let mut got_match = false;
         if dn_parts.len() == self.base_dn.len()
             || (dn_parts.len() == self.base_dn.len() + 1
                 && dn_parts[0] == ("ou".to_string(), "people".to_string()))
         {
+            got_match = true;
             results.extend(self.get_user_list(request).await);
         }
-        if dn_parts.len() == self.base_dn.len() + 1
-            && dn_parts[0] == ("ou".to_string(), "groups".to_string())
+        if dn_parts.len() == self.base_dn.len()
+            || (dn_parts.len() == self.base_dn.len() + 1
+                && dn_parts[0] == ("ou".to_string(), "groups".to_string()))
         {
+            got_match = true;
             results.extend(self.get_groups_list(request).await);
+        }
+        if !got_match {
+            warn!(
+                r#"The requested search tree "{}" matches neither the user subtree "ou=people,{}" nor the group subtree "ou=groups,{}""#,
+                &request.base, &self.base_dn_str, &self.base_dn_str
+            );
+        }
+        if results.is_empty() || matches!(results[results.len() - 1], LdapOp::SearchResultEntry(_))
+        {
+            results.push(make_search_success());
         }
         results
     }
@@ -452,8 +466,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             .into_iter()
             .map(|u| make_ldap_search_user_result_entry(u, &self.base_dn_str, &request.attrs))
             .map(|entry| Ok(LdapOp::SearchResultEntry(entry?)))
-            // If the processing succeeds, add a success message at the end.
-            .chain(std::iter::once(Ok(make_search_success())))
             .collect::<Result<Vec<_>>>()
             .unwrap_or_else(|e| {
                 vec![make_search_error(
@@ -530,8 +542,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             .into_iter()
             .map(|u| make_ldap_search_group_result_entry(u, &self.base_dn_str, &request.attrs))
             .map(|entry| Ok(LdapOp::SearchResultEntry(entry?)))
-            // If the processing succeeds, add a success message at the end.
-            .chain(std::iter::once(Ok(make_search_success())))
             .collect::<Result<Vec<_>>>()
             .unwrap_or_else(|e| {
                 vec![make_search_error(
