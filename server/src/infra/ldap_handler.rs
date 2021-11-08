@@ -361,7 +361,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     }
                     Err(e) => vec![make_extended_response(
                         LdapResultCode::InvalidDNSyntax,
-                        format!("Invalid username: {} ({:#?})", user, e),
+                        format!("Invalid username: {:#?}", e),
                     )],
                 }
             }
@@ -1382,6 +1382,96 @@ mod tests {
                 LdapResultCode::UnwillingToPerform,
                 "Unsupported user filter: Unsupported user filter: Substring(\"uid\", LdapSubstringFilter { initial: None, any: [], final_: None })".to_string()
             )]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_password_change() {
+        let mut mock = MockTestBackendHandler::new();
+        use lldap_auth::*;
+        let mut rng = rand::rngs::OsRng;
+        let registration_start_request =
+            opaque::client::registration::start_registration("password", &mut rng).unwrap();
+        let request = registration::ClientRegistrationStartRequest {
+            username: "bob".to_string(),
+            registration_start_request: registration_start_request.message,
+        };
+        let start_response = opaque::server::registration::start_registration(
+            &opaque::server::ServerSetup::new(&mut rng),
+            request.registration_start_request,
+            &request.username,
+        )
+        .unwrap();
+        mock.expect_registration_start().times(1).return_once(|_| {
+            Ok(registration::ServerRegistrationStartResponse {
+                server_data: "".to_string(),
+                registration_response: start_response.message,
+            })
+        });
+        mock.expect_registration_finish()
+            .times(1)
+            .return_once(|_| Ok(()));
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = LdapOp::ExtendedRequest(
+            LdapPasswordModifyRequest {
+                user_identity: Some("cn=bob,ou=people,dc=example,dc=com".to_string()),
+                old_password: None,
+                new_password: Some("password".to_string()),
+            }
+            .into(),
+        );
+        assert_eq!(
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![make_extended_response(
+                LdapResultCode::Success,
+                "".to_string(),
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_password_change_errors() {
+        let mut ldap_handler = setup_bound_handler(MockTestBackendHandler::new()).await;
+        let request = LdapOp::ExtendedRequest(
+            LdapPasswordModifyRequest {
+                user_identity: None,
+                old_password: None,
+                new_password: None,
+            }
+            .into(),
+        );
+        assert_eq!(
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![make_extended_response(
+                LdapResultCode::ConstraintViolation,
+                "Missing either user_id or password".to_string(),
+            )])
+        );
+        let request = LdapOp::ExtendedRequest(
+            LdapPasswordModifyRequest {
+                user_identity: Some("cn=bob,ou=groups,ou=people,dc=example,dc=com".to_string()),
+                old_password: None,
+                new_password: Some("password".to_string()),
+            }
+            .into(),
+        );
+        assert_eq!(
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![make_extended_response(
+                LdapResultCode::InvalidDNSyntax,
+                r#"Invalid username: "Unexpected user DN format. Got \"cn=bob,ou=groups,ou=people,dc=example,dc=com\", expected: \"cn=username,ou=people,dc=example,dc=com\"""#.to_string(),
+            )])
+        );
+        let request = LdapOp::ExtendedRequest(LdapExtendedRequest {
+            name: "test".to_string(),
+            value: None,
+        });
+        assert_eq!(
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![make_extended_response(
+                LdapResultCode::UnwillingToPerform,
+                "Unsupported extended operation: test".to_string(),
+            )])
         );
     }
 
