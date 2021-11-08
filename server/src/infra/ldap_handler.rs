@@ -1190,6 +1190,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_search_member_of() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(RequestFilter::MemberOf("group_1".to_string()))))
+            .times(1)
+            .return_once(|_| Ok(vec![]));
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = make_user_search_request(
+            LdapFilter::Equality(
+                "memberOf".to_string(),
+                "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+            ),
+            vec!["objectClass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![make_search_success()]
+        );
+        let request = make_user_search_request(
+            LdapFilter::Equality("memberOf".to_string(), "group_1".to_string()),
+            vec!["objectClass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![make_search_error(
+                LdapResultCode::UnwillingToPerform,
+                "Unsupported user filter: while parsing a group ID: Missing DN value".to_string()
+            )]
+        );
+        let request = make_user_search_request(
+            LdapFilter::Equality(
+                "memberOf".to_string(),
+                "cn=mygroup,dc=example,dc=com".to_string(),
+            ),
+            vec!["objectClass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![make_search_error(
+                LdapResultCode::UnwillingToPerform,
+                "Unsupported user filter: Unexpected group DN format. Got \"cn=mygroup,dc=example,dc=com\", expected: \"cn=groupname,ou=groups,dc=example,dc=com\"".to_string()
+            )]
+        );
+    }
+
+    #[tokio::test]
     async fn test_search_filters_lowercase() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
