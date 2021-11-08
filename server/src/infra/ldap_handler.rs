@@ -1102,10 +1102,13 @@ mod tests {
         let mut ldap_handler = setup_bound_handler(mock).await;
         let request = make_search_request(
             "ou=groups,dc=example,dc=com",
-            LdapFilter::Equality(
-                "uniqueMember".to_string(),
-                "cn=bob,ou=people,dc=example,dc=com".to_string(),
-            ),
+            LdapFilter::And(vec![
+                LdapFilter::Equality(
+                    "uniqueMember".to_string(),
+                    "cn=bob,ou=people,dc=example,dc=com".to_string(),
+                ),
+                LdapFilter::Equality("objectclass".to_string(), "groupOfUniqueNames".to_string()),
+            ]),
             vec!["cn"],
         );
         assert_eq!(
