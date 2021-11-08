@@ -105,12 +105,13 @@ filter like: `(memberOf=cn=admins,ou=groups,dc=example,dc=com)`.
 The administrator group for LLDAP is `lldap_admin`: anyone in this group has
 admin rights in the Web UI.
 
-### Authelia configuration
+### Sample client configurations
 
-If you are using `LLDAP` as a backend for `Authelia` you need to adjust the 
-`Authelia` configuration.
-
-You can find an example `authelia_config.yml` inside the `example_configs` folder.
+Some specific clients have been tested to work and come with sample
+configuration files, or guides. See the `example_configs` folder for help with:
+  - Authelia
+  - KeyCloak
+  - Jisti Meet
 
 ## I can't log in!
 
