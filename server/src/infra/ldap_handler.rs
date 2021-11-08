@@ -4,7 +4,7 @@ use crate::domain::{
     },
     opaque_handler::OpaqueHandler,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use futures::stream::StreamExt;
 use futures_util::TryStreamExt;
 use ldap3_server::proto::{
@@ -47,7 +47,7 @@ fn get_group_id_from_distinguished_name(
     base_tree: &[(String, String)],
     base_dn_str: &str,
 ) -> Result<String> {
-    let parts = parse_distinguished_name(dn)?;
+    let parts = parse_distinguished_name(dn).context("while parsing a group ID")?;
     if !is_subtree(&parts, base_tree) {
         bail!("Not a subtree of the base tree");
     }
@@ -74,7 +74,7 @@ fn get_user_id_from_distinguished_name(
     base_tree: &[(String, String)],
     base_dn_str: &str,
 ) -> Result<String> {
-    let parts = parse_distinguished_name(dn)?;
+    let parts = parse_distinguished_name(dn).context("while parsing a user ID")?;
     if !is_subtree(&parts, base_tree) {
         bail!("Not a subtree of the base tree");
     }
@@ -452,7 +452,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             Err(e) => {
                 return vec![make_search_error(
                     LdapResultCode::UnwillingToPerform,
-                    format!("Unsupported user filter: {}", e),
+                    format!("Unsupported user filter: {:#}", e),
                 )]
             }
         };
@@ -461,7 +461,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             Err(e) => {
                 return vec![make_search_error(
                     LdapResultCode::Other,
-                    format!(r#"Error during searching user "{}": {}"#, request.base, e),
+                    format!(r#"Error during searching user "{}": {:#}"#, request.base, e),
                 )]
             }
         };
@@ -485,7 +485,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             Err(e) => {
                 return vec![make_search_error(
                     LdapResultCode::UnwillingToPerform,
-                    format!("Unsupported group filter: {}", e),
+                    format!("Unsupported group filter: {:#}", e),
                 )]
             }
         };
@@ -511,7 +511,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     return vec![make_search_error(
                         LdapResultCode::Other,
                         format!(
-                            r#"Error while listing user groups: "{}": {}"#,
+                            r#"Error while listing user groups: "{}": {:#}"#,
                             request.base, e
                         ),
                     )]
@@ -526,7 +526,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 Err(e) => {
                     return vec![make_search_error(
                         LdapResultCode::Other,
-                        format!(r#"Error while listing user groups: "{}": {}"#, request.base, e),
+                        format!(r#"Error while listing user groups: "{}": {:#}"#, request.base, e),
                     )]
                 }
             }
@@ -536,7 +536,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 Err(e) => {
                     return vec![make_search_error(
                         LdapResultCode::Other,
-                        format!(r#"Error while listing groups "{}": {}"#, request.base, e),
+                        format!(r#"Error while listing groups "{}": {:#}"#, request.base, e),
                     )]
                 }
             }
