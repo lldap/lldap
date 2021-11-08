@@ -1173,14 +1173,27 @@ mod tests {
                     "user_id".to_string(),
                     "bob".to_string(),
                 ))),
+                RequestFilter::And(vec![]),
+                RequestFilter::Not(Box::new(RequestFilter::And(vec![]))),
+                RequestFilter::And(vec![]),
+                RequestFilter::And(vec![]),
+                RequestFilter::Not(Box::new(RequestFilter::And(vec![]))),
             ])]))))
             .times(1)
             .return_once(|_| Ok(vec![]));
         let mut ldap_handler = setup_bound_handler(mock).await;
         let request = make_user_search_request(
-            LdapFilter::And(vec![LdapFilter::Or(vec![LdapFilter::Not(Box::new(
-                LdapFilter::Equality("uid".to_string(), "bob".to_string()),
-            ))])]),
+            LdapFilter::And(vec![LdapFilter::Or(vec![
+                LdapFilter::Not(Box::new(LdapFilter::Equality(
+                    "uid".to_string(),
+                    "bob".to_string(),
+                ))),
+                LdapFilter::Equality("objectclass".to_string(), "person".to_string()),
+                LdapFilter::Equality("objectclass".to_string(), "other".to_string()),
+                LdapFilter::Present("objectClass".to_string()),
+                LdapFilter::Present("uid".to_string()),
+                LdapFilter::Present("unknown".to_string()),
+            ])]),
             vec!["objectClass"],
         );
         assert_eq!(
