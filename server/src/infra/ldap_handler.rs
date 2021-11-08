@@ -865,6 +865,22 @@ mod tests {
             ldap_handler.do_bind(&request).await.0,
             LdapResultCode::NamingViolation,
         );
+        let request = LdapBindRequest {
+            dn: "cn=bob,ou=people,dc=example,dc=fr".to_string(),
+            cred: LdapBindCred::Simple("pass".to_string()),
+        };
+        assert_eq!(
+            ldap_handler.do_bind(&request).await.0,
+            LdapResultCode::NamingViolation,
+        );
+        let request = LdapBindRequest {
+            dn: "cn=bob=test,ou=people,dc=example,dc=com".to_string(),
+            cred: LdapBindCred::Simple("pass".to_string()),
+        };
+        assert_eq!(
+            ldap_handler.do_bind(&request).await.0,
+            LdapResultCode::NamingViolation,
+        );
     }
 
     #[test]
