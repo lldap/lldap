@@ -770,13 +770,21 @@ mod tests {
         let mut ldap_handler =
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
 
-        let request = LdapBindRequest {
+        let request = LdapOp::BindRequest(LdapBindRequest {
             dn: "cn=bob,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
-        };
+        });
         assert_eq!(
-            ldap_handler.do_bind(&request).await.0,
-            LdapResultCode::Success
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![LdapOp::BindResponse(LdapBindResponse {
+                res: LdapResult {
+                    code: LdapResultCode::Success,
+                    matcheddn: "".to_string(),
+                    message: "".to_string(),
+                    referral: vec![],
+                },
+                saslcreds: None,
+            })]),
         );
     }
 
