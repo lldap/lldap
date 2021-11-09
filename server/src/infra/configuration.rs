@@ -99,7 +99,7 @@ impl Configuration {
     }
 
     fn merge_with_cli(mut self: Configuration, cli_opts: RunOpts) -> Configuration {
-        if cli_opts.verbose {
+        if cli_opts.general_config.verbose {
             self.verbose = true;
         }
 
@@ -138,9 +138,12 @@ fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
 }
 
 pub fn init(cli_opts: RunOpts) -> Result<Configuration> {
-    let config_file = cli_opts.config_file.clone();
+    let config_file = cli_opts.general_config.config_file.clone();
 
-    println!("Loading configuration from {}", cli_opts.config_file);
+    println!(
+        "Loading configuration from {}",
+        cli_opts.general_config.config_file
+    );
 
     let config: Configuration = Figment::from(Serialized::defaults(
         ConfigurationBuilder::default().build().unwrap(),
