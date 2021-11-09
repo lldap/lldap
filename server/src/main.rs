@@ -104,5 +104,6 @@ fn main() -> Result<()> {
     match cli_opts.command {
         Command::ExportGraphQLSchema(opts) => infra::graphql::api::export_schema(opts),
         Command::Run(opts) => run_server_command(opts),
+        Command::SendTestEmail(_opts) => Ok(()),
     }
 }
