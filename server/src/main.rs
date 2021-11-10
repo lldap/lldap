@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![forbid(non_ascii_idents)]
 #![allow(clippy::nonstandard_macro_braces)]
 
 use crate::{
