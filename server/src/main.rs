@@ -20,10 +20,11 @@ mod domain;
 mod infra;
 
 async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) -> Result<()> {
+    let pass_length = config.ldap_user_pass.unsecure().len();
     assert!(
-        config.ldap_user_pass.len() >= 8,
+        pass_length >= 8,
         "Minimum password length is 8 characters, got {} characters",
-        config.ldap_user_pass.len()
+        pass_length
     );
     handler
         .create_user(CreateUserRequest {

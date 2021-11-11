@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use lldap_auth::opaque;
 use log::*;
 use sea_query::{Expr, Iden, Query};
+use secstr::SecUtf8;
 use sqlx::Row;
 
 type SqlOpaqueHandler = SqlBackendHandler;
@@ -83,7 +84,7 @@ impl SqlBackendHandler {
 impl LoginHandler for SqlBackendHandler {
     async fn bind(&self, request: BindRequest) -> Result<()> {
         if request.name == self.config.ldap_user_dn {
-            if request.password == self.config.ldap_user_pass {
+            if SecUtf8::from(request.password) == self.config.ldap_user_pass {
                 return Ok(());
             } else {
                 debug!(r#"Invalid password for LDAP bind user"#);
@@ -220,11 +221,12 @@ impl OpaqueHandler for SqlOpaqueHandler {
 pub(crate) async fn register_password(
     opaque_handler: &SqlOpaqueHandler,
     username: &str,
-    password: &str,
+    password: &SecUtf8,
 ) -> Result<()> {
     let mut rng = rand::rngs::OsRng;
     use registration::*;
-    let registration_start = opaque::client::registration::start_registration(password, &mut rng)?;
+    let registration_start =
+        opaque::client::registration::start_registration(password.unsecure(), &mut rng)?;
     let start_response = opaque_handler
         .registration_start(ClientRegistrationStartRequest {
             username: username.to_string(),
@@ -321,7 +323,7 @@ mod tests {
         attempt_login(&opaque_handler, "bob", "bob00")
             .await
             .unwrap_err();
-        register_password(&opaque_handler, "bob", "bob00").await?;
+        register_password(&opaque_handler, "bob", &secstr::SecUtf8::from("bob00")).await?;
         attempt_login(&opaque_handler, "bob", "wrong_password")
             .await
             .unwrap_err();

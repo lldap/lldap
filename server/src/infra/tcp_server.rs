@@ -44,14 +44,14 @@ pub(crate) fn error_to_http_response(error: DomainError) -> HttpResponse {
 fn http_config<Backend>(
     cfg: &mut web::ServiceConfig,
     backend_handler: Backend,
-    jwt_secret: String,
+    jwt_secret: secstr::SecUtf8,
     jwt_blacklist: HashSet<u64>,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Sync + 'static,
 {
     cfg.app_data(web::Data::new(AppState::<Backend> {
         backend_handler,
-        jwt_key: Hmac::new_varkey(jwt_secret.as_bytes()).unwrap(),
+        jwt_key: Hmac::new_varkey(jwt_secret.unsecure().as_bytes()).unwrap(),
         jwt_blacklist: RwLock::new(jwt_blacklist),
     }))
     // Serve index.html and main.js, and default to index.html.

@@ -1803,6 +1803,7 @@ dependencies = [
  "orion",
  "rand 0.8.4",
  "sea-query",
+ "secstr",
  "serde",
  "serde_json",
  "sha2",
@@ -2755,6 +2756,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "secstr"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cce2c726741c320e5b8f1edd9a21b3c2c292ae94514afd001d41d81ba143dafc"
+dependencies = [
+ "libc",
+ "serde",
 ]
 
 [[package]]
