@@ -21,3 +21,6 @@ package.json
 
 # Server private key
 server_key
+
+# Misc
+.env
