@@ -1,4 +1,4 @@
-use crate::infra::cli::RunOpts;
+use crate::infra::cli::{GeneralConfigOpts, RunOpts, SmtpOpts, TestEmailOpts};
 use anyhow::{Context, Result};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
@@ -97,26 +97,6 @@ impl Configuration {
     pub fn get_server_keys(&self) -> &KeyPair {
         self.get_server_setup().keypair()
     }
-
-    fn merge_with_cli(mut self: Configuration, cli_opts: RunOpts) -> Configuration {
-        if cli_opts.general_config.verbose {
-            self.verbose = true;
-        }
-
-        if let Some(port) = cli_opts.ldap_port {
-            self.ldap_port = port;
-        }
-
-        if let Some(port) = cli_opts.ldaps_port {
-            self.ldaps_port = port;
-        }
-
-        if let Some(port) = cli_opts.http_port {
-            self.http_port = port;
-        }
-
-        self
-    }
 }
 
 fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
@@ -137,22 +117,107 @@ fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
     }
 }
 
-pub fn init(cli_opts: RunOpts) -> Result<Configuration> {
-    let config_file = cli_opts.general_config.config_file.clone();
+pub trait ConfigOverrider {
+    fn override_config(&self, config: &mut Configuration);
+}
+
+pub trait TopLevelCommandOpts {
+    fn general_config(&self) -> &GeneralConfigOpts;
+}
+
+impl TopLevelCommandOpts for RunOpts {
+    fn general_config(&self) -> &GeneralConfigOpts {
+        &self.general_config
+    }
+}
+
+impl TopLevelCommandOpts for TestEmailOpts {
+    fn general_config(&self) -> &GeneralConfigOpts {
+        &self.general_config
+    }
+}
+
+impl ConfigOverrider for RunOpts {
+    fn override_config(&self, config: &mut Configuration) {
+        self.general_config.override_config(config);
+        if let Some(port) = self.ldap_port {
+            config.ldap_port = port;
+        }
+
+        if let Some(port) = self.ldaps_port {
+            config.ldaps_port = port;
+        }
+
+        if let Some(port) = self.http_port {
+            config.http_port = port;
+        }
+        self.smtp_opts.override_config(config);
+    }
+}
+
+impl ConfigOverrider for TestEmailOpts {
+    fn override_config(&self, config: &mut Configuration) {
+        self.general_config.override_config(config);
+        self.smtp_opts.override_config(config);
+    }
+}
+
+impl ConfigOverrider for GeneralConfigOpts {
+    fn override_config(&self, config: &mut Configuration) {
+        if self.verbose {
+            config.verbose = true;
+        }
+    }
+}
+
+impl ConfigOverrider for SmtpOpts {
+    fn override_config(&self, config: &mut Configuration) {
+        if let Some(from) = &self.smtp_from {
+            config.smtp_options.from = Some(from.clone());
+        }
+        if let Some(reply_to) = &self.smtp_reply_to {
+            config.smtp_options.reply_to = Some(reply_to.clone());
+        }
+        if let Some(server) = &self.smtp_server {
+            config.smtp_options.server = server.clone();
+        }
+        if let Some(port) = self.smtp_port {
+            config.smtp_options.port = port;
+        }
+        if let Some(user) = &self.smtp_user {
+            config.smtp_options.user = user.clone();
+        }
+        if let Some(password) = &self.smtp_password {
+            config.smtp_options.password = password.clone();
+        }
+        if let Some(tls_required) = self.smtp_tls_required {
+            config.smtp_options.tls_required = tls_required;
+        }
+    }
+}
+
+pub fn init<C>(overrides: C) -> Result<Configuration>
+where
+    C: TopLevelCommandOpts + ConfigOverrider,
+{
+    let config_file = overrides.general_config().config_file.clone();
 
     println!(
         "Loading configuration from {}",
-        cli_opts.general_config.config_file
+        overrides.general_config().config_file
     );
 
-    let config: Configuration = Figment::from(Serialized::defaults(
+    let mut config: Configuration = Figment::from(Serialized::defaults(
         ConfigurationBuilder::default().build().unwrap(),
     ))
     .merge(Toml::file(config_file))
     .merge(Env::prefixed("LLDAP_").split("__"))
     .extract()?;
 
-    let mut config = config.merge_with_cli(cli_opts);
+    overrides.override_config(&mut config);
+    if config.verbose {
+        println!("Configuration: {:#?}", &config);
+    }
     config.server_setup = Some(get_server_setup(&config.key_file)?);
     if config.jwt_secret == "secretjwtsecret" {
         println!("WARNING: Default JWT secret used! This is highly unsafe and can allow attackers to log in as admin.");

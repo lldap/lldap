@@ -84,13 +84,12 @@ async fn run_server(config: Configuration) -> Result<()> {
 }
 
 fn run_server_command(opts: RunOpts) -> Result<()> {
-    let config = infra::configuration::init(opts.clone())?;
-    infra::logging::init(config.clone())?;
+    debug!("CLI: {:#?}", &opts);
+
+    let config = infra::configuration::init(opts)?;
+    infra::logging::init(&config)?;
 
     info!("Starting LLDAP....");
-
-    debug!("CLI: {:#?}", opts);
-    debug!("Configuration: {:#?}", config);
 
     actix::run(
         run_server(config).unwrap_or_else(|e| error!("Could not bring up the servers: {:#}", e)),

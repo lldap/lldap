@@ -3,7 +3,7 @@ use anyhow::Context;
 use tracing::subscriber::set_global_default;
 use tracing_log::LogTracer;
 
-pub fn init(config: Configuration) -> anyhow::Result<()> {
+pub fn init(config: &Configuration) -> anyhow::Result<()> {
     let max_log_level = log_level_from_config(config);
     let subscriber = tracing_subscriber::fmt()
         .with_timer(tracing_subscriber::fmt::time::time())
@@ -17,7 +17,7 @@ pub fn init(config: Configuration) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn log_level_from_config(config: Configuration) -> tracing::Level {
+fn log_level_from_config(config: &Configuration) -> tracing::Level {
     if config.verbose {
         tracing::Level::DEBUG
     } else {
