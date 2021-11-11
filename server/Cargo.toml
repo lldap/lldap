@@ -83,5 +83,9 @@ features = ["with-chrono"]
 features = ["env", "toml"]
 version = "*"
 
+[dependencies.secstr]
+features = ["serde"]
+version = "*"
+
 [dev-dependencies]
 mockall = "0.9.1"

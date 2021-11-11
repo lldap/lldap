@@ -437,7 +437,7 @@ mod tests {
         let sql_pool = get_in_memory_db().await;
         let config = ConfigurationBuilder::default()
             .ldap_user_dn("admin".to_string())
-            .ldap_user_pass("test".to_string())
+            .ldap_user_pass(secstr::SecUtf8::from("test"))
             .build()
             .unwrap();
         let handler = SqlBackendHandler::new(config, sql_pool);

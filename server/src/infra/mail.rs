@@ -22,7 +22,10 @@ pub fn send_test_email(to: Mailbox, options: &MailOptions) -> Result<()> {
         .to(to)
         .subject("LLDAP test email")
         .body("The test is successful! You can send emails from LLDAP".to_string())?;
-    let creds = Credentials::new(options.user.clone(), options.password.clone());
+    let creds = Credentials::new(
+        options.user.clone(),
+        options.password.unsecure().to_string(),
+    );
     let mailer = SmtpTransport::relay(&options.server)?
         .credentials(creds)
         .build();

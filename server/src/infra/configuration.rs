@@ -6,6 +6,7 @@ use figment::{
 };
 use lettre::message::Mailbox;
 use lldap_auth::opaque::{server::ServerSetup, KeyPair};
+use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
@@ -23,8 +24,8 @@ pub struct MailOptions {
     pub port: u16,
     #[builder(default = r#""admin".to_string()"#)]
     pub user: String,
-    #[builder(default = r#""".to_string()"#)]
-    pub password: String,
+    #[builder(default = r#"SecUtf8::from("")"#)]
+    pub password: SecUtf8,
     #[builder(default = "true")]
     pub tls_required: bool,
 }
@@ -47,14 +48,14 @@ pub struct Configuration {
     pub ldaps_port: u16,
     #[builder(default = "17170")]
     pub http_port: u16,
-    #[builder(default = r#"String::from("secretjwtsecret")"#)]
-    pub jwt_secret: String,
+    #[builder(default = r#"SecUtf8::from("secretjwtsecret")"#)]
+    pub jwt_secret: SecUtf8,
     #[builder(default = r#"String::from("dc=example,dc=com")"#)]
     pub ldap_base_dn: String,
     #[builder(default = r#"String::from("admin")"#)]
     pub ldap_user_dn: String,
-    #[builder(default = r#"String::from("password")"#)]
-    pub ldap_user_pass: String,
+    #[builder(default = r#"SecUtf8::from("password")"#)]
+    pub ldap_user_pass: SecUtf8,
     #[builder(default = r#"String::from("sqlite://users.db?mode=rwc")"#)]
     pub database_url: String,
     #[builder(default = "false")]
@@ -188,7 +189,7 @@ impl ConfigOverrider for SmtpOpts {
             config.smtp_options.user = user.clone();
         }
         if let Some(password) = &self.smtp_password {
-            config.smtp_options.password = password.clone();
+            config.smtp_options.password = SecUtf8::from(password.clone());
         }
         if let Some(tls_required) = self.smtp_tls_required {
             config.smtp_options.tls_required = tls_required;
@@ -219,10 +220,10 @@ where
         println!("Configuration: {:#?}", &config);
     }
     config.server_setup = Some(get_server_setup(&config.key_file)?);
-    if config.jwt_secret == "secretjwtsecret" {
+    if config.jwt_secret == SecUtf8::from("secretjwtsecret") {
         println!("WARNING: Default JWT secret used! This is highly unsafe and can allow attackers to log in as admin.");
     }
-    if config.ldap_user_pass == "password" {
+    if config.ldap_user_pass == SecUtf8::from("password") {
         println!("WARNING: Unsecure default admin password is used.");
     }
     Ok(config)
