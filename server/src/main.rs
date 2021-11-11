@@ -9,7 +9,7 @@ use crate::{
         sql_opaque_handler::register_password,
         sql_tables::PoolOptions,
     },
-    infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler},
+    infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler, mail},
 };
 use actix::Actor;
 use anyhow::{anyhow, Context, Result};
@@ -99,11 +99,18 @@ fn run_server_command(opts: RunOpts) -> Result<()> {
     Ok(())
 }
 
+fn send_test_email_command(opts: TestEmailOpts) -> Result<()> {
+    let to = opts.to.parse()?;
+    let config = infra::configuration::init(opts)?;
+    infra::logging::init(&config)?;
+    mail::send_test_email(to, &config.smtp_options)
+}
+
 fn main() -> Result<()> {
     let cli_opts = infra::cli::init();
     match cli_opts.command {
         Command::ExportGraphQLSchema(opts) => infra::graphql::api::export_schema(opts),
         Command::Run(opts) => run_server_command(opts),
-        Command::SendTestEmail(_opts) => Ok(()),
+        Command::SendTestEmail(opts) => send_test_email_command(opts),
     }
 }
