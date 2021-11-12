@@ -25,7 +25,7 @@ The key settings are:
  - Connection URL: `ldap://<your-lldap-container>:3890`
  - Users DN: `ou=people,dc=example,dc=com` (or whatever `dc` you have)
  - Bind Type: `simple`
- - Bind DN: `admin` (your LLDAP admin user)
+ - Bind DN: `cn=admin,ou=people,dc=example,dc=com` (replace with your admin user and `dc`)
  - Bind Credential: your LLDAP admin password
 
 Test the connection and authentication, it should work.
