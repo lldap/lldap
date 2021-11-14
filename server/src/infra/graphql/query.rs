@@ -1,7 +1,6 @@
 use crate::domain::handler::{BackendHandler, GroupId, GroupIdAndName};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
 
 type DomainRequestFilter = crate::domain::handler::RequestFilter;
 type DomainUser = crate::domain::handler::User;
