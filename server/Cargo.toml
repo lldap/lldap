@@ -42,7 +42,7 @@ tokio-stream = "*"
 tracing = "*"
 tracing-actix-web = "0.4.0-beta.7"
 tracing-log = "*"
-tracing-subscriber = "*"
+tracing-subscriber = "0.3"
 rand = { version = "0.8", features = ["small_rng", "getrandom"] }
 juniper_actix = "0.4.0"
 juniper = "0.15.6"
