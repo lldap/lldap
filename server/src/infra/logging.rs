@@ -1,19 +1,15 @@
 use crate::infra::configuration::Configuration;
-use anyhow::Context;
-use tracing::subscriber::set_global_default;
-use tracing_log::LogTracer;
+use tracing_subscriber::prelude::*;
 
 pub fn init(config: &Configuration) -> anyhow::Result<()> {
     let max_log_level = log_level_from_config(config);
-    let subscriber = tracing_subscriber::fmt()
-        .with_timer(tracing_subscriber::fmt::time::time())
-        .with_target(false)
-        .with_level(true)
-        .with_max_level(max_log_level)
-        .finish();
-    LogTracer::init().context("Failed to set logger")?;
-    set_global_default(subscriber).context("Failed to set subscriber")?;
-    // TODO: Only log SQL statements >= warn unless verbose.
+    let sqlx_max_log_level = sqlx_log_level_from_config(config);
+    let filter = tracing_subscriber::filter::Targets::new()
+        .with_target("lldap", max_log_level)
+        .with_target("sqlx", sqlx_max_log_level);
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_filter(filter))
+        .init();
     Ok(())
 }
 
@@ -22,5 +18,13 @@ fn log_level_from_config(config: &Configuration) -> tracing::Level {
         tracing::Level::DEBUG
     } else {
         tracing::Level::INFO
+    }
+}
+
+fn sqlx_log_level_from_config(config: &Configuration) -> tracing::Level {
+    if config.verbose {
+        tracing::Level::INFO
+    } else {
+        tracing::Level::WARN
     }
 }
