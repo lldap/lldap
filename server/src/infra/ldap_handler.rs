@@ -13,7 +13,6 @@ use ldap3_server::proto::{
     LdapResultCode, LdapSearchRequest, LdapSearchResultEntry, LdapSearchScope,
 };
 use log::{debug, warn};
-use std::convert::TryFrom;
 
 fn make_dn_pair<I>(mut iter: I) -> Result<(String, String)>
 where

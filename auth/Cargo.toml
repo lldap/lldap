@@ -2,7 +2,7 @@
 name = "lldap_auth"
 version = "0.2.0"
 authors = ["Valentin Tolmer <valentin@tolmer.fr>", "Steve Barrau <steve.barrau@gmail.com>", "Thomas Wickham <mackwic@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [features]
 default = ["opaque_server", "opaque_client"]
