@@ -1858,8 +1858,6 @@ dependencies = [
  "rust-argon2",
  "serde",
  "sha2",
- "sqlx",
- "sqlx-core",
  "thiserror",
 ]
 
@@ -2201,8 +2199,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "opaque-ke"
-version = "0.6.0-pre.1"
-source = "git+https://github.com/novifinancial/opaque-ke?rev=eb59676a940b15f77871aefe1e46d7b5bf85f40a#eb59676a940b15f77871aefe1e46d7b5bf85f40a"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26772682ba4fa69f11ae6e4af8bc83946372981ff31a026648d4acb2553c9ee8"
 dependencies = [
  "base64",
  "curve25519-dalek",

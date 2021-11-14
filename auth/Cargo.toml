@@ -20,29 +20,12 @@ serde = "*"
 sha2 = "0.9"
 thiserror = "*"
 
-# TODO: update to 0.6 when out.
 [dependencies.opaque-ke]
-git = "https://github.com/novifinancial/opaque-ke"
-rev = "eb59676a940b15f77871aefe1e46d7b5bf85f40a"
+version = "0.6"
 
 [dependencies.chrono]
 version = "*"
 features = [ "serde" ]
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.sqlx]
-version = "0.5"
-features = [
-  "any",
-  "chrono",
-  "macros",
-  "mysql",
-  "postgres",
-  "runtime-actix-native-tls",
-  "sqlite",
-]
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.sqlx-core]
-version = "=0.5.1"
 
 # For WASM targets, use the JS getrandom.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]
