@@ -48,10 +48,8 @@ juniper_actix = "0.4.0"
 juniper = "0.15.6"
 itertools = "0.10.1"
 
-# TODO: update to 0.6 when out.
 [dependencies.opaque-ke]
-git = "https://github.com/novifinancial/opaque-ke"
-rev = "eb59676a940b15f77871aefe1e46d7b5bf85f40a"
+version = "0.6"
 
 [dependencies.lettre]
 version = "0.10.0-rc.3"
