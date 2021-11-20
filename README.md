@@ -1,25 +1,51 @@
-# lldap - Light LDAP implementation for authentication
+<h1 align="center">lldap - Light LDAP implementation for authentication</h1>
 
-![Build](https://github.com/nitnelave/lldap/actions/workflows/rust.yml/badge.svg)
-![Discord](https://img.shields.io/discord/898492935446876200)
-![Twitter Follow](https://img.shields.io/twitter/follow/nitnelave1?style=social)
+<p align="center">
+<i style="font-size:24px">LDAP made easy.</i>
+</p>
 
-WARNING: This project is still in alpha, with the basic core functionality
-implemented but still very rough. For updates, follow
-[@nitnelave1](https://twitter.com/nitnelave1) or join our [Discord
-server](https://discord.gg/h5PEdRMNyP)!
+<p align="center">
+  <a href="https://github.com/nitnelave/lldap/actions/workflows/rust.yml?query=branch%3Amain">
+    <img
+      src="https://github.com/nitnelave/lldap/actions/workflows/rust.yml/badge.svg"
+      alt="Build"/>
+  </a>
+  <a href="https://discord.gg/h5PEdRMNyP">
+    <img alt="Discord" src="https://img.shields.io/discord/898492935446876200?label=discord&logo=discord" />
+  </a>
+  <a href="https://twitter.com/nitnelave1?ref_src=twsrc%5Etfw">
+    <img
+      src="https://img.shields.io/twitter/follow/nitnelave1?style=social"
+      alt="Twitter Follow"/>
+  </a>
+  <a href="https://github.com/rust-secure-code/safety-dance/">
+    <img
+      src="https://img.shields.io/badge/unsafe-forbidden-success.svg"
+      alt="Unsafe forbidden"/>
+  </a>
+  <a href="https://app.codecov.io/gh/nitnelave/lldap">
+    <img alt="Codecov" src="https://img.shields.io/codecov/c/github/nitnelave/lldap" />
+  </a>
+</p>
 
+## About
 
-This project is an lightweight authentication server that provides an
-opinionated, simplified LDAP interface for authentication: clients that can
-only speak LDAP protocol can talk to it and use it as an authentication server.
+This project is a lightweight authentication server that provides an
+opinionated, simplified LDAP interface for authentication. It integrates with
+many backends, from KeyCloak to Authelia to Nextcloud and more!
 
-![Screenshot of the user list page](screenshot.png)
+<img
+  src="https://raw.githubusercontent.com/nitnelave/lldap/master/screenshot.png"
+  alt="Screenshot of the user list page"
+  width="50%"
+  align="right"
+/>
 
 The goal is _not_ to provide a full LDAP server; if you're interested in that,
 check out OpenLDAP. This server is a user management system that is:
-* simple to setup (no messing around with `slapd`)
-* simple to manage (friendly web UI)
+* simple to setup (no messing around with `slapd`),
+* simple to manage (friendly web UI),
+* low resources,
 * opinionated with basic defaults so you don't have to understand the
   subtleties of LDAP.
 
@@ -31,7 +57,7 @@ For more features (OAuth/OpenID support, reverse proxy, ...) you can install
 other components (KeyCloak, Authelia, ...) using this server as the source of
 truth for users, via LDAP.
 
-## Setup
+## Installation
 
 ### With Docker
 
@@ -87,6 +113,31 @@ To bring up the server, just run `cargo run`. The default config is in
 `lldap_config.toml`, setting environment variables or passing arguments to
 `cargo run`.
 
+### Cross-compilation
+
+No Docker image is provided for other architectures, due to the difficulty of
+setting up cross-compilation inside a Docker image.
+
+Some pre-compiled binaries are provided for each release, starting with 0.2.
+
+If you want to cross-compile, you can do so by installing
+[`cross`](https://github.com/rust-embedded/cross):
+
+```sh
+cargo install cross
+cross build --target=armv7-unknown-linux-musleabihf -p lldap --release
+./app/build.sh
+```
+
+(Replace `armv7-unknown-linux-musleabihf` with the correct Rust target for your
+device.)
+
+You can then get the compiled server binary in
+`target/armv7-unknown-linux-musleabihf/release/lldap` and the various needed files
+(`index.html`, `main.js`, `pkg` folder) in the `app` folder. Copy them to the
+Raspberry Pi (or other target), with the folder structure maintained (`app`
+files in an `app` folder next to the binary).
+
 ## Client configuration
 
 To configure the services that will talk to LLDAP, here are the values:
@@ -108,10 +159,42 @@ admin rights in the Web UI.
 ### Sample client configurations
 
 Some specific clients have been tested to work and come with sample
-configuration files, or guides. See the `example_configs` folder for help with:
-  - Authelia
-  - KeyCloak
-  - Jisti Meet
+configuration files, or guides. See the [`example_configs`](example_configs)
+folder for help with:
+  - [Authelia](example_configs/authelia_config.yml)
+  - [KeyCloak](example_configs/keycloak.md)
+  - [Jisti Meet](example_configs/jitsi_meet.conf)
+
+## Comparisons with other services
+
+### vs OpenLDAP
+
+OpenLDAP is a monster of a service that implements all of LDAP and all of its
+extensions, plus some of its own. That said, if you need all that flexibility,
+it might be what you need! Note that installation can be a bit painful
+(figuring out how to use `slapd`) and people have mixed experiences following
+tutorials online. If you don't configure it properly, you might end up storing
+passwords in clear, so a breach of your server would reveal all the stored
+passwords!
+
+OpenLDAP doesn't come with a UI: if you want a web interface, you'll have to
+install one (not that many that look nice) and configure it.
+
+LLDAP is much simpler to setup, has a much smaller image (10x smaller, 20x if
+you add PhpLdapAdmin), and comes packed with its own purpose-built wed UI.
+
+### vs FreeIPA
+
+FreeIPA is the one-stop shop for identity management: LDAP, Kerberos, NTP, DNS, Samba, you name it, it has it. In addition to user
+management, it also does security policies, single sign-on, certificate
+management, linux account management and so on.
+
+If you need all of that, go for it! Keep in mind that a more complex system is
+more complex to maintain, though.
+
+LLDAP is much lighter to run (<100 MB RAM including the DB), easier to
+configure (no messing around with DNS or security policies) and simpler to
+use. It also comes conveniently packed in a docker container.
 
 ## I can't log in!
 
@@ -131,90 +214,6 @@ set isn't working, try the following:
     can `chmod 777 /data` (or whatever the folder) to make it world-writeable.
   - Make sure you restart the server.
   - If it's still not working, join the [Discord server](https://discord.gg/h5PEdRMNyP) to ask for help.
-
-## Architecture
-
-The server is entirely written in Rust, using [actix](https://actix.rs) for the
-backend and [yew](https://yew.rs) for the frontend.
-
-Backend:
-* Listens on a port for LDAP protocol.
-  * Only a small, read-only subset of the LDAP protocol is supported.
-  * An extension to allow resetting the password through LDAP will be added.
-* Listens on another port for HTTP traffic.
-  * The authentication API, based on JWTs, is under "/auth".
-  * The user management API is a GraphQL API under "/api/graphql". The schema
-    is defined in `schema.graphql`.
-  * The static frontend files are served by this port too.
-
-Note that secure protocols (LDAPS, HTTPS) are currently not supported. This can
-be worked around by using a reverse proxy in front of the server (for the HTTP
-API) that wraps/unwraps the HTTPS messages, or only open the service to
-localhost or other trusted docker containers (for the LDAP API).
-
-Frontend:
-* User management UI.
-* Written in Rust compiled to WASM as an SPA with the Yew library.
-* Based on components, with a React-like organization.
-
-Data storage:
-* The data (users, groups, memberships, active JWTs, ...) is stored in SQL.
-* Currently only SQLite is supported (see
-  https://github.com/launchbadge/sqlx/issues/1225 for what blocks us from
-  supporting more SQL backends).
-
-### Code organization
-
-* `auth/`: Contains the shared structures needed for authentication, the
-  interface between front and back-end. In particular, it contains the OPAQUE
-  structures and the JWT format.
-* `app/`: The frontend.
-  * `src/components`: The elements containing the business and display logic of
-    the various pages and their components.
-  * `src/infra`: Various tools and utilities.
-* `server/`: The backend.
-  * `src/domain/`: Domain-specific logic: users, groups, checking passwords...
-  * `src/infra/`: API, both GraphQL and LDAP
-
-## Authentication
-
-### Passwords
-
-Passwords are hashed using Argon2, the state of the art in terms of password
-storage. They are hashed using a secret provided in the configuration (which
-can be given as environment variable or command line argument as well): this
-should be kept secret and shouldn't change (it would invalidate all passwords).
-
-Authentication is done via the OPAQUE protocol, meaning that the passwords are
-never sent to the server, but instead the client proves that they know the
-correct password (zero-knowledge proof). This is likely overkill, especially
-considered that the LDAP interface requires sending the password to the server,
-but it's one less potential flaw (especially since the LDAP interface can be
-restricted to an internal docker-only network while the web app is exposed to
-the Internet).
-
-### JWTs and refresh tokens
-
-When logging in for the first time, users are provided with a refresh token
-that gets stored in an HTTP-only cookie, valid for 30 days. They can use this
-token to get a JWT to get access to various servers: the JWT lists the groups
-the user belongs to. To simplify the setup, there is a single JWT secret that
-should be shared between the authentication server and the application servers;
-and users don't get a different token per application server
-(this could be implemented, we just didn't have any use case yet).
-
-JWTs are only valid for one day: when they expire, a new JWT can be obtained
-from the authentication server using the refresh token. If the user stays
-logged in, they would only have to type their password once a month.
-
-#### Logout
-
-In order to handle logout correctly, we rely on a blacklist of JWTs. When a
-user logs out, their refresh token is removed from the backend, and all of
-their currently valid JWTs are added to a blacklist. Incoming requests are
-checked against this blacklist (in-memory, faster than calling the database).
-Applications that want to use these JWTs should subscribe to be notified of
-blacklisted JWTs (TODO: implement the PubSub service and API).
 
 ## Contributions
 
