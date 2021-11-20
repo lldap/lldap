@@ -21,6 +21,15 @@ pub enum JwtStorage {
     Blacklisted,
 }
 
+/// Contains the temporary tokens to reset the password, sent by email.
+#[derive(Iden)]
+pub enum PasswordResetTokens {
+    Table,
+    Token,
+    UserId,
+    ExpiryDate,
+}
+
 /// This needs to be initialized after the domain tables are.
 pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
     sqlx::query(
@@ -87,6 +96,39 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
                     .name("JwtStorageUserForeignKey")
                     .table(JwtStorage::Table, Users::Table)
                     .col(JwtStorage::UserId, Users::UserId)
+                    .on_delete(ForeignKeyAction::Cascade)
+                    .on_update(ForeignKeyAction::Cascade),
+            )
+            .to_string(DbQueryBuilder {}),
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        &Table::create()
+            .table(PasswordResetTokens::Table)
+            .if_not_exists()
+            .col(
+                ColumnDef::new(PasswordResetTokens::Token)
+                    .string_len(255)
+                    .not_null()
+                    .primary_key(),
+            )
+            .col(
+                ColumnDef::new(PasswordResetTokens::UserId)
+                    .string_len(255)
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(PasswordResetTokens::ExpiryDate)
+                    .date_time()
+                    .not_null(),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("PasswordResetTokensUserForeignKey")
+                    .table(PasswordResetTokens::Table, Users::Table)
+                    .col(PasswordResetTokens::UserId, Users::UserId)
                     .on_delete(ForeignKeyAction::Cascade)
                     .on_update(ForeignKeyAction::Cascade),
             )
