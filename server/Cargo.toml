@@ -85,5 +85,9 @@ version = "*"
 features = ["serde"]
 version = "*"
 
+[dependencies.openssl-sys]
+features = ["vendored"]
+version = "*"
+
 [dev-dependencies]
 mockall = "0.9.1"
