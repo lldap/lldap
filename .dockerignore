@@ -22,3 +22,4 @@ server_key
 users.db*
 screenshot.png
 recipe.json
+*.md
