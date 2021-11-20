@@ -1,5 +1,7 @@
 # Don't track git
 .git/*
+.github/*
+.gitignore
 
 # Don't track cargo generated files
 target/*
@@ -18,5 +20,5 @@ Dockerfile
 lldap_config.toml
 server_key
 users.db*
-.gitignore
 screenshot.png
+recipe.json
