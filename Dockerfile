@@ -9,12 +9,13 @@ RUN set -x \
         --ingroup app \
         --home /app \
         --uid 10001 \
-        app
-RUN set -x \
+        app \
     # Install required packages
-    && apk add npm openssl-dev musl-dev make perl
+    && apk add npm openssl-dev musl-dev make perl curl
+
 USER app
 WORKDIR /app
+
 RUN set -x \
     # Install build tools
     && RUSTFLAGS=-Ctarget-feature=-crt-static cargo install wasm-pack cargo-chef \
@@ -24,20 +25,19 @@ RUN set -x \
 # Prepare the dependency list.
 FROM chef AS planner
 COPY . .
-USER root
-RUN cargo chef prepare --recipe-path recipe.json
+RUN cargo chef prepare --recipe-path /tmp/recipe.json
 
-# Build dependencies
+# Build dependencies.
 FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release -p lldap --recipe-path recipe.json \
-  && cargo chef cook --release -p lldap_app --target wasm32-unknown-unknown
+COPY --from=planner /tmp/recipe.json recipe.json
+RUN cargo chef cook --release -p lldap_app --target wasm32-unknown-unknown \
+    && cargo chef cook --release -p lldap
 
-# Copy the source and build the app.
+# Copy the source and build the app and server.
 COPY --chown=app:app . .
-RUN cargo build --release -p lldap
-# TODO: release mode.
-RUN ./app/build.sh
+RUN cargo build --release -p lldap \
+    # Build the frontend.
+    && ./app/build.sh
 
 # Final image
 FROM alpine
@@ -50,14 +50,13 @@ RUN set -x \
         --ingroup app \
         --home /app \
         --uid 10001 \
-        app
+        app \
+    && mkdir /data && chown app:app /data
 
-RUN mkdir /data && chown app:app /data
 USER app
 WORKDIR /app
-COPY --chown=app:app --from=builder /app/app/index.html app/index.html
-COPY --chown=app:app --from=builder /app/app/main.js app/main.js
-COPY --chown=app:app --from=builder /app/app/pkg app/pkg
+
+COPY --chown=app:app --from=builder /app/app/index.html /app/app/main.js /app/app/pkg app/
 COPY --chown=app:app --from=builder /app/target/release/lldap lldap
 
 ENV LDAP_PORT=3890
