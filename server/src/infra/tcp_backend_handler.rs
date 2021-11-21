@@ -17,6 +17,8 @@ pub trait TcpBackendHandler {
 
     /// Get the user ID associated with a password reset token.
     async fn get_user_id_for_password_reset_token(&self, token: &str) -> Result<String>;
+
+    async fn delete_password_reset_token(&self, token: &str) -> Result<()>;
 }
 
 #[cfg(test)]
@@ -56,5 +58,6 @@ mockall::mock! {
         async fn delete_refresh_token(&self, refresh_token_hash: u64) -> Result<()>;
         async fn start_password_reset(&self, user: &str) -> Result<Option<String>>;
         async fn get_user_id_for_password_reset_token(&self, token: &str) -> Result<String>;
+        async fn delete_password_reset_token(&self, token: &str) -> Result<()>;
     }
 }

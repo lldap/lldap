@@ -151,4 +151,13 @@ impl TcpBackendHandler for SqlBackendHandler {
         let (user_id,) = sqlx::query_as(&query).fetch_one(&self.sql_pool).await?;
         Ok(user_id)
     }
+
+    async fn delete_password_reset_token(&self, token: &str) -> Result<()> {
+        let query = Query::delete()
+            .from_table(PasswordResetTokens::Table)
+            .and_where(Expr::col(PasswordResetTokens::Token).eq(token))
+            .to_string(DbQueryBuilder {});
+        sqlx::query(&query).execute(&self.sql_pool).await?;
+        Ok(())
+    }
 }
