@@ -15,6 +15,7 @@ use actix_web::{
     error::{ErrorBadRequest, ErrorUnauthorized},
     web, HttpRequest, HttpResponse,
 };
+use actix_web_httpauth::extractors::bearer::BearerAuth;
 use anyhow::Result;
 use chrono::prelude::*;
 use futures::future::{ok, Ready};
@@ -109,6 +110,64 @@ where
             .body(token.as_str().to_owned())
     })
     .unwrap_or_else(error_to_http_response)
+}
+
+async fn get_password_reset_step1<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: HttpRequest,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    let user_id = match request.match_info().get("user_id") {
+        None => return HttpResponse::BadRequest().body("Missing user ID"),
+        Some(id) => id,
+    };
+    let _token = match data.backend_handler.start_password_reset(user_id).await {
+        Err(e) => return HttpResponse::InternalServerError().body(e.to_string()),
+        Ok(None) => return HttpResponse::Ok().finish(),
+        Ok(Some(token)) => token,
+    };
+    // TODO: Send email.
+    HttpResponse::Ok().finish()
+}
+
+async fn get_password_reset_step2<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: HttpRequest,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    let token = match request.match_info().get("token") {
+        None => return HttpResponse::BadRequest().body("Missing token"),
+        Some(token) => token,
+    };
+    let user_id = match data
+        .backend_handler
+        .get_user_id_for_password_reset_token(token)
+        .await
+    {
+        Err(_) => return HttpResponse::Unauthorized().body("Invalid or expired token"),
+        Ok(user_id) => user_id,
+    };
+    let _ = data
+        .backend_handler
+        .delete_password_reset_token(token)
+        .await;
+    let groups = HashSet::new();
+    let token = create_jwt(&data.jwt_key, user_id.to_string(), groups);
+    HttpResponse::Ok()
+        .cookie(
+            Cookie::build("token", token.as_str())
+                .max_age(5.minutes())
+                // Cookie is only valid to reset the password.
+                .path("/auth")
+                .http_only(true)
+                .same_site(SameSite::Strict)
+                .finish(),
+        )
+        .json(user_id)
 }
 
 async fn get_logout<Backend>(
@@ -254,14 +313,45 @@ where
 }
 
 async fn opaque_register_start<Backend>(
+    request: actix_web::HttpRequest,
+    mut payload: actix_web::web::Payload,
     data: web::Data<AppState<Backend>>,
-    request: web::Json<registration::ClientRegistrationStartRequest>,
 ) -> ApiResult<registration::ServerRegistrationStartResponse>
 where
     Backend: OpaqueHandler + 'static,
 {
+    use actix_web::FromRequest;
+    let validation_result = match BearerAuth::from_request(&request, &mut payload.0)
+        .await
+        .ok()
+        .and_then(|bearer| check_if_token_is_valid(&data, bearer.token()).ok())
+    {
+        Some(t) => t,
+        None => {
+            return ApiResult::Right(
+                HttpResponse::Unauthorized().body("Not authorized to change the user's password"),
+            )
+        }
+    };
+    let registration_start_request =
+        match web::Json::<registration::ClientRegistrationStartRequest>::from_request(
+            &request,
+            &mut payload.0,
+        )
+        .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                return ApiResult::Right(
+                    HttpResponse::BadRequest().body(format!("Bad request: {:#?}", e)),
+                )
+            }
+        }
+        .into_inner();
+    let user_id = &registration_start_request.username;
+    validation_result.can_access(user_id);
     data.backend_handler
-        .registration_start(request.into_inner())
+        .registration_start(registration_start_request)
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
         .unwrap_or_else(error_to_api_response)
@@ -402,14 +492,25 @@ where
             web::resource("/opaque/login/finish")
                 .route(web::post().to(opaque_login_finish::<Backend>)),
         )
-        .service(
-            web::resource("/opaque/register/start")
-                .route(web::post().to(opaque_register_start::<Backend>)),
-        )
-        .service(
-            web::resource("/opaque/register/finish")
-                .route(web::post().to(opaque_register_finish::<Backend>)),
-        )
         .service(web::resource("/refresh").route(web::get().to(get_refresh::<Backend>)))
-        .service(web::resource("/logout").route(web::get().to(get_logout::<Backend>)));
+        .service(
+            web::resource("/reset/step1/{user_id}")
+                .route(web::get().to(get_password_reset_step1::<Backend>)),
+        )
+        .service(
+            web::resource("/reset/step2/{token}")
+                .route(web::get().to(get_password_reset_step2::<Backend>)),
+        )
+        .service(web::resource("/logout").route(web::get().to(get_logout::<Backend>)))
+        .service(
+            web::scope("/opaque/register")
+                .wrap(CookieToHeaderTranslatorFactory)
+                .service(
+                    web::resource("/start").route(web::post().to(opaque_register_start::<Backend>)),
+                )
+                .service(
+                    web::resource("/finish")
+                        .route(web::post().to(opaque_register_finish::<Backend>)),
+                ),
+        );
 }
