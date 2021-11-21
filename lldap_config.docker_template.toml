@@ -10,6 +10,9 @@
 ## administration.
 #http_port = 17170
 
+## The public URL of the server, for password reset links.
+#http_url = "http://localhost"
+
 ## Random secret for JWT signature.
 ## This secret should be random, and should be shared with application
 ## servers that need to consume the JWTs.

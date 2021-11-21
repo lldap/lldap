@@ -64,6 +64,8 @@ pub struct Configuration {
     pub key_file: String,
     #[builder(default)]
     pub smtp_options: MailOptions,
+    #[builder(default = r#"String::from("http://localhost")"#)]
+    pub http_url: String,
     #[serde(skip)]
     #[builder(field(private), setter(strip_option))]
     server_setup: Option<ServerSetup>,
@@ -151,6 +153,10 @@ impl ConfigOverrider for RunOpts {
 
         if let Some(port) = self.http_port {
             config.http_port = port;
+        }
+
+        if let Some(url) = self.http_url.as_ref() {
+            config.http_url = url.to_string();
         }
         self.smtp_opts.override_config(config);
     }

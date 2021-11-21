@@ -10,6 +10,7 @@ pub struct CLIOpts {
     pub command: Command,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clap, Clone)]
 pub enum Command {
     /// Export the GraphQL schema to *.graphql.
@@ -55,6 +56,10 @@ pub struct RunOpts {
     /// Change HTTP API port. Default: 17170
     #[clap(long, env = "LLDAP_HTTP_PORT")]
     pub http_port: Option<u16>,
+
+    /// URL of the server, for password reset links.
+    #[clap(long, env = "LLDAP_HTTP_URL")]
+    pub http_url: Option<String>,
 
     #[clap(flatten)]
     pub smtp_opts: SmtpOpts,
