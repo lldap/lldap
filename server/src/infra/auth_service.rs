@@ -101,7 +101,7 @@ where
             .cookie(
                 Cookie::build("token", token.as_str())
                     .max_age(1.days())
-                    .path("/api")
+                    .path("/")
                     .http_only(true)
                     .same_site(SameSite::Strict)
                     .finish(),
@@ -148,7 +148,7 @@ where
         .cookie(
             Cookie::build("token", "")
                 .max_age(0.days())
-                .path("/api")
+                .path("/")
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -203,7 +203,7 @@ where
                 .cookie(
                     Cookie::build("token", token.as_str())
                         .max_age(1.days())
-                        .path("/api")
+                        .path("/")
                         .http_only(true)
                         .same_site(SameSite::Strict)
                         .finish(),
