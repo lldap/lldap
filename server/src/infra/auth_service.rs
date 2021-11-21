@@ -23,6 +23,7 @@ use futures_util::{FutureExt, TryFutureExt};
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
 use lldap_auth::{login, registration, JWTClaims};
+use log::*;
 use sha2::Sha512;
 use std::collections::{hash_map::DefaultHasher, HashSet};
 use std::hash::{Hash, Hasher};
@@ -123,12 +124,27 @@ where
         None => return HttpResponse::BadRequest().body("Missing user ID"),
         Some(id) => id,
     };
-    let _token = match data.backend_handler.start_password_reset(user_id).await {
+    let token = match data.backend_handler.start_password_reset(user_id).await {
         Err(e) => return HttpResponse::InternalServerError().body(e.to_string()),
         Ok(None) => return HttpResponse::Ok().finish(),
         Ok(Some(token)) => token,
     };
-    // TODO: Send email.
+    let user = match data.backend_handler.get_user_details(user_id).await {
+        Err(e) => {
+            warn!("Error getting used details: {:#?}", e);
+            return HttpResponse::Ok().finish();
+        }
+        Ok(u) => u,
+    };
+    if let Err(e) = super::mail::send_password_reset_email(
+        &user.display_name,
+        &user.email,
+        &token,
+        &data.server_url,
+        &data.mail_options,
+    ) {
+        warn!("Error sending email: {:#?}", e);
+    }
     HttpResponse::Ok().finish()
 }
 
