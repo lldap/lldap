@@ -4,7 +4,11 @@ use crate::{
         handler::{BackendHandler, LoginHandler},
         opaque_handler::OpaqueHandler,
     },
-    infra::{auth_service, configuration::Configuration, tcp_backend_handler::*},
+    infra::{
+        auth_service,
+        configuration::{Configuration, MailOptions},
+        tcp_backend_handler::*,
+    },
 };
 use actix_files::{Files, NamedFile};
 use actix_http::HttpServiceBuilder;
@@ -46,6 +50,8 @@ fn http_config<Backend>(
     backend_handler: Backend,
     jwt_secret: secstr::SecUtf8,
     jwt_blacklist: HashSet<u64>,
+    server_url: String,
+    mail_options: MailOptions,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Sync + 'static,
 {
@@ -53,6 +59,8 @@ fn http_config<Backend>(
         backend_handler,
         jwt_key: Hmac::new_varkey(jwt_secret.unsecure().as_bytes()).unwrap(),
         jwt_blacklist: RwLock::new(jwt_blacklist),
+        server_url,
+        mail_options,
     }))
     // Serve index.html and main.js, and default to index.html.
     .route(
@@ -76,6 +84,8 @@ pub(crate) struct AppState<Backend> {
     pub backend_handler: Backend,
     pub jwt_key: Hmac<Sha512>,
     pub jwt_blacklist: RwLock<HashSet<u64>>,
+    pub server_url: String,
+    pub mail_options: MailOptions,
 }
 
 pub async fn build_tcp_server<Backend>(
@@ -91,15 +101,26 @@ where
         .get_jwt_blacklist()
         .await
         .context("while getting the jwt blacklist")?;
+    let server_url = config.http_url.clone();
+    let mail_options = config.smtp_options.clone();
     server_builder
         .bind("http", ("0.0.0.0", config.http_port), move || {
             let backend_handler = backend_handler.clone();
             let jwt_secret = jwt_secret.clone();
             let jwt_blacklist = jwt_blacklist.clone();
+            let server_url = server_url.clone();
+            let mail_options = mail_options.clone();
             HttpServiceBuilder::new()
                 .finish(map_config(
                     App::new().configure(move |cfg| {
-                        http_config(cfg, backend_handler, jwt_secret, jwt_blacklist)
+                        http_config(
+                            cfg,
+                            backend_handler,
+                            jwt_secret,
+                            jwt_blacklist,
+                            server_url,
+                            mail_options,
+                        )
                     }),
                     |_| AppConfig::default(),
                 ))
