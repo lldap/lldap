@@ -8,6 +8,7 @@ use crate::{
         login::LoginForm,
         logout::LogoutButton,
         reset_password_step1::ResetPasswordStep1Form,
+        reset_password_step2::ResetPasswordStep2Form,
         router::{AppRoute, Link, NavButton},
         user_details::UserDetails,
         user_table::UserTable,
@@ -192,6 +193,9 @@ impl App {
             },
             AppRoute::StartResetPassword => html! {
                 <ResetPasswordStep1Form />
+            },
+            AppRoute::FinishResetPassword(token) => html! {
+                <ResetPasswordStep2Form token=token />
             },
         }
     }

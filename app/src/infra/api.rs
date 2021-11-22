@@ -241,7 +241,19 @@ impl HostService {
             &format!("/auth/reset/step1/{}", username),
             yew::format::Nothing,
             callback,
-            "Could not logout",
+            "Could not initiate password reset",
+        )
+    }
+
+    pub fn reset_password_step2(
+        token: &str,
+        callback: Callback<Result<String>>,
+    ) -> Result<FetchTask> {
+        call_server_json_with_error_message(
+            &format!("/auth/reset/step2/{}", token),
+            yew::format::Nothing,
+            callback,
+            "Could not validate token",
         )
     }
 }

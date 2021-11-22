@@ -9,6 +9,8 @@ pub enum AppRoute {
     Login,
     #[to = "/reset-password/step1"]
     StartResetPassword,
+    #[to = "/reset-password/step2/{token}"]
+    FinishResetPassword(String),
     #[to = "/users/create"]
     CreateUser,
     #[to = "/users"]
