@@ -7,6 +7,7 @@ use crate::{
         group_table::GroupTable,
         login::LoginForm,
         logout::LogoutButton,
+        reset_password_step1::ResetPasswordStep1Form,
         router::{AppRoute, Link, NavButton},
         user_details::UserDetails,
         user_table::UserTable,
@@ -101,40 +102,7 @@ impl Component for App {
               <div class="row justify-content-center">
                 <div class="shadow-sm py-3" style="max-width: 1000px">
                   <Router<AppRoute>
-                    render = Router::render(move |switch: AppRoute| {
-                        match switch {
-                            AppRoute::Login => html! {
-                                <LoginForm on_logged_in=link.callback(Msg::Login)/>
-                            },
-                            AppRoute::CreateUser => html! {
-                                <CreateUserForm/>
-                            },
-                            AppRoute::Index | AppRoute::ListUsers => html! {
-                                <div>
-                                  <UserTable />
-                                  <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
-                                </div>
-                            },
-                            AppRoute::CreateGroup => html! {
-                                <CreateGroupForm/>
-                            },
-                            AppRoute::ListGroups => html! {
-                                <div>
-                                  <GroupTable />
-                                  <NavButton classes="btn btn-primary" route=AppRoute::CreateGroup>{"Create a group"}</NavButton>
-                                </div>
-                            },
-                            AppRoute::GroupDetails(group_id) => html! {
-                                <GroupDetails group_id=group_id />
-                            },
-                            AppRoute::UserDetails(username) => html! {
-                                <UserDetails username=username.clone() is_admin=is_admin />
-                            },
-                            AppRoute::ChangePassword(username) => html! {
-                                <ChangePasswordForm username=username.clone() is_admin=is_admin />
-                            }
-                        }
-                    })
+                    render = Router::render(move |s| Self::dispatch_route(s, &link, is_admin))
                   />
                 </div>
               </div>
@@ -147,7 +115,11 @@ impl App {
     fn get_redirect_route() -> Option<AppRoute> {
         let route_service = RouteService::<()>::new();
         let current_route = route_service.get_path();
-        if current_route.is_empty() || current_route == "/" || current_route.contains("login") {
+        if current_route.is_empty()
+            || current_route == "/"
+            || current_route.contains("login")
+            || current_route.contains("reset-password")
+        {
             None
         } else {
             use yew_router::Switch;
@@ -156,6 +128,11 @@ impl App {
     }
 
     fn apply_initial_redirections(&mut self) {
+        let route_service = RouteService::<()>::new();
+        let current_route = route_service.get_path();
+        if current_route.contains("reset-password") {
+            return;
+        }
         match &self.user_info {
             None => {
                 self.route_dispatcher
@@ -177,6 +154,44 @@ impl App {
                             )));
                     }
                 }
+            },
+        }
+    }
+
+    fn dispatch_route(switch: AppRoute, link: &ComponentLink<Self>, is_admin: bool) -> Html {
+        match switch {
+            AppRoute::Login => html! {
+                <LoginForm on_logged_in=link.callback(Msg::Login)/>
+            },
+            AppRoute::CreateUser => html! {
+                <CreateUserForm/>
+            },
+            AppRoute::Index | AppRoute::ListUsers => html! {
+                <div>
+                  <UserTable />
+                  <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
+                </div>
+            },
+            AppRoute::CreateGroup => html! {
+                <CreateGroupForm/>
+            },
+            AppRoute::ListGroups => html! {
+                <div>
+                  <GroupTable />
+                  <NavButton classes="btn btn-primary" route=AppRoute::CreateGroup>{"Create a group"}</NavButton>
+                </div>
+            },
+            AppRoute::GroupDetails(group_id) => html! {
+                <GroupDetails group_id=group_id />
+            },
+            AppRoute::UserDetails(username) => html! {
+                <UserDetails username=username is_admin=is_admin />
+            },
+            AppRoute::ChangePassword(username) => html! {
+                <ChangePasswordForm username=username is_admin=is_admin />
+            },
+            AppRoute::StartResetPassword => html! {
+                <ResetPasswordStep1Form />
             },
         }
     }
