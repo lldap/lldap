@@ -1,6 +1,9 @@
-use crate::infra::{
-    api::HostService,
-    common_component::{CommonComponent, CommonComponentParts},
+use crate::{
+    components::router::{AppRoute, NavButton},
+    infra::{
+        api::HostService,
+        common_component::{CommonComponent, CommonComponentParts},
+    },
 };
 use anyhow::{anyhow, bail, Context, Result};
 use lldap_auth::*;
@@ -160,7 +163,7 @@ impl Component for LoginForm {
                     placeholder="Password"
                     autocomplete="current-password" />
                 </div>
-                <div class="form-group">
+                <div class="form-group mt-3">
                   <button
                     type="submit"
                     class="btn btn-primary"
@@ -168,6 +171,12 @@ impl Component for LoginForm {
                     onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
                     {"Login"}
                   </button>
+                  <NavButton
+                    classes="btn-link btn"
+                    disabled=self.common.is_task_running()
+                    route=AppRoute::StartResetPassword>
+                    {"Forgot your password?"}
+                  </NavButton>
                 </div>
                 <div class="form-group">
                 { if let Some(e) = &self.common.error {

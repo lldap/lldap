@@ -232,4 +232,16 @@ impl HostService {
             "Could not logout",
         )
     }
+
+    pub fn reset_password_step1(
+        username: &str,
+        callback: Callback<Result<()>>,
+    ) -> Result<FetchTask> {
+        call_server_empty_response_with_error_message(
+            &format!("/auth/reset/step1/{}", username),
+            yew::format::Nothing,
+            callback,
+            "Could not logout",
+        )
+    }
 }

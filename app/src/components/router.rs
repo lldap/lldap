@@ -7,6 +7,8 @@ use yew_router::{
 pub enum AppRoute {
     #[to = "/login"]
     Login,
+    #[to = "/reset-password/step1"]
+    StartResetPassword,
     #[to = "/users/create"]
     CreateUser,
     #[to = "/users"]
