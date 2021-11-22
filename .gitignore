@@ -24,3 +24,4 @@ server_key
 
 # Misc
 .env
+recipe.json
