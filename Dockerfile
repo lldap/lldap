@@ -51,6 +51,7 @@ RUN set -x \
         --home /app \
         --uid 10001 \
         app \
+    # Create the /data folder
     && mkdir /data && chown app:app /data
 
 USER app
