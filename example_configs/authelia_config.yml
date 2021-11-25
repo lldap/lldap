@@ -6,10 +6,10 @@
 
 
 authentication_backend:
-  # Passwort reset through authelia does not work at the moment
-  disable_reset_password: true 
+  # Password reset through authelia works normally.
+  disable_reset_password: false
   # How often authelia should check if there is an user update in LDAP
-  refresh_interval: 1m 
+  refresh_interval: 1m
   ldap:
     implementation: custom
     # Pattern is ldap://HOSTNAME-OR-IP:PORT
