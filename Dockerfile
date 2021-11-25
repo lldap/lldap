@@ -1,5 +1,5 @@
 # Build image
-FROM rust:alpine AS chef
+FROM rust:alpine3.14 AS chef
 
 RUN set -x \
     # Add user
@@ -40,7 +40,7 @@ RUN cargo build --release -p lldap \
     && ./app/build.sh
 
 # Final image
-FROM alpine
+FROM alpine:3.14
 
 RUN set -x \
     # Add user
@@ -54,16 +54,20 @@ RUN set -x \
     # Create the /data folder
     && mkdir /data && chown app:app /data
 
+RUN apk add --no-cache bash
+
 USER app
 WORKDIR /app
 
 COPY --chown=app:app --from=builder /app/app/index.html /app/app/main.js app/
 COPY --chown=app:app --from=builder /app/app/pkg app/pkg
 COPY --chown=app:app --from=builder /app/target/release/lldap lldap
+COPY docker-entrypoint.sh .
 
 ENV LDAP_PORT=3890
 ENV HTTP_PORT=17170
 
 EXPOSE ${LDAP_PORT} ${HTTP_PORT}
 
-CMD ["/app/lldap", "run", "--config-file", "/data/lldap_config.toml"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["run", "--config-file", "/data/lldap_config.toml"]

@@ -71,6 +71,8 @@ Configure the server by copying the `lldap_config.docker_template.toml` to
 Environment variables should be prefixed with `LLDAP_` to override the
 configuration.
 
+Secrets can also be set through a file. The filename should be specified by the variables `LLDAP_JWT_SECRET_FILE` or `LLDAP_USER_PASS_FILE`, and the file contents are loaded into the respective configuration parameters. Note that `_FILE` variables take precedence.
+
 Example for docker compose:
 
 ```yaml
