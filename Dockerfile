@@ -57,7 +57,8 @@ RUN set -x \
 USER app
 WORKDIR /app
 
-COPY --chown=app:app --from=builder /app/app/index.html /app/app/main.js /app/app/pkg app/
+COPY --chown=app:app --from=builder /app/app/index.html /app/app/main.js app/
+COPY --chown=app:app --from=builder /app/app/pkg app/pkg
 COPY --chown=app:app --from=builder /app/target/release/lldap lldap
 
 ENV LDAP_PORT=3890
