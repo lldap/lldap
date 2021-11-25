@@ -52,9 +52,8 @@ RUN set -x \
         --uid 10001 \
         app \
     # Create the /data folder
-    && mkdir /data && chown app:app /data
-
-RUN apk add --no-cache bash
+    && mkdir /data && chown app:app /data \
+    && apk add --no-cache bash
 
 USER app
 WORKDIR /app
