@@ -58,7 +58,7 @@ RUN set -x \
 USER app
 WORKDIR /app
 
-COPY --chown=app:app --from=builder /app/app/index.html /app/app/main.js app/
+COPY --chown=app:app --from=builder /app/app/index.html /app/app/main.js /app/app/style.css app/
 COPY --chown=app:app --from=builder /app/app/pkg app/pkg
 COPY --chown=app:app --from=builder /app/target/release/lldap lldap
 COPY docker-entrypoint.sh .
