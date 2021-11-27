@@ -37,10 +37,7 @@ impl std::default::Default for MailOptions {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
-#[builder(
-    pattern = "owned",
-    build_fn(name = "private_build", validate = "Self::validate")
-)]
+#[builder(pattern = "owned", build_fn(name = "private_build"))]
 pub struct Configuration {
     #[builder(default = "3890")]
     pub ldap_port: u16,
@@ -67,7 +64,7 @@ pub struct Configuration {
     #[builder(default = r#"String::from("http://localhost")"#)]
     pub http_url: String,
     #[serde(skip)]
-    #[builder(field(private), setter(strip_option))]
+    #[builder(field(private), default = "None")]
     server_setup: Option<ServerSetup>,
 }
 
@@ -80,15 +77,7 @@ impl std::default::Default for Configuration {
 impl ConfigurationBuilder {
     pub fn build(self) -> Result<Configuration> {
         let server_setup = get_server_setup(self.key_file.as_deref().unwrap_or("server_key"))?;
-        Ok(self.server_setup(server_setup).private_build()?)
-    }
-
-    fn validate(&self) -> Result<(), String> {
-        if self.server_setup.is_none() {
-            Err("Don't use `private_build`, use `build` instead".to_string())
-        } else {
-            Ok(())
-        }
+        Ok(self.server_setup(Some(server_setup)).private_build()?)
     }
 }
 
@@ -143,6 +132,11 @@ impl TopLevelCommandOpts for TestEmailOpts {
 impl ConfigOverrider for RunOpts {
     fn override_config(&self, config: &mut Configuration) {
         self.general_config.override_config(config);
+
+        if let Some(path) = self.server_key_file.as_ref() {
+            config.key_file = path.to_string();
+        }
+
         if let Some(port) = self.ldap_port {
             config.ldap_port = port;
         }
@@ -215,7 +209,7 @@ where
     );
 
     let mut config: Configuration = Figment::from(Serialized::defaults(
-        ConfigurationBuilder::default().build().unwrap(),
+        ConfigurationBuilder::default().private_build().unwrap(),
     ))
     .merge(Toml::file(config_file))
     .merge(Env::prefixed("LLDAP_").split("__"))

@@ -45,6 +45,11 @@ pub struct RunOpts {
     #[clap(flatten)]
     pub general_config: GeneralConfigOpts,
 
+    /// Path to the file that contains the private server key.
+    /// It will be created if it doesn't exist.
+    #[clap(long, env = "LLDAP_SERVER_KEY_FILE")]
+    pub server_key_file: Option<String>,
+
     /// Change ldap port. Default: 3890
     #[clap(long, env = "LLDAP_LDAP_PORT")]
     pub ldap_port: Option<u16>,
