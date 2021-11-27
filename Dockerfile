@@ -42,26 +42,16 @@ RUN cargo build --release -p lldap \
 # Final image
 FROM alpine:3.14
 
-RUN set -x \
-    # Add user
-    && addgroup --gid 10001 app \
-    && adduser --disabled-password \
-        --gecos '' \
-        --ingroup app \
-        --home /app \
-        --uid 10001 \
-        app \
-    # Create the /data folder
-    && mkdir /data && chown app:app /data \
-    && apk add --no-cache bash
-
-USER app
 WORKDIR /app
 
-COPY --chown=app:app --from=builder /app/app/index.html /app/app/main.js /app/app/style.css app/
-COPY --chown=app:app --from=builder /app/app/pkg app/pkg
-COPY --chown=app:app --from=builder /app/target/release/lldap lldap
-COPY docker-entrypoint.sh .
+COPY --from=builder /app/app/index.html /app/app/main.js /app/app/style.css app/
+COPY --from=builder /app/app/pkg app/pkg
+COPY --from=builder /app/target/release/lldap lldap
+COPY docker-entrypoint.sh lldap_config.docker_template.toml ./
+
+RUN set -x \
+    && apk add --no-cache bash \
+    && chmod a+r -R .
 
 ENV LDAP_PORT=3890
 ENV HTTP_PORT=17170

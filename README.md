@@ -83,6 +83,8 @@ volumes:
 services:
   lldap:
     image: nitnelave/lldap
+    # Change this to the user:group you want.
+    user: "33:33"
     ports:
       # For LDAP
       - "3890:3890"
@@ -90,6 +92,8 @@ services:
       - "17170:17170"
     volumes:
       - "lldap_data:/data"
+      # Alternatively, you can mount a local folder
+      # - "./lldap_data:/data"
     environment:
       - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
       - LLDAP_LDAP_USER_PASS=REPLACE_WITH_PASSWORD
