@@ -73,9 +73,11 @@ fn http_config<Backend>(
     // Serve static files
     .service(Files::new("/static", "./app/static"))
     // Serve the index
-    .service(web::scope("/")
-        .route("", web::get().to(index))
-        .route("index.html", web::get().to(index)));
+    .service(
+        web::scope("/")
+            .route("", web::get().to(index))
+            .route("index.html", web::get().to(index)),
+    );
 }
 
 pub(crate) struct AppState<Backend> {
