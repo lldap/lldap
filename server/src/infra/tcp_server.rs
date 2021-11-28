@@ -14,7 +14,7 @@ use actix_files::{Files, NamedFile};
 use actix_http::HttpServiceBuilder;
 use actix_server::ServerBuilder;
 use actix_service::map_config;
-use actix_web::{dev::AppConfig, web, App, HttpRequest, HttpResponse};
+use actix_web::{dev::AppConfig, web, App, HttpResponse};
 use anyhow::{Context, Result};
 use hmac::{Hmac, NewMac};
 use sha2::Sha512;
@@ -22,11 +22,10 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
-async fn index(req: HttpRequest) -> actix_web::Result<NamedFile> {
+async fn index() -> actix_web::Result<NamedFile> {
     let mut path = PathBuf::new();
     path.push("app");
-    let file = req.match_info().query("filename");
-    path.push(if file.is_empty() { "index.html" } else { file });
+    path.push("index.html");
     Ok(NamedFile::open(path)?)
 }
 
@@ -62,11 +61,6 @@ fn http_config<Backend>(
         server_url,
         mail_options,
     }))
-    // Serve index.html and main.js, and default to index.html.
-    .route(
-        "/{filename:(index\\.html|main\\.js|style\\.css)?}",
-        web::get().to(index),
-    )
     .service(web::scope("/auth").configure(auth_service::configure_server::<Backend>))
     // API endpoint.
     .service(
@@ -76,8 +70,12 @@ fn http_config<Backend>(
     )
     // Serve the /pkg path with the compiled WASM app.
     .service(Files::new("/pkg", "./app/pkg"))
-    // Default to serve index.html for unknown routes, to support routing.
-    .service(web::scope("/").route("/.*", web::get().to(index)));
+    // Serve static files
+    .service(Files::new("/static", "./app/static"))
+    // Serve the index
+    .service(web::scope("/")
+        .route("", web::get().to(index))
+        .route("index.html", web::get().to(index)));
 }
 
 pub(crate) struct AppState<Backend> {
