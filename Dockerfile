@@ -44,13 +44,15 @@ FROM alpine:3.14
 
 WORKDIR /app
 
-COPY --from=builder /app/app/index.html /app/app/main.js /app/app/style.css app/
+COPY --from=builder /app/app/index_local.html app/index.html
+COPY --from=builder /app/app/static app/static
 COPY --from=builder /app/app/pkg app/pkg
 COPY --from=builder /app/target/release/lldap lldap
 COPY docker-entrypoint.sh lldap_config.docker_template.toml ./
 
 RUN set -x \
     && apk add --no-cache bash \
+    && for file in $(cat app/static/libraries.txt); do wget -P app/static "$file"; done \
     && chmod a+r -R .
 
 ENV LDAP_PORT=3890
