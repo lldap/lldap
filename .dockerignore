@@ -16,6 +16,11 @@ app/pkg/*
 Dockerfile
 .dockerignore
 
+# Don't track docs
+README.md
+LICENSE
+docs/*
+
 # Various config files that shouldn't be tracked
 lldap_config.toml
 server_key
