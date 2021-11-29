@@ -72,6 +72,8 @@ fn http_config<Backend>(
     .service(Files::new("/pkg", "./app/pkg"))
     // Serve static files
     .service(Files::new("/static", "./app/static"))
+    // Serve static fonts
+    .service(Files::new("/static/fonts", "./app/static/fonts"))
     // Serve the index
     .service(
         web::scope("/")
