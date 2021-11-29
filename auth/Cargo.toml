@@ -1,7 +1,7 @@
 [package]
 name = "lldap_auth"
-version = "0.2.0"
-authors = ["Valentin Tolmer <valentin@tolmer.fr>", "Steve Barrau <steve.barrau@gmail.com>", "Thomas Wickham <mackwic@gmail.com>"]
+version = "0.3.0-alpha.1"
+authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
 edition = "2021"
 
 [features]
