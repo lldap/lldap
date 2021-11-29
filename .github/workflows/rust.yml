@@ -119,7 +119,7 @@ jobs:
       - name: Aggregate reports
         run: cargo llvm-cov --no-run --lcov --output-path lcov.info
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v2.1.0
         with:
           files: lcov.info
           fail_ci_if_error: true
