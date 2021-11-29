@@ -5,7 +5,8 @@ on:
     branches:
       - 'main'
   release:
-    types: [created]
+    types:
+      - 'published'
   pull_request:
     branches:
       - 'main'
