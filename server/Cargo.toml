@@ -1,8 +1,8 @@
 [package]
-authors = ["Valentin Tolmer <valentin@tolmer.fr>", "Steve Barrau <steve.barrau@gmail.com>", "Thomas Wickham <mackwic@gmail.com>"]
+authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
 edition = "2021"
 name = "lldap"
-version = "0.2.0"
+version = "0.3.0-alpha.1"
 
 [dependencies]
 actix = "0.12"
