@@ -24,4 +24,4 @@ then
   exit 1
 fi
 
-$ROLLUP_BIN ./main.js --format iife --file ./pkg/bundle.js
+$ROLLUP_BIN ./main.js --format iife --file ./pkg/bundle.js --globals bootstrap:bootstrap
