@@ -82,7 +82,7 @@ volumes:
 
 services:
   lldap:
-    image: nitnelave/lldap
+    image: nitnelave/lldap:stable
     # Change this to the user:group you want.
     user: "33:33"
     ports:

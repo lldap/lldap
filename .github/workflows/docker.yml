@@ -1,11 +1,12 @@
-name: ci
+name: docker
 
 on:
   push:
     branches:
       - 'main'
-    tags:
-      - 'v*.*.*'
+  release:
+    types:
+      - 'published'
   pull_request:
     branches:
       - 'main'
@@ -43,8 +44,14 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+        # Parse the tag into semver.
+      - uses: gacts/github-slug@v1
+        id: slug
+
       -
         name: Build and push
+        if: github.event_name != 'release'
         uses: docker/build-push-action@v2
         with:
           context: .
@@ -53,6 +60,20 @@ jobs:
           tags: nitnelave/lldap:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      -
+        name: Build and push
+        if: github.event_name == 'release'
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
+          tags: nitnelave/lldap:latest, nitnelave/lldap:stable, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       -
         name: Update repo description
         if: github.event_name != 'pull_request'
