@@ -78,7 +78,7 @@ fn http_config<Backend>(
     .service(
         web::scope("/")
             .route("", web::get().to(index))
-            .route("index.html", web::get().to(index)),
+            .route(".*", web::get().to(index)),
     );
 }
 
