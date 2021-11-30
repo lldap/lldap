@@ -74,10 +74,10 @@ fn http_config<Backend>(
     .service(Files::new("/static", "./app/static"))
     // Serve static fonts
     .service(Files::new("/static/fonts", "./app/static/fonts"))
-    // Serve the index
+    // Default to serve index.html for unknown routes, to support routing.
     .service(
         web::scope("/")
-            .route("", web::get().to(index))
+            .route("", web::get().to(index)) // this is necessary because the below doesn't match a request for "/"
             .route(".*", web::get().to(index)),
     );
 }
