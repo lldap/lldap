@@ -168,6 +168,7 @@ Some specific clients have been tested to work and come with sample
 configuration files, or guides. See the [`example_configs`](example_configs)
 folder for help with:
   - [Authelia](example_configs/authelia_config.yml)
+  - [Bookstack](example_configs/bookstack.env.example)
   - [KeyCloak](example_configs/keycloak.md)
   - [Jisti Meet](example_configs/jitsi_meet.conf)
 
