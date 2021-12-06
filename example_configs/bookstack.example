@@ -1,0 +1,62 @@
+# General auth
+AUTH_METHOD=ldap
+
+# The LDAP host, Adding a port is optional
+LDAP_SERVER=ldap://lldap:3890
+
+# If using LDAP over SSL you should also define the protocol:
+# LDAP_SERVER=ldaps://example.com:636
+
+# The base DN from where users will be dk within
+LDAP_BASE_DN=ou=people,dc=example,dc=com
+
+# The full DN and password of the user used to search the server
+# Can both be left as false to bind anonymously
+LDAP_DN=cn=admin,ou=people,dc=example,dc=com
+LDAP_PASS=YOUR-ADNUB-PASSWORD-HERE
+
+# A filter to use when searching for users
+# The user-provided user-name used to replace any occurrences of '${user}'
+# If you're setting this option via other means, such as within a docker-compose.yml,
+# you may need escape the $, often using $$ or \$ instead. 
+LDAP_USER_FILTER=(&(uid=${user}))
+
+# Set the LDAP version to use when connecting to the server
+# Should be set to 3 in most cases.
+LDAP_VERSION=3
+
+# Set the property to use as a unique identifier for this user.
+# Stored and used to match LDAP users with existing BookStack users.
+# Prefixing the value with 'BIN;' will assume the LDAP service provides the attribute value as
+# binary data and BookStack will convert the value to a hexidecimal representation.
+# Defaults to 'uid'.
+LDAP_ID_ATTRIBUTE=uid
+
+# Set the default 'email' attribute. Defaults to 'mail'
+LDAP_EMAIL_ATTRIBUTE=mail
+
+# Set the property to use for a user's display name. Defaults to 'cn'
+LDAP_DISPLAY_NAME_ATTRIBUTE=cn
+
+# Set the attribute to use for the user's avatar image.
+# Must provide JPEG binary image data.
+# Will be used upon login or registration when the user doesn't
+# already have an avatar image set.
+# Remove this option or set to 'null' to disable LDAP avatar import.
+
+#LDAP_THUMBNAIL_ATTRIBUTE=jpegphoto
+
+# Force TLS to be used for LDAP communication.
+# Use this if you can but your LDAP support will need to support it and
+# you may need to import your certificate to the BookStack host machine.
+# Defaults to 'false'.
+LDAP_START_TLS=false
+
+# If you need to allow untrusted LDAPS certificates, add the below and uncomment (remove the #)
+# Only set this option if debugging or you're absolutely sure it's required for your setup.
+# If using php-fpm, you may want to restart it after changing this option to avoid instability.
+#LDAP_TLS_INSECURE=true
+
+# If you need to debug the details coming from your LDAP server, add the below and uncomment (remove the #)
+# Only set this option if debugging since it will block logins and potentially show private details.
+#LDAP_DUMP_USER_DETAILS=true
