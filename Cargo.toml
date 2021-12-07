@@ -2,8 +2,11 @@
 members = [
   "server",
   "auth",
-  "app"
+  "app",
+  "migration-tool"
 ]
+
+default-members = ["server"]
 
 # TODO: remove when there's a new release.
 [patch.crates-io.yew_form]

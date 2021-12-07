@@ -1,0 +1,6 @@
+mutation CreateGroup($name: String!) {
+  createGroup(name: $name) {
+    id
+    displayName
+  }
+}
