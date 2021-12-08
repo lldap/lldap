@@ -3,7 +3,7 @@ use lettre::message::Mailbox;
 
 /// lldap is a lightweight LDAP server
 #[derive(Debug, Clap, Clone)]
-#[clap(version = "0.1", author = "The LLDAP team")]
+#[clap(version, author)]
 pub struct CLIOpts {
     /// Export
     #[clap(subcommand)]
