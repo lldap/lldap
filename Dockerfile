@@ -31,11 +31,12 @@ RUN cargo chef prepare --recipe-path /tmp/recipe.json
 FROM chef AS builder
 COPY --from=planner /tmp/recipe.json recipe.json
 RUN cargo chef cook --release -p lldap_app --target wasm32-unknown-unknown \
-    && cargo chef cook --release -p lldap
+    && cargo chef cook --release -p lldap \
+    && cargo chef cook --release -p migration-tool
 
 # Copy the source and build the app and server.
 COPY --chown=app:app . .
-RUN cargo build --release -p lldap \
+RUN cargo build --release -p lldap -p migration-tool \
     # Build the frontend.
     && ./app/build.sh
 
@@ -47,7 +48,7 @@ WORKDIR /app
 COPY --from=builder /app/app/index_local.html app/index.html
 COPY --from=builder /app/app/static app/static
 COPY --from=builder /app/app/pkg app/pkg
-COPY --from=builder /app/target/release/lldap lldap
+COPY --from=builder /app/target/release/lldap /app/target/release/migration-tool ./
 COPY docker-entrypoint.sh lldap_config.docker_template.toml ./
 
 RUN set -x \

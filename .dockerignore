@@ -5,9 +5,6 @@
 
 # Don't track cargo generated files
 target/*
-server/target/*
-app/target/*
-auth/target/*
 
 # Don't track the generated JS
 app/pkg/*
@@ -20,6 +17,7 @@ Dockerfile
 README.md
 LICENSE
 docs/*
+example_configs/*
 
 # Various config files that shouldn't be tracked
 lldap_config.toml
