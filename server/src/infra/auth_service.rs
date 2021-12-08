@@ -53,7 +53,7 @@ fn get_refresh_token_from_cookie(
 ) -> std::result::Result<(u64, String), HttpResponse> {
     match request.cookie("refresh_token") {
         None => Err(HttpResponse::Unauthorized().body("Missing refresh token")),
-        Some(t) => match t.value().split_once("+") {
+        Some(t) => match t.value().split_once('+') {
             None => Err(HttpResponse::Unauthorized().body("Invalid refresh token")),
             Some((token, u)) => {
                 let refresh_token_hash = {
