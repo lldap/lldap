@@ -5,8 +5,7 @@ use web_sys::HtmlDocument;
 
 fn get_document() -> Result<HtmlDocument> {
     web_sys::window()
-        .map(|w| w.document())
-        .flatten()
+        .and_then(|w| w.document())
         .ok_or_else(|| anyhow!("Could not get window document"))
         .and_then(|d| {
             d.dyn_into::<web_sys::HtmlDocument>()
@@ -16,8 +15,7 @@ fn get_document() -> Result<HtmlDocument> {
 
 pub fn set_cookie(cookie_name: &str, value: &str, expiration: &DateTime<Utc>) -> Result<()> {
     let doc = web_sys::window()
-        .map(|w| w.document())
-        .flatten()
+        .and_then(|w| w.document())
         .ok_or_else(|| anyhow!("Could not get window document"))
         .and_then(|d| {
             d.dyn_into::<web_sys::HtmlDocument>()
