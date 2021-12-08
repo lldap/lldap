@@ -20,11 +20,10 @@ jobs:
       - id: skip_check
         uses: fkirc/skip-duplicate-actions@master
         with:
-          # All of these options are optional, so you can remove them if you are happy with the defaults
           concurrent_skipping: 'never'
           skip_after_successful_duplicate: 'true'
-          paths_ignore: '["**/README.md", "**/docs/**"]'
-          do_not_skip: '["pull_request", "workflow_dispatch", "schedule"]'
+          paths_ignore: '["**/*.md", "**/docs/**", "example_configs/**", "*.sh"]'
+          do_not_skip: '["workflow_dispatch", "schedule"]'
   test:
     name: cargo test
     needs: pre_job
