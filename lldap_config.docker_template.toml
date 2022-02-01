@@ -20,7 +20,7 @@
 ## them to re-login.
 ## You should probably set it through the LLDAP_JWT_SECRET environment
 ## variable from a secret ".env" file.
-## This can also be set from a file's contents by specifying the file path 
+## This can also be set from a file's contents by specifying the file path
 ## in the LLDAP_JWT_SECRET_FILE environment variable
 ## You can generate it with (on linux):
 ## LC_ALL=C tr -dc 'A-Za-z0-9!"#%&'\''()*+,-./:;<=>?@[\]^_{|}~' </dev/urandom | head -c 32; echo ''
@@ -48,7 +48,7 @@
 ## It should be minimum 8 characters long.
 ## You can set it with the LLDAP_LDAP_USER_PASS environment variable.
 ## This can also be set from a file's contents by specifying the file path
-## in the LLDAP_USER_PASS_FILE environment variable
+## in the LLDAP_LDAP_USER_PASS_FILE environment variable
 ## Note: you can create another admin user for user administration, this
 ## is just the default one.
 #ldap_user_pass = "REPLACE_WITH_PASSWORD"
@@ -95,3 +95,7 @@ key_file = "/data/private_key"
 #from="LLDAP Admin <sender@gmail.com>"
 ## Same for reply-to, optional.
 #reply_to="Do not reply <noreply@localhost>"
+
+## Tune the logging to be more verbose by setting this to be true.
+## You can set it with the VERBOSE environment variable.
+# verbose=false
