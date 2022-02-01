@@ -97,5 +97,5 @@ key_file = "/data/private_key"
 #reply_to="Do not reply <noreply@localhost>"
 
 ## Tune the logging to be more verbose by setting this to be true.
-## You can set it with the VERBOSE environment variable.
+## You can set it with the LLDAP_VERBOSE environment variable.
 # verbose=false
