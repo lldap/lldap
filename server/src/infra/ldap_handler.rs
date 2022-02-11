@@ -37,7 +37,7 @@ where
 
 fn parse_distinguished_name(dn: &str) -> Result<Vec<(String, String)>> {
     dn.split(',')
-        .map(|s| make_dn_pair(s.split('=').map(String::from)))
+        .map(|s| make_dn_pair(s.split('=').map(str::trim).map(String::from)))
         .collect()
 }
 
@@ -908,6 +908,11 @@ mod tests {
             parse_distinguished_name("ou=people,dc=example,dc=com").expect("parsing failed"),
             parsed_dn
         );
+        assert_eq!(
+            parse_distinguished_name(" ou  = people , dc = example , dc =  com ")
+                .expect("parsing failed"),
+            parsed_dn
+        );
     }
 
     #[tokio::test]
@@ -1212,7 +1217,7 @@ mod tests {
         let request = make_user_search_request(
             LdapFilter::Equality(
                 "memberOf".to_string(),
-                "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                "cn=group_1, ou=groups, dc=example,dc=com".to_string(),
             ),
             vec!["objectClass"],
         );
