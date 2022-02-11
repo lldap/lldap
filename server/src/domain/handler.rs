@@ -43,10 +43,10 @@ pub struct BindRequest {
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub enum RequestFilter {
-    And(Vec<RequestFilter>),
-    Or(Vec<RequestFilter>),
-    Not(Box<RequestFilter>),
+pub enum UserRequestFilter {
+    And(Vec<UserRequestFilter>),
+    Or(Vec<UserRequestFilter>),
+    Not(Box<UserRequestFilter>),
     Equality(String, String),
     // Check if a user belongs to a group identified by name.
     MemberOf(String),
@@ -93,7 +93,7 @@ pub struct GroupIdAndName(pub GroupId, pub String);
 
 #[async_trait]
 pub trait BackendHandler: Clone + Send {
-    async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>>;
+    async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>>;
     async fn list_groups(&self) -> Result<Vec<Group>>;
     async fn get_user_details(&self, user_id: &str) -> Result<User>;
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
@@ -116,7 +116,7 @@ mockall::mock! {
     }
     #[async_trait]
     impl BackendHandler for TestBackendHandler {
-        async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>>;
+        async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>>;
         async fn list_groups(&self) -> Result<Vec<Group>>;
         async fn get_user_details(&self, user_id: &str) -> Result<User>;
         async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;

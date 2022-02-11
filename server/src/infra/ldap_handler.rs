@@ -1,6 +1,6 @@
 use crate::domain::{
     handler::{
-        BackendHandler, BindRequest, Group, GroupIdAndName, LoginHandler, RequestFilter, User,
+        BackendHandler, BindRequest, Group, GroupIdAndName, LoginHandler, UserRequestFilter, User,
     },
     opaque_handler::OpaqueHandler,
 };
@@ -494,7 +494,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             g: &GroupIdAndName,
         ) -> Result<Group> {
             let users = backend_handler
-                .list_users(Some(RequestFilter::MemberOfId(g.0)))
+                .list_users(Some(UserRequestFilter::MemberOfId(g.0)))
                 .await?;
             Ok(Group {
                 id: g.0,
@@ -605,21 +605,21 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
-    fn convert_user_filter(&self, filter: &LdapFilter) -> Result<RequestFilter> {
+    fn convert_user_filter(&self, filter: &LdapFilter) -> Result<UserRequestFilter> {
         match filter {
-            LdapFilter::And(filters) => Ok(RequestFilter::And(
+            LdapFilter::And(filters) => Ok(UserRequestFilter::And(
                 filters
                     .iter()
                     .map(|f| self.convert_user_filter(f))
                     .collect::<Result<_>>()?,
             )),
-            LdapFilter::Or(filters) => Ok(RequestFilter::Or(
+            LdapFilter::Or(filters) => Ok(UserRequestFilter::Or(
                 filters
                     .iter()
                     .map(|f| self.convert_user_filter(f))
                     .collect::<Result<_>>()?,
             )),
-            LdapFilter::Not(filter) => Ok(RequestFilter::Not(Box::new(
+            LdapFilter::Not(filter) => Ok(UserRequestFilter::Not(Box::new(
                 self.convert_user_filter(&*filter)?,
             ))),
             LdapFilter::Equality(field, value) => {
@@ -629,27 +629,27 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         &self.base_dn,
                         &self.base_dn_str,
                     )?;
-                    Ok(RequestFilter::MemberOf(group_name))
+                    Ok(UserRequestFilter::MemberOf(group_name))
                 } else if field.to_lowercase() == "objectclass" {
                     if value == "person"
                         || value == "inetOrgPerson"
                         || value == "posixAccount"
                         || value == "mailAccount"
                     {
-                        Ok(RequestFilter::And(vec![]))
+                        Ok(UserRequestFilter::And(vec![]))
                     } else {
-                        Ok(RequestFilter::Not(Box::new(RequestFilter::And(vec![]))))
+                        Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))))
                     }
                 } else {
-                    Ok(RequestFilter::Equality(map_field(field)?, value.clone()))
+                    Ok(UserRequestFilter::Equality(map_field(field)?, value.clone()))
                 }
             }
             LdapFilter::Present(field) => {
                 // Check that it's a field we support.
                 if field.to_lowercase() == "objectclass" || map_field(field).is_ok() {
-                    Ok(RequestFilter::And(vec![]))
+                    Ok(UserRequestFilter::And(vec![]))
                 } else {
-                    Ok(RequestFilter::Not(Box::new(RequestFilter::And(vec![]))))
+                    Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))))
                 }
             }
             _ => bail!("Unsupported user filter: {:?}", filter),
@@ -678,7 +678,7 @@ mod tests {
         }
         #[async_trait]
         impl BackendHandler for TestBackendHandler {
-            async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>>;
+            async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>>;
             async fn list_groups(&self) -> Result<Vec<Group>>;
             async fn get_user_details(&self, user_id: &str) -> Result<User>;
             async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
@@ -1133,7 +1133,7 @@ mod tests {
                 Ok(set)
             });
         mock.expect_list_users()
-            .with(eq(Some(RequestFilter::MemberOfId(GroupId(1)))))
+            .with(eq(Some(UserRequestFilter::MemberOfId(GroupId(1)))))
             .times(1)
             .return_once(|_| {
                 Ok(vec![User {
@@ -1172,16 +1172,16 @@ mod tests {
     async fn test_search_filters() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(RequestFilter::And(vec![RequestFilter::Or(vec![
-                RequestFilter::Not(Box::new(RequestFilter::Equality(
+            .with(eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(vec![
+                UserRequestFilter::Not(Box::new(UserRequestFilter::Equality(
                     "user_id".to_string(),
                     "bob".to_string(),
                 ))),
-                RequestFilter::And(vec![]),
-                RequestFilter::Not(Box::new(RequestFilter::And(vec![]))),
-                RequestFilter::And(vec![]),
-                RequestFilter::And(vec![]),
-                RequestFilter::Not(Box::new(RequestFilter::And(vec![]))),
+                UserRequestFilter::And(vec![]),
+                UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
+                UserRequestFilter::And(vec![]),
+                UserRequestFilter::And(vec![]),
+                UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
             ])]))))
             .times(1)
             .return_once(|_| Ok(vec![]));
@@ -1210,7 +1210,7 @@ mod tests {
     async fn test_search_member_of() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(RequestFilter::MemberOf("group_1".to_string()))))
+            .with(eq(Some(UserRequestFilter::MemberOf("group_1".to_string()))))
             .times(1)
             .return_once(|_| Ok(vec![]));
         let mut ldap_handler = setup_bound_handler(mock).await;
@@ -1256,8 +1256,8 @@ mod tests {
     async fn test_search_filters_lowercase() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(RequestFilter::And(vec![RequestFilter::Or(vec![
-                RequestFilter::Not(Box::new(RequestFilter::Equality(
+            .with(eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(vec![
+                UserRequestFilter::Not(Box::new(UserRequestFilter::Equality(
                     "first_name".to_string(),
                     "bob".to_string(),
                 ))),

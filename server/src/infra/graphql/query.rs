@@ -2,7 +2,7 @@ use crate::domain::handler::{BackendHandler, GroupId, GroupIdAndName};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 
-type DomainRequestFilter = crate::domain::handler::RequestFilter;
+type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
 type DomainUser = crate::domain::handler::User;
 type DomainGroup = crate::domain::handler::Group;
 use super::api::Context;
@@ -269,7 +269,10 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{domain::handler::MockTestBackendHandler, infra::auth_service::ValidationResults};
+    use crate::{
+        domain::handler::{MockTestBackendHandler, UserRequestFilter},
+        infra::auth_service::ValidationResults,
+    };
     use juniper::{
         execute, graphql_value, DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType,
         RootNode, Variables,
@@ -358,11 +361,10 @@ mod tests {
         }"#;
 
         let mut mock = MockTestBackendHandler::new();
-        use crate::domain::handler::RequestFilter;
         mock.expect_list_users()
-            .with(eq(Some(RequestFilter::Or(vec![
-                RequestFilter::Equality("id".to_string(), "bob".to_string()),
-                RequestFilter::Equality("email".to_string(), "robert@bobbers.on".to_string()),
+            .with(eq(Some(UserRequestFilter::Or(vec![
+                UserRequestFilter::Equality("id".to_string(), "bob".to_string()),
+                UserRequestFilter::Equality("email".to_string(), "robert@bobbers.on".to_string()),
             ]))))
             .return_once(|_| {
                 Ok(vec![
