@@ -21,10 +21,10 @@ impl SqlBackendHandler {
 struct RequiresGroup(bool);
 
 // Returns the condition for the SQL query, and whether it requires joining with the groups table.
-fn get_filter_expr(filter: RequestFilter) -> (RequiresGroup, SimpleExpr) {
-    use RequestFilter::*;
+fn get_filter_expr(filter: UserRequestFilter) -> (RequiresGroup, SimpleExpr) {
+    use UserRequestFilter::*;
     fn get_repeated_filter(
-        fs: Vec<RequestFilter>,
+        fs: Vec<UserRequestFilter>,
         field: &dyn Fn(SimpleExpr, SimpleExpr) -> SimpleExpr,
     ) -> (RequiresGroup, SimpleExpr) {
         let mut requires_group = false;
@@ -74,7 +74,7 @@ fn get_filter_expr(filter: RequestFilter) -> (RequiresGroup, SimpleExpr) {
 
 #[async_trait]
 impl BackendHandler for SqlBackendHandler {
-    async fn list_users(&self, filters: Option<RequestFilter>) -> Result<Vec<User>> {
+    async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>> {
         let query = {
             let mut query_builder = Query::select()
                 .column((Users::Table, Users::UserId))
@@ -88,11 +88,15 @@ impl BackendHandler for SqlBackendHandler {
                 .order_by((Users::Table, Users::UserId), Order::Asc)
                 .to_owned();
             if let Some(filter) = filters {
-                if filter == RequestFilter::Not(Box::new(RequestFilter::And(Vec::new()))) {
+                if filter
+                    == UserRequestFilter::Not(Box::new(
+                        UserRequestFilter::And(Vec::new()),
+                    ))
+                {
                     return Ok(Vec::new());
                 }
-                if filter != RequestFilter::And(Vec::new())
-                    && filter != RequestFilter::Or(Vec::new())
+                if filter != UserRequestFilter::And(Vec::new())
+                    && filter != UserRequestFilter::Or(Vec::new())
                 {
                     let (RequiresGroup(requires_group), condition) = get_filter_expr(filter);
                     query_builder.and_where(condition);
@@ -516,7 +520,7 @@ mod tests {
         }
         {
             let users = handler
-                .list_users(Some(RequestFilter::Equality(
+                .list_users(Some(UserRequestFilter::Equality(
                     "user_id".to_string(),
                     "bob".to_string(),
                 )))
@@ -529,9 +533,9 @@ mod tests {
         }
         {
             let users = handler
-                .list_users(Some(RequestFilter::Or(vec![
-                    RequestFilter::Equality("user_id".to_string(), "bob".to_string()),
-                    RequestFilter::Equality("user_id".to_string(), "John".to_string()),
+                .list_users(Some(UserRequestFilter::Or(vec![
+                    UserRequestFilter::Equality("user_id".to_string(), "bob".to_string()),
+                    UserRequestFilter::Equality("user_id".to_string(), "John".to_string()),
                 ])))
                 .await
                 .unwrap()
@@ -542,7 +546,7 @@ mod tests {
         }
         {
             let users = handler
-                .list_users(Some(RequestFilter::Not(Box::new(RequestFilter::Equality(
+                .list_users(Some(UserRequestFilter::Not(Box::new(UserRequestFilter::Equality(
                     "user_id".to_string(),
                     "bob".to_string(),
                 )))))
