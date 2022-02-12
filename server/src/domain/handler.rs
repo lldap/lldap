@@ -54,6 +54,17 @@ pub enum UserRequestFilter {
     MemberOfId(GroupId),
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub enum GroupRequestFilter {
+    And(Vec<GroupRequestFilter>),
+    Or(Vec<GroupRequestFilter>),
+    Not(Box<GroupRequestFilter>),
+    DisplayName(String),
+    GroupId(GroupId),
+    // Check if the group contains a user identified by uid.
+    Member(String),
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
 pub struct CreateUserRequest {
     // Same fields as User, but no creation_date, and with password.
@@ -94,7 +105,7 @@ pub struct GroupIdAndName(pub GroupId, pub String);
 #[async_trait]
 pub trait BackendHandler: Clone + Send {
     async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>>;
-    async fn list_groups(&self) -> Result<Vec<Group>>;
+    async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
     async fn get_user_details(&self, user_id: &str) -> Result<User>;
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
@@ -117,7 +128,7 @@ mockall::mock! {
     #[async_trait]
     impl BackendHandler for TestBackendHandler {
         async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>>;
-        async fn list_groups(&self) -> Result<Vec<Group>>;
+        async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
         async fn get_user_details(&self, user_id: &str) -> Result<User>;
         async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;

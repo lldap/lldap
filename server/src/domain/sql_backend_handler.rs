@@ -21,7 +21,7 @@ impl SqlBackendHandler {
 struct RequiresGroup(bool);
 
 // Returns the condition for the SQL query, and whether it requires joining with the groups table.
-fn get_filter_expr(filter: UserRequestFilter) -> (RequiresGroup, SimpleExpr) {
+fn get_user_filter_expr(filter: UserRequestFilter) -> (RequiresGroup, SimpleExpr) {
     use UserRequestFilter::*;
     fn get_repeated_filter(
         fs: Vec<UserRequestFilter>,
@@ -32,13 +32,13 @@ fn get_filter_expr(filter: UserRequestFilter) -> (RequiresGroup, SimpleExpr) {
         let first_expr = match it.next() {
             None => return (RequiresGroup(false), Expr::value(true)),
             Some(f) => {
-                let (group, filter) = get_filter_expr(f);
+                let (group, filter) = get_user_filter_expr(f);
                 requires_group |= group.0;
                 filter
             }
         };
         let filter = it.fold(first_expr, |e, f| {
-            let (group, filters) = get_filter_expr(f);
+            let (group, filters) = get_user_filter_expr(f);
             requires_group |= group.0;
             field(e, filters)
         });
@@ -48,7 +48,7 @@ fn get_filter_expr(filter: UserRequestFilter) -> (RequiresGroup, SimpleExpr) {
         And(fs) => get_repeated_filter(fs, &SimpleExpr::and),
         Or(fs) => get_repeated_filter(fs, &SimpleExpr::or),
         Not(f) => {
-            let (requires_group, filters) = get_filter_expr(*f);
+            let (requires_group, filters) = get_user_filter_expr(*f);
             (requires_group, Expr::not(Expr::expr(filters)))
         }
         Equality(s1, s2) => (
@@ -72,6 +72,37 @@ fn get_filter_expr(filter: UserRequestFilter) -> (RequiresGroup, SimpleExpr) {
     }
 }
 
+// Returns the condition for the SQL query, and whether it requires joining with the groups table.
+fn get_group_filter_expr(filter: GroupRequestFilter) -> SimpleExpr {
+    use GroupRequestFilter::*;
+    fn get_repeated_filter(
+        fs: Vec<GroupRequestFilter>,
+        field: &dyn Fn(SimpleExpr, SimpleExpr) -> SimpleExpr,
+    ) -> SimpleExpr {
+        let mut it = fs.into_iter();
+        let first_expr = match it.next() {
+            None => return Expr::value(true),
+            Some(f) => get_group_filter_expr(f),
+        };
+        it.fold(first_expr, |e, f| field(e, get_group_filter_expr(f)))
+    }
+    match filter {
+        And(fs) => get_repeated_filter(fs, &SimpleExpr::and),
+        Or(fs) => get_repeated_filter(fs, &SimpleExpr::or),
+        Not(f) => Expr::not(Expr::expr(get_group_filter_expr(*f))),
+        DisplayName(name) => Expr::col((Groups::Table, Groups::DisplayName)).eq(name),
+        GroupId(id) => Expr::col((Groups::Table, Groups::GroupId)).eq(id.0),
+        // WHERE (group_id in (SELECT group_id FROM memberships WHERE user_id = user))
+        Member(user) => Expr::col((Memberships::Table, Memberships::GroupId)).in_subquery(
+            Query::select()
+                .column(Memberships::GroupId)
+                .from(Memberships::Table)
+                .and_where(Expr::col(Memberships::UserId).eq(user))
+                .take(),
+        ),
+    }
+}
+
 #[async_trait]
 impl BackendHandler for SqlBackendHandler {
     async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>> {
@@ -88,17 +119,13 @@ impl BackendHandler for SqlBackendHandler {
                 .order_by((Users::Table, Users::UserId), Order::Asc)
                 .to_owned();
             if let Some(filter) = filters {
-                if filter
-                    == UserRequestFilter::Not(Box::new(
-                        UserRequestFilter::And(Vec::new()),
-                    ))
-                {
+                if filter == UserRequestFilter::Not(Box::new(UserRequestFilter::And(Vec::new()))) {
                     return Ok(Vec::new());
                 }
                 if filter != UserRequestFilter::And(Vec::new())
                     && filter != UserRequestFilter::Or(Vec::new())
                 {
-                    let (RequiresGroup(requires_group), condition) = get_filter_expr(filter);
+                    let (RequiresGroup(requires_group), condition) = get_user_filter_expr(filter);
                     query_builder.and_where(condition);
                     if requires_group {
                         query_builder
@@ -127,20 +154,36 @@ impl BackendHandler for SqlBackendHandler {
         Ok(results.into_iter().collect::<sqlx::Result<Vec<User>>>()?)
     }
 
-    async fn list_groups(&self) -> Result<Vec<Group>> {
-        let query: String = Query::select()
-            .column((Groups::Table, Groups::GroupId))
-            .column(Groups::DisplayName)
-            .column(Memberships::UserId)
-            .from(Groups::Table)
-            .left_join(
-                Memberships::Table,
-                Expr::tbl(Groups::Table, Groups::GroupId)
-                    .equals(Memberships::Table, Memberships::GroupId),
-            )
-            .order_by(Groups::DisplayName, Order::Asc)
-            .order_by(Memberships::UserId, Order::Asc)
-            .to_string(DbQueryBuilder {});
+    async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
+        let query: String = {
+            let mut query_builder = Query::select()
+                .column((Groups::Table, Groups::GroupId))
+                .column(Groups::DisplayName)
+                .column(Memberships::UserId)
+                .from(Groups::Table)
+                .left_join(
+                    Memberships::Table,
+                    Expr::tbl(Groups::Table, Groups::GroupId)
+                        .equals(Memberships::Table, Memberships::GroupId),
+                )
+                .order_by(Groups::DisplayName, Order::Asc)
+                .order_by(Memberships::UserId, Order::Asc)
+                .to_owned();
+
+            if let Some(filter) = filters {
+                if filter == GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(Vec::new())))
+                {
+                    return Ok(Vec::new());
+                }
+                if filter != GroupRequestFilter::And(Vec::new())
+                    && filter != GroupRequestFilter::Or(Vec::new())
+                {
+                    query_builder.and_where(get_group_filter_expr(filter));
+                }
+            }
+
+            query_builder.to_string(DbQueryBuilder {})
+        };
 
         // For group_by.
         use itertools::Itertools;
@@ -546,10 +589,9 @@ mod tests {
         }
         {
             let users = handler
-                .list_users(Some(UserRequestFilter::Not(Box::new(UserRequestFilter::Equality(
-                    "user_id".to_string(),
-                    "bob".to_string(),
-                )))))
+                .list_users(Some(UserRequestFilter::Not(Box::new(
+                    UserRequestFilter::Equality("user_id".to_string(), "bob".to_string()),
+                ))))
                 .await
                 .unwrap()
                 .into_iter()
@@ -575,7 +617,7 @@ mod tests {
         insert_membership(&handler, group_2, "patrick").await;
         insert_membership(&handler, group_2, "John").await;
         assert_eq!(
-            handler.list_groups().await.unwrap(),
+            handler.list_groups(None).await.unwrap(),
             vec![
                 Group {
                     id: group_1,
@@ -593,6 +635,43 @@ mod tests {
                     users: vec!["John".to_string(), "patrick".to_string()]
                 },
             ]
+        );
+        assert_eq!(
+            handler
+                .list_groups(Some(GroupRequestFilter::Or(vec![
+                    GroupRequestFilter::DisplayName("Empty Group".to_string()),
+                    GroupRequestFilter::Member("bob".to_string()),
+                ])))
+                .await
+                .unwrap(),
+            vec![
+                Group {
+                    id: group_1,
+                    display_name: "Best Group".to_string(),
+                    users: vec!["bob".to_string(), "patrick".to_string()]
+                },
+                Group {
+                    id: group_3,
+                    display_name: "Empty Group".to_string(),
+                    users: vec![]
+                },
+            ]
+        );
+        assert_eq!(
+            handler
+                .list_groups(Some(GroupRequestFilter::And(vec![
+                    GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
+                        "value".to_string()
+                    ))),
+                    GroupRequestFilter::GroupId(group_1),
+                ])))
+                .await
+                .unwrap(),
+            vec![Group {
+                id: group_1,
+                display_name: "Best Group".to_string(),
+                users: vec!["bob".to_string(), "patrick".to_string()]
+            }]
         );
     }
 

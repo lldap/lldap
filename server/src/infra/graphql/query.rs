@@ -134,7 +134,7 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         }
         Ok(context
             .handler
-            .list_groups()
+            .list_groups(None)
             .await
             .map(|v| v.into_iter().map(Into::into).collect())?)
     }

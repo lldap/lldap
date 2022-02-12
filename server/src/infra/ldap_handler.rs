@@ -1,12 +1,11 @@
 use crate::domain::{
     handler::{
-        BackendHandler, BindRequest, Group, GroupIdAndName, LoginHandler, UserRequestFilter, User,
+        BackendHandler, BindRequest, Group, GroupRequestFilter, LoginHandler, User,
+        UserRequestFilter,
     },
     opaque_handler::OpaqueHandler,
 };
 use anyhow::{bail, Context, Result};
-use futures::stream::StreamExt;
-use futures_util::TryStreamExt;
 use ldap3_server::proto::{
     LdapBindCred, LdapBindRequest, LdapBindResponse, LdapExtendedRequest, LdapExtendedResponse,
     LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest, LdapResult,
@@ -479,8 +478,8 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     async fn get_groups_list(&self, request: &LdapSearchRequest) -> Vec<LdapOp> {
-        let for_user = match self.get_group_filter(&request.filter) {
-            Ok(u) => u,
+        let filter = match self.convert_group_filter(&request.filter) {
+            Ok(f) => f,
             Err(e) => {
                 return vec![make_search_error(
                     LdapResultCode::UnwillingToPerform,
@@ -489,55 +488,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             }
         };
 
-        async fn get_users_for_group<Backend: BackendHandler>(
-            backend_handler: &Backend,
-            g: &GroupIdAndName,
-        ) -> Result<Group> {
-            let users = backend_handler
-                .list_users(Some(UserRequestFilter::MemberOfId(g.0)))
-                .await?;
-            Ok(Group {
-                id: g.0,
-                display_name: g.1.clone(),
-                users: users.into_iter().map(|u| u.user_id).collect(),
-            })
-        }
-
-        let groups: Vec<Group> = if let Some(user) = for_user {
-            let groups_without_users = match self.backend_handler.get_user_groups(&user).await {
-                Ok(groups) => groups,
-                Err(e) => {
-                    return vec![make_search_error(
-                        LdapResultCode::Other,
-                        format!(
-                            r#"Error while listing user groups: "{}": {:#}"#,
-                            request.base, e
-                        ),
-                    )]
-                }
-            };
-            match tokio_stream::iter(groups_without_users.iter())
-                .then(|g| async move { get_users_for_group::<Backend>(&self.backend_handler, g).await })
-                .try_collect::<Vec<Group>>()
-                .await
-            {
-                Ok(groups) => groups,
-                Err(e) => {
-                    return vec![make_search_error(
-                        LdapResultCode::Other,
-                        format!(r#"Error while listing user groups: "{}": {:#}"#, request.base, e),
-                    )]
-                }
-            }
-        } else {
-            match self.backend_handler.list_groups().await {
-                Ok(groups) => groups,
-                Err(e) => {
-                    return vec![make_search_error(
-                        LdapResultCode::Other,
-                        format!(r#"Error while listing groups "{}": {:#}"#, request.base, e),
-                    )]
-                }
+        let groups = match self.backend_handler.list_groups(Some(filter)).await {
+            Ok(groups) => groups,
+            Err(e) => {
+                return vec![make_search_error(
+                    LdapResultCode::Other,
+                    format!(r#"Error while listing groups "{}": {:#}"#, request.base, e),
+                )]
             }
         };
 
@@ -582,7 +539,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         })
     }
 
-    fn get_group_filter(&self, filter: &LdapFilter) -> Result<Option<String>> {
+    fn convert_group_filter(&self, filter: &LdapFilter) -> Result<GroupRequestFilter> {
         match filter {
             LdapFilter::Equality(field, value) => {
                 if field == "member" || field.to_lowercase() == "uniquemember" {
@@ -591,16 +548,33 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         &self.base_dn,
                         &self.base_dn_str,
                     )?;
-                    Ok(Some(user_name))
+                    Ok(GroupRequestFilter::Member(user_name))
                 } else if field.to_lowercase() == "objectclass" && value == "groupOfUniqueNames" {
-                    Ok(None)
+                    Ok(GroupRequestFilter::And(vec![]))
                 } else {
-                    bail!("Unsupported group filter: {:?}", filter)
+                    let field = map_field(field)?;
+                    if field == "display_name" {
+                        Ok(GroupRequestFilter::DisplayName(value.clone()))
+                    } else {
+                        bail!("Unsupported group attribute: {:?}", field)
+                    }
                 }
             }
-            LdapFilter::And(v) => v
-                .iter()
-                .fold(Ok(None), |o, f| Ok(o?.xor(self.get_group_filter(f)?))),
+            LdapFilter::And(filters) => Ok(GroupRequestFilter::And(
+                filters
+                    .iter()
+                    .map(|f| self.convert_group_filter(f))
+                    .collect::<Result<_>>()?,
+            )),
+            LdapFilter::Or(filters) => Ok(GroupRequestFilter::Or(
+                filters
+                    .iter()
+                    .map(|f| self.convert_group_filter(f))
+                    .collect::<Result<_>>()?,
+            )),
+            LdapFilter::Not(filter) => Ok(GroupRequestFilter::Not(Box::new(
+                self.convert_group_filter(&*filter)?,
+            ))),
             _ => bail!("Unsupported group filter: {:?}", filter),
         }
     }
@@ -638,10 +612,15 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     {
                         Ok(UserRequestFilter::And(vec![]))
                     } else {
-                        Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))))
+                        Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
+                            vec![],
+                        ))))
                     }
                 } else {
-                    Ok(UserRequestFilter::Equality(map_field(field)?, value.clone()))
+                    Ok(UserRequestFilter::Equality(
+                        map_field(field)?,
+                        value.clone(),
+                    ))
                 }
             }
             LdapFilter::Present(field) => {
@@ -649,7 +628,9 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 if field.to_lowercase() == "objectclass" || map_field(field).is_ok() {
                     Ok(UserRequestFilter::And(vec![]))
                 } else {
-                    Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))))
+                    Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
+                        vec![],
+                    ))))
                 }
             }
             _ => bail!("Unsupported user filter: {:?}", filter),
@@ -679,7 +660,7 @@ mod tests {
         #[async_trait]
         impl BackendHandler for TestBackendHandler {
             async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>>;
-            async fn list_groups(&self) -> Result<Vec<Group>>;
+            async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
             async fn get_user_details(&self, user_id: &str) -> Result<User>;
             async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
             async fn get_user_groups(&self, user: &str) -> Result<HashSet<GroupIdAndName>>;
@@ -1048,20 +1029,23 @@ mod tests {
     #[tokio::test]
     async fn test_search_groups() {
         let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_groups().times(1).return_once(|| {
-            Ok(vec![
-                Group {
-                    id: GroupId(1),
-                    display_name: "group_1".to_string(),
-                    users: vec!["bob".to_string(), "john".to_string()],
-                },
-                Group {
-                    id: GroupId(3),
-                    display_name: "bestgroup".to_string(),
-                    users: vec!["john".to_string()],
-                },
-            ])
-        });
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::And(vec![]))))
+            .times(1)
+            .return_once(|_| {
+                Ok(vec![
+                    Group {
+                        id: GroupId(1),
+                        display_name: "group_1".to_string(),
+                        users: vec!["bob".to_string(), "john".to_string()],
+                    },
+                    Group {
+                        id: GroupId(3),
+                        display_name: "bestgroup".to_string(),
+                        users: vec!["john".to_string()],
+                    },
+                ])
+            });
         let mut ldap_handler = setup_bound_handler(mock).await;
         let request = make_search_request(
             "ou=groups,dc=example,dc=com",
@@ -1124,27 +1108,25 @@ mod tests {
     #[tokio::test]
     async fn test_search_groups_filter() {
         let mut mock = MockTestBackendHandler::new();
-        mock.expect_get_user_groups()
-            .with(eq("bob"))
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::And(vec![
+                GroupRequestFilter::DisplayName("group_1".to_string()),
+                GroupRequestFilter::Member("bob".to_string()),
+                GroupRequestFilter::And(vec![]),
+            ]))))
             .times(1)
             .return_once(|_| {
-                let mut set = HashSet::new();
-                set.insert(GroupIdAndName(GroupId(1), "group_1".to_string()));
-                Ok(set)
-            });
-        mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::MemberOfId(GroupId(1)))))
-            .times(1)
-            .return_once(|_| {
-                Ok(vec![User {
-                    user_id: "bob".to_string(),
-                    ..Default::default()
+                Ok(vec![Group {
+                    display_name: "group_1".to_string(),
+                    id: GroupId(1),
+                    users: vec![],
                 }])
             });
         let mut ldap_handler = setup_bound_handler(mock).await;
         let request = make_search_request(
             "ou=groups,dc=example,dc=com",
             LdapFilter::And(vec![
+                LdapFilter::Equality("cn".to_string(), "group_1".to_string()),
                 LdapFilter::Equality(
                     "uniqueMember".to_string(),
                     "cn=bob,ou=people,dc=example,dc=com".to_string(),
@@ -1169,20 +1151,116 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_search_groups_filter_2() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::Or(vec![
+                GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
+                    "group_2".to_string(),
+                ))),
+            ]))))
+            .times(1)
+            .return_once(|_| {
+                Ok(vec![Group {
+                    display_name: "group_1".to_string(),
+                    id: GroupId(1),
+                    users: vec![],
+                }])
+            });
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = make_search_request(
+            "ou=groups,dc=example,dc=com",
+            LdapFilter::Or(vec![LdapFilter::Not(Box::new(LdapFilter::Equality(
+                "displayname".to_string(),
+                "group_2".to_string(),
+            )))]),
+            vec!["cn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                    attributes: vec![LdapPartialAttribute {
+                        atype: "cn".to_string(),
+                        vals: vec!["group_1".to_string()]
+                    },],
+                }),
+                make_search_success(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_groups_error() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::Or(vec![
+                GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
+                    "group_2".to_string(),
+                ))),
+            ]))))
+            .times(1)
+            .return_once(|_| {
+                Err(crate::domain::error::DomainError::InternalError(
+                    "Error getting groups".to_string(),
+                ))
+            });
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = make_search_request(
+            "ou=groups,dc=example,dc=com",
+            LdapFilter::Or(vec![LdapFilter::Not(Box::new(LdapFilter::Equality(
+                "displayname".to_string(),
+                "group_2".to_string(),
+            )))]),
+            vec!["cn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![make_search_error(
+                LdapResultCode::Other,
+                r#"Error while listing groups "ou=groups,dc=example,dc=com": Internal error: `Error getting groups`"#.to_string()
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_groups_filter_error() {
+        let mut ldap_handler = setup_bound_handler(MockTestBackendHandler::new()).await;
+        let request = make_search_request(
+            "ou=groups,dc=example,dc=com",
+            LdapFilter::And(vec![LdapFilter::Equality(
+                "whatever".to_string(),
+                "group_1".to_string(),
+            )]),
+            vec!["cn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![make_search_error(
+                LdapResultCode::UnwillingToPerform,
+                "Unsupported group filter: Unknown field: whatever".to_string()
+            )]
+        );
+    }
+
+    #[tokio::test]
     async fn test_search_filters() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(vec![
-                UserRequestFilter::Not(Box::new(UserRequestFilter::Equality(
-                    "user_id".to_string(),
-                    "bob".to_string(),
-                ))),
-                UserRequestFilter::And(vec![]),
-                UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
-                UserRequestFilter::And(vec![]),
-                UserRequestFilter::And(vec![]),
-                UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
-            ])]))))
+            .with(eq(Some(UserRequestFilter::And(vec![
+                UserRequestFilter::Or(vec![
+                    UserRequestFilter::Not(Box::new(UserRequestFilter::Equality(
+                        "user_id".to_string(),
+                        "bob".to_string(),
+                    ))),
+                    UserRequestFilter::And(vec![]),
+                    UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
+                    UserRequestFilter::And(vec![]),
+                    UserRequestFilter::And(vec![]),
+                    UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
+                ]),
+            ]))))
             .times(1)
             .return_once(|_| Ok(vec![]));
         let mut ldap_handler = setup_bound_handler(mock).await;
@@ -1256,12 +1334,11 @@ mod tests {
     async fn test_search_filters_lowercase() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(vec![
-                UserRequestFilter::Not(Box::new(UserRequestFilter::Equality(
-                    "first_name".to_string(),
-                    "bob".to_string(),
-                ))),
-            ])]))))
+            .with(eq(Some(UserRequestFilter::And(vec![
+                UserRequestFilter::Or(vec![UserRequestFilter::Not(Box::new(
+                    UserRequestFilter::Equality("first_name".to_string(), "bob".to_string()),
+                ))]),
+            ]))))
             .times(1)
             .return_once(|_| {
                 Ok(vec![User {
@@ -1309,13 +1386,16 @@ mod tests {
                 ..Default::default()
             }])
         });
-        mock.expect_list_groups().times(1).return_once(|| {
-            Ok(vec![Group {
-                id: GroupId(1),
-                display_name: "group_1".to_string(),
-                users: vec!["bob".to_string(), "john".to_string()],
-            }])
-        });
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::And(vec![]))))
+            .times(1)
+            .return_once(|_| {
+                Ok(vec![Group {
+                    id: GroupId(1),
+                    display_name: "group_1".to_string(),
+                    users: vec!["bob".to_string(), "john".to_string()],
+                }])
+            });
         let mut ldap_handler = setup_bound_handler(mock).await;
         let request = make_search_request(
             "dc=example,dc=com",
