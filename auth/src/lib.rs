@@ -3,10 +3,11 @@
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::fmt;
 
 pub mod opaque;
 
-/// The messages for the 3-step OPAQUE login process.
+/// The messages for the 3-step OPAQUE and simple login process.
 pub mod login {
     use super::*;
 
@@ -34,6 +35,28 @@ pub mod login {
         /// Encrypted ServerData from the previous step.
         pub server_data: String,
         pub credential_finalization: opaque::client::login::CredentialFinalization,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientSimpleLoginRequest {
+        pub username: String,
+        pub password: String,
+    }
+
+    impl fmt::Debug for ClientSimpleLoginRequest {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("ClientSimpleLoginRequest")
+                .field("username", &self.username)
+                .field("password", &"***********")
+                .finish()
+        }
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerLoginResponse {
+        pub token: String,
+        #[serde(rename = "refreshToken", skip_serializing_if = "Option::is_none")]
+        pub refresh_token: Option<String>,
     }
 }
 
@@ -65,6 +88,19 @@ pub mod registration {
         /// Encrypted ServerData from the previous step.
         pub server_data: String,
         pub registration_upload: opaque::server::registration::RegistrationUpload,
+    }
+}
+
+/// The messages for the 3-step OPAQUE registration process.
+/// It is used to reset a user's password.
+pub mod password_reset {
+    use super::*;
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerPasswordResetResponse {
+        #[serde(rename = "userId")]
+        pub user_id: String,
+        pub token: String,
     }
 }
 

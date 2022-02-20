@@ -186,9 +186,13 @@ impl HostService {
                 .context("Error clearing cookie")
         };
         let parse_token = move |data: String| {
-            get_claims_from_jwt(&data)
+            serde_json::from_str::<login::ServerLoginResponse>(&data)
                 .context("Could not parse response")
-                .and_then(set_cookies)
+                .and_then(|r| {
+                    get_claims_from_jwt(r.token.as_str())
+                        .context("Could not parse response")
+                        .and_then(set_cookies)
+                })
         };
         call_server(
             "/auth/opaque/login/finish",

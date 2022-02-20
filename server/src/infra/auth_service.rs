@@ -1,14 +1,8 @@
-use crate::{
-    domain::{
-        error::DomainError,
-        handler::{BackendHandler, BindRequest, GroupIdAndName, LoginHandler},
-        opaque_handler::OpaqueHandler,
-    },
-    infra::{
-        tcp_backend_handler::*,
-        tcp_server::{error_to_http_response, AppState},
-    },
-};
+use std::collections::{hash_map::DefaultHasher, HashSet};
+use std::hash::{Hash, Hasher};
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use actix_web::{
     cookie::{Cookie, SameSite},
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
@@ -22,14 +16,23 @@ use futures::future::{ok, Ready};
 use futures_util::{FutureExt, TryFutureExt};
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
-use lldap_auth::{login, registration, JWTClaims};
 use log::*;
 use sha2::Sha512;
-use std::collections::{hash_map::DefaultHasher, HashSet};
-use std::hash::{Hash, Hasher};
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use time::ext::NumericalDuration;
+
+use lldap_auth::{login, opaque, password_reset, registration, JWTClaims};
+
+use crate::{
+    domain::{
+        error::DomainError,
+        handler::{BackendHandler, BindRequest, GroupIdAndName, LoginHandler},
+        opaque_handler::OpaqueHandler,
+    },
+    infra::{
+        tcp_backend_handler::*,
+        tcp_server::{error_to_http_response, AppState},
+    },
+};
 
 type Token<S> = jwt::Token<jwt::Header, JWTClaims, S>;
 type SignedToken = Token<jwt::token::Signed>;
@@ -48,22 +51,28 @@ fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<GroupIdAndName>)
     jwt::Token::new(header, claims).sign_with_key(key).unwrap()
 }
 
-fn get_refresh_token_from_cookie(
-    request: HttpRequest,
-) -> std::result::Result<(u64, String), HttpResponse> {
-    match request.cookie("refresh_token") {
-        None => Err(HttpResponse::Unauthorized().body("Missing refresh token")),
-        Some(t) => match t.value().split_once('+') {
-            None => Err(HttpResponse::Unauthorized().body("Invalid refresh token")),
-            Some((token, u)) => {
-                let refresh_token_hash = {
-                    let mut s = DefaultHasher::new();
-                    token.hash(&mut s);
-                    s.finish()
-                };
-                Ok((refresh_token_hash, u.to_string()))
-            }
-        },
+fn parse_refresh_token(token: &str) -> std::result::Result<(u64, String), HttpResponse> {
+    match token.split_once('+') {
+        None => Err(HttpResponse::Unauthorized().body("Invalid refresh token")),
+        Some((token, u)) => {
+            let refresh_token_hash = {
+                let mut s = DefaultHasher::new();
+                token.hash(&mut s);
+                s.finish()
+            };
+            Ok((refresh_token_hash, u.to_string()))
+        }
+    }
+}
+
+fn get_refresh_token(request: HttpRequest) -> std::result::Result<(u64, String), HttpResponse> {
+    match (
+        request.cookie("refresh_token"),
+        request.headers().get("refresh-token"),
+    ) {
+        (Some(c), _) => parse_refresh_token(c.value()),
+        (_, Some(t)) => parse_refresh_token(t.to_str().unwrap()),
+        (None, None) => Err(HttpResponse::Unauthorized().body("Missing refresh token")),
     }
 }
 
@@ -76,7 +85,7 @@ where
 {
     let backend_handler = &data.backend_handler;
     let jwt_key = &data.jwt_key;
-    let (refresh_token_hash, user) = match get_refresh_token_from_cookie(request) {
+    let (refresh_token_hash, user) = match get_refresh_token(request) {
         Ok(t) => t,
         Err(http_response) => return http_response,
     };
@@ -108,7 +117,10 @@ where
                     .same_site(SameSite::Strict)
                     .finish(),
             )
-            .body(token.as_str().to_owned())
+            .json(&login::ServerLoginResponse {
+                token: token.as_str().to_owned(),
+                refresh_token: None,
+            })
     })
     .unwrap_or_else(error_to_http_response)
 }
@@ -183,7 +195,10 @@ where
                 .same_site(SameSite::Strict)
                 .finish(),
         )
-        .json(user_id)
+        .json(&password_reset::ServerPasswordResetResponse {
+            user_id,
+            token: token.as_str().to_owned(),
+        })
 }
 
 async fn get_logout<Backend>(
@@ -193,7 +208,7 @@ async fn get_logout<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    let (refresh_token_hash, user) = match get_refresh_token_from_cookie(request) {
+    let (refresh_token_hash, user) = match get_refresh_token(request) {
         Ok(t) => t,
         Err(http_response) => return http_response,
     };
@@ -274,6 +289,8 @@ where
         .await
         .map(|(groups, (refresh_token, max_age))| {
             let token = create_jwt(&data.jwt_key, name.to_string(), groups);
+            let refresh_token_plus_name = refresh_token + "+" + name;
+
             HttpResponse::Ok()
                 .cookie(
                     Cookie::build("token", token.as_str())
@@ -284,14 +301,17 @@ where
                         .finish(),
                 )
                 .cookie(
-                    Cookie::build("refresh_token", refresh_token + "+" + name)
+                    Cookie::build("refresh_token", refresh_token_plus_name.clone())
                         .max_age(max_age.num_days().days())
                         .path("/auth")
                         .http_only(true)
                         .same_site(SameSite::Strict)
                         .finish(),
                 )
-                .body(token.as_str().to_owned())
+                .json(&login::ServerLoginResponse {
+                    token: token.as_str().to_owned(),
+                    refresh_token: Some(refresh_token_plus_name),
+                })
         })
         .unwrap_or_else(error_to_http_response)
 }
@@ -311,6 +331,58 @@ where
         Ok(n) => n,
         Err(e) => return error_to_http_response(e),
     };
+    get_login_successful_response(&data, &name).await
+}
+
+async fn simple_login<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login::ClientSimpleLoginRequest>,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    let password = &request.password;
+    let mut rng = rand::rngs::OsRng;
+    let opaque::client::login::ClientLoginStartResult { state, message } =
+        match opaque::client::login::start_login(password, &mut rng) {
+            Ok(n) => n,
+            Err(e) => {
+                return HttpResponse::InternalServerError()
+                    .body(format!("Internal Server Error: {:#?}", e))
+            }
+        };
+
+    let username = request.username.clone();
+    let start_request = login::ClientLoginStartRequest {
+        username: username.clone(),
+        login_start_request: message,
+    };
+
+    let start_response = match data.backend_handler.login_start(start_request).await {
+        Ok(n) => n,
+        Err(e) => return error_to_http_response(e),
+    };
+
+    let login_finish =
+        match opaque::client::login::finish_login(state, start_response.credential_response) {
+            Err(_) => {
+                return error_to_http_response(DomainError::AuthenticationError(String::from(
+                    "Invalid username or password",
+                )))
+            }
+            Ok(l) => l,
+        };
+
+    let finish_request = login::ClientLoginFinishRequest {
+        server_data: start_response.server_data,
+        credential_finalization: login_finish.message,
+    };
+
+    let name = match data.backend_handler.login_finish(finish_request).await {
+        Ok(n) => n,
+        Err(e) => return error_to_http_response(e),
+    };
+
     get_login_successful_response(&data, &name).await
 }
 
@@ -508,6 +580,7 @@ where
             web::resource("/opaque/login/finish")
                 .route(web::post().to(opaque_login_finish::<Backend>)),
         )
+        .service(web::resource("/simple/login").route(web::post().to(simple_login::<Backend>)))
         .service(web::resource("/refresh").route(web::get().to(get_refresh::<Backend>)))
         .service(
             web::resource("/reset/step1/{user_id}")
