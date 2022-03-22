@@ -16,3 +16,12 @@ rev = '67050812695b7a8a90b81b0637e347fc6629daed'
 [patch.crates-io.yew_form_derive]
 git = 'https://github.com/sassman/yew_form/'
 rev = '67050812695b7a8a90b81b0637e347fc6629daed'
+
+# TODO: remove after https://github.com/SeaQL/sea-query has a release >0.25
+[patch.crates-io.sea-query]
+git = 'https://github.com/SeaQL/sea-query/'
+rev = 'f2b74b2875a1a5a5550a7c8658d3fcd385134925'
+
+[patch.crates-io.sea-query-binder]
+git = 'https://github.com/SeaQL/sea-query/'
+rev = 'f2b74b2875a1a5a5550a7c8658d3fcd385134925'

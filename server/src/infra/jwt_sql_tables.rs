@@ -55,8 +55,8 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
             .foreign_key(
                 ForeignKey::create()
                     .name("JwtRefreshStorageUserForeignKey")
-                    .table(JwtRefreshStorage::Table, Users::Table)
-                    .col(JwtRefreshStorage::UserId, Users::UserId)
+                    .from(JwtRefreshStorage::Table, JwtRefreshStorage::UserId)
+                    .to(Users::Table, Users::UserId)
                     .on_delete(ForeignKeyAction::Cascade)
                     .on_update(ForeignKeyAction::Cascade),
             )
@@ -94,8 +94,8 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
             .foreign_key(
                 ForeignKey::create()
                     .name("JwtStorageUserForeignKey")
-                    .table(JwtStorage::Table, Users::Table)
-                    .col(JwtStorage::UserId, Users::UserId)
+                    .from(JwtStorage::Table, JwtStorage::UserId)
+                    .to(Users::Table, Users::UserId)
                     .on_delete(ForeignKeyAction::Cascade)
                     .on_update(ForeignKeyAction::Cascade),
             )
@@ -127,8 +127,8 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
             .foreign_key(
                 ForeignKey::create()
                     .name("PasswordResetTokensUserForeignKey")
-                    .table(PasswordResetTokens::Table, Users::Table)
-                    .col(PasswordResetTokens::UserId, Users::UserId)
+                    .from(PasswordResetTokens::Table, PasswordResetTokens::UserId)
+                    .to(Users::Table, Users::UserId)
                     .on_delete(ForeignKeyAction::Cascade)
                     .on_update(ForeignKeyAction::Cascade),
             )

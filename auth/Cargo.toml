@@ -13,7 +13,7 @@ js = []
 [dependencies]
 rust-argon2 = "0.8"
 curve25519-dalek = "3"
-digest = "*"
+digest = "0.9"
 generic-array = "*"
 rand = "0.8"
 serde = "*"

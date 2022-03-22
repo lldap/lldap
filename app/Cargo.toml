@@ -21,6 +21,9 @@ yew-router = "0.15"
 yew_form = "0.1.8"
 yew_form_derive = "*"
 
+# Needed because of https://github.com/tkaitchuck/aHash/issues/95
+indexmap = "=1.6.2"
+
 [dependencies.web-sys]
 version = "0.3"
 features = [
