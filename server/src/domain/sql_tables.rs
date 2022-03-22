@@ -169,16 +169,16 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
             .foreign_key(
                 ForeignKey::create()
                     .name("MembershipUserForeignKey")
-                    .table(Memberships::Table, Users::Table)
-                    .col(Memberships::UserId, Users::UserId)
+                    .from(Memberships::Table, Memberships::UserId)
+                    .to(Users::Table, Users::UserId)
                     .on_delete(ForeignKeyAction::Cascade)
                     .on_update(ForeignKeyAction::Cascade),
             )
             .foreign_key(
                 ForeignKey::create()
                     .name("MembershipGroupForeignKey")
-                    .table(Memberships::Table, Groups::Table)
-                    .col(Memberships::GroupId, Groups::GroupId)
+                    .from(Memberships::Table, Memberships::GroupId)
+                    .to(Groups::Table, Groups::GroupId)
                     .on_delete(ForeignKeyAction::Cascade)
                     .on_update(ForeignKeyAction::Cascade),
             )

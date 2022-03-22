@@ -34,7 +34,7 @@ native-tls = "0.2.10"
 serde = "*"
 serde_json = "1"
 sha2 = "0.9"
-sqlx-core = "=0.5.1"
+sqlx-core = "0.5.11"
 thiserror = "*"
 time = "0.2"
 tokio = { version = "1.13.1", features = ["full"] }
@@ -64,7 +64,7 @@ features = [
 ]
 
 [dependencies.sqlx]
-version = "0.5.1"
+version = "0.5.11"
 features = [
   "any",
   "chrono",
@@ -76,8 +76,12 @@ features = [
 ]
 
 [dependencies.sea-query]
-version = "0.9.4"
-features = ["with-chrono"]
+version = "^0.25"
+features = ["with-chrono", "sqlx-sqlite"]
+
+[dependencies.sea-query-binder]
+version = "*"
+features = ["with-chrono", "sqlx-sqlite", "sqlx-any"]
 
 [dependencies.figment]
 features = ["env", "toml"]
