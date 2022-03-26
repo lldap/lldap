@@ -1,6 +1,6 @@
 use crate::domain::{
     handler::{
-        BackendHandler, BindRequest, Group, GroupRequestFilter, LoginHandler, User,
+        BackendHandler, BindRequest, Group, GroupRequestFilter, LoginHandler, User, UserId,
         UserRequestFilter,
     },
     opaque_handler::OpaqueHandler,
@@ -71,7 +71,7 @@ fn get_user_id_from_distinguished_name(
     dn: &str,
     base_tree: &[(String, String)],
     base_dn_str: &str,
-) -> Result<String> {
+) -> Result<UserId> {
     let parts = parse_distinguished_name(dn).context("while parsing a user ID")?;
     if !is_subtree(&parts, base_tree) {
         bail!("Not a subtree of the base tree");
@@ -84,7 +84,7 @@ fn get_user_id_from_distinguished_name(
                 base_dn_str
             );
         }
-        Ok(parts[0].1.to_string())
+        Ok(UserId::new(&parts[0].1))
     } else {
         bail!(
             r#"Unexpected user DN format. Got "{}", expected: "cn=username,ou=people,{}""#,
@@ -103,7 +103,7 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Vec<Stri
             "person".to_string(),
         ]),
         "dn" => Ok(vec![dn.to_string()]),
-        "uid" => Ok(vec![user.user_id.clone()]),
+        "uid" => Ok(vec![user.user_id.to_string()]),
         "mail" => Ok(vec![user.email.clone()]),
         "givenname" => Ok(vec![user.first_name.clone()]),
         "sn" => Ok(vec![user.last_name.clone()]),
@@ -118,7 +118,7 @@ fn make_ldap_search_user_result_entry(
     base_dn_str: &str,
     attributes: &[String],
 ) -> Result<LdapSearchResultEntry> {
-    let dn = format!("cn={},ou=people,{}", user.user_id, base_dn_str);
+    let dn = format!("cn={},ou=people,{}", user.user_id.as_str(), base_dn_str);
     Ok(LdapSearchResultEntry {
         dn: dn.clone(),
         attributes: attributes
@@ -264,17 +264,17 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
 }
 
 pub struct LdapHandler<Backend: BackendHandler + LoginHandler + OpaqueHandler> {
-    dn: String,
+    dn: UserId,
     backend_handler: Backend,
     pub base_dn: Vec<(String, String)>,
     base_dn_str: String,
-    ldap_user_dn: String,
+    ldap_user_dn: UserId,
 }
 
 impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
-    pub fn new(backend_handler: Backend, ldap_base_dn: String, ldap_user_dn: String) -> Self {
+    pub fn new(backend_handler: Backend, ldap_base_dn: String, ldap_user_dn: UserId) -> Self {
         Self {
-            dn: "Unauthenticated".to_string(),
+            dn: UserId::new("unauthenticated"),
             backend_handler,
             base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
                 panic!(
@@ -282,7 +282,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     ldap_base_dn
                 )
             }),
-            ldap_user_dn: format!("cn={},ou=people,{}", ldap_user_dn, &ldap_base_dn),
+            ldap_user_dn: UserId::new(&format!("cn={},ou=people,{}", ldap_user_dn, &ldap_base_dn)),
             base_dn_str: ldap_base_dn,
         }
     }
@@ -307,14 +307,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             .await
         {
             Ok(()) => {
-                self.dn = request.dn.clone();
+                self.dn = UserId::new(&request.dn);
                 (LdapResultCode::Success, "".to_string())
             }
             Err(_) => (LdapResultCode::InvalidCredentials, "".to_string()),
         }
     }
 
-    async fn change_password(&mut self, user: &str, password: &str) -> Result<()> {
+    async fn change_password(&mut self, user: &UserId, password: &str) -> Result<()> {
         use lldap_auth::*;
         let mut rng = rand::rngs::OsRng;
         let registration_start_request =
@@ -527,7 +527,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             }
             LdapOp::SearchRequest(request) => self.do_search(&request).await,
             LdapOp::UnbindRequest => {
-                self.dn = "Unauthenticated".to_string();
+                self.dn = UserId::new("unauthenticated");
                 // No need to notify on unbind (per rfc4511)
                 return None;
             }
@@ -617,10 +617,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         ))))
                     }
                 } else {
-                    Ok(UserRequestFilter::Equality(
-                        map_field(field)?,
-                        value.clone(),
-                    ))
+                    let field = map_field(field)?;
+                    if field == "user_id" {
+                        Ok(UserRequestFilter::UserId(UserId::new(value)))
+                    } else {
+                        Ok(UserRequestFilter::Equality(field, value.clone()))
+                    }
                 }
             }
             LdapFilter::Present(field) => {
@@ -661,17 +663,17 @@ mod tests {
         impl BackendHandler for TestBackendHandler {
             async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>>;
             async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
-            async fn get_user_details(&self, user_id: &str) -> Result<User>;
+            async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
             async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
-            async fn get_user_groups(&self, user: &str) -> Result<HashSet<GroupIdAndName>>;
+            async fn get_user_groups(&self, user: &UserId) -> Result<HashSet<GroupIdAndName>>;
             async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
             async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
             async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
-            async fn delete_user(&self, user_id: &str) -> Result<()>;
+            async fn delete_user(&self, user_id: &UserId) -> Result<()>;
             async fn create_group(&self, group_name: &str) -> Result<GroupId>;
             async fn delete_group(&self, group_id: GroupId) -> Result<()>;
-            async fn add_user_to_group(&self, user_id: &str, group_id: GroupId) -> Result<()>;
-            async fn remove_user_from_group(&self, user_id: &str, group_id: GroupId) -> Result<()>;
+            async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
+            async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
         }
         #[async_trait]
         impl OpaqueHandler for TestBackendHandler {
@@ -679,7 +681,7 @@ mod tests {
                 &self,
                 request: login::ClientLoginStartRequest
             ) -> Result<login::ServerLoginStartResponse>;
-            async fn login_finish(&self, request: login::ClientLoginFinishRequest) -> Result<String>;
+            async fn login_finish(&self, request: login::ClientLoginFinishRequest) -> Result<UserId>;
             async fn registration_start(
                 &self,
                 request: registration::ClientRegistrationStartRequest
@@ -720,12 +722,12 @@ mod tests {
     ) -> LdapHandler<MockTestBackendHandler> {
         mock.expect_bind()
             .with(eq(BindRequest {
-                name: "test".to_string(),
+                name: UserId::new("test"),
                 password: "pass".to_string(),
             }))
             .return_once(|_| Ok(()));
         let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
         let request = LdapBindRequest {
             dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
@@ -742,13 +744,13 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_bind()
             .with(eq(crate::domain::handler::BindRequest {
-                name: "bob".to_string(),
+                name: UserId::new("bob"),
                 password: "pass".to_string(),
             }))
             .times(1)
             .return_once(|_| Ok(()));
         let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
 
         let request = LdapOp::BindRequest(LdapBindRequest {
             dn: "cn=bob,ou=people,dc=example,dc=com".to_string(),
@@ -773,13 +775,13 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_bind()
             .with(eq(crate::domain::handler::BindRequest {
-                name: "test".to_string(),
+                name: UserId::new("test"),
                 password: "pass".to_string(),
             }))
             .times(1)
             .return_once(|_| Ok(()));
         let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), "test".to_string());
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
 
         let request = LdapBindRequest {
             dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
@@ -796,13 +798,13 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_bind()
             .with(eq(crate::domain::handler::BindRequest {
-                name: "test".to_string(),
+                name: UserId::new("test"),
                 password: "pass".to_string(),
             }))
             .times(1)
             .return_once(|_| Ok(()));
         let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), "admin".to_string());
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("admin"));
 
         let request = LdapBindRequest {
             dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
@@ -827,7 +829,7 @@ mod tests {
     async fn test_bind_invalid_dn() {
         let mock = MockTestBackendHandler::new();
         let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), "admin".to_string());
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("admin"));
 
         let request = LdapBindRequest {
             dn: "cn=bob,dc=example,dc=com".to_string(),
@@ -903,7 +905,7 @@ mod tests {
         mock.expect_list_users().times(1).return_once(|_| {
             Ok(vec![
                 User {
-                    user_id: "bob_1".to_string(),
+                    user_id: UserId::new("bob_1"),
                     email: "bob@bobmail.bob".to_string(),
                     display_name: "Bôb Böbberson".to_string(),
                     first_name: "Bôb".to_string(),
@@ -911,7 +913,7 @@ mod tests {
                     ..Default::default()
                 },
                 User {
-                    user_id: "jim".to_string(),
+                    user_id: UserId::new("jim"),
                     email: "jim@cricket.jim".to_string(),
                     display_name: "Jimminy Cricket".to_string(),
                     first_name: "Jim".to_string(),
@@ -1037,12 +1039,12 @@ mod tests {
                     Group {
                         id: GroupId(1),
                         display_name: "group_1".to_string(),
-                        users: vec!["bob".to_string(), "john".to_string()],
+                        users: vec![UserId::new("bob"), UserId::new("john")],
                     },
                     Group {
                         id: GroupId(3),
                         display_name: "bestgroup".to_string(),
-                        users: vec!["john".to_string()],
+                        users: vec![UserId::new("john")],
                     },
                 ])
             });
@@ -1111,7 +1113,7 @@ mod tests {
         mock.expect_list_groups()
             .with(eq(Some(GroupRequestFilter::And(vec![
                 GroupRequestFilter::DisplayName("group_1".to_string()),
-                GroupRequestFilter::Member("bob".to_string()),
+                GroupRequestFilter::Member(UserId::new("bob")),
                 GroupRequestFilter::And(vec![]),
             ]))))
             .times(1)
@@ -1250,10 +1252,7 @@ mod tests {
         mock.expect_list_users()
             .with(eq(Some(UserRequestFilter::And(vec![
                 UserRequestFilter::Or(vec![
-                    UserRequestFilter::Not(Box::new(UserRequestFilter::Equality(
-                        "user_id".to_string(),
-                        "bob".to_string(),
-                    ))),
+                    UserRequestFilter::Not(Box::new(UserRequestFilter::UserId(UserId::new("bob")))),
                     UserRequestFilter::And(vec![]),
                     UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
                     UserRequestFilter::And(vec![]),
@@ -1342,7 +1341,7 @@ mod tests {
             .times(1)
             .return_once(|_| {
                 Ok(vec![User {
-                    user_id: "bob_1".to_string(),
+                    user_id: UserId::new("bob_1"),
                     ..Default::default()
                 }])
             });
@@ -1378,7 +1377,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users().times(1).return_once(|_| {
             Ok(vec![User {
-                user_id: "bob_1".to_string(),
+                user_id: UserId::new("bob_1"),
                 email: "bob@bobmail.bob".to_string(),
                 display_name: "Bôb Böbberson".to_string(),
                 first_name: "Bôb".to_string(),
@@ -1393,7 +1392,7 @@ mod tests {
                 Ok(vec![Group {
                     id: GroupId(1),
                     display_name: "group_1".to_string(),
-                    users: vec!["bob".to_string(), "john".to_string()],
+                    users: vec![UserId::new("bob"), UserId::new("john")],
                 }])
             });
         let mut ldap_handler = setup_bound_handler(mock).await;

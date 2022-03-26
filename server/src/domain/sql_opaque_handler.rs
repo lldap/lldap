@@ -1,6 +1,6 @@
 use super::{
     error::*,
-    handler::{BindRequest, LoginHandler},
+    handler::{BindRequest, LoginHandler, UserId},
     opaque_handler::*,
     sql_backend_handler::SqlBackendHandler,
     sql_tables::*,
@@ -18,7 +18,7 @@ fn passwords_match(
     password_file_bytes: &[u8],
     clear_password: &str,
     server_setup: &opaque::server::ServerSetup,
-    username: &str,
+    username: &UserId,
 ) -> Result<()> {
     use opaque::{client, server};
     let mut rng = rand::rngs::OsRng;
@@ -31,7 +31,7 @@ fn passwords_match(
         server_setup,
         Some(password_file),
         client_login_start_result.message,
-        username,
+        username.as_str(),
     )?;
     client::login::finish_login(
         client_login_start_result.state,
@@ -88,13 +88,16 @@ impl LoginHandler for SqlBackendHandler {
                 return Ok(());
             } else {
                 debug!(r#"Invalid password for LDAP bind user"#);
-                return Err(DomainError::AuthenticationError(request.name));
+                return Err(DomainError::AuthenticationError(format!(
+                    " for user '{}'",
+                    request.name
+                )));
             }
         }
         let query = Query::select()
             .column(Users::PasswordHash)
             .from(Users::Table)
-            .and_where(Expr::col(Users::UserId).eq(request.name.as_str()))
+            .and_where(Expr::col(Users::UserId).eq(&request.name))
             .to_string(DbQueryBuilder {});
         if let Ok(row) = sqlx::query(&query).fetch_one(&self.sql_pool).await {
             if let Some(password_hash) =
@@ -106,17 +109,20 @@ impl LoginHandler for SqlBackendHandler {
                     self.config.get_server_setup(),
                     &request.name,
                 ) {
-                    debug!(r#"Invalid password for "{}": {}"#, request.name, e);
+                    debug!(r#"Invalid password for "{}": {}"#, &request.name, e);
                 } else {
                     return Ok(());
                 }
             } else {
-                debug!(r#"User "{}" has no password"#, request.name);
+                debug!(r#"User "{}" has no password"#, &request.name);
             }
         } else {
-            debug!(r#"No user found for "{}""#, request.name);
+            debug!(r#"No user found for "{}""#, &request.name);
         }
-        Err(DomainError::AuthenticationError(request.name))
+        Err(DomainError::AuthenticationError(format!(
+            " for user '{}'",
+            request.name
+        )))
     }
 }
 
@@ -150,7 +156,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         })
     }
 
-    async fn login_finish(&self, request: login::ClientLoginFinishRequest) -> Result<String> {
+    async fn login_finish(&self, request: login::ClientLoginFinishRequest) -> Result<UserId> {
         let secret_key = self.get_orion_secret_key()?;
         let login::ServerData {
             username,
@@ -165,7 +171,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
             opaque::server::login::finish_login(server_login, request.credential_finalization)?
                 .session_key;
 
-        Ok(username)
+        Ok(UserId::new(&username))
     }
 
     async fn registration_start(
@@ -220,7 +226,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
 /// Convenience function to set a user's password.
 pub(crate) async fn register_password(
     opaque_handler: &SqlOpaqueHandler,
-    username: &str,
+    username: &UserId,
     password: &SecUtf8,
 ) -> Result<()> {
     let mut rng = rand::rngs::OsRng;
@@ -278,7 +284,7 @@ mod tests {
     async fn insert_user_no_password(handler: &SqlBackendHandler, name: &str) {
         handler
             .create_user(CreateUserRequest {
-                user_id: name.to_string(),
+                user_id: UserId::new(name),
                 email: "bob@bob.bob".to_string(),
                 ..Default::default()
             })
@@ -323,7 +329,12 @@ mod tests {
         attempt_login(&opaque_handler, "bob", "bob00")
             .await
             .unwrap_err();
-        register_password(&opaque_handler, "bob", &secstr::SecUtf8::from("bob00")).await?;
+        register_password(
+            &opaque_handler,
+            &UserId::new("bob"),
+            &secstr::SecUtf8::from("bob00"),
+        )
+        .await?;
         attempt_login(&opaque_handler, "bob", "wrong_password")
             .await
             .unwrap_err();

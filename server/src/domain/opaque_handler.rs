@@ -1,4 +1,4 @@
-use super::error::*;
+use crate::domain::{error::*, handler::UserId};
 use async_trait::async_trait;
 
 pub use lldap_auth::{login, registration};
@@ -9,7 +9,7 @@ pub trait OpaqueHandler: Clone + Send {
         &self,
         request: login::ClientLoginStartRequest,
     ) -> Result<login::ServerLoginStartResponse>;
-    async fn login_finish(&self, request: login::ClientLoginFinishRequest) -> Result<String>;
+    async fn login_finish(&self, request: login::ClientLoginFinishRequest) -> Result<UserId>;
     async fn registration_start(
         &self,
         request: registration::ClientRegistrationStartRequest,
@@ -32,7 +32,7 @@ mockall::mock! {
             &self,
             request: login::ClientLoginStartRequest
         ) -> Result<login::ServerLoginStartResponse>;
-        async fn login_finish(&self, request: login::ClientLoginFinishRequest ) -> Result<String>;
+        async fn login_finish(&self, request: login::ClientLoginFinishRequest ) -> Result<UserId>;
         async fn registration_start(
             &self,
             request: registration::ClientRegistrationStartRequest

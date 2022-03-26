@@ -1,5 +1,5 @@
 use crate::domain::handler::{
-    BackendHandler, CreateUserRequest, GroupId, UpdateGroupRequest, UpdateUserRequest,
+    BackendHandler, CreateUserRequest, GroupId, UpdateGroupRequest, UpdateUserRequest, UserId,
 };
 use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
 
@@ -66,10 +66,11 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         if !context.validation_result.is_admin {
             return Err("Unauthorized user creation".into());
         }
+        let user_id = UserId::new(&user.id);
         context
             .handler
             .create_user(CreateUserRequest {
-                user_id: user.id.clone(),
+                user_id: user_id.clone(),
                 email: user.email,
                 display_name: user.display_name,
                 first_name: user.first_name,
@@ -78,7 +79,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             .await?;
         Ok(context
             .handler
-            .get_user_details(&user.id)
+            .get_user_details(&user_id)
             .await
             .map(Into::into)?)
     }
@@ -108,7 +109,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         context
             .handler
             .update_user(UpdateUserRequest {
-                user_id: user.id,
+                user_id: UserId::new(&user.id),
                 email: user.email,
                 display_name: user.display_name,
                 first_name: user.first_name,
@@ -148,7 +149,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         }
         context
             .handler
-            .add_user_to_group(&user_id, GroupId(group_id))
+            .add_user_to_group(&UserId::new(&user_id), GroupId(group_id))
             .await?;
         Ok(Success::new())
     }
@@ -166,7 +167,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         }
         context
             .handler
-            .remove_user_from_group(&user_id, GroupId(group_id))
+            .remove_user_from_group(&UserId::new(&user_id), GroupId(group_id))
             .await?;
         Ok(Success::new())
     }
@@ -178,7 +179,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         if context.validation_result.user == user_id {
             return Err("Cannot delete current user".into());
         }
-        context.handler.delete_user(&user_id).await?;
+        context.handler.delete_user(&UserId::new(&user_id)).await?;
         Ok(Success::new())
     }
 
