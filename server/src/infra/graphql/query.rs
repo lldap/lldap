@@ -1,4 +1,4 @@
-use crate::domain::handler::{BackendHandler, GroupId, GroupIdAndName};
+use crate::domain::handler::{BackendHandler, GroupId, GroupIdAndName, UserId};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +48,9 @@ impl TryInto<DomainRequestFilter> for RequestFilter {
             return Err("Multiple fields specified in request filter".to_string());
         }
         if let Some(e) = self.eq {
+            if e.field.to_lowercase() == "uid" {
+                return Ok(DomainRequestFilter::UserId(UserId::new(&e.value)));
+            }
             return Ok(DomainRequestFilter::Equality(e.field, e.value));
         }
         if let Some(c) = self.any {
@@ -109,7 +112,7 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         }
         Ok(context
             .handler
-            .get_user_details(&user_id)
+            .get_user_details(&UserId::new(&user_id))
             .await
             .map(Into::into)?)
     }
@@ -170,7 +173,7 @@ impl<Handler: BackendHandler> Default for User<Handler> {
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler + Sync> User<Handler> {
     fn id(&self) -> &str {
-        &self.user.user_id
+        self.user.user_id.as_str()
     }
 
     fn email(&self) -> &str {
@@ -260,7 +263,7 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
         Self {
             group_id: group.id.0,
             display_name: group.display_name,
-            members: Some(group.users.into_iter().map(Into::into).collect()),
+            members: Some(group.users.into_iter().map(UserId::into_string).collect()),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -305,10 +308,10 @@ mod tests {
 
         let mut mock = MockTestBackendHandler::new();
         mock.expect_get_user_details()
-            .with(eq("bob"))
+            .with(eq(UserId::new("bob")))
             .return_once(|_| {
                 Ok(DomainUser {
-                    user_id: "bob".to_string(),
+                    user_id: UserId::new("bob"),
                     email: "bob@bobbers.on".to_string(),
                     ..Default::default()
                 })
@@ -316,7 +319,7 @@ mod tests {
         let mut groups = HashSet::new();
         groups.insert(GroupIdAndName(GroupId(3), "Bobbersons".to_string()));
         mock.expect_get_user_groups()
-            .with(eq("bob"))
+            .with(eq(UserId::new("bob")))
             .return_once(|_| Ok(groups));
 
         let context = Context::<MockTestBackendHandler> {
@@ -369,12 +372,12 @@ mod tests {
             .return_once(|_| {
                 Ok(vec![
                     DomainUser {
-                        user_id: "bob".to_string(),
+                        user_id: UserId::new("bob"),
                         email: "bob@bobbers.on".to_string(),
                         ..Default::default()
                     },
                     DomainUser {
-                        user_id: "robert".to_string(),
+                        user_id: UserId::new("robert"),
                         email: "robert@bobbers.on".to_string(),
                         ..Default::default()
                     },

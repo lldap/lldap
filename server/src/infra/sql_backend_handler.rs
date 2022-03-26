@@ -1,5 +1,5 @@
 use super::{jwt_sql_tables::*, tcp_backend_handler::*};
-use crate::domain::{error::*, sql_backend_handler::SqlBackendHandler};
+use crate::domain::{error::*, handler::UserId, sql_backend_handler::SqlBackendHandler};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use sea_query::{Expr, Iden, Query, SimpleExpr};
@@ -34,7 +34,7 @@ impl TcpBackendHandler for SqlBackendHandler {
             .map_err(|e| anyhow::anyhow!(e))
     }
 
-    async fn create_refresh_token(&self, user: &str) -> Result<(String, chrono::Duration)> {
+    async fn create_refresh_token(&self, user: &UserId) -> Result<(String, chrono::Duration)> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         // TODO: Initialize the rng only once. Maybe Arc<Cell>?
@@ -62,7 +62,7 @@ impl TcpBackendHandler for SqlBackendHandler {
         Ok((refresh_token, duration))
     }
 
-    async fn check_token(&self, refresh_token_hash: u64, user: &str) -> Result<bool> {
+    async fn check_token(&self, refresh_token_hash: u64, user: &UserId) -> Result<bool> {
         let query = Query::select()
             .expr(SimpleExpr::Value(1.into()))
             .from(JwtRefreshStorage::Table)
@@ -74,7 +74,7 @@ impl TcpBackendHandler for SqlBackendHandler {
             .await?
             .is_some())
     }
-    async fn blacklist_jwts(&self, user: &str) -> Result<HashSet<u64>> {
+    async fn blacklist_jwts(&self, user: &UserId) -> Result<HashSet<u64>> {
         use sqlx::Result;
         let query = Query::select()
             .column(JwtStorage::JwtHash)
@@ -106,7 +106,7 @@ impl TcpBackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    async fn start_password_reset(&self, user: &str) -> Result<Option<String>> {
+    async fn start_password_reset(&self, user: &UserId) -> Result<Option<String>> {
         let query = Query::select()
             .column(Users::UserId)
             .from(Users::Table)
@@ -138,7 +138,7 @@ impl TcpBackendHandler for SqlBackendHandler {
         Ok(Some(token))
     }
 
-    async fn get_user_id_for_password_reset_token(&self, token: &str) -> Result<String> {
+    async fn get_user_id_for_password_reset_token(&self, token: &str) -> Result<UserId> {
         let query = Query::select()
             .column(PasswordResetTokens::UserId)
             .from(PasswordResetTokens::Table)

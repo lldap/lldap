@@ -25,7 +25,7 @@ use lldap_auth::{login, opaque, password_reset, registration, JWTClaims};
 use crate::{
     domain::{
         error::DomainError,
-        handler::{BackendHandler, BindRequest, GroupIdAndName, LoginHandler},
+        handler::{BackendHandler, BindRequest, GroupIdAndName, LoginHandler, UserId},
         opaque_handler::OpaqueHandler,
     },
     infra::{
@@ -51,7 +51,7 @@ fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<GroupIdAndName>)
     jwt::Token::new(header, claims).sign_with_key(key).unwrap()
 }
 
-fn parse_refresh_token(token: &str) -> std::result::Result<(u64, String), HttpResponse> {
+fn parse_refresh_token(token: &str) -> std::result::Result<(u64, UserId), HttpResponse> {
     match token.split_once('+') {
         None => Err(HttpResponse::Unauthorized().body("Invalid refresh token")),
         Some((token, u)) => {
@@ -60,12 +60,12 @@ fn parse_refresh_token(token: &str) -> std::result::Result<(u64, String), HttpRe
                 token.hash(&mut s);
                 s.finish()
             };
-            Ok((refresh_token_hash, u.to_string()))
+            Ok((refresh_token_hash, UserId::new(u)))
         }
     }
 }
 
-fn get_refresh_token(request: HttpRequest) -> std::result::Result<(u64, String), HttpResponse> {
+fn get_refresh_token(request: HttpRequest) -> std::result::Result<(u64, UserId), HttpResponse> {
     match (
         request.cookie("refresh_token"),
         request.headers().get("refresh-token"),
@@ -134,14 +134,14 @@ where
 {
     let user_id = match request.match_info().get("user_id") {
         None => return HttpResponse::BadRequest().body("Missing user ID"),
-        Some(id) => id,
+        Some(id) => UserId::new(id),
     };
-    let token = match data.backend_handler.start_password_reset(user_id).await {
+    let token = match data.backend_handler.start_password_reset(&user_id).await {
         Err(e) => return HttpResponse::InternalServerError().body(e.to_string()),
         Ok(None) => return HttpResponse::Ok().finish(),
         Ok(Some(token)) => token,
     };
-    let user = match data.backend_handler.get_user_details(user_id).await {
+    let user = match data.backend_handler.get_user_details(&user_id).await {
         Err(e) => {
             warn!("Error getting used details: {:#?}", e);
             return HttpResponse::Ok().finish();
@@ -196,7 +196,7 @@ where
                 .finish(),
         )
         .json(&password_reset::ServerPasswordResetResponse {
-            user_id,
+            user_id: user_id.to_string(),
             token: token.as_str().to_owned(),
         })
 }
@@ -276,7 +276,7 @@ where
 
 async fn get_login_successful_response<Backend>(
     data: &web::Data<AppState<Backend>>,
-    name: &str,
+    name: &UserId,
 ) -> HttpResponse
 where
     Backend: TcpBackendHandler + BackendHandler,
@@ -289,7 +289,7 @@ where
         .await
         .map(|(groups, (refresh_token, max_age))| {
             let token = create_jwt(&data.jwt_key, name.to_string(), groups);
-            let refresh_token_plus_name = refresh_token + "+" + name;
+            let refresh_token_plus_name = refresh_token + "+" + name.as_str();
 
             HttpResponse::Ok()
                 .cookie(

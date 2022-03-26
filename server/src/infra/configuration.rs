@@ -1,4 +1,7 @@
-use crate::infra::cli::{GeneralConfigOpts, RunOpts, SmtpOpts, TestEmailOpts};
+use crate::{
+    domain::handler::UserId,
+    infra::cli::{GeneralConfigOpts, RunOpts, SmtpOpts, TestEmailOpts},
+};
 use anyhow::{Context, Result};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
@@ -49,8 +52,8 @@ pub struct Configuration {
     pub jwt_secret: SecUtf8,
     #[builder(default = r#"String::from("dc=example,dc=com")"#)]
     pub ldap_base_dn: String,
-    #[builder(default = r#"String::from("admin")"#)]
-    pub ldap_user_dn: String,
+    #[builder(default = r#"UserId::new("admin")"#)]
+    pub ldap_user_dn: UserId,
     #[builder(default = r#"SecUtf8::from("password")"#)]
     pub ldap_user_pass: SecUtf8,
     #[builder(default = r#"String::from("sqlite://users.db?mode=rwc")"#)]

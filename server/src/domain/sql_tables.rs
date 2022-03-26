@@ -1,4 +1,4 @@
-use super::handler::GroupId;
+use super::handler::{GroupId, UserId};
 use sea_query::*;
 
 pub type Pool = sqlx::sqlite::SqlitePool;
@@ -34,6 +34,43 @@ where
         value: <DB as sqlx::database::HasValueRef<'r>>::ValueRef,
     ) -> Result<Self, Box<dyn std::error::Error + Sync + Send + 'static>> {
         <i32 as sqlx::Decode<'r, DB>>::decode(value).map(GroupId)
+    }
+}
+
+impl<DB> sqlx::Type<DB> for UserId
+where
+    DB: sqlx::Database,
+    String: sqlx::Type<DB>,
+{
+    fn type_info() -> <DB as sqlx::Database>::TypeInfo {
+        <String as sqlx::Type<DB>>::type_info()
+    }
+    fn compatible(ty: &<DB as sqlx::Database>::TypeInfo) -> bool {
+        <String as sqlx::Type<DB>>::compatible(ty)
+    }
+}
+
+impl<'r, DB> sqlx::Decode<'r, DB> for UserId
+where
+    DB: sqlx::Database,
+    String: sqlx::Decode<'r, DB>,
+{
+    fn decode(
+        value: <DB as sqlx::database::HasValueRef<'r>>::ValueRef,
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send + 'static>> {
+        <String as sqlx::Decode<'r, DB>>::decode(value).map(|s| UserId::new(&s))
+    }
+}
+
+impl From<UserId> for sea_query::Value {
+    fn from(user_id: UserId) -> Self {
+        user_id.into_string().into()
+    }
+}
+
+impl From<&UserId> for sea_query::Value {
+    fn from(user_id: &UserId) -> Self {
+        user_id.as_str().into()
     }
 }
 

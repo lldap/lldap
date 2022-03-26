@@ -51,12 +51,16 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> (RequiresGroup, SimpleExpr
             let (requires_group, filters) = get_user_filter_expr(*f);
             (requires_group, Expr::not(Expr::expr(filters)))
         }
+        UserId(user_id) => (
+            RequiresGroup(false),
+            Expr::col((Users::Table, Users::UserId)).eq(user_id),
+        ),
         Equality(s1, s2) => (
             RequiresGroup(false),
             if s1 == Users::DisplayName.to_string() {
                 Expr::col((Users::Table, Users::DisplayName)).eq(s2)
             } else if s1 == Users::UserId.to_string() {
-                Expr::col((Users::Table, Users::UserId)).eq(s2)
+                panic!("User id should be wrapped")
             } else {
                 Expr::expr(Expr::cust(&s1)).eq(s2)
             },
@@ -205,17 +209,17 @@ impl BackendHandler for SqlBackendHandler {
                 id: group_id,
                 display_name,
                 users: rows
-                    .map(|row| row.get::<String, _>(&*Memberships::UserId.to_string()))
+                    .map(|row| row.get::<UserId, _>(&*Memberships::UserId.to_string()))
                     // If a group has no users, an empty string is returned because of the left
                     // join.
-                    .filter(|s| !s.is_empty())
+                    .filter(|s| !s.as_str().is_empty())
                     .collect(),
             });
         }
         Ok(groups)
     }
 
-    async fn get_user_details(&self, user_id: &str) -> Result<User> {
+    async fn get_user_details(&self, user_id: &UserId) -> Result<User> {
         let query = Query::select()
             .column(Users::UserId)
             .column(Users::Email)
@@ -246,8 +250,8 @@ impl BackendHandler for SqlBackendHandler {
             .await?)
     }
 
-    async fn get_user_groups(&self, user: &str) -> Result<HashSet<GroupIdAndName>> {
-        if user == self.config.ldap_user_dn {
+    async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupIdAndName>> {
+        if *user_id == self.config.ldap_user_dn {
             let mut groups = HashSet::new();
             groups.insert(GroupIdAndName(GroupId(1), "lldap_admin".to_string()));
             return Ok(groups);
@@ -261,7 +265,7 @@ impl BackendHandler for SqlBackendHandler {
                 Expr::tbl(Groups::Table, Groups::GroupId)
                     .equals(Memberships::Table, Memberships::GroupId),
             )
-            .and_where(Expr::col(Memberships::UserId).eq(user))
+            .and_where(Expr::col(Memberships::UserId).eq(user_id))
             .to_string(DbQueryBuilder {});
 
         sqlx::query(&query)
@@ -294,7 +298,7 @@ impl BackendHandler for SqlBackendHandler {
             Users::CreationDate,
         ];
         let values = vec![
-            request.user_id.clone().into(),
+            request.user_id.into(),
             request.email.into(),
             request.display_name.unwrap_or_default().into(),
             request.first_name.unwrap_or_default().into(),
@@ -353,7 +357,7 @@ impl BackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    async fn delete_user(&self, user_id: &str) -> Result<()> {
+    async fn delete_user(&self, user_id: &UserId) -> Result<()> {
         let delete_query = Query::delete()
             .from_table(Users::Table)
             .and_where(Expr::col(Users::UserId).eq(user_id))
@@ -387,7 +391,7 @@ impl BackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    async fn add_user_to_group(&self, user_id: &str, group_id: GroupId) -> Result<()> {
+    async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
         let query = Query::insert()
             .into_table(Memberships::Table)
             .columns(vec![Memberships::UserId, Memberships::GroupId])
@@ -397,7 +401,7 @@ impl BackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    async fn remove_user_from_group(&self, user_id: &str, group_id: GroupId) -> Result<()> {
+    async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
         let query = Query::delete()
             .from_table(Memberships::Table)
             .and_where(Expr::col(Memberships::GroupId).eq(group_id))
@@ -463,7 +467,7 @@ mod tests {
     async fn insert_user_no_password(handler: &SqlBackendHandler, name: &str) {
         handler
             .create_user(CreateUserRequest {
-                user_id: name.to_string(),
+                user_id: UserId::new(name),
                 email: "bob@bob.bob".to_string(),
                 ..Default::default()
             })
@@ -476,21 +480,24 @@ mod tests {
     }
 
     async fn insert_membership(handler: &SqlBackendHandler, group_id: GroupId, user_id: &str) {
-        handler.add_user_to_group(user_id, group_id).await.unwrap();
+        handler
+            .add_user_to_group(&UserId::new(user_id), group_id)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
     async fn test_bind_admin() {
         let sql_pool = get_in_memory_db().await;
         let config = ConfigurationBuilder::default()
-            .ldap_user_dn("admin".to_string())
+            .ldap_user_dn(UserId::new("admin"))
             .ldap_user_pass(secstr::SecUtf8::from("test"))
             .build()
             .unwrap();
         let handler = SqlBackendHandler::new(config, sql_pool);
         handler
             .bind(BindRequest {
-                name: "admin".to_string(),
+                name: UserId::new("admin"),
                 password: "test".to_string(),
             })
             .await
@@ -506,21 +513,21 @@ mod tests {
 
         handler
             .bind(BindRequest {
-                name: "bob".to_string(),
+                name: UserId::new("bob"),
                 password: "bob00".to_string(),
             })
             .await
             .unwrap();
         handler
             .bind(BindRequest {
-                name: "andrew".to_string(),
+                name: UserId::new("andrew"),
                 password: "bob00".to_string(),
             })
             .await
             .unwrap_err();
         handler
             .bind(BindRequest {
-                name: "bob".to_string(),
+                name: UserId::new("bob"),
                 password: "wrong_password".to_string(),
             })
             .await
@@ -536,7 +543,7 @@ mod tests {
 
         handler
             .bind(BindRequest {
-                name: "bob".to_string(),
+                name: UserId::new("bob"),
                 password: "bob00".to_string(),
             })
             .await
@@ -557,47 +564,44 @@ mod tests {
                 .await
                 .unwrap()
                 .into_iter()
-                .map(|u| u.user_id)
+                .map(|u| u.user_id.to_string())
                 .collect::<Vec<_>>();
-            assert_eq!(users, vec!["John", "bob", "patrick"]);
+            assert_eq!(users, vec!["bob", "john", "patrick"]);
         }
         {
             let users = handler
-                .list_users(Some(UserRequestFilter::Equality(
-                    "user_id".to_string(),
-                    "bob".to_string(),
-                )))
+                .list_users(Some(UserRequestFilter::UserId(UserId::new("bob"))))
                 .await
                 .unwrap()
                 .into_iter()
-                .map(|u| u.user_id)
+                .map(|u| u.user_id.to_string())
                 .collect::<Vec<_>>();
             assert_eq!(users, vec!["bob"]);
         }
         {
             let users = handler
                 .list_users(Some(UserRequestFilter::Or(vec![
-                    UserRequestFilter::Equality("user_id".to_string(), "bob".to_string()),
-                    UserRequestFilter::Equality("user_id".to_string(), "John".to_string()),
+                    UserRequestFilter::UserId(UserId::new("bob")),
+                    UserRequestFilter::UserId(UserId::new("John")),
                 ])))
                 .await
                 .unwrap()
                 .into_iter()
-                .map(|u| u.user_id)
+                .map(|u| u.user_id.to_string())
                 .collect::<Vec<_>>();
-            assert_eq!(users, vec!["John", "bob"]);
+            assert_eq!(users, vec!["bob", "john"]);
         }
         {
             let users = handler
                 .list_users(Some(UserRequestFilter::Not(Box::new(
-                    UserRequestFilter::Equality("user_id".to_string(), "bob".to_string()),
+                    UserRequestFilter::UserId(UserId::new("bob")),
                 ))))
                 .await
                 .unwrap()
                 .into_iter()
-                .map(|u| u.user_id)
+                .map(|u| u.user_id.to_string())
                 .collect::<Vec<_>>();
-            assert_eq!(users, vec!["John", "patrick"]);
+            assert_eq!(users, vec!["john", "patrick"]);
         }
     }
 
@@ -622,7 +626,7 @@ mod tests {
                 Group {
                     id: group_1,
                     display_name: "Best Group".to_string(),
-                    users: vec!["bob".to_string(), "patrick".to_string()]
+                    users: vec![UserId::new("bob"), UserId::new("patrick")]
                 },
                 Group {
                     id: group_3,
@@ -632,7 +636,7 @@ mod tests {
                 Group {
                     id: group_2,
                     display_name: "Worst Group".to_string(),
-                    users: vec!["John".to_string(), "patrick".to_string()]
+                    users: vec![UserId::new("john"), UserId::new("patrick")]
                 },
             ]
         );
@@ -640,7 +644,7 @@ mod tests {
             handler
                 .list_groups(Some(GroupRequestFilter::Or(vec![
                     GroupRequestFilter::DisplayName("Empty Group".to_string()),
-                    GroupRequestFilter::Member("bob".to_string()),
+                    GroupRequestFilter::Member(UserId::new("bob")),
                 ])))
                 .await
                 .unwrap(),
@@ -648,7 +652,7 @@ mod tests {
                 Group {
                     id: group_1,
                     display_name: "Best Group".to_string(),
-                    users: vec!["bob".to_string(), "patrick".to_string()]
+                    users: vec![UserId::new("bob"), UserId::new("patrick")]
                 },
                 Group {
                     id: group_3,
@@ -670,7 +674,7 @@ mod tests {
             vec![Group {
                 id: group_1,
                 display_name: "Best Group".to_string(),
-                users: vec!["bob".to_string(), "patrick".to_string()]
+                users: vec![UserId::new("bob"), UserId::new("patrick")]
             }]
         );
     }
@@ -682,13 +686,35 @@ mod tests {
         let handler = SqlBackendHandler::new(config, sql_pool);
         insert_user(&handler, "bob", "bob00").await;
         {
-            let user = handler.get_user_details("bob").await.unwrap();
-            assert_eq!(user.user_id, "bob".to_string());
+            let user = handler.get_user_details(&UserId::new("bob")).await.unwrap();
+            assert_eq!(user.user_id.as_str(), "bob");
         }
         {
-            handler.get_user_details("John").await.unwrap_err();
+            handler
+                .get_user_details(&UserId::new("John"))
+                .await
+                .unwrap_err();
         }
     }
+
+    #[tokio::test]
+    async fn test_user_lowercase() {
+        let sql_pool = get_initialized_db().await;
+        let config = get_default_config();
+        let handler = SqlBackendHandler::new(config, sql_pool);
+        insert_user(&handler, "Bob", "bob00").await;
+        {
+            let user = handler.get_user_details(&UserId::new("bOb")).await.unwrap();
+            assert_eq!(user.user_id.as_str(), "bob");
+        }
+        {
+            handler
+                .get_user_details(&UserId::new("John"))
+                .await
+                .unwrap_err();
+        }
+    }
+
     #[tokio::test]
     async fn test_get_user_groups() {
         let sql_pool = get_initialized_db().await;
@@ -707,13 +733,19 @@ mod tests {
         let mut patrick_groups = HashSet::new();
         patrick_groups.insert(GroupIdAndName(group_1, "Group1".to_string()));
         patrick_groups.insert(GroupIdAndName(group_2, "Group2".to_string()));
-        assert_eq!(handler.get_user_groups("bob").await.unwrap(), bob_groups);
         assert_eq!(
-            handler.get_user_groups("patrick").await.unwrap(),
+            handler.get_user_groups(&UserId::new("bob")).await.unwrap(),
+            bob_groups
+        );
+        assert_eq!(
+            handler
+                .get_user_groups(&UserId::new("patrick"))
+                .await
+                .unwrap(),
             patrick_groups
         );
         assert_eq!(
-            handler.get_user_groups("John").await.unwrap(),
+            handler.get_user_groups(&UserId::new("John")).await.unwrap(),
             HashSet::new()
         );
     }
@@ -729,29 +761,29 @@ mod tests {
         insert_user(&handler, "Jennz", "boupBoup").await;
 
         // Remove a user
-        let _request_result = handler.delete_user("Jennz").await.unwrap();
+        let _request_result = handler.delete_user(&UserId::new("Jennz")).await.unwrap();
 
         let users = handler
             .list_users(None)
             .await
             .unwrap()
             .into_iter()
-            .map(|u| u.user_id)
+            .map(|u| u.user_id.to_string())
             .collect::<Vec<_>>();
 
-        assert_eq!(users, vec!["Hector", "val"]);
+        assert_eq!(users, vec!["hector", "val"]);
 
         // Insert new user and remove two
         insert_user(&handler, "NewBoi", "Joni").await;
-        let _request_result = handler.delete_user("Hector").await.unwrap();
-        let _request_result = handler.delete_user("NewBoi").await.unwrap();
+        let _request_result = handler.delete_user(&UserId::new("Hector")).await.unwrap();
+        let _request_result = handler.delete_user(&UserId::new("NewBoi")).await.unwrap();
 
         let users = handler
             .list_users(None)
             .await
             .unwrap()
             .into_iter()
-            .map(|u| u.user_id)
+            .map(|u| u.user_id.to_string())
             .collect::<Vec<_>>();
 
         assert_eq!(users, vec!["val"]);
