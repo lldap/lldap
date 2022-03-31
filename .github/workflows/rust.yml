@@ -105,13 +105,10 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install nightly --component llvm-tools-preview
 
-      - name: Install cargo-llvm-cov
-        run: curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz | tar xzf - -C ~/.cargo/bin
+      - uses: taiki-e/install-action@cargo-llvm-cov
 
       - uses: Swatinem/rust-cache@v1
 
-      - name: clean
-        run: cargo llvm-cov clean --workspace
       - name: Generate code coverage for unit test
         run: cargo llvm-cov  --workspace --no-report
       - name: Aggregate reports
