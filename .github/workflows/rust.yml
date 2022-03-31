@@ -11,7 +11,7 @@ env:
 
 jobs:
   pre_job:
-    # continue-on-error: true # Uncomment once integration is finished
+    continue-on-error: true
     runs-on: ubuntu-latest
     # Map a step output to a job output
     outputs:
@@ -97,7 +97,6 @@ jobs:
   coverage:
     name: Code coverage
     needs: pre_job
-    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
