@@ -16,9 +16,9 @@ use futures::future::{ok, Ready};
 use futures_util::{FutureExt, TryFutureExt};
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
-use log::*;
 use sha2::Sha512;
 use time::ext::NumericalDuration;
+use tracing::{debug, instrument, warn};
 
 use lldap_auth::{login, opaque, password_reset, registration, JWTClaims};
 
@@ -76,6 +76,7 @@ fn get_refresh_token(request: HttpRequest) -> std::result::Result<(u64, UserId),
     }
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn get_refresh<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
@@ -95,15 +96,10 @@ where
         .await;
     // Async closures are not supported yet.
     match res_found {
-        Ok(found) => {
-            if found {
-                backend_handler.get_user_groups(&user).await
-            } else {
-                Err(DomainError::AuthenticationError(
-                    "Invalid refresh token".to_string(),
-                ))
-            }
-        }
+        Ok(true) => backend_handler.get_user_groups(&user).await,
+        Ok(false) => Err(DomainError::AuthenticationError(
+            "Invalid refresh token".to_string(),
+        )),
         Err(e) => Err(e),
     }
     .map(|groups| create_jwt(jwt_key, user.to_string(), groups))
@@ -125,6 +121,7 @@ where
     .unwrap_or_else(error_to_http_response)
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn get_password_reset_step1<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
@@ -161,6 +158,7 @@ where
     HttpResponse::Ok().finish()
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn get_password_reset_step2<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
@@ -202,6 +200,7 @@ where
         })
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn get_logout<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
@@ -261,6 +260,7 @@ pub(crate) fn error_to_api_response<T>(error: DomainError) -> ApiResult<T> {
 
 pub type ApiResult<M> = actix_web::Either<web::Json<M>, HttpResponse>;
 
+#[instrument(skip_all, level = "debug")]
 async fn opaque_login_start<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<login::ClientLoginStartRequest>,
@@ -275,6 +275,7 @@ where
         .unwrap_or_else(error_to_api_response)
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn get_login_successful_response<Backend>(
     data: &web::Data<AppState<Backend>>,
     name: &UserId,
@@ -317,6 +318,7 @@ where
         .unwrap_or_else(error_to_http_response)
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn opaque_login_finish<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<login::ClientLoginFinishRequest>,
@@ -335,6 +337,7 @@ where
     get_login_successful_response(&data, &name).await
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn simple_login<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<login::ClientSimpleLoginRequest>,
@@ -387,6 +390,7 @@ where
     get_login_successful_response(&data, &name).await
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn post_authorize<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<BindRequest>,
@@ -395,12 +399,14 @@ where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
 {
     let name = request.name.clone();
+    debug!(%name);
     if let Err(e) = data.backend_handler.bind(request.into_inner()).await {
         return error_to_http_response(e);
     }
     get_login_successful_response(&data, &name).await
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn opaque_register_start<Backend>(
     request: actix_web::HttpRequest,
     mut payload: actix_web::web::Payload,
@@ -450,6 +456,7 @@ where
         .unwrap_or_else(error_to_api_response)
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn opaque_register_finish<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<registration::ClientRegistrationFinishRequest>,
@@ -530,6 +537,7 @@ pub enum Permission {
     Regular,
 }
 
+#[derive(Debug)]
 pub struct ValidationResults {
     pub user: String,
     pub permission: Permission,
@@ -567,6 +575,7 @@ impl ValidationResults {
     }
 }
 
+#[instrument(skip_all, level = "debug", err, ret)]
 pub(crate) fn check_if_token_is_valid<Backend>(
     state: &AppState<Backend>,
     token_str: &str,

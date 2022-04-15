@@ -2,6 +2,7 @@ use crate::domain::handler::{
     BackendHandler, CreateUserRequest, GroupId, UpdateGroupRequest, UpdateUserRequest, UserId,
 };
 use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
+use tracing::{debug, debug_span, Instrument};
 
 use super::api::Context;
 
@@ -63,7 +64,12 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         context: &Context<Handler>,
         user: CreateUserInput,
     ) -> FieldResult<super::query::User<Handler>> {
+        let span = debug_span!("[GraphQL mutation] create_user");
+        span.in_scope(|| {
+            debug!(?user.id);
+        });
         if !context.validation_result.is_admin() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized user creation".into());
         }
         let user_id = UserId::new(&user.id);
@@ -76,10 +82,12 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
                 first_name: user.first_name,
                 last_name: user.last_name,
             })
+            .instrument(span.clone())
             .await?;
         Ok(context
             .handler
             .get_user_details(&user_id)
+            .instrument(span)
             .await
             .map(Into::into)?)
     }
@@ -88,13 +96,19 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         context: &Context<Handler>,
         name: String,
     ) -> FieldResult<super::query::Group<Handler>> {
+        let span = debug_span!("[GraphQL mutation] create_group");
+        span.in_scope(|| {
+            debug!(?name);
+        });
         if !context.validation_result.is_admin() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized group creation".into());
         }
         let group_id = context.handler.create_group(&name).await?;
         Ok(context
             .handler
             .get_group_details(group_id)
+            .instrument(span)
             .await
             .map(Into::into)?)
     }
@@ -103,7 +117,12 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         context: &Context<Handler>,
         user: UpdateUserInput,
     ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] update_user");
+        span.in_scope(|| {
+            debug!(?user.id);
+        });
         if !context.validation_result.can_write(&user.id) {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized user update".into());
         }
         context
@@ -115,6 +134,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
                 first_name: user.first_name,
                 last_name: user.last_name,
             })
+            .instrument(span)
             .await?;
         Ok(Success::new())
     }
@@ -123,10 +143,16 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         context: &Context<Handler>,
         group: UpdateGroupInput,
     ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] update_group");
+        span.in_scope(|| {
+            debug!(?group.id);
+        });
         if !context.validation_result.is_admin() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized group update".into());
         }
         if group.id == 1 {
+            span.in_scope(|| debug!("Cannot change admin group details"));
             return Err("Cannot change admin group details".into());
         }
         context
@@ -135,6 +161,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
                 group_id: GroupId(group.id),
                 display_name: group.display_name,
             })
+            .instrument(span)
             .await?;
         Ok(Success::new())
     }
@@ -144,12 +171,18 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         user_id: String,
         group_id: i32,
     ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] add_user_to_group");
+        span.in_scope(|| {
+            debug!(?user_id, ?group_id);
+        });
         if !context.validation_result.is_admin() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized group membership modification".into());
         }
         context
             .handler
             .add_user_to_group(&UserId::new(&user_id), GroupId(group_id))
+            .instrument(span)
             .await?;
         Ok(Success::new())
     }
@@ -159,38 +192,65 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         user_id: String,
         group_id: i32,
     ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] remove_user_from_group");
+        span.in_scope(|| {
+            debug!(?user_id, ?group_id);
+        });
         if !context.validation_result.is_admin() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized group membership modification".into());
         }
         if context.validation_result.user == user_id && group_id == 1 {
+            span.in_scope(|| debug!("Cannot remove admin rights for current user"));
             return Err("Cannot remove admin rights for current user".into());
         }
         context
             .handler
             .remove_user_from_group(&UserId::new(&user_id), GroupId(group_id))
+            .instrument(span)
             .await?;
         Ok(Success::new())
     }
 
     async fn delete_user(context: &Context<Handler>, user_id: String) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] delete_user");
+        span.in_scope(|| {
+            debug!(?user_id);
+        });
         if !context.validation_result.is_admin() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized user deletion".into());
         }
         if context.validation_result.user == user_id {
+            span.in_scope(|| debug!("Cannot delete current user"));
             return Err("Cannot delete current user".into());
         }
-        context.handler.delete_user(&UserId::new(&user_id)).await?;
+        context
+            .handler
+            .delete_user(&UserId::new(&user_id))
+            .instrument(span)
+            .await?;
         Ok(Success::new())
     }
 
     async fn delete_group(context: &Context<Handler>, group_id: i32) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] delete_group");
+        span.in_scope(|| {
+            debug!(?group_id);
+        });
         if !context.validation_result.is_admin() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized group deletion".into());
         }
         if group_id == 1 {
+            span.in_scope(|| debug!("Cannot delete admin group"));
             return Err("Cannot delete admin group".into());
         }
-        context.handler.delete_group(GroupId(group_id)).await?;
+        context
+            .handler
+            .delete_group(GroupId(group_id))
+            .instrument(span)
+            .await?;
         Ok(Success::new())
     }
 }

@@ -41,10 +41,9 @@ tokio = { version = "1.13.1", features = ["full"] }
 tokio-native-tls = "0.3"
 tokio-util = "0.6.3"
 tokio-stream = "*"
-tracing = "*"
 tracing-actix-web = "0.4.0-beta.7"
+tracing-attributes = "^0.1.21"
 tracing-log = "*"
-tracing-subscriber = "0.3"
 rand = { version = "0.8", features = ["small_rng", "getrandom"] }
 juniper_actix = "0.4.0"
 juniper = "0.15.6"
@@ -52,6 +51,10 @@ itertools = "0.10.1"
 
 [dependencies.opaque-ke]
 version = "0.6"
+
+[dependencies.tracing-subscriber]
+version = "0.3"
+features = ["env-filter", "tracing-log"]
 
 [dependencies.lettre]
 version = "0.10.0-rc.3"
@@ -93,6 +96,13 @@ version = "*"
 
 [dependencies.openssl-sys]
 features = ["vendored"]
+version = "*"
+
+[dependencies.tracing-forest]
+features = ["smallvec", "chrono", "tokio"]
+version = "^0.1.4"
+
+[dependencies.tracing]
 version = "*"
 
 [dev-dependencies]

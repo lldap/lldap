@@ -1,30 +1,50 @@
 use crate::infra::configuration::Configuration;
-use tracing_subscriber::prelude::*;
+use actix_web::{
+    dev::{ServiceRequest, ServiceResponse},
+    Error,
+};
+use tracing::{error, info, Span};
+use tracing_actix_web::{root_span, RootSpanBuilder};
+use tracing_subscriber::{filter::EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+
+/// We will define a custom root span builder to capture additional fields, specific
+/// to our application, on top of the ones provided by `DefaultRootSpanBuilder` out of the box.
+pub struct CustomRootSpanBuilder;
+
+impl RootSpanBuilder for CustomRootSpanBuilder {
+    fn on_request_start(request: &ServiceRequest) -> Span {
+        let span = root_span!(request);
+        span.in_scope(|| {
+            info!(uri = %request.uri());
+        });
+        span
+    }
+
+    fn on_request_end<B>(_: Span, outcome: &Result<ServiceResponse<B>, Error>) {
+        match &outcome {
+            Ok(response) => {
+                if let Some(error) = response.response().error() {
+                    error!(?error);
+                } else {
+                    info!(status_code = &response.response().status().as_u16());
+                }
+            }
+            Err(error) => error!(?error),
+        };
+    }
+}
 
 pub fn init(config: &Configuration) -> anyhow::Result<()> {
-    let max_log_level = log_level_from_config(config);
-    let sqlx_max_log_level = sqlx_log_level_from_config(config);
-    let filter = tracing_subscriber::filter::Targets::new()
-        .with_target("lldap", max_log_level)
-        .with_target("sqlx", sqlx_max_log_level);
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new(if config.verbose {
+            "sqlx=warn,debug"
+        } else {
+            "sqlx=warn,info"
+        })
+    });
     tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer().with_filter(filter))
+        .with(env_filter)
+        .with(tracing_forest::ForestLayer::default())
         .init();
     Ok(())
-}
-
-fn log_level_from_config(config: &Configuration) -> tracing::Level {
-    if config.verbose {
-        tracing::Level::DEBUG
-    } else {
-        tracing::Level::INFO
-    }
-}
-
-fn sqlx_log_level_from_config(config: &Configuration) -> tracing::Level {
-    if config.verbose {
-        tracing::Level::INFO
-    } else {
-        tracing::Level::WARN
-    }
 }

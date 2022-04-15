@@ -4,7 +4,7 @@ use lettre::{
     message::Mailbox, transport::smtp::authentication::Credentials, Message, SmtpTransport,
     Transport,
 };
-use log::debug;
+use tracing::debug;
 
 fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOptions) -> Result<()> {
     let from = options
