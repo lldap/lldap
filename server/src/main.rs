@@ -12,9 +12,10 @@ use crate::{
     infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler, mail},
 };
 use actix::Actor;
+use actix_server::ServerBuilder;
 use anyhow::{anyhow, Context, Result};
 use futures_util::TryFutureExt;
-use log::*;
+use tracing::*;
 
 mod domain;
 mod infra;
@@ -45,7 +46,10 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
         .context("Error adding admin user to group")
 }
 
-async fn run_server(config: Configuration) -> Result<()> {
+#[instrument(skip_all)]
+async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
+    info!("Starting LLDAP....");
+
     let sql_pool = PoolOptions::new()
         .max_connections(5)
         .connect(&config.database_url)
@@ -89,7 +93,12 @@ async fn run_server(config: Configuration) -> Result<()> {
     // Run every hour.
     let scheduler = Scheduler::new("0 0 * * * * *", sql_pool);
     scheduler.start();
-    server_builder
+    Ok(server_builder)
+}
+
+async fn run_server(config: Configuration) -> Result<()> {
+    set_up_server(config)
+        .await?
         .workers(1)
         .run()
         .await
@@ -102,8 +111,6 @@ fn run_server_command(opts: RunOpts) -> Result<()> {
 
     let config = infra::configuration::init(opts)?;
     infra::logging::init(&config)?;
-
-    info!("Starting LLDAP....");
 
     actix::run(
         run_server(config).unwrap_or_else(|e| error!("Could not bring up the servers: {:#}", e)),

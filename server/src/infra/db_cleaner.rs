@@ -7,6 +7,7 @@ use chrono::Local;
 use cron::Schedule;
 use sea_query::{Expr, Query};
 use std::{str::FromStr, time::Duration};
+use tracing::{debug, error, info, instrument};
 
 // Define actor
 pub struct Scheduler {
@@ -19,7 +20,7 @@ impl Actor for Scheduler {
     type Context = Context<Self>;
 
     fn started(&mut self, context: &mut Context<Self>) {
-        log::info!("DB Cleanup Cron started");
+        info!("DB Cleanup Cron started");
 
         context.run_later(self.duration_until_next(), move |this, ctx| {
             this.schedule_task(ctx)
@@ -27,7 +28,7 @@ impl Actor for Scheduler {
     }
 
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
-        log::info!("DB Cleanup stopped");
+        info!("DB Cleanup stopped");
     }
 }
 
@@ -38,7 +39,6 @@ impl Scheduler {
     }
 
     fn schedule_task(&self, ctx: &mut Context<Self>) {
-        log::info!("Cleaning DB");
         let future = actix::fut::wrap_future::<_, Self>(Self::cleanup_db(self.sql_pool.clone()));
         ctx.spawn(future);
 
@@ -47,17 +47,16 @@ impl Scheduler {
         });
     }
 
+    #[instrument(skip_all)]
     async fn cleanup_db(sql_pool: Pool) {
-        if let Err(e) = sqlx::query(
-            &Query::delete()
-                .from_table(JwtRefreshStorage::Table)
-                .and_where(Expr::col(JwtRefreshStorage::ExpiryDate).lt(Local::now().naive_utc()))
-                .to_string(DbQueryBuilder {}),
-        )
-        .execute(&sql_pool)
-        .await
-        {
-            log::error!("DB error while cleaning up JWT refresh tokens: {}", e);
+        info!("Cleaning DB");
+        let query = Query::delete()
+            .from_table(JwtRefreshStorage::Table)
+            .and_where(Expr::col(JwtRefreshStorage::ExpiryDate).lt(Local::now().naive_utc()))
+            .to_string(DbQueryBuilder {});
+        debug!(%query);
+        if let Err(e) = sqlx::query(&query).execute(&sql_pool).await {
+            error!("DB error while cleaning up JWT refresh tokens: {}", e);
         };
         if let Err(e) = sqlx::query(
             &Query::delete()
@@ -68,9 +67,9 @@ impl Scheduler {
         .execute(&sql_pool)
         .await
         {
-            log::error!("DB error while cleaning up JWT storage: {}", e);
+            error!("DB error while cleaning up JWT storage: {}", e);
         };
-        log::info!("DB cleaned!");
+        info!("DB cleaned!");
     }
 
     fn duration_until_next(&self) -> Duration {

@@ -6,6 +6,7 @@ use sea_query::{Alias, Cond, Expr, Iden, Order, Query, SimpleExpr};
 use sea_query_binder::SqlxBinder;
 use sqlx::{query_as_with, query_with, FromRow, Row};
 use std::collections::HashSet;
+use tracing::{debug, instrument};
 
 #[derive(Debug, Clone)]
 pub struct SqlBackendHandler {
@@ -110,11 +111,13 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> SimpleExpr {
 
 #[async_trait]
 impl BackendHandler for SqlBackendHandler {
+    #[instrument(skip_all, level = "debug", ret, err)]
     async fn list_users(
         &self,
         filters: Option<UserRequestFilter>,
         get_groups: bool,
     ) -> Result<Vec<UserAndGroups>> {
+        debug!(?filters, get_groups);
         let (query, values) = {
             let mut query_builder = Query::select()
                 .column((Users::Table, Users::UserId))
@@ -167,7 +170,8 @@ impl BackendHandler for SqlBackendHandler {
 
             query_builder.build_sqlx(DbQueryBuilder {})
         };
-        log::error!("query: {}", &query);
+
+        debug!(%query);
 
         // For group_by.
         use itertools::Itertools;
@@ -199,11 +203,12 @@ impl BackendHandler for SqlBackendHandler {
                 },
             });
         }
-
         Ok(users)
     }
 
+    #[instrument(skip_all, level = "debug", ret, err)]
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
+        debug!(?filters);
         let (query, values) = {
             let mut query_builder = Query::select()
                 .column((Groups::Table, Groups::GroupId))
@@ -233,6 +238,7 @@ impl BackendHandler for SqlBackendHandler {
 
             query_builder.build_sqlx(DbQueryBuilder {})
         };
+        debug!(%query);
 
         // For group_by.
         use itertools::Itertools;
@@ -264,7 +270,9 @@ impl BackendHandler for SqlBackendHandler {
         Ok(groups)
     }
 
+    #[instrument(skip_all, level = "debug", ret, err)]
     async fn get_user_details(&self, user_id: &UserId) -> Result<User> {
+        debug!(?user_id);
         let (query, values) = Query::select()
             .column(Users::UserId)
             .column(Users::Email)
@@ -276,19 +284,23 @@ impl BackendHandler for SqlBackendHandler {
             .from(Users::Table)
             .cond_where(Expr::col(Users::UserId).eq(user_id))
             .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
 
         Ok(query_as_with::<_, User, _>(query.as_str(), values)
             .fetch_one(&self.sql_pool)
             .await?)
     }
 
+    #[instrument(skip_all, level = "debug", ret, err)]
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName> {
+        debug!(?group_id);
         let (query, values) = Query::select()
             .column(Groups::GroupId)
             .column(Groups::DisplayName)
             .from(Groups::Table)
             .cond_where(Expr::col(Groups::GroupId).eq(group_id))
             .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
 
         Ok(
             query_as_with::<_, GroupIdAndName, _>(query.as_str(), values)
@@ -297,12 +309,9 @@ impl BackendHandler for SqlBackendHandler {
         )
     }
 
+    #[instrument(skip_all, level = "debug", ret, err)]
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupIdAndName>> {
-        if *user_id == self.config.ldap_user_dn {
-            let mut groups = HashSet::new();
-            groups.insert(GroupIdAndName(GroupId(1), "lldap_admin".to_string()));
-            return Ok(groups);
-        }
+        debug!(?user_id);
         let (query, values) = Query::select()
             .column((Groups::Table, Groups::GroupId))
             .column(Groups::DisplayName)
@@ -314,6 +323,7 @@ impl BackendHandler for SqlBackendHandler {
             )
             .cond_where(Expr::col(Memberships::UserId).eq(user_id))
             .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
 
         query_with(query.as_str(), values)
             // Extract the group id from the row.
@@ -335,7 +345,9 @@ impl BackendHandler for SqlBackendHandler {
             .map_err(DomainError::DatabaseError)
     }
 
+    #[instrument(skip_all, level = "debug", err)]
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
+        debug!(user_id = ?request.user_id);
         let columns = vec![
             Users::UserId,
             Users::Email,
@@ -356,13 +368,16 @@ impl BackendHandler for SqlBackendHandler {
                 chrono::Utc::now().naive_utc().into(),
             ])
             .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
         query_with(query.as_str(), values)
             .execute(&self.sql_pool)
             .await?;
         Ok(())
     }
 
+    #[instrument(skip_all, level = "debug", err)]
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
+        debug!(user_id = ?request.user_id);
         let mut values = Vec::new();
         if let Some(email) = request.email {
             values.push((Users::Email, email.into()));
@@ -384,13 +399,16 @@ impl BackendHandler for SqlBackendHandler {
             .values(values)
             .cond_where(Expr::col(Users::UserId).eq(request.user_id))
             .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
         query_with(query.as_str(), values)
             .execute(&self.sql_pool)
             .await?;
         Ok(())
     }
 
+    #[instrument(skip_all, level = "debug", err)]
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()> {
+        debug!(?request.group_id);
         let mut values = Vec::new();
         if let Some(display_name) = request.display_name {
             values.push((Groups::DisplayName, display_name.into()));
@@ -403,29 +421,36 @@ impl BackendHandler for SqlBackendHandler {
             .values(values)
             .cond_where(Expr::col(Groups::GroupId).eq(request.group_id))
             .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
         query_with(query.as_str(), values)
             .execute(&self.sql_pool)
             .await?;
         Ok(())
     }
 
+    #[instrument(skip_all, level = "debug", err)]
     async fn delete_user(&self, user_id: &UserId) -> Result<()> {
-        let (delete_query, values) = Query::delete()
+        debug!(?user_id);
+        let (query, values) = Query::delete()
             .from_table(Users::Table)
             .cond_where(Expr::col(Users::UserId).eq(user_id))
             .build_sqlx(DbQueryBuilder {});
-        query_with(delete_query.as_str(), values)
+        debug!(%query);
+        query_with(query.as_str(), values)
             .execute(&self.sql_pool)
             .await?;
         Ok(())
     }
 
+    #[instrument(skip_all, level = "debug", ret, err)]
     async fn create_group(&self, group_name: &str) -> Result<GroupId> {
+        debug!(?group_name);
         let (query, values) = Query::insert()
             .into_table(Groups::Table)
             .columns(vec![Groups::DisplayName])
             .values_panic(vec![group_name.into()])
             .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
         query_with(query.as_str(), values)
             .execute(&self.sql_pool)
             .await?;
@@ -434,36 +459,45 @@ impl BackendHandler for SqlBackendHandler {
             .from(Groups::Table)
             .cond_where(Expr::col(Groups::DisplayName).eq(group_name))
             .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
         let row = query_with(query.as_str(), values)
             .fetch_one(&self.sql_pool)
             .await?;
         Ok(GroupId(row.get::<i32, _>(&*Groups::GroupId.to_string())))
     }
 
+    #[instrument(skip_all, level = "debug", err)]
     async fn delete_group(&self, group_id: GroupId) -> Result<()> {
-        let (delete_query, values) = Query::delete()
+        debug!(?group_id);
+        let (query, values) = Query::delete()
             .from_table(Groups::Table)
             .cond_where(Expr::col(Groups::GroupId).eq(group_id))
             .build_sqlx(DbQueryBuilder {});
-        query_with(delete_query.as_str(), values)
-            .execute(&self.sql_pool)
-            .await?;
-        Ok(())
-    }
-
-    async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
-        let (query, values) = Query::insert()
-            .into_table(Memberships::Table)
-            .columns(vec![Memberships::UserId, Memberships::GroupId])
-            .values_panic(vec![user_id.into(), group_id.into()])
-            .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
         query_with(query.as_str(), values)
             .execute(&self.sql_pool)
             .await?;
         Ok(())
     }
 
+    #[instrument(skip_all, level = "debug", err)]
+    async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
+        debug!(?user_id, ?group_id);
+        let (query, values) = Query::insert()
+            .into_table(Memberships::Table)
+            .columns(vec![Memberships::UserId, Memberships::GroupId])
+            .values_panic(vec![user_id.into(), group_id.into()])
+            .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
+        query_with(query.as_str(), values)
+            .execute(&self.sql_pool)
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip_all, level = "debug", err)]
     async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
+        debug!(?user_id, ?group_id);
         let (query, values) = Query::delete()
             .from_table(Memberships::Table)
             .cond_where(
@@ -472,6 +506,7 @@ impl BackendHandler for SqlBackendHandler {
                     .add(Expr::col(Memberships::UserId).eq(user_id)),
             )
             .build_sqlx(DbQueryBuilder {});
+        debug!(%query);
         query_with(query.as_str(), values)
             .execute(&self.sql_pool)
             .await?;
