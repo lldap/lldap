@@ -156,6 +156,7 @@ where
         &data.mail_options,
     ) {
         warn!("Error sending email: {:#?}", e);
+        return HttpResponse::InternalServerError().body(format!("Could not send email: {}", e));
     }
     HttpResponse::Ok().finish()
 }
