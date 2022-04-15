@@ -251,7 +251,7 @@ impl HostService {
 
     pub fn reset_password_step2(
         token: &str,
-        callback: Callback<Result<String>>,
+        callback: Callback<Result<lldap_auth::password_reset::ServerPasswordResetResponse>>,
     ) -> Result<FetchTask> {
         call_server_json_with_error_message(
             &format!("/auth/reset/step2/{}", token),
