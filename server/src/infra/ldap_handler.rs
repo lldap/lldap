@@ -109,6 +109,7 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Vec<Stri
         "sn" => Ok(vec![user.last_name.clone()]),
         "cn" | "displayname" => Ok(vec![user.display_name.clone()]),
         "createtimestamp" | "modifytimestamp" => Ok(vec![user.creation_date.to_rfc3339()]),
+        "1.1" => Ok(vec![]),
         _ => bail!("Unsupported user attribute: {}", attribute),
     }
 }
