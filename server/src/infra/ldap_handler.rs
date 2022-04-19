@@ -550,8 +550,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         &self.base_dn_str,
                     )?;
                     Ok(GroupRequestFilter::Member(user_name))
-                } else if field.to_lowercase() == "objectclass" && value == "groupOfUniqueNames" {
-                    Ok(GroupRequestFilter::And(vec![]))
+                } else if field.to_lowercase() == "objectclass" {
+                    if value == "groupOfUniqueNames" || value == "groupOfNames" {
+                        Ok(GroupRequestFilter::And(vec![]))
+                    } else {
+                        Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
+                            vec![],
+                        ))))
+                    }
                 } else {
                     let field = map_field(field)?;
                     if field == "display_name" {
@@ -1116,6 +1122,7 @@ mod tests {
                 GroupRequestFilter::DisplayName("group_1".to_string()),
                 GroupRequestFilter::Member(UserId::new("bob")),
                 GroupRequestFilter::And(vec![]),
+                GroupRequestFilter::And(vec![]),
             ]))))
             .times(1)
             .return_once(|_| {
@@ -1135,6 +1142,7 @@ mod tests {
                     "cn=bob,ou=people,dc=example,dc=com".to_string(),
                 ),
                 LdapFilter::Equality("objectclass".to_string(), "groupOfUniqueNames".to_string()),
+                LdapFilter::Equality("objectclass".to_string(), "groupOfNames".to_string()),
             ]),
             vec!["cn"],
         );
