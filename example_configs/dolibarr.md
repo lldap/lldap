@@ -59,7 +59,13 @@ Click on the blank form "Users in LDAP database", you will get the list of the u
 ##To enable LDAP login:
 
 Modify your conf.php in your dolibarr folder in htdocs/conf
-Add those lines:
+Replace
+```
+// Authentication settings
+$dolibarr_main_authentication='dolibarr'; 
+```
+
+with:
 ```
 // Authentication settings
 // Only  add "ldap" to only login using the ldap server, or/and "dolibar" to compare with local users. In any case, you need to have the user existing in dolibarr.
@@ -71,7 +77,7 @@ $dolibarr_main_auth_ldap_servertype='openldap';
 $dolibarr_main_auth_ldap_login_attribute='cn';
 $dolibarr_main_auth_ldap_dn='ou=people,dc=example,dc=com';
 $dolibarr_main_auth_ldap_admin_login='cn=admin,ou=people,dc=example,dc=com';
-$dolibarr_main_auth_ldap_admin_pass='secret;
+$dolibarr_main_auth_ldap_admin_pass='secret';
 ```
 
 You can add this line to enable debug in case anything is wrong:
