@@ -20,7 +20,7 @@ Use TLS:  No
 Administrator DN: cn=admin,ou=people,dc=example,dc=com
 Administrator password: secret
 
-Click on modify then "test ldap connection". 
+Click on modify then "TEST LDAP CONNECTION". 
 You should get this result on the bottom:
 ```
  TCP connect to LDAP server successful (Server=ldap://example.com, Port=389)
@@ -53,12 +53,12 @@ You should get the number of users in the group.
 ##To import ldap users into the dolibarr database (needed to login with those users):
 
 Navigate to  Users & Groups -> New Users
-Click on the blank form "Users in LDAP database", you will get te list of the users in the group filled above. With the "GET" button, you will import the selected user.
+Click on the blank form "Users in LDAP database", you will get the list of the users in the group filled above. With the "GET" button, you will import the selected user.
 
 
 ##To enable LDAP login:
 
-Modify you conf.php in your dolibarr folder in htdocs/conf
+Modify your conf.php in your dolibarr folder in htdocs/conf
 Add those lines:
 ```
 // Authentication settings
