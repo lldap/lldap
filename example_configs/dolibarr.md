@@ -1,4 +1,4 @@
-## Configuration pour Dolibarr
+# Configuration pour Dolibarr
 
 This example will help you to create user in dolibarr from your users in your lldap server from a specific group and to login with the password from the lldap server.
 
