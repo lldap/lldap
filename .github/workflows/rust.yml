@@ -20,10 +20,12 @@ jobs:
       - id: skip_check
         uses: fkirc/skip-duplicate-actions@master
         with:
-          concurrent_skipping: 'never'
+          concurrent_skipping: 'outdated_runs'
           skip_after_successful_duplicate: 'true'
           paths_ignore: '["**/*.md", "**/docs/**", "example_configs/**", "*.sh"]'
           do_not_skip: '["workflow_dispatch", "schedule"]'
+          cancel_others: true
+
   test:
     name: cargo test
     needs: pre_job
@@ -97,6 +99,7 @@ jobs:
   coverage:
     name: Code coverage
     needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
