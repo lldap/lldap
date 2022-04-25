@@ -8,17 +8,17 @@ In Dolibarr, install the LDAP module from Home -> Modules/Applications
 Go to the configuration of this module and fill it like this:
 
 
-Users and groups synchronization: `LDAP -> Dolibarr`
-Contacts' synchronization: `No`
-Type: `OpenLdap`
-Version: `Version 3`
-Primary server: `ldap://example.com`
-Secondary server: `Empty`
-Server port: port `3890`
-Server DN: `dc=example,dc=com`
-Use TLS:  `No`
-Administrator DN: `cn=admin,ou=people,dc=example,dc=com`
-Administrator password: `secret`
+ - Users and groups synchronization: `LDAP -> Dolibarr`
+ - Contacts' synchronization: `No`
+ - Type: `OpenLdap`
+ - Version: `Version 3`
+ - Primary server: `ldap://example.com`
+ - Secondary server: `Empty`
+ - Server port: port `3890`
+ - Server DN: `dc=example,dc=com`
+ - Use TLS:  `No`
+ - Administrator DN: `cn=admin,ou=people,dc=example,dc=com`
+ - Administrator password: `secret`
 
 Click on modify then "TEST LDAP CONNECTION". 
 You should get this result on the bottom:
@@ -35,16 +35,17 @@ We will use only Users in this example to get the users we want to import.
 The tab Groups would be to import groups.
 
 Click on the Users tab and fill it like this:
-Users' DN: `ou=people,dc=example,dc=com`
-List of objectClass: `person`
-Search filter: `memberOf=cn=yournamegroup,ou=groups,dc=example,dc=com`
-or if you don't have a group for your users, leave the search filter empty.
+ - Users' DN: `ou=people,dc=example,dc=com`
+ - List of objectClass: `person`
+ - Search filter: `memberOf=cn=yournamegroup,ou=groups,dc=example,dc=com`
 
-Full name: `cn`
-Name: `sn`
-First name: `givenname`
-Login `uid`
-Email address `mail`
+(or if you don't have a group for your users, leave the search filter empty)
+
+ - Full name: `cn`
+ - Name: `sn`
+ - First name: `givenname`
+ - Login `uid`
+ - Email address `mail`
 
 Click on "MODIFY" and then on "TEST A LDAP SEARCH"
 
