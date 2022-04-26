@@ -1,5 +1,5 @@
 # Configuration for Organizr
-####  System Settings > Main > Authentication
+##  System Settings > Main > Authentication
 ---
 
 ### Host Address
