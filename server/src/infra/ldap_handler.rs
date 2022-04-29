@@ -85,7 +85,7 @@ fn get_user_id_from_distinguished_name(
             || (parts[0].0 != "cn" && parts[0].0 != "uid")
         {
             bail!(
-                r#"Unexpected user DN format. Got "{}", expected: "cn=username,ou=people,{}""#,
+                r#"Unexpected user DN format. Got "{}", expected: "uid=username,ou=people,{}""#,
                 dn,
                 base_dn_str
             );
@@ -93,7 +93,7 @@ fn get_user_id_from_distinguished_name(
         Ok(UserId::new(&parts[0].1))
     } else {
         bail!(
-            r#"Unexpected user DN format. Got "{}", expected: "cn=username,ou=people,{}""#,
+            r#"Unexpected user DN format. Got "{}", expected: "uid=username,ou=people,{}""#,
             dn,
             base_dn_str
         );
@@ -125,7 +125,11 @@ fn make_ldap_search_user_result_entry(
     base_dn_str: &str,
     attributes: &[String],
 ) -> Result<LdapSearchResultEntry> {
-    let dn = format!("cn={},ou=people,{}", user.user_id.as_str(), base_dn_str);
+    let dn = format!(
+        "cn={},ou=people,{}",
+        user.display_name.as_str(),
+        base_dn_str
+    );
     Ok(LdapSearchResultEntry {
         dn: dn.clone(),
         attributes: attributes
@@ -864,7 +868,7 @@ mod tests {
             .times(1)
             .return_once(|_| {
                 Ok(vec![User {
-                    user_id: UserId::new("test"),
+                    display_name: "test".to_string(),
                     ..Default::default()
                 }])
             });
@@ -1009,7 +1013,7 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "cn=bob_1,ou=people,dc=example,dc=com".to_string(),
+                    dn: "cn=Bôb Böbberson,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
@@ -1022,7 +1026,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "dn".to_string(),
-                            vals: vec!["cn=bob_1,ou=people,dc=example,dc=com".to_string()]
+                            vals: vec!["cn=Bôb Böbberson,ou=people,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),
@@ -1051,7 +1055,7 @@ mod tests {
                     ],
                 }),
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "cn=jim,ou=people,dc=example,dc=com".to_string(),
+                    dn: "cn=Jimminy Cricket,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
@@ -1064,7 +1068,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "dn".to_string(),
-                            vals: vec!["cn=jim,ou=people,dc=example,dc=com".to_string()]
+                            vals: vec!["cn=Jimminy Cricket,ou=people,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),
@@ -1409,7 +1413,7 @@ mod tests {
             .times(1)
             .return_once(|_| {
                 Ok(vec![User {
-                    user_id: UserId::new("bob_1"),
+                    display_name: "bob_1".to_string(),
                     ..Default::default()
                 }])
             });
@@ -1473,7 +1477,7 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "cn=bob_1,ou=people,dc=example,dc=com".to_string(),
+                    dn: "cn=Bôb Böbberson,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
@@ -1486,7 +1490,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "dn".to_string(),
-                            vals: vec!["cn=bob_1,ou=people,dc=example,dc=com".to_string()]
+                            vals: vec!["cn=Bôb Böbberson,ou=people,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
@@ -1623,7 +1627,7 @@ mod tests {
             ldap_handler.handle_ldap_message(request).await,
             Some(vec![make_extended_response(
                 LdapResultCode::InvalidDNSyntax,
-                r#"Invalid username: "Unexpected user DN format. Got \"cn=bob,ou=groups,ou=people,dc=example,dc=com\", expected: \"cn=username,ou=people,dc=example,dc=com\"""#.to_string(),
+                r#"Invalid username: "Unexpected user DN format. Got \"cn=bob,ou=groups,ou=people,dc=example,dc=com\", expected: \"uid=username,ou=people,dc=example,dc=com\"""#.to_string(),
             )])
         );
         let request = LdapOp::ExtendedRequest(LdapExtendedRequest {
