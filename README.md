@@ -28,11 +28,27 @@
   </a>
 </p>
 
+ - [About](##About)
+ - [Installation](##Installation)
+   - [With Docker](###With-Docker)
+   - [From source](###From-source)
+   - [Cross-compilation](###Cross-compilation)
+ - [Client configuration](##Client-configuration)
+   - [Compatible services](##compatible-services)
+   - [General configuration guide](###general-configuration-guide)
+   - [Sample cient configurations](###Sample-client-configurations)
+ - [Comparisons with other services](##Comparisons-with-other-services)
+   - [vs OpenLDAP](###vs-openldap)
+   - [vs FreeIPA](###vs-freeipa)
+ - [I can't log in!](##i-cant-log-in)
+ - [Contributions](##Contributions)
+
 ## About
 
 This project is a lightweight authentication server that provides an
 opinionated, simplified LDAP interface for authentication. It integrates with
-many backends, from KeyCloak to Authelia to Nextcloud and more!
+many backends, from KeyCloak to Authelia to Nextcloud and
+[more](##compatible-services)!
 
 <img
   src="https://raw.githubusercontent.com/nitnelave/lldap/master/screenshot.png"
@@ -71,7 +87,10 @@ Configure the server by copying the `lldap_config.docker_template.toml` to
 Environment variables should be prefixed with `LLDAP_` to override the
 configuration.
 
-Secrets can also be set through a file. The filename should be specified by the variables `LLDAP_JWT_SECRET_FILE` or `LLDAP_USER_PASS_FILE`, and the file contents are loaded into the respective configuration parameters. Note that `_FILE` variables take precedence.
+Secrets can also be set through a file. The filename should be specified by the
+variables `LLDAP_JWT_SECRET_FILE` or `LLDAP_USER_PASS_FILE`, and the file
+contents are loaded into the respective configuration parameters. Note that
+`_FILE` variables take precedence.
 
 Example for docker compose:
 
@@ -146,6 +165,16 @@ files in an `app` folder next to the binary).
 
 ## Client configuration
 
+### Compatible services
+
+Most services that can use LDAP as an authentication provider should work out
+of the box. For new services, it's possible that they require a bit of tweaking
+on LLDAP's side to make things work. In that case, just create an issue with
+the relevant details (logs of the service, LLDAP logs with `verbose=true` in
+the config).
+
+### General configuration guide
+
 To configure the services that will talk to LLDAP, here are the values:
   - The LDAP user DN is from the configuration. By default,
     `cn=admin,ou=people,dc=example,dc=com`.
@@ -192,9 +221,10 @@ you add PhpLdapAdmin), and comes packed with its own purpose-built wed UI.
 
 ### vs FreeIPA
 
-FreeIPA is the one-stop shop for identity management: LDAP, Kerberos, NTP, DNS, Samba, you name it, it has it. In addition to user
-management, it also does security policies, single sign-on, certificate
-management, linux account management and so on.
+FreeIPA is the one-stop shop for identity management: LDAP, Kerberos, NTP, DNS,
+Samba, you name it, it has it. In addition to user management, it also does
+security policies, single sign-on, certificate management, linux account
+management and so on.
 
 If you need all of that, go for it! Keep in mind that a more complex system is
 more complex to maintain, though.
@@ -220,7 +250,8 @@ set isn't working, try the following:
     for docker) has the rights to write to the `/data` folder. If in doubt, you
     can `chmod 777 /data` (or whatever the folder) to make it world-writeable.
   - Make sure you restart the server.
-  - If it's still not working, join the [Discord server](https://discord.gg/h5PEdRMNyP) to ask for help.
+  - If it's still not working, join the 
+    [Discord server](https://discord.gg/h5PEdRMNyP) to ask for help.
 
 ## Contributions
 
