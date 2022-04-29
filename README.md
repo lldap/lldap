@@ -28,27 +28,27 @@
   </a>
 </p>
 
- - [About](##About)
- - [Installation](##Installation)
-   - [With Docker](###With-Docker)
-   - [From source](###From-source)
-   - [Cross-compilation](###Cross-compilation)
- - [Client configuration](##Client-configuration)
-   - [Compatible services](##compatible-services)
-   - [General configuration guide](###general-configuration-guide)
-   - [Sample cient configurations](###Sample-client-configurations)
- - [Comparisons with other services](##Comparisons-with-other-services)
-   - [vs OpenLDAP](###vs-openldap)
-   - [vs FreeIPA](###vs-freeipa)
- - [I can't log in!](##i-cant-log-in)
- - [Contributions](##Contributions)
+ - [About](#About)
+ - [Installation](#Installation)
+   - [With Docker](#With-Docker)
+   - [From source](#From-source)
+   - [Cross-compilation](#Cross-compilation)
+ - [Client configuration](#Client-configuration)
+   - [Compatible services](#compatible-services)
+   - [General configuration guide](#general-configuration-guide)
+   - [Sample cient configurations](#Sample-client-configurations)
+ - [Comparisons with other services](#Comparisons-with-other-services)
+   - [vs OpenLDAP](#vs-openldap)
+   - [vs FreeIPA](#vs-freeipa)
+ - [I can't log in!](#i-cant-log-in)
+ - [Contributions](#Contributions)
 
 ## About
 
 This project is a lightweight authentication server that provides an
 opinionated, simplified LDAP interface for authentication. It integrates with
 many backends, from KeyCloak to Authelia to Nextcloud and
-[more](##compatible-services)!
+[more](#compatible-services)!
 
 <img
   src="https://raw.githubusercontent.com/nitnelave/lldap/master/screenshot.png"
