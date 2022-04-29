@@ -6,7 +6,8 @@ backend and [yew](https://yew.rs) for the frontend.
 Backend:
 * Listens on a port for LDAP protocol.
   * Only a small, read-only subset of the LDAP protocol is supported.
-  * An extension to allow resetting the password through LDAP will be added.
+  * In addition to that, an extension to allow resetting the password is also
+    supported.
 * Listens on another port for HTTP traffic.
   * The authentication API, based on JWTs, is under "/auth".
   * The user management API is a GraphQL API under "/api/graphql". The schema
@@ -46,11 +47,6 @@ Data storage:
 
 ### Passwords
 
-Passwords are hashed using Argon2, the state of the art in terms of password
-storage. They are hashed using a secret provided in the configuration (which
-can be given as environment variable or command line argument as well): this
-should be kept secret and shouldn't change (it would invalidate all passwords).
-
 Authentication is done via the OPAQUE protocol, meaning that the passwords are
 never sent to the server, but instead the client proves that they know the
 correct password (zero-knowledge proof). This is likely overkill, especially
@@ -58,6 +54,15 @@ considered that the LDAP interface requires sending the password to the server,
 but it's one less potential flaw (especially since the LDAP interface can be
 restricted to an internal docker-only network while the web app is exposed to
 the Internet).
+
+OPAQUE's "passwords" (user-specific blobs of data that can only be used in a
+zero-knowledge proof that the password is correct) are hashed using Argon2, the
+state of the art in terms of password storage. They are hashed using a secret
+provided in the configuration (which can be given as environment variable or
+command line argument as well): this should be kept secret and shouldn't change
+(it would invalidate all passwords). Note that even if it was compromised, the
+attacker wouldn't be able to decrypt the passwords without running an expensive
+brute-force search independently for each password.
 
 ### JWTs and refresh tokens
 
