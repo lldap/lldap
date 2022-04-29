@@ -13,6 +13,9 @@ use ldap3_server::proto::{
 };
 use log::{debug, warn};
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct LdapDn(String);
+
 fn make_dn_pair<I>(mut iter: I) -> Result<(String, String)>
 where
     I: Iterator<Item = String>,
@@ -94,24 +97,24 @@ fn get_user_id_from_distinguished_name(
     }
 }
 
-fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Vec<String>> {
-    match attribute.to_lowercase().as_str() {
-        "objectclass" => Ok(vec![
+fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Option<Vec<String>>> {
+    Ok(Some(match attribute.to_lowercase().as_str() {
+        "objectclass" => vec![
             "inetOrgPerson".to_string(),
             "posixAccount".to_string(),
             "mailAccount".to_string(),
             "person".to_string(),
-        ]),
-        "dn" => Ok(vec![dn.to_string()]),
-        "uid" => Ok(vec![user.user_id.to_string()]),
-        "mail" => Ok(vec![user.email.clone()]),
-        "givenname" => Ok(vec![user.first_name.clone()]),
-        "sn" => Ok(vec![user.last_name.clone()]),
-        "cn" | "displayname" => Ok(vec![user.display_name.clone()]),
-        "createtimestamp" | "modifytimestamp" => Ok(vec![user.creation_date.to_rfc3339()]),
-        "1.1" => Ok(vec![]),
+        ],
+        "dn" => vec![dn.to_string()],
+        "uid" => vec![user.user_id.to_string()],
+        "mail" => vec![user.email.clone()],
+        "givenname" => vec![user.first_name.clone()],
+        "sn" => vec![user.last_name.clone()],
+        "cn" | "displayname" => vec![user.display_name.clone()],
+        "createtimestamp" | "modifytimestamp" => vec![user.creation_date.to_rfc3339()],
+        "1.1" => return Ok(None),
         _ => bail!("Unsupported user attribute: {}", attribute),
-    }
+    }))
 }
 
 fn make_ldap_search_user_result_entry(
@@ -124,47 +127,63 @@ fn make_ldap_search_user_result_entry(
         dn: dn.clone(),
         attributes: attributes
             .iter()
-            .map(|a| {
-                Ok(LdapPartialAttribute {
+            .filter_map(|a| {
+                let values = match get_user_attribute(&user, a, &dn) {
+                    Err(e) => return Some(Err(e)),
+                    Ok(v) => v,
+                }?;
+                Some(Ok(LdapPartialAttribute {
                     atype: a.to_string(),
-                    vals: get_user_attribute(&user, a, &dn)?,
-                })
+                    vals: values,
+                }))
             })
             .collect::<Result<Vec<LdapPartialAttribute>>>()?,
     })
 }
 
-fn get_group_attribute(group: &Group, base_dn_str: &str, attribute: &str) -> Result<Vec<String>> {
-    match attribute.to_lowercase().as_str() {
-        "objectclass" => Ok(vec!["groupOfUniqueNames".to_string()]),
-        "dn" => Ok(vec![format!(
+fn get_group_attribute(
+    group: &Group,
+    base_dn_str: &str,
+    attribute: &str,
+    user_filter: &Option<&UserId>,
+) -> Result<Option<Vec<String>>> {
+    Ok(Some(match attribute.to_lowercase().as_str() {
+        "objectclass" => vec!["groupOfUniqueNames".to_string()],
+        "dn" => vec![format!(
             "cn={},ou=groups,{}",
             group.display_name, base_dn_str
-        )]),
-        "cn" | "uid" => Ok(vec![group.display_name.clone()]),
-        "member" | "uniquemember" => Ok(group
+        )],
+        "cn" | "uid" => vec![group.display_name.clone()],
+        "member" | "uniquemember" => group
             .users
             .iter()
+            .filter(|u| user_filter.map(|f| *u == f).unwrap_or(true))
             .map(|u| format!("cn={},ou=people,{}", u, base_dn_str))
-            .collect()),
+            .collect(),
+        "1.1" => return Ok(None),
         _ => bail!("Unsupported group attribute: {}", attribute),
-    }
+    }))
 }
 
 fn make_ldap_search_group_result_entry(
     group: Group,
     base_dn_str: &str,
     attributes: &[String],
+    user_filter: &Option<&UserId>,
 ) -> Result<LdapSearchResultEntry> {
     Ok(LdapSearchResultEntry {
         dn: format!("cn={},ou=groups,{}", group.display_name, base_dn_str),
         attributes: attributes
             .iter()
-            .map(|a| {
-                Ok(LdapPartialAttribute {
+            .filter_map(|a| {
+                let values = match get_group_attribute(&group, base_dn_str, a, user_filter) {
+                    Err(e) => return Some(Err(e)),
+                    Ok(v) => v,
+                }?;
+                Some(Ok(LdapPartialAttribute {
                     atype: a.to_string(),
-                    vals: get_group_attribute(&group, base_dn_str, a)?,
-                })
+                    vals: values,
+                }))
             })
             .collect::<Result<Vec<LdapPartialAttribute>>>()?,
     })
@@ -265,17 +284,19 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
 }
 
 pub struct LdapHandler<Backend: BackendHandler + LoginHandler + OpaqueHandler> {
-    dn: UserId,
+    dn: LdapDn,
+    user_id: UserId,
     backend_handler: Backend,
     pub base_dn: Vec<(String, String)>,
     base_dn_str: String,
-    ldap_user_dn: UserId,
+    ldap_user_dn: LdapDn,
 }
 
 impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
     pub fn new(backend_handler: Backend, ldap_base_dn: String, ldap_user_dn: UserId) -> Self {
         Self {
-            dn: UserId::new("unauthenticated"),
+            dn: LdapDn("unauthenticated".to_string()),
+            user_id: UserId::new("unauthenticated"),
             backend_handler,
             base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
                 panic!(
@@ -283,7 +304,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     ldap_base_dn
                 )
             }),
-            ldap_user_dn: UserId::new(&format!("cn={},ou=people,{}", ldap_user_dn, &ldap_base_dn)),
+            ldap_user_dn: LdapDn(format!("cn={},ou=people,{}", ldap_user_dn, &ldap_base_dn)),
             base_dn_str: ldap_base_dn,
         }
     }
@@ -302,13 +323,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         match self
             .backend_handler
             .bind(BindRequest {
-                name: user_id,
+                name: user_id.clone(),
                 password: password.clone(),
             })
             .await
         {
             Ok(()) => {
-                self.dn = UserId::new(&request.dn);
+                self.dn = LdapDn(request.dn.clone());
+                self.user_id = user_id;
                 (LdapResultCode::Success, "".to_string())
             }
             Err(_) => (LdapResultCode::InvalidCredentials, "".to_string()),
@@ -382,15 +404,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     pub async fn do_search(&mut self, request: &LdapSearchRequest) -> Vec<LdapOp> {
-        if self.dn != self.ldap_user_dn {
-            return vec![make_search_error(
-                LdapResultCode::InsufficentAccessRights,
-                format!(
-                    r#"Current user `{}` is not allowed to query LDAP, expected {}"#,
-                    &self.dn, &self.ldap_user_dn
-                ),
-            )];
-        }
+        let admin = self.dn == self.ldap_user_dn;
         if request.base.is_empty()
             && request.scope == LdapSearchScope::Base
             && request.filter == LdapFilter::Present("objectClass".to_string())
@@ -418,19 +432,20 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
         let mut results = Vec::new();
         let mut got_match = false;
+        let user_filter = if admin { None } else { Some(&self.user_id) };
         if dn_parts.len() == self.base_dn.len()
             || (dn_parts.len() == self.base_dn.len() + 1
                 && dn_parts[0] == ("ou".to_string(), "people".to_string()))
         {
             got_match = true;
-            results.extend(self.get_user_list(request).await);
+            results.extend(self.get_user_list(request, &user_filter).await);
         }
         if dn_parts.len() == self.base_dn.len()
             || (dn_parts.len() == self.base_dn.len() + 1
                 && dn_parts[0] == ("ou".to_string(), "groups".to_string()))
         {
             got_match = true;
-            results.extend(self.get_groups_list(request).await);
+            results.extend(self.get_groups_list(request, &user_filter).await);
         }
         if !got_match {
             warn!(
@@ -445,9 +460,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         results
     }
 
-    async fn get_user_list(&self, request: &LdapSearchRequest) -> Vec<LdapOp> {
+    async fn get_user_list(
+        &self,
+        request: &LdapSearchRequest,
+        user_filter: &Option<&UserId>,
+    ) -> Vec<LdapOp> {
         let filters = match self.convert_user_filter(&request.filter) {
-            Ok(f) => Some(f),
+            Ok(f) => f,
             Err(e) => {
                 return vec![make_search_error(
                     LdapResultCode::UnwillingToPerform,
@@ -455,7 +474,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 )]
             }
         };
-        let users = match self.backend_handler.list_users(filters).await {
+        let filters = match user_filter {
+            None => filters,
+            Some(u) => {
+                UserRequestFilter::And(vec![filters, UserRequestFilter::UserId((*u).clone())])
+            }
+        };
+        let users = match self.backend_handler.list_users(Some(filters)).await {
             Ok(users) => users,
             Err(e) => {
                 return vec![make_search_error(
@@ -478,7 +503,11 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             })
     }
 
-    async fn get_groups_list(&self, request: &LdapSearchRequest) -> Vec<LdapOp> {
+    async fn get_groups_list(
+        &self,
+        request: &LdapSearchRequest,
+        user_filter: &Option<&UserId>,
+    ) -> Vec<LdapOp> {
         let filter = match self.convert_group_filter(&request.filter) {
             Ok(f) => f,
             Err(e) => {
@@ -486,6 +515,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     LdapResultCode::UnwillingToPerform,
                     format!("Unsupported group filter: {:#}", e),
                 )]
+            }
+        };
+        let filter = match user_filter {
+            None => filter,
+            Some(u) => {
+                GroupRequestFilter::And(vec![filter, GroupRequestFilter::Member((*u).clone())])
             }
         };
 
@@ -501,7 +536,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
         groups
             .into_iter()
-            .map(|u| make_ldap_search_group_result_entry(u, &self.base_dn_str, &request.attrs))
+            .map(|u| {
+                make_ldap_search_group_result_entry(
+                    u,
+                    &self.base_dn_str,
+                    &request.attrs,
+                    user_filter,
+                )
+            })
             .map(|entry| Ok(LdapOp::SearchResultEntry(entry?)))
             .collect::<Result<Vec<_>>>()
             .unwrap_or_else(|e| {
@@ -528,7 +570,8 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             }
             LdapOp::SearchRequest(request) => self.do_search(&request).await,
             LdapOp::UnbindRequest => {
-                self.dn = UserId::new("unauthenticated");
+                self.dn = LdapDn("unauthenticated".to_string());
+                self.user_id = UserId::new("unauthenticated");
                 // No need to notify on unbind (per rfc4511)
                 return None;
             }
@@ -801,7 +844,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_bind_invalid_credentials() {
+    async fn test_search_non_admin_user() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_bind()
             .with(eq(crate::domain::handler::BindRequest {
@@ -810,6 +853,18 @@ mod tests {
             }))
             .times(1)
             .return_once(|_| Ok(()));
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::And(vec![
+                UserRequestFilter::And(vec![]),
+                UserRequestFilter::UserId(UserId::new("test")),
+            ]))))
+            .times(1)
+            .return_once(|_| {
+                Ok(vec![User {
+                    user_id: UserId::new("test"),
+                    ..Default::default()
+                }])
+            });
         let mut ldap_handler =
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("admin"));
 
@@ -822,13 +877,17 @@ mod tests {
             LdapResultCode::Success
         );
 
-        let request = make_user_search_request::<String>(LdapFilter::And(vec![]), vec![]);
+        let request =
+            make_user_search_request::<String>(LdapFilter::And(vec![]), vec!["1.1".to_string()]);
         assert_eq!(
             ldap_handler.do_search(&request).await,
-            vec![make_search_error(
-                LdapResultCode::InsufficentAccessRights,
-                r#"Current user `cn=test,ou=people,dc=example,dc=com` is not allowed to query LDAP, expected cn=admin,ou=people,dc=example,dc=com"#.to_string()
-            )]
+            vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![],
+                }),
+                make_search_success()
+            ],
         );
     }
 
@@ -1144,17 +1203,14 @@ mod tests {
                 LdapFilter::Equality("objectclass".to_string(), "groupOfUniqueNames".to_string()),
                 LdapFilter::Equality("objectclass".to_string(), "groupOfNames".to_string()),
             ]),
-            vec!["cn"],
+            vec!["1.1"],
         );
         assert_eq!(
             ldap_handler.do_search(&request).await,
             vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
-                    attributes: vec![LdapPartialAttribute {
-                        atype: "cn".to_string(),
-                        vals: vec!["group_1".to_string()]
-                    },],
+                    attributes: vec![],
                 }),
                 make_search_success(),
             ]

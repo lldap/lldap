@@ -100,7 +100,7 @@ impl Component for App {
         html! {
             <div class="container shadow-sm py-3">
               {self.view_banner()}
-              <div class="row justify-content-center">
+              <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <div class="shadow-sm py-3" style="max-width: 1000px">
                   <Router<AppRoute>
                     render = Router::render(move |s| Self::dispatch_route(s, &link, is_admin))
