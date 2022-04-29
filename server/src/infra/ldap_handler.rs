@@ -80,7 +80,10 @@ fn get_user_id_from_distinguished_name(
         bail!("Not a subtree of the base tree");
     }
     if parts.len() == base_tree.len() + 2 {
-        if parts[1].0 != "ou" || parts[1].1 != "people" || parts[0].0 != "cn" {
+        if parts[1].0 != "ou"
+            || parts[1].1 != "people"
+            || (parts[0].0 != "cn" && parts[0].0 != "uid")
+        {
             bail!(
                 r#"Unexpected user DN format. Got "{}", expected: "cn=username,ou=people,{}""#,
                 dn,
@@ -803,7 +806,7 @@ mod tests {
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
 
         let request = LdapOp::BindRequest(LdapBindRequest {
-            dn: "cn=bob,ou=people,dc=example,dc=com".to_string(),
+            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         });
         assert_eq!(
