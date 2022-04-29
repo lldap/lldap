@@ -4,12 +4,24 @@ Replace `dc=example,dc=com` with your LLDAP configured domain.
 
 ### LDAP Bind User
 ```
-cn=admin,ou=people,dc=example,dc=com
+uid=admin,ou=people,dc=example,dc=com
 ```
 
 ### LDAP Base DN for searches
 ```
 ou=people,dc=example,dc=com
+```
+
+### LDAP Attributes
+
+```
+uid, mail
+```
+
+### LDAP Name Attribute
+
+```
+uid
 ```
 
 ### User Filter
