@@ -115,6 +115,9 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Option<V
         "sn" => vec![user.last_name.clone()],
         "cn" | "displayname" => vec![user.display_name.clone()],
         "createtimestamp" | "modifytimestamp" => vec![user.creation_date.to_rfc3339()],
+        // Ignored attributes.
+        "entryuuid" | "nsuniqueid" | "objectguid" | "guid" | "ipauniqueid" => return Ok(None),
+        // Special attribute meaning "no attribute".
         "1.1" => return Ok(None),
         _ => bail!("Unsupported user attribute: {}", attribute),
     }))
@@ -1661,6 +1664,62 @@ mod tests {
             vec![
                 root_dse_response("dc=example,dc=com"),
                 make_search_success()
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_unsupported_attributes() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users().times(1).return_once(|_| {
+            Ok(vec![User {
+                user_id: UserId::new("bob_1"),
+                ..Default::default()
+            }])
+        });
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = make_user_search_request::<String>(
+            LdapFilter::And(vec![]),
+            vec!["random_attribute".to_string()],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![make_search_error(
+                LdapResultCode::NoSuchAttribute,
+                "Unsupported user attribute: random_attribute".to_string()
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_ignored_attributes() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users().times(1).return_once(|_| {
+            Ok(vec![User {
+                display_name: "bob_1".to_string(),
+                ..Default::default()
+            }])
+        });
+        let mut ldap_handler = setup_bound_handler(mock).await;
+        let request = make_user_search_request::<String>(
+            LdapFilter::And(vec![]),
+            vec![
+                "entryUUID".to_string(),
+                "guid".to_string(),
+                "cn".to_string(),
+            ],
+        );
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=bob_1,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![LdapPartialAttribute {
+                        atype: "cn".to_string(),
+                        vals: vec!["bob_1".to_string()]
+                    },],
+                }),
+                make_search_success(),
             ]
         );
     }
