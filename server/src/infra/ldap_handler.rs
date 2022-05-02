@@ -128,11 +128,7 @@ fn make_ldap_search_user_result_entry(
     base_dn_str: &str,
     attributes: &[String],
 ) -> Result<LdapSearchResultEntry> {
-    let dn = format!(
-        "cn={},ou=people,{}",
-        user.display_name.as_str(),
-        base_dn_str
-    );
+    let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
     Ok(LdapSearchResultEntry {
         dn: dn.clone(),
         attributes: attributes
@@ -789,7 +785,7 @@ mod tests {
         let mut ldap_handler =
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
         let request = LdapBindRequest {
-            dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
+            dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
@@ -844,7 +840,7 @@ mod tests {
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
 
         let request = LdapBindRequest {
-            dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
+            dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
@@ -879,7 +875,7 @@ mod tests {
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("admin"));
 
         let request = LdapBindRequest {
-            dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
+            dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
@@ -893,7 +889,7 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
+                    dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![],
                 }),
                 make_search_success()
