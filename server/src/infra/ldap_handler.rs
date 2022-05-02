@@ -125,11 +125,7 @@ fn make_ldap_search_user_result_entry(
     base_dn_str: &str,
     attributes: &[String],
 ) -> Result<LdapSearchResultEntry> {
-    let dn = format!(
-        "cn={},ou=people,{}",
-        user.display_name.as_str(),
-        base_dn_str
-    );
+    let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
     Ok(LdapSearchResultEntry {
         dn: dn.clone(),
         attributes: attributes
@@ -165,7 +161,7 @@ fn get_group_attribute(
             .users
             .iter()
             .filter(|u| user_filter.map(|f| *u == f).unwrap_or(true))
-            .map(|u| format!("cn={},ou=people,{}", u, base_dn_str))
+            .map(|u| format!("uid={},ou=people,{}", u, base_dn_str))
             .collect(),
         "1.1" => return Ok(None),
         _ => bail!("Unsupported group attribute: {}", attribute),
@@ -311,7 +307,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     ldap_base_dn
                 )
             }),
-            ldap_user_dn: LdapDn(format!("cn={},ou=people,{}", ldap_user_dn, &ldap_base_dn)),
+            ldap_user_dn: LdapDn(format!("uid={},ou=people,{}", ldap_user_dn, &ldap_base_dn)),
             base_dn_str: ldap_base_dn,
         }
     }
@@ -786,7 +782,7 @@ mod tests {
         let mut ldap_handler =
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
         let request = LdapBindRequest {
-            dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
+            dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
@@ -841,7 +837,7 @@ mod tests {
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
 
         let request = LdapBindRequest {
-            dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
+            dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
@@ -868,7 +864,7 @@ mod tests {
             .times(1)
             .return_once(|_| {
                 Ok(vec![User {
-                    display_name: "test".to_string(),
+                    user_id: UserId::new("test"),
                     ..Default::default()
                 }])
             });
@@ -876,7 +872,7 @@ mod tests {
             LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("admin"));
 
         let request = LdapBindRequest {
-            dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
+            dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
@@ -890,7 +886,7 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "cn=test,ou=people,dc=example,dc=com".to_string(),
+                    dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![],
                 }),
                 make_search_success()
@@ -913,7 +909,7 @@ mod tests {
             LdapResultCode::NamingViolation,
         );
         let request = LdapBindRequest {
-            dn: "cn=bob,ou=groups,dc=example,dc=com".to_string(),
+            dn: "uid=bob,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
@@ -921,7 +917,7 @@ mod tests {
             LdapResultCode::NamingViolation,
         );
         let request = LdapBindRequest {
-            dn: "cn=bob,ou=people,dc=example,dc=fr".to_string(),
+            dn: "uid=bob,ou=groups,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
@@ -929,7 +925,15 @@ mod tests {
             LdapResultCode::NamingViolation,
         );
         let request = LdapBindRequest {
-            dn: "cn=bob=test,ou=people,dc=example,dc=com".to_string(),
+            dn: "uid=bob,ou=people,dc=example,dc=fr".to_string(),
+            cred: LdapBindCred::Simple("pass".to_string()),
+        };
+        assert_eq!(
+            ldap_handler.do_bind(&request).await.0,
+            LdapResultCode::NamingViolation,
+        );
+        let request = LdapBindRequest {
+            dn: "uid=bob=test,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
@@ -1013,7 +1017,7 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "cn=Bôb Böbberson,ou=people,dc=example,dc=com".to_string(),
+                    dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
@@ -1026,7 +1030,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "dn".to_string(),
-                            vals: vec!["cn=Bôb Böbberson,ou=people,dc=example,dc=com".to_string()]
+                            vals: vec!["uid=bob_1,ou=people,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),
@@ -1055,7 +1059,7 @@ mod tests {
                     ],
                 }),
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "cn=Jimminy Cricket,ou=people,dc=example,dc=com".to_string(),
+                    dn: "uid=jim,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
@@ -1068,7 +1072,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "dn".to_string(),
-                            vals: vec!["cn=Jimminy Cricket,ou=people,dc=example,dc=com".to_string()]
+                            vals: vec!["uid=jim,ou=people,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),
@@ -1148,8 +1152,8 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "uniqueMember".to_string(),
                             vals: vec![
-                                "cn=bob,ou=people,dc=example,dc=com".to_string(),
-                                "cn=john,ou=people,dc=example,dc=com".to_string(),
+                                "uid=bob,ou=people,dc=example,dc=com".to_string(),
+                                "uid=john,ou=people,dc=example,dc=com".to_string(),
                             ]
                         },
                     ],
@@ -1171,7 +1175,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "uniqueMember".to_string(),
-                            vals: vec!["cn=john,ou=people,dc=example,dc=com".to_string()]
+                            vals: vec!["uid=john,ou=people,dc=example,dc=com".to_string()]
                         },
                     ],
                 }),
@@ -1205,7 +1209,7 @@ mod tests {
                 LdapFilter::Equality("cn".to_string(), "group_1".to_string()),
                 LdapFilter::Equality(
                     "uniqueMember".to_string(),
-                    "cn=bob,ou=people,dc=example,dc=com".to_string(),
+                    "uid=bob,ou=people,dc=example,dc=com".to_string(),
                 ),
                 LdapFilter::Equality("objectclass".to_string(), "groupOfUniqueNames".to_string()),
                 LdapFilter::Equality("objectclass".to_string(), "groupOfNames".to_string()),
@@ -1413,7 +1417,7 @@ mod tests {
             .times(1)
             .return_once(|_| {
                 Ok(vec![User {
-                    display_name: "bob_1".to_string(),
+                    user_id: UserId::new("bob_1"),
                     ..Default::default()
                 }])
             });
@@ -1428,7 +1432,7 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "cn=bob_1,ou=people,dc=example,dc=com".to_string(),
+                    dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![LdapPartialAttribute {
                         atype: "objectclass".to_string(),
                         vals: vec![
@@ -1477,7 +1481,7 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "cn=Bôb Böbberson,ou=people,dc=example,dc=com".to_string(),
+                    dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
@@ -1490,7 +1494,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "dn".to_string(),
-                            vals: vec!["cn=Bôb Böbberson,ou=people,dc=example,dc=com".to_string()]
+                            vals: vec!["uid=bob_1,ou=people,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
@@ -1582,7 +1586,7 @@ mod tests {
         let mut ldap_handler = setup_bound_handler(mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
-                user_identity: Some("cn=bob,ou=people,dc=example,dc=com".to_string()),
+                user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
                 old_password: None,
                 new_password: Some("password".to_string()),
             }
@@ -1617,7 +1621,7 @@ mod tests {
         );
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
-                user_identity: Some("cn=bob,ou=groups,ou=people,dc=example,dc=com".to_string()),
+                user_identity: Some("uid=bob,ou=groups,ou=people,dc=example,dc=com".to_string()),
                 old_password: None,
                 new_password: Some("password".to_string()),
             }
@@ -1627,7 +1631,7 @@ mod tests {
             ldap_handler.handle_ldap_message(request).await,
             Some(vec![make_extended_response(
                 LdapResultCode::InvalidDNSyntax,
-                r#"Invalid username: "Unexpected user DN format. Got \"cn=bob,ou=groups,ou=people,dc=example,dc=com\", expected: \"uid=username,ou=people,dc=example,dc=com\"""#.to_string(),
+                r#"Invalid username: "Unexpected user DN format. Got \"uid=bob,ou=groups,ou=people,dc=example,dc=com\", expected: \"uid=username,ou=people,dc=example,dc=com\"""#.to_string(),
             )])
         );
         let request = LdapOp::ExtendedRequest(LdapExtendedRequest {
