@@ -1,6 +1,6 @@
 use crate::{
     domain::handler::UserId,
-    infra::cli::{GeneralConfigOpts, RunOpts, SmtpOpts, TestEmailOpts},
+    infra::cli::{GeneralConfigOpts, LdapsOpts, RunOpts, SmtpOpts, TestEmailOpts},
 };
 use anyhow::{Context, Result};
 use figment::{
@@ -40,12 +40,29 @@ impl std::default::Default for MailOptions {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[builder(pattern = "owned")]
+pub struct LdapsOptions {
+    #[builder(default = "false")]
+    pub enabled: bool,
+    #[builder(default = "6360")]
+    pub port: u16,
+    #[builder(default = r#"String::from("cert.pem")"#)]
+    pub cert_file: String,
+    #[builder(default = r#"String::from("key.pem")"#)]
+    pub key_file: String,
+}
+
+impl std::default::Default for LdapsOptions {
+    fn default() -> Self {
+        LdapsOptionsBuilder::default().build().unwrap()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
 #[builder(pattern = "owned", build_fn(name = "private_build"))]
 pub struct Configuration {
     #[builder(default = "3890")]
     pub ldap_port: u16,
-    #[builder(default = "6360")]
-    pub ldaps_port: u16,
     #[builder(default = "17170")]
     pub http_port: u16,
     #[builder(default = r#"SecUtf8::from("secretjwtsecret")"#)]
@@ -64,6 +81,8 @@ pub struct Configuration {
     pub key_file: String,
     #[builder(default)]
     pub smtp_options: MailOptions,
+    #[builder(default)]
+    pub ldaps_options: LdapsOptions,
     #[builder(default = r#"String::from("http://localhost")"#)]
     pub http_url: String,
     #[serde(skip)]
@@ -144,10 +163,6 @@ impl ConfigOverrider for RunOpts {
             config.ldap_port = port;
         }
 
-        if let Some(port) = self.ldaps_port {
-            config.ldaps_port = port;
-        }
-
         if let Some(port) = self.http_port {
             config.http_port = port;
         }
@@ -156,6 +171,7 @@ impl ConfigOverrider for RunOpts {
             config.http_url = url.to_string();
         }
         self.smtp_opts.override_config(config);
+        self.ldaps_opts.override_config(config);
     }
 }
 
@@ -163,6 +179,23 @@ impl ConfigOverrider for TestEmailOpts {
     fn override_config(&self, config: &mut Configuration) {
         self.general_config.override_config(config);
         self.smtp_opts.override_config(config);
+    }
+}
+
+impl ConfigOverrider for LdapsOpts {
+    fn override_config(&self, config: &mut Configuration) {
+        if let Some(enabled) = self.ldaps_enabled {
+            config.ldaps_options.enabled = enabled;
+        }
+        if let Some(port) = self.ldaps_port {
+            config.ldaps_options.port = port;
+        }
+        if let Some(path) = self.ldaps_cert_file.as_ref() {
+            config.ldaps_options.cert_file = path.clone();
+        }
+        if let Some(path) = self.ldaps_key_file.as_ref() {
+            config.ldaps_options.key_file = path.clone();
+        }
     }
 }
 

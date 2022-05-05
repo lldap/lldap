@@ -3,6 +3,10 @@
 ## with "LLDAP_". For instance, "ldap_port" can be overridden with the
 ## "LLDAP_LDAP_PORT" variable.
 
+## Tune the logging to be more verbose by setting this to be true.
+## You can set it with the LLDAP_VERBOSE environment variable.
+# verbose=false
+
 ## The port on which to have the LDAP server.
 #ldap_port = 3890
 
@@ -96,6 +100,15 @@ key_file = "/data/private_key"
 ## Same for reply-to, optional.
 #reply_to="Do not reply <noreply@localhost>"
 
-## Tune the logging to be more verbose by setting this to be true.
-## You can set it with the LLDAP_VERBOSE environment variable.
-# verbose=false
+## Options to configure LDAPS.
+## To set these options from environment variables, use the following format
+## (example with "port"): LLDAP_LDAPS_OPTIONS__PORT
+#[ldaps_options]
+## Whether to enable LDAPS.
+#enabled=true
+## Port on which to listen.
+#port=6360
+## Certificate file.
+#cert_file="/data/cert.pem"
+## Certificate key file.
+#key_file="/data/key.pem"
