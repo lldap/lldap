@@ -26,3 +26,5 @@ server_key
 .env
 recipe.json
 lldap_config.toml
+cert.pem
+key.pem

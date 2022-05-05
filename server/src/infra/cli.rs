@@ -1,8 +1,8 @@
-use clap::Clap;
+use clap::Parser;
 use lettre::message::Mailbox;
 
 /// lldap is a lightweight LDAP server
-#[derive(Debug, Clap, Clone)]
+#[derive(Debug, Parser, Clone)]
 #[clap(version, author)]
 pub struct CLIOpts {
     /// Export
@@ -11,7 +11,7 @@ pub struct CLIOpts {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clap, Clone)]
+#[derive(Debug, Parser, Clone)]
 pub enum Command {
     /// Export the GraphQL schema to *.graphql.
     #[clap(name = "export_graphql_schema")]
@@ -24,7 +24,7 @@ pub enum Command {
     SendTestEmail(TestEmailOpts),
 }
 
-#[derive(Debug, Clap, Clone)]
+#[derive(Debug, Parser, Clone)]
 pub struct GeneralConfigOpts {
     /// Change config file name.
     #[clap(
@@ -40,7 +40,7 @@ pub struct GeneralConfigOpts {
     pub verbose: bool,
 }
 
-#[derive(Debug, Clap, Clone)]
+#[derive(Debug, Parser, Clone)]
 pub struct RunOpts {
     #[clap(flatten)]
     pub general_config: GeneralConfigOpts,
@@ -54,10 +54,6 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_LDAP_PORT")]
     pub ldap_port: Option<u16>,
 
-    /// Change ldap ssl port. Default: 6360
-    #[clap(long, env = "LLDAP_LDAPS_PORT")]
-    pub ldaps_port: Option<u16>,
-
     /// Change HTTP API port. Default: 17170
     #[clap(long, env = "LLDAP_HTTP_PORT")]
     pub http_port: Option<u16>,
@@ -68,9 +64,12 @@ pub struct RunOpts {
 
     #[clap(flatten)]
     pub smtp_opts: SmtpOpts,
+
+    #[clap(flatten)]
+    pub ldaps_opts: LdapsOpts,
 }
 
-#[derive(Debug, Clap, Clone)]
+#[derive(Debug, Parser, Clone)]
 pub struct TestEmailOpts {
     #[clap(flatten)]
     pub general_config: GeneralConfigOpts,
@@ -83,10 +82,30 @@ pub struct TestEmailOpts {
     pub smtp_opts: SmtpOpts,
 }
 
-#[derive(Debug, Clap, Clone)]
+#[derive(Debug, Parser, Clone)]
+#[clap(next_help_heading = Some("LDAPS"), setting = clap::AppSettings::DeriveDisplayOrder)]
+pub struct LdapsOpts {
+    /// Enable LDAPS. Default: false.
+    #[clap(long, env = "LLDAP_LDAPS_OPTIONS__ENABLED")]
+    pub ldaps_enabled: Option<bool>,
+
+    /// Change ldap ssl port. Default: 6360
+    #[clap(long, env = "LLDAP_LDAPS_OPTIONS__PORT")]
+    pub ldaps_port: Option<u16>,
+
+    /// Ldaps certificate file. Default: cert.pem
+    #[clap(long, env = "LLDAP_LDAPS_OPTIONS__CERT_FILE")]
+    pub ldaps_cert_file: Option<String>,
+
+    /// Ldaps certificate key file. Default: key.pem
+    #[clap(long, env = "LLDAP_LDAPS_OPTIONS__KEY_FILE")]
+    pub ldaps_key_file: Option<String>,
+}
+
+#[derive(Debug, Parser, Clone)]
+#[clap(next_help_heading = Some("SMTP"), setting = clap::AppSettings::DeriveDisplayOrder)]
 pub struct SmtpOpts {
     /// Sender email address.
-    #[clap(long)]
     #[clap(long, env = "LLDAP_SMTP_OPTIONS__FROM")]
     pub smtp_from: Option<Mailbox>,
 
@@ -115,7 +134,7 @@ pub struct SmtpOpts {
     pub smtp_tls_required: Option<bool>,
 }
 
-#[derive(Debug, Clap, Clone)]
+#[derive(Debug, Parser, Clone)]
 pub struct ExportGraphQLSchemaOpts {
     /// Output to a file. If not specified, the config is printed to the standard output.
     #[clap(short, long)]
