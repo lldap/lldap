@@ -1917,6 +1917,7 @@ dependencies = [
  "lldap_auth",
  "log",
  "mockall",
+ "native-tls",
  "opaque-ke",
  "openssl-sys",
  "orion",
@@ -1931,6 +1932,7 @@ dependencies = [
  "thiserror",
  "time 0.2.27",
  "tokio",
+ "tokio-native-tls",
  "tokio-stream",
  "tokio-util",
  "tracing",
@@ -2150,9 +2152,9 @@ dependencies = [
 
 [[package]]
 name = "native-tls"
-version = "0.2.8"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48ba9f7719b5a0f42f338907614285fb5fd70e53858141f69898a1fb7203b24d"
+checksum = "fd7e2f3618557f980e0b17e8856252eee3c97fa12c54dff0ca290fb6266ca4a9"
 dependencies = [
  "lazy_static",
  "libc",
