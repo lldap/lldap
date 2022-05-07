@@ -108,7 +108,7 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Option<V
             "mailAccount".to_string(),
             "person".to_string(),
         ],
-        "dn" => vec![dn.to_string()],
+        "dn" | "distinguishedname" => vec![dn.to_string()],
         "uid" => vec![user.user_id.to_string()],
         "mail" => vec![user.email.clone()],
         "givenname" => vec![user.first_name.clone()],
@@ -152,7 +152,7 @@ fn get_group_attribute(
 ) -> Result<Option<Vec<String>>> {
     Ok(Some(match attribute.to_lowercase().as_str() {
         "objectclass" => vec!["groupOfUniqueNames".to_string()],
-        "dn" => vec![format!(
+        "dn" | "distinguishedname" => vec![format!(
             "cn={},ou=groups,{}",
             group.display_name, base_dn_str
         )],
