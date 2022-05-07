@@ -52,7 +52,7 @@ jobs:
       -
         name: Build and push
         if: github.event_name != 'release'
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -64,7 +64,7 @@ jobs:
       -
         name: Build and push
         if: github.event_name == 'release'
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: .
           push: true
