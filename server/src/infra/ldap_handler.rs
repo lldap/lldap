@@ -6,6 +6,7 @@ use crate::domain::{
     opaque_handler::OpaqueHandler,
 };
 use anyhow::{bail, Context, Result};
+use itertools::Itertools;
 use ldap3_server::proto::{
     LdapBindCred, LdapBindRequest, LdapBindResponse, LdapExtendedRequest, LdapExtendedResponse,
     LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest, LdapResult,
@@ -116,9 +117,48 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Option<V
         "cn" | "displayname" => vec![user.display_name.clone()],
         "createtimestamp" | "modifytimestamp" => vec![user.creation_date.to_rfc3339()],
         "1.1" => return Ok(None),
-        _ => bail!("Unsupported user attribute: {}", attribute),
+        // We ignore the operational attribute wildcard
+        "+" => return Ok(None),
+        "*" => {
+            warn!(
+                "Matched {}, * should have been expanded into attribute list and * removed",
+                attribute
+            );
+            return Ok(None);
+        }
+        _ => {
+            warn!("Ignoring unrecognized group attribute: {}", attribute);
+            return Ok(None);
+        }
     }))
 }
+
+fn expand_attribute_wildcards(attributes: &[String], all_attribute_keys: &[&str]) -> Vec<String> {
+    let mut attributes_out = attributes.to_owned();
+
+    if attributes_out.iter().any(|x| x == "*") || attributes_out.is_empty() {
+        debug!(r#"Expanding * / empty attrs:"#);
+        // Remove occurrences of '*'
+        attributes_out.retain(|x| x != "*");
+        // Splice in all non-operational attributes
+        attributes_out.extend(all_attribute_keys.iter().map(|s| s.to_string()));
+    }
+
+    debug!(r#"Expanded: "{:?}""#, &attributes_out);
+
+    // Deduplicate, preserving order
+    attributes_out.into_iter().unique().collect_vec()
+}
+const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
+    "objectclass",
+    "dn",
+    "uid",
+    "mail",
+    "givenname",
+    "sn",
+    "cn",
+    "createtimestamp",
+];
 
 fn make_ldap_search_user_result_entry(
     user: User,
@@ -126,9 +166,11 @@ fn make_ldap_search_user_result_entry(
     attributes: &[String],
 ) -> Result<LdapSearchResultEntry> {
     let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
+
+    let expanded_attributes = expand_attribute_wildcards(attributes, ALL_USER_ATTRIBUTE_KEYS);
     Ok(LdapSearchResultEntry {
         dn: dn.clone(),
-        attributes: attributes
+        attributes: expanded_attributes
             .iter()
             .filter_map(|a| {
                 let values = match get_user_attribute(&user, a, &dn) {
@@ -164,9 +206,24 @@ fn get_group_attribute(
             .map(|u| format!("uid={},ou=people,{}", u, base_dn_str))
             .collect(),
         "1.1" => return Ok(None),
-        _ => bail!("Unsupported group attribute: {}", attribute),
+        // We ignore the operational attribute wildcard
+        "+" => return Ok(None),
+        "*" => {
+            warn!(
+                "Matched {}, * should have been expanded into attribute list and * removed",
+                attribute
+            );
+            return Ok(None);
+        }
+        _ => {
+            warn!("Ignoring unrecognized group attribute: {}", attribute);
+            return Ok(None);
+        }
     }))
 }
+
+const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] =
+    &["objectclass", "dn", "uid", "cn", "member", "uniquemember"];
 
 fn make_ldap_search_group_result_entry(
     group: Group,
@@ -174,9 +231,11 @@ fn make_ldap_search_group_result_entry(
     attributes: &[String],
     user_filter: &Option<&UserId>,
 ) -> Result<LdapSearchResultEntry> {
+    let expanded_attributes = expand_attribute_wildcards(attributes, ALL_GROUP_ATTRIBUTE_KEYS);
+
     Ok(LdapSearchResultEntry {
         dn: format!("cn={},ou=groups,{}", group.display_name, base_dn_str),
-        attributes: attributes
+        attributes: expanded_attributes
             .iter()
             .filter_map(|a| {
                 let values = match get_group_attribute(&group, base_dn_str, a, user_filter) {
