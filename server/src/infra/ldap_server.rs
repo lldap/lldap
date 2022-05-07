@@ -117,10 +117,7 @@ where
         config.ldap_user_dn.clone(),
     );
 
-    let tls_context = (
-        context.clone(),
-        get_tls_acceptor(config).context("while setting up the SSL certificate")?,
-    );
+    let context_for_tls = context.clone();
 
     let binder = move || {
         let context = context.clone();
@@ -134,23 +131,27 @@ where
         .map_err(|err: anyhow::Error| error!("[LDAP] Service Error: {:#}", err))
     };
 
-    let tls_binder = move || {
-        let tls_context = tls_context.clone();
-        fn_service(move |stream: TcpStream| {
-            let tls_context = tls_context.clone();
-            async move {
-                let ((handler, base_dn, user_dn), tls_acceptor) = tls_context;
-                let tls_stream = tls_acceptor.clone().accept(stream).await?;
-                handle_ldap_stream(tls_stream, handler, base_dn, user_dn).await
-            }
-        })
-        .map_err(|err: anyhow::Error| error!("[LDAPS] Service Error: {:#}", err))
-    };
-
     let server_builder = server_builder
         .bind("ldap", ("0.0.0.0", config.ldap_port), binder)
         .with_context(|| format!("while binding to the port {}", config.ldap_port));
     if config.ldaps_options.enabled {
+        let tls_context = (
+            context_for_tls,
+            get_tls_acceptor(config).context("while setting up the SSL certificate")?,
+        );
+        let tls_binder = move || {
+            let tls_context = tls_context.clone();
+            fn_service(move |stream: TcpStream| {
+                let tls_context = tls_context.clone();
+                async move {
+                    let ((handler, base_dn, user_dn), tls_acceptor) = tls_context;
+                    let tls_stream = tls_acceptor.accept(stream).await?;
+                    handle_ldap_stream(tls_stream, handler, base_dn, user_dn).await
+                }
+            })
+            .map_err(|err: anyhow::Error| error!("[LDAPS] Service Error: {:#}", err))
+        };
+
         server_builder.and_then(|s| {
             s.bind("ldaps", ("0.0.0.0", config.ldaps_options.port), tls_binder)
                 .with_context(|| format!("while binding to the port {}", config.ldaps_options.port))
