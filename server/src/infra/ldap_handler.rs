@@ -1636,6 +1636,151 @@ mod tests {
             ]
         );
     }
+    #[tokio::test]
+    async fn test_search_wildcards() {
+        use chrono::TimeZone;
+        let mut mock = MockTestBackendHandler::new();
+
+        mock.expect_list_users().returning(|_| {
+            Ok(vec![User {
+                user_id: UserId::new("bob_1"),
+                email: "bob@bobmail.bob".to_string(),
+                display_name: "Bôb Böbberson".to_string(),
+                first_name: "Bôb".to_string(),
+                last_name: "Böbberson".to_string(),
+                ..Default::default()
+            }])
+        });
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::And(vec![]))))
+            .returning(|_| {
+                Ok(vec![Group {
+                    id: GroupId(1),
+                    display_name: "group_1".to_string(),
+                    users: vec![UserId::new("bob"), UserId::new("john")],
+                }])
+            });
+        let mut ldap_handler = setup_bound_handler(mock).await;
+
+        // Test simple wildcard
+        let request =
+            make_search_request("dc=example,dc=com", LdapFilter::And(vec![]), vec!["*", "+"]);
+
+        // all: "objectclass", "dn", "uid", "mail", "givenname", "sn", "cn"
+        // Operational: "createtimestamp"
+
+        let expected_result = vec![
+            LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
+                attributes: vec![
+                    LdapPartialAttribute {
+                        atype: "objectclass".to_string(),
+                        vals: vec![
+                            "inetOrgPerson".to_string(),
+                            "posixAccount".to_string(),
+                            "mailAccount".to_string(),
+                            "person".to_string(),
+                        ],
+                    },
+                    LdapPartialAttribute {
+                        atype: "dn".to_string(),
+                        vals: vec!["uid=bob_1,ou=people,dc=example,dc=com".to_string()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "uid".to_string(),
+                        vals: vec!["bob_1".to_string()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "mail".to_string(),
+                        vals: vec!["bob@bobmail.bob".to_string()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "givenname".to_string(),
+                        vals: vec!["Bôb".to_string()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "sn".to_string(),
+                        vals: vec!["Böbberson".to_string()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "cn".to_string(),
+                        vals: vec!["Bôb Böbberson".to_string()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "createtimestamp".to_string(),
+                        vals: vec![chrono::Utc.timestamp(0, 0).to_rfc3339()],
+                    },
+                ],
+            }),
+            // "objectclass", "dn", "uid", "cn", "member", "uniquemember"
+            LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                attributes: vec![
+                    LdapPartialAttribute {
+                        atype: "objectclass".to_string(),
+                        vals: vec!["groupOfUniqueNames".to_string()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "dn".to_string(),
+                        vals: vec!["cn=group_1,ou=groups,dc=example,dc=com".to_string()],
+                    },
+                    // UID
+                    LdapPartialAttribute {
+                        atype: "uid".to_string(),
+                        vals: vec!["group_1".to_string()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "cn".to_string(),
+                        vals: vec!["group_1".to_string()],
+                    },
+                    //member / uniquemember : "uid={},ou=people,{}"
+                    LdapPartialAttribute {
+                        atype: "member".to_string(),
+                        vals: vec![
+                            "uid=bob,ou=people,dc=example,dc=com".to_string(),
+                            "uid=john,ou=people,dc=example,dc=com".to_string(),
+                        ],
+                    },
+                    LdapPartialAttribute {
+                        atype: "uniquemember".to_string(),
+                        vals: vec![
+                            "uid=bob,ou=people,dc=example,dc=com".to_string(),
+                            "uid=john,ou=people,dc=example,dc=com".to_string(),
+                        ],
+                    },
+                ],
+            }),
+            make_search_success(),
+        ];
+
+        assert_eq!(ldap_handler.do_search(&request).await, expected_result);
+
+        let request2 =
+            make_search_request("dc=example,dc=com", LdapFilter::And(vec![]), vec!["*", "*"]);
+
+        assert_eq!(ldap_handler.do_search(&request2).await, expected_result);
+
+        let request3 = make_search_request(
+            "dc=example,dc=com",
+            LdapFilter::And(vec![]),
+            vec!["*", "+", "+"],
+        );
+
+        assert_eq!(ldap_handler.do_search(&request3).await, expected_result);
+
+        let request4 =
+            make_search_request("dc=example,dc=com", LdapFilter::And(vec![]), vec![""; 0]);
+
+        assert_eq!(ldap_handler.do_search(&request4).await, expected_result);
+
+        let request5 = make_search_request(
+            "dc=example,dc=com",
+            LdapFilter::And(vec![]),
+            vec!["objectclass", "dn", "uid", "*"],
+        );
+
+        assert_eq!(ldap_handler.do_search(&request5).await, expected_result);
+    }
 
     #[tokio::test]
     async fn test_search_wrong_base() {
