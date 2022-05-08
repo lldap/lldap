@@ -286,20 +286,23 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
     })
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Permission {
+    Admin,
+    Regular,
+}
+
 pub struct LdapHandler<Backend: BackendHandler + LoginHandler + OpaqueHandler> {
-    dn: LdapDn,
-    user_id: UserId,
+    user_info: Option<(UserId, Permission)>,
     backend_handler: Backend,
     pub base_dn: Vec<(String, String)>,
     base_dn_str: String,
-    ldap_user_dn: LdapDn,
 }
 
 impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
-    pub fn new(backend_handler: Backend, ldap_base_dn: String, ldap_user_dn: UserId) -> Self {
+    pub fn new(backend_handler: Backend, ldap_base_dn: String) -> Self {
         Self {
-            dn: LdapDn("unauthenticated".to_string()),
-            user_id: UserId::new("unauthenticated"),
+            user_info: None,
             backend_handler,
             base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
                 panic!(
@@ -307,7 +310,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     ldap_base_dn
                 )
             }),
-            ldap_user_dn: LdapDn(format!("uid={},ou=people,{}", ldap_user_dn, &ldap_base_dn)),
             base_dn_str: ldap_base_dn,
         }
     }
@@ -332,8 +334,20 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             .await
         {
             Ok(()) => {
-                self.dn = LdapDn(request.dn.clone());
-                self.user_id = user_id;
+                let is_admin = self
+                    .backend_handler
+                    .get_user_groups(&user_id)
+                    .await
+                    .map(|groups| groups.iter().any(|g| g.1 == "lldap_admin"))
+                    .unwrap_or(false);
+                self.user_info = Some((
+                    user_id,
+                    if is_admin {
+                        Permission::Admin
+                    } else {
+                        Permission::Regular
+                    },
+                ));
                 (LdapResultCode::Success, "".to_string())
             }
             Err(_) => (LdapResultCode::InvalidCredentials, "".to_string()),
@@ -367,10 +381,28 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         &mut self,
         request: &LdapPasswordModifyRequest,
     ) -> Vec<LdapOp> {
+        let (user_id, permission) = match &self.user_info {
+            Some(info) => info,
+            _ => {
+                return vec![make_search_error(
+                    LdapResultCode::InsufficentAccessRights,
+                    "No user currently bound".to_string(),
+                )];
+            }
+        };
         match (&request.user_identity, &request.new_password) {
             (Some(user), Some(password)) => {
                 match get_user_id_from_distinguished_name(user, &self.base_dn, &self.base_dn_str) {
                     Ok(uid) => {
+                        if *permission != Permission::Admin && user_id != &uid {
+                            return vec![make_search_error(
+                                LdapResultCode::InsufficentAccessRights,
+                                format!(
+                                    r#"User {} cannot modify the password of user {}"#,
+                                    &user_id, &uid
+                                ),
+                            )];
+                        }
                         if let Err(e) = self.change_password(&uid, password).await {
                             vec![make_extended_response(
                                 LdapResultCode::Other,
@@ -407,7 +439,16 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     pub async fn do_search(&mut self, request: &LdapSearchRequest) -> Vec<LdapOp> {
-        let admin = self.dn == self.ldap_user_dn;
+        let user_filter = match &self.user_info {
+            Some((_, Permission::Admin)) => None,
+            Some((user_id, Permission::Regular)) => Some(user_id),
+            None => {
+                return vec![make_search_error(
+                    LdapResultCode::InsufficentAccessRights,
+                    "No user currently bound".to_string(),
+                )];
+            }
+        };
         if request.base.is_empty()
             && request.scope == LdapSearchScope::Base
             && request.filter == LdapFilter::Present("objectClass".to_string())
@@ -435,7 +476,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
         let mut results = Vec::new();
         let mut got_match = false;
-        let user_filter = if admin { None } else { Some(&self.user_id) };
         if dn_parts.len() == self.base_dn.len()
             || (dn_parts.len() == self.base_dn.len() + 1
                 && dn_parts[0] == ("ou".to_string(), "people".to_string()))
@@ -573,8 +613,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             }
             LdapOp::SearchRequest(request) => self.do_search(&request).await,
             LdapOp::UnbindRequest => {
-                self.dn = LdapDn("unauthenticated".to_string());
-                self.user_id = UserId::new("unauthenticated");
+                self.user_info = None;
                 // No need to notify on unbind (per rfc4511)
                 return None;
             }
@@ -779,8 +818,14 @@ mod tests {
                 password: "pass".to_string(),
             }))
             .return_once(|_| Ok(()));
-        let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("test")))
+            .return_once(|_| {
+                let mut set = HashSet::new();
+                set.insert(GroupIdAndName(GroupId(42), "lldap_admin".to_string()));
+                Ok(set)
+            });
+        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
@@ -802,8 +847,10 @@ mod tests {
             }))
             .times(1)
             .return_once(|_| Ok(()));
-        let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .return_once(|_| Ok(HashSet::new()));
+        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
 
         let request = LdapOp::BindRequest(LdapBindRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
@@ -833,8 +880,14 @@ mod tests {
             }))
             .times(1)
             .return_once(|_| Ok(()));
-        let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("test"));
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("test")))
+            .return_once(|_| {
+                let mut set = HashSet::new();
+                set.insert(GroupIdAndName(GroupId(42), "lldap_admin".to_string()));
+                Ok(set)
+            });
+        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
 
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
@@ -868,8 +921,10 @@ mod tests {
                     ..Default::default()
                 }])
             });
-        let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("admin"));
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("test")))
+            .return_once(|_| Ok(HashSet::new()));
+        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
 
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
@@ -897,8 +952,7 @@ mod tests {
     #[tokio::test]
     async fn test_bind_invalid_dn() {
         let mock = MockTestBackendHandler::new();
-        let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), UserId::new("admin"));
+        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
 
         let request = LdapBindRequest {
             dn: "cn=bob,dc=example,dc=com".to_string(),

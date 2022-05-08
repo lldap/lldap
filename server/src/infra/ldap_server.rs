@@ -1,6 +1,6 @@
 use crate::{
     domain::{
-        handler::{BackendHandler, LoginHandler, UserId},
+        handler::{BackendHandler, LoginHandler},
         opaque_handler::OpaqueHandler,
     },
     infra::{configuration::Configuration, ldap_handler::LdapHandler},
@@ -70,7 +70,6 @@ async fn handle_ldap_stream<Stream, Backend>(
     stream: Stream,
     backend_handler: Backend,
     ldap_base_dn: String,
-    ldap_user_dn: UserId,
 ) -> Result<Stream>
 where
     Backend: BackendHandler + LoginHandler + OpaqueHandler + 'static,
@@ -82,7 +81,7 @@ where
     let mut requests = FramedRead::new(r, LdapCodec);
     let mut resp = FramedWrite::new(w, LdapCodec);
 
-    let mut session = LdapHandler::new(backend_handler, ldap_base_dn, ldap_user_dn);
+    let mut session = LdapHandler::new(backend_handler, ldap_base_dn);
 
     while let Some(msg) = requests.next().await {
         if !handle_incoming_message(msg, &mut resp, &mut session)
@@ -111,11 +110,7 @@ pub fn build_ldap_server<Backend>(
 where
     Backend: BackendHandler + LoginHandler + OpaqueHandler + 'static,
 {
-    let context = (
-        backend_handler,
-        config.ldap_base_dn.clone(),
-        config.ldap_user_dn.clone(),
-    );
+    let context = (backend_handler, config.ldap_base_dn.clone());
 
     let context_for_tls = context.clone();
 
@@ -124,8 +119,8 @@ where
         fn_service(move |stream: TcpStream| {
             let context = context.clone();
             async move {
-                let (handler, base_dn, user_dn) = context;
-                handle_ldap_stream(stream, handler, base_dn, user_dn).await
+                let (handler, base_dn) = context;
+                handle_ldap_stream(stream, handler, base_dn).await
             }
         })
         .map_err(|err: anyhow::Error| error!("[LDAP] Service Error: {:#}", err))
@@ -144,9 +139,9 @@ where
             fn_service(move |stream: TcpStream| {
                 let tls_context = tls_context.clone();
                 async move {
-                    let ((handler, base_dn, user_dn), tls_acceptor) = tls_context;
+                    let ((handler, base_dn), tls_acceptor) = tls_context;
                     let tls_stream = tls_acceptor.accept(stream).await?;
-                    handle_ldap_stream(tls_stream, handler, base_dn, user_dn).await
+                    handle_ldap_stream(tls_stream, handler, base_dn).await
                 }
             })
             .map_err(|err: anyhow::Error| error!("[LDAPS] Service Error: {:#}", err))
