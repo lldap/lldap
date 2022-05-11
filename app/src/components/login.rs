@@ -15,6 +15,7 @@ use yew_form_derive::Model;
 pub struct LoginForm {
     common: CommonComponentParts<Self>,
     form: Form<FormModel>,
+    refreshing: bool,
 }
 
 /// The fields of the form, with the constraints.
@@ -34,6 +35,7 @@ pub struct Props {
 pub enum Msg {
     Update,
     Submit,
+    AuthenticationRefreshResponse(Result<(String, bool)>),
     AuthenticationStartResponse(
         (
             opaque::client::login::ClientLogin,
@@ -99,6 +101,14 @@ impl CommonComponent<LoginForm> for LoginForm {
                     .emit(user_info.context("Could not log in")?);
                 Ok(true)
             }
+            Msg::AuthenticationRefreshResponse(user_info) => {
+                self.refreshing = false;
+                self.common.cancel_task();
+                if let Ok(user_info) = user_info {
+                    self.common.on_logged_in.emit(user_info);
+                }
+                Ok(true)
+            }
         }
     }
 
@@ -112,10 +122,19 @@ impl Component for LoginForm {
     type Properties = Props;
 
     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
-        LoginForm {
+        let mut app = LoginForm {
             common: CommonComponentParts::<Self>::create(props, link),
             form: Form::<FormModel>::new(FormModel::default()),
+            refreshing: true,
+        };
+        if let Err(e) =
+            app.common
+                .call_backend(HostService::refresh, (), Msg::AuthenticationRefreshResponse)
+        {
+            ConsoleService::debug(&format!("Could not refresh auth: {}", e));
+            app.refreshing = false;
         }
+        app
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
@@ -128,63 +147,71 @@ impl Component for LoginForm {
 
     fn view(&self) -> Html {
         type Field = yew_form::Field<FormModel>;
-        html! {
-            <form
-              class="form center-block col-sm-4 col-offset-4">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">
-                      <i class="bi-person-fill"/>
-                    </span>
+        if self.refreshing {
+            html! {
+              <div>
+                <img src={"spinner.gif"} alt={"Loading"} />
+              </div>
+            }
+        } else {
+            html! {
+              <form
+                class="form center-block col-sm-4 col-offset-4">
+                  <div class="input-group">
+                    <div class="input-group-prepend">
+                      <span class="input-group-text">
+                        <i class="bi-person-fill"/>
+                      </span>
+                    </div>
+                    <Field
+                      class="form-control"
+                      class_invalid="is-invalid has-error"
+                      class_valid="has-success"
+                      form=&self.form
+                      field_name="username"
+                      placeholder="Username"
+                      autocomplete="username"
+                      oninput=self.common.callback(|_| Msg::Update) />
                   </div>
-                  <Field
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    form=&self.form
-                    field_name="username"
-                    placeholder="Username"
-                    autocomplete="username"
-                    oninput=self.common.callback(|_| Msg::Update) />
-                </div>
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">
-                      <i class="bi-lock-fill"/>
-                    </span>
+                  <div class="input-group">
+                    <div class="input-group-prepend">
+                      <span class="input-group-text">
+                        <i class="bi-lock-fill"/>
+                      </span>
+                    </div>
+                    <Field
+                      class="form-control"
+                      class_invalid="is-invalid has-error"
+                      class_valid="has-success"
+                      form=&self.form
+                      field_name="password"
+                      input_type="password"
+                      placeholder="Password"
+                      autocomplete="current-password" />
                   </div>
-                  <Field
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    form=&self.form
-                    field_name="password"
-                    input_type="password"
-                    placeholder="Password"
-                    autocomplete="current-password" />
-                </div>
-                <div class="form-group mt-3">
-                  <button
-                    type="submit"
-                    class="btn btn-primary"
-                    disabled=self.common.is_task_running()
-                    onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
-                    {"Login"}
-                  </button>
-                  <NavButton
-                    classes="btn-link btn"
-                    disabled=self.common.is_task_running()
-                    route=AppRoute::StartResetPassword>
-                    {"Forgot your password?"}
-                  </NavButton>
-                </div>
-                <div class="form-group">
-                { if let Some(e) = &self.common.error {
-                    html! { e.to_string() }
-                  } else { html! {} }
-                }
-                </div>
-            </form>
+                  <div class="form-group mt-3">
+                    <button
+                      type="submit"
+                      class="btn btn-primary"
+                      disabled=self.common.is_task_running()
+                      onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                      {"Login"}
+                    </button>
+                    <NavButton
+                      classes="btn-link btn"
+                      disabled=self.common.is_task_running()
+                      route=AppRoute::StartResetPassword>
+                      {"Forgot your password?"}
+                    </NavButton>
+                  </div>
+                  <div class="form-group">
+                  { if let Some(e) = &self.common.error {
+                      html! { e.to_string() }
+                    } else { html! {} }
+                  }
+                  </div>
+              </form>
+            }
         }
     }
 }

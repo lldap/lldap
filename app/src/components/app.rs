@@ -85,7 +85,7 @@ impl Component for App {
         }
         if self.user_info.is_none() {
             self.route_dispatcher
-                .send(RouteRequest::ReplaceRoute(Route::new_no_state("/login")));
+                .send(RouteRequest::ReplaceRoute(Route::from(AppRoute::Login)));
         }
         true
     }
@@ -138,7 +138,7 @@ impl App {
         match &self.user_info {
             None => {
                 self.route_dispatcher
-                    .send(RouteRequest::ReplaceRoute(Route::new_no_state("/login")));
+                    .send(RouteRequest::ReplaceRoute(Route::from(AppRoute::Login)));
             }
             Some((user_name, is_admin)) => match &self.redirect_to {
                 Some(url) => {
@@ -148,7 +148,7 @@ impl App {
                 None => {
                     if *is_admin {
                         self.route_dispatcher
-                            .send(RouteRequest::ReplaceRoute(Route::new_no_state("/users")));
+                            .send(RouteRequest::ReplaceRoute(Route::from(AppRoute::ListUsers)));
                     } else {
                         self.route_dispatcher
                             .send(RouteRequest::ReplaceRoute(Route::from(
