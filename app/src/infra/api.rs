@@ -227,6 +227,32 @@ impl HostService {
         )
     }
 
+    pub fn refresh(_request: (), callback: Callback<Result<(String, bool)>>) -> Result<FetchTask> {
+        let set_cookies = |jwt_claims: JWTClaims| {
+            let is_admin = jwt_claims.groups.contains("lldap_admin");
+            set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
+                .map(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
+                .map(|_| (jwt_claims.user.clone(), is_admin))
+                .context("Error clearing cookie")
+        };
+        let parse_token = move |data: String| {
+            serde_json::from_str::<login::ServerLoginResponse>(&data)
+                .context("Could not parse response")
+                .and_then(|r| {
+                    get_claims_from_jwt(r.token.as_str())
+                        .context("Could not parse response")
+                        .and_then(set_cookies)
+                })
+        };
+        call_server(
+            "/auth/refresh",
+            yew::format::Nothing,
+            callback,
+            "Could not start authentication: ",
+            parse_token,
+        )
+    }
+
     // The `_request` parameter is to make it the same shape as the other functions.
     pub fn logout(_request: (), callback: Callback<Result<()>>) -> Result<FetchTask> {
         call_server_empty_response_with_error_message(
