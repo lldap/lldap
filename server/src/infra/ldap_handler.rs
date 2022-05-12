@@ -120,11 +120,10 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Option<V
         // We ignore the operational attribute wildcard
         "+" => return Ok(None),
         "*" => {
-            warn!(
+            bail!(
                 "Matched {}, * should have been expanded into attribute list and * removed",
                 attribute
-            );
-            return Ok(None);
+            )
         }
         _ => {
             warn!("Ignoring unrecognized group attribute: {}", attribute);
@@ -209,11 +208,10 @@ fn get_group_attribute(
         // We ignore the operational attribute wildcard
         "+" => return Ok(None),
         "*" => {
-            warn!(
+            bail!(
                 "Matched {}, * should have been expanded into attribute list and * removed",
                 attribute
-            );
-            return Ok(None);
+            )
         }
         _ => {
             warn!("Ignoring unrecognized group attribute: {}", attribute);
