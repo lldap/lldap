@@ -10,6 +10,7 @@ pub mod group_details;
 pub mod group_table;
 pub mod login;
 pub mod logout;
+pub mod password_field;
 pub mod remove_user_from_group;
 pub mod reset_password_step1;
 pub mod reset_password_step2;

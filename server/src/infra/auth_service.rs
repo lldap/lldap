@@ -1,21 +1,22 @@
 use std::collections::{hash_map::DefaultHasher, HashSet};
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::Poll;
 
 use actix_web::{
     cookie::{Cookie, SameSite},
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
     error::{ErrorBadRequest, ErrorUnauthorized},
-    web, HttpRequest, HttpResponse,
+    web, FromRequest, HttpRequest, HttpResponse,
 };
 use actix_web_httpauth::extractors::bearer::BearerAuth;
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use chrono::prelude::*;
 use futures::future::{ok, Ready};
 use futures_util::FutureExt;
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
+use secstr::SecUtf8;
 use sha2::Sha512;
 use time::ext::NumericalDuration;
 use tracing::{debug, info, instrument, warn};
@@ -205,6 +206,24 @@ where
         .unwrap_or_else(error_to_http_response)
 }
 
+async fn check_password_reset_token<'a, Backend>(
+    backend_handler: &Backend,
+    token: &Option<&'a str>,
+) -> TcpResult<Option<(&'a str, UserId)>>
+where
+    Backend: TcpBackendHandler + 'static,
+{
+    let token = match token {
+        None => return Ok(None),
+        Some(token) => token,
+    };
+    let user_id = backend_handler
+        .get_user_id_for_password_reset_token(token)
+        .await
+        .map_err(|_| TcpError::UnauthorizedError("Invalid or expired token".to_string()))?;
+    Ok(Some((token, user_id)))
+}
+
 #[instrument(skip_all, level = "debug")]
 async fn get_password_reset_step2<Backend>(
     data: web::Data<AppState<Backend>>,
@@ -213,22 +232,12 @@ async fn get_password_reset_step2<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    let token = request
-        .match_info()
-        .get("token")
-        .ok_or_else(|| TcpError::BadRequest("Missing reset token".to_owned()))?;
-    let user_id = data
-        .get_tcp_handler()
-        .get_user_id_for_password_reset_token(token)
-        .await
-        .map_err(|e| {
-            debug!("Reset token error: {e:#}");
-            TcpError::NotFoundError("Wrong or expired reset token".to_owned())
-        })?;
-    let _ = data
-        .get_tcp_handler()
-        .delete_password_reset_token(token)
-        .await;
+    let tcp_handler = data.get_tcp_handler();
+    let (token, user_id) =
+        check_password_reset_token(tcp_handler, &request.match_info().get("token"))
+            .await?
+            .ok_or_else(|| TcpError::BadRequest("Missing token".to_string()))?;
+    let _ = tcp_handler.delete_password_reset_token(token).await;
     let groups = HashSet::new();
     let token = create_jwt(&data.jwt_key, user_id.to_string(), groups);
     Ok(HttpResponse::Ok()
@@ -403,6 +412,7 @@ where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + LoginHandler + 'static,
 {
     let user_id = UserId::new(&request.username);
+    debug!(?user_id);
     let bind_request = BindRequest {
         name: user_id.clone(),
         password: request.password.clone(),
@@ -445,6 +455,115 @@ where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
 {
     post_authorize(data, request)
+        .await
+        .unwrap_or_else(error_to_http_response)
+}
+
+// Parse the response from the HaveIBeenPwned API. Sample response:
+//
+// 0018A45C4D1DEF81644B54AB7F969B88D65:1
+// 00D4F6E8FA6EECAD2A3AA415EEC418D38EC:2
+// 011053FD0102E94D6AE2F8B83D76FAF94F6:13
+fn parse_hash_list(response: &str) -> Result<password_reset::PasswordHashList> {
+    use password_reset::*;
+    let parse_line = |line: &str| -> Result<PasswordHashCount> {
+        let split = line.trim().split(':').collect::<Vec<_>>();
+        if let [hash, count] = &split[..] {
+            if hash.len() == 35 {
+                if let Ok(count) = str::parse::<u64>(count) {
+                    return Ok(PasswordHashCount {
+                        hash: hash.to_string(),
+                        count,
+                    });
+                }
+            }
+        }
+        bail!("Invalid password hash from API: {}", line)
+    };
+    Ok(PasswordHashList {
+        hashes: response
+            .split('\n')
+            .map(parse_line)
+            .collect::<Result<Vec<_>>>()?,
+    })
+}
+
+// TODO: Refactor that for testing.
+async fn get_password_hash_list(
+    hash: &str,
+    api_key: &SecUtf8,
+) -> Result<password_reset::PasswordHashList> {
+    use reqwest::*;
+    let client = Client::new();
+    let resp = client
+        .get(format!("https://api.pwnedpasswords.com/range/{}", hash))
+        .header(header::USER_AGENT, "LLDAP")
+        .header("hibp-api-key", api_key.unsecure())
+        .send()
+        .await
+        .context("Could not get response from HIPB")?
+        .text()
+        .await?;
+    parse_hash_list(&resp).context("Invalid HIPB response")
+}
+
+async fn check_password_pwned<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: HttpRequest,
+    payload: web::Payload,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    let has_reset_token = check_password_reset_token(
+        data.get_tcp_handler(),
+        &request
+            .headers()
+            .get("reset-token")
+            .map(|v| v.to_str().unwrap()),
+    )
+    .await?
+    .is_some();
+    let inner_payload = &mut payload.into_inner();
+    if !has_reset_token
+        && BearerAuth::from_request(&request, inner_payload)
+            .await
+            .ok()
+            .and_then(|bearer| check_if_token_is_valid(&data, bearer.token()).ok())
+            .is_none()
+    {
+        return Err(TcpError::UnauthorizedError(
+            "No token or invalid token".to_string(),
+        ));
+    }
+    if data.hipb_api_key.unsecure().is_empty() {
+        return Err(TcpError::NotImplemented("No HIPB API key".to_string()));
+    }
+    let hash = request
+        .match_info()
+        .get("hash")
+        .ok_or_else(|| TcpError::BadRequest("Missing hash".to_string()))?;
+    if hash.len() != 5 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(TcpError::BadRequest(format!(
+            "Bad request: invalid hash format \"{}\"",
+            hash
+        )));
+    }
+    get_password_hash_list(hash, &data.hipb_api_key)
+        .await
+        .map(|hashes| HttpResponse::Ok().json(hashes))
+        .map_err(|e| TcpError::InternalServerError(e.to_string()))
+}
+
+async fn check_password_pwned_handler<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: HttpRequest,
+    payload: web::Payload,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    check_password_pwned(data, request, payload)
         .await
         .unwrap_or_else(error_to_http_response)
 }
@@ -565,7 +684,7 @@ where
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn core::future::Future<Output = Result<Self::Response, Self::Error>>>>;
 
-    fn poll_ready(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(&self, cx: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.service.poll_ready(cx)
     }
 
@@ -636,6 +755,11 @@ where
             web::resource("/simple/login").route(web::post().to(simple_login_handler::<Backend>)),
         )
         .service(web::resource("/refresh").route(web::get().to(get_refresh_handler::<Backend>)))
+        .service(
+            web::resource("/password/check/{hash}")
+                .wrap(CookieToHeaderTranslatorFactory)
+                .route(web::get().to(check_password_pwned_handler::<Backend>)),
+        )
         .service(web::resource("/logout").route(web::get().to(get_logout_handler::<Backend>)))
         .service(
             web::scope("/opaque/register")

@@ -1,5 +1,8 @@
 use crate::{
-    components::router::{AppRoute, Link},
+    components::{
+        password_field::PasswordField,
+        router::{AppRoute, Link},
+    },
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
@@ -176,14 +179,12 @@ impl Component for ResetPasswordStep2Form {
                   {"New password*:"}
                 </label>
                 <div class="col-sm-10">
-                  <Field
+                  <PasswordField<FormModel>
                     form={&self.form}
                     field_name="password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
-                    autocomplete="new-password"
-                    input_type="password"
                     oninput={link.callback(|_| Msg::FormUpdate)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("password")}

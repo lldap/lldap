@@ -81,6 +81,10 @@ pub struct RunOpts {
     #[clap(short, long, env = "LLDAP_DATABASE_URL")]
     pub database_url: Option<String>,
 
+    /// HaveIBeenPwned API key, to check passwords against leaks.
+    #[clap(long, env = "LLDAP_HIPB_API_KEY")]
+    pub hipb_api_key: Option<String>,
+
     #[clap(flatten)]
     pub smtp_opts: SmtpOpts,
 
