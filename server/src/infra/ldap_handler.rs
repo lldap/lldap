@@ -724,6 +724,15 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             LdapFilter::Not(filter) => Ok(GroupRequestFilter::Not(Box::new(
                 self.convert_group_filter(&*filter)?,
             ))),
+            LdapFilter::Present(field) => {
+                if ALL_GROUP_ATTRIBUTE_KEYS.contains(&field.to_lowercase().as_str()) {
+                    Ok(GroupRequestFilter::And(vec![]))
+                } else {
+                    Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
+                        vec![],
+                    ))))
+                }
+            }
             _ => bail!("Unsupported group filter: {:?}", filter),
         }
     }
@@ -1304,6 +1313,11 @@ mod tests {
                 GroupRequestFilter::Member(UserId::new("bob")),
                 GroupRequestFilter::And(vec![]),
                 GroupRequestFilter::And(vec![]),
+                GroupRequestFilter::And(vec![]),
+                GroupRequestFilter::And(vec![]),
+                GroupRequestFilter::Not(Box::new(GroupRequestFilter::Not(Box::new(
+                    GroupRequestFilter::And(vec![]),
+                )))),
             ]))))
             .times(1)
             .return_once(|_| {
@@ -1324,6 +1338,11 @@ mod tests {
                 ),
                 LdapFilter::Equality("objectclass".to_string(), "groupOfUniqueNames".to_string()),
                 LdapFilter::Equality("objectclass".to_string(), "groupOfNames".to_string()),
+                LdapFilter::Present("objectclass".to_string()),
+                LdapFilter::Present("dn".to_string()),
+                LdapFilter::Not(Box::new(LdapFilter::Present(
+                    "random_attribute".to_string(),
+                ))),
             ]),
             vec!["1.1"],
         );
