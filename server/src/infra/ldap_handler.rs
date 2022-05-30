@@ -39,6 +39,7 @@ where
 }
 
 fn parse_distinguished_name(dn: &str) -> Result<Vec<(String, String)>> {
+    assert!(dn == dn.to_ascii_lowercase());
     dn.split(',')
         .map(|s| make_dn_pair(s.split('=').map(str::trim).map(String::from)))
         .collect()
@@ -102,7 +103,7 @@ fn get_user_id_from_distinguished_name(
 }
 
 fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Option<Vec<String>>> {
-    Ok(Some(match attribute.to_lowercase().as_str() {
+    Ok(Some(match attribute.to_ascii_lowercase().as_str() {
         "objectclass" => vec![
             "inetOrgPerson".to_string(),
             "posixAccount".to_string(),
@@ -191,7 +192,7 @@ fn get_group_attribute(
     attribute: &str,
     user_filter: &Option<&UserId>,
 ) -> Result<Option<Vec<String>>> {
-    Ok(Some(match attribute.to_lowercase().as_str() {
+    Ok(Some(match attribute.to_ascii_lowercase().as_str() {
         "objectclass" => vec!["groupOfUniqueNames".to_string()],
         "dn" | "distinguishedname" => vec![format!(
             "cn={},ou=groups,{}",
@@ -250,6 +251,14 @@ fn make_ldap_search_group_result_entry(
 }
 
 fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) -> bool {
+    for (k, v) in subtree {
+        assert!(k == &k.to_ascii_lowercase());
+        assert!(v == &v.to_ascii_lowercase());
+    }
+    for (k, v) in base_tree {
+        assert!(k == &k.to_ascii_lowercase());
+        assert!(v == &v.to_ascii_lowercase());
+    }
     if subtree.len() < base_tree.len() {
         return false;
     }
@@ -263,22 +272,20 @@ fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) -> b
 }
 
 fn map_field(field: &str) -> Result<String> {
+    assert!(field == field.to_ascii_lowercase());
     Ok(if field == "uid" {
         "user_id".to_string()
     } else if field == "mail" {
         "email".to_string()
-    } else if field == "cn" || field.to_lowercase() == "displayname" {
+    } else if field == "cn" || field == "displayname" {
         "display_name".to_string()
-    } else if field.to_lowercase() == "givenname" {
+    } else if field == "givenname" {
         "first_name".to_string()
     } else if field == "sn" {
         "last_name".to_string()
     } else if field == "avatar" {
         "avatar".to_string()
-    } else if field.to_lowercase() == "creationdate"
-        || field.to_lowercase() == "createtimestamp"
-        || field.to_lowercase() == "modifytimestamp"
-    {
+    } else if field == "creationdate" || field == "createtimestamp" || field == "modifytimestamp" {
         "creation_date".to_string()
     } else {
         bail!("Unknown field: {}", field);
@@ -357,7 +364,8 @@ pub struct LdapHandler<Backend: BackendHandler + LoginHandler + OpaqueHandler> {
 }
 
 impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
-    pub fn new(backend_handler: Backend, ldap_base_dn: String) -> Self {
+    pub fn new(backend_handler: Backend, mut ldap_base_dn: String) -> Self {
+        ldap_base_dn.make_ascii_lowercase();
         Self {
             user_info: None,
             backend_handler,
@@ -374,7 +382,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     pub async fn do_bind(&mut self, request: &LdapBindRequest) -> (LdapResultCode, String) {
         debug!(r#"Received bind request for "{}""#, &request.dn);
         let user_id = match get_user_id_from_distinguished_name(
-            &request.dn,
+            &request.dn.to_ascii_lowercase(),
             &self.base_dn,
             &self.base_dn_str,
         ) {
@@ -514,7 +522,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             return vec![root_dse_response(&self.base_dn_str), make_search_success()];
         }
         debug!("Received search request: {:?}", &request);
-        let dn_parts = match parse_distinguished_name(&request.base) {
+        let dn_parts = match parse_distinguished_name(&request.base.to_ascii_lowercase()) {
             Ok(dn) => dn,
             Err(_) => {
                 return vec![make_search_error(
@@ -685,15 +693,17 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     fn convert_group_filter(&self, filter: &LdapFilter) -> Result<GroupRequestFilter> {
         match filter {
             LdapFilter::Equality(field, value) => {
-                if field == "member" || field.to_lowercase() == "uniquemember" {
+                let field = &field.to_ascii_lowercase();
+                let value = &value.to_ascii_lowercase();
+                if field == "member" || field == "uniquemember" {
                     let user_name = get_user_id_from_distinguished_name(
                         value,
                         &self.base_dn,
                         &self.base_dn_str,
                     )?;
                     Ok(GroupRequestFilter::Member(user_name))
-                } else if field.to_lowercase() == "objectclass" {
-                    if value == "groupOfUniqueNames" || value == "groupOfNames" {
+                } else if field == "objectclass" {
+                    if value == "groupofuniquenames" || value == "groupofnames" {
                         Ok(GroupRequestFilter::And(vec![]))
                     } else {
                         Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
@@ -725,7 +735,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 self.convert_group_filter(&*filter)?,
             ))),
             LdapFilter::Present(field) => {
-                if ALL_GROUP_ATTRIBUTE_KEYS.contains(&field.to_lowercase().as_str()) {
+                if ALL_GROUP_ATTRIBUTE_KEYS.contains(&field.to_ascii_lowercase().as_str()) {
                     Ok(GroupRequestFilter::And(vec![]))
                 } else {
                     Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
@@ -755,14 +765,15 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 self.convert_user_filter(&*filter)?,
             ))),
             LdapFilter::Equality(field, value) => {
-                if field.to_lowercase() == "memberof" {
+                let field = &field.to_ascii_lowercase();
+                if field == "memberof" {
                     let group_name = get_group_id_from_distinguished_name(
-                        value,
+                        &value.to_ascii_lowercase(),
                         &self.base_dn,
                         &self.base_dn_str,
                     )?;
                     Ok(UserRequestFilter::MemberOf(group_name))
-                } else if field.to_lowercase() == "objectclass" {
+                } else if field == "objectclass" {
                     if value == "person"
                         || value == "inetOrgPerson"
                         || value == "posixAccount"
@@ -784,8 +795,9 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 }
             }
             LdapFilter::Present(field) => {
+                let field = &field.to_ascii_lowercase();
                 // Check that it's a field we support.
-                if field.to_lowercase() == "objectclass" || map_field(field).is_ok() {
+                if field == "objectclass" || map_field(field).is_ok() {
                     Ok(UserRequestFilter::And(vec![]))
                 } else {
                     Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
@@ -872,7 +884,7 @@ mod tests {
         filter: LdapFilter,
         attrs: Vec<S>,
     ) -> LdapSearchRequest {
-        make_search_request::<S>("ou=people,dc=example,dc=com", filter, attrs)
+        make_search_request::<S>("ou=people,Dc=example,dc=com", filter, attrs)
     }
 
     async fn setup_bound_handler(
@@ -891,9 +903,9 @@ mod tests {
                 set.insert(GroupIdAndName(GroupId(42), "lldap_admin".to_string()));
                 Ok(set)
             });
-        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
+        let mut ldap_handler = LdapHandler::new(mock, "dc=Example,dc=com".to_string());
         let request = LdapBindRequest {
-            dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
+            dn: "uid=test,ou=people,dc=example,dc=coM".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
         assert_eq!(
@@ -916,7 +928,7 @@ mod tests {
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
             .return_once(|_| Ok(HashSet::new()));
-        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
+        let mut ldap_handler = LdapHandler::new(mock, "dc=eXample,dc=com".to_string());
 
         let request = LdapOp::BindRequest(LdapBindRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
@@ -1240,14 +1252,14 @@ mod tests {
                     },
                     Group {
                         id: GroupId(3),
-                        display_name: "bestgroup".to_string(),
+                        display_name: "BestGroup".to_string(),
                         users: vec![UserId::new("john")],
                     },
                 ])
             });
         let mut ldap_handler = setup_bound_handler(mock).await;
         let request = make_search_request(
-            "ou=groups,dc=example,dc=com",
+            "ou=groups,dc=example,dc=cOm",
             LdapFilter::And(vec![]),
             vec!["objectClass", "dn", "cn", "uniqueMember"],
         );
@@ -1279,7 +1291,7 @@ mod tests {
                     ],
                 }),
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "cn=bestgroup,ou=groups,dc=example,dc=com".to_string(),
+                    dn: "cn=BestGroup,ou=groups,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
@@ -1287,11 +1299,11 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "dn".to_string(),
-                            vals: vec!["cn=bestgroup,ou=groups,dc=example,dc=com".to_string()]
+                            vals: vec!["cn=BestGroup,ou=groups,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
-                            vals: vec!["bestgroup".to_string()]
+                            vals: vec!["BestGroup".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "uniqueMember".to_string(),
@@ -1331,17 +1343,17 @@ mod tests {
         let request = make_search_request(
             "ou=groups,dc=example,dc=com",
             LdapFilter::And(vec![
-                LdapFilter::Equality("cn".to_string(), "group_1".to_string()),
+                LdapFilter::Equality("cN".to_string(), "Group_1".to_string()),
                 LdapFilter::Equality(
                     "uniqueMember".to_string(),
-                    "uid=bob,ou=people,dc=example,dc=com".to_string(),
+                    "uid=bob,ou=peopLe,Dc=eXample,dc=com".to_string(),
                 ),
-                LdapFilter::Equality("objectclass".to_string(), "groupOfUniqueNames".to_string()),
+                LdapFilter::Equality("obJEctclass".to_string(), "groupOfUniqueNames".to_string()),
                 LdapFilter::Equality("objectclass".to_string(), "groupOfNames".to_string()),
                 LdapFilter::Present("objectclass".to_string()),
                 LdapFilter::Present("dn".to_string()),
                 LdapFilter::Not(Box::new(LdapFilter::Present(
-                    "random_attribute".to_string(),
+                    "random_attribUte".to_string(),
                 ))),
             ]),
             vec!["1.1"],
