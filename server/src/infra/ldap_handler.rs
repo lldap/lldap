@@ -711,11 +711,20 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         ))))
                     }
                 } else {
-                    let field = map_field(field)?;
-                    if field == "display_name" {
+                    let mapped_field = map_field(field);
+                    if mapped_field.is_ok()
+                        && (mapped_field.as_ref().unwrap() == "display_name"
+                            || mapped_field.as_ref().unwrap() == "user_id")
+                    {
                         Ok(GroupRequestFilter::DisplayName(value.clone()))
                     } else {
-                        bail!("Unsupported group attribute: {:?}", field)
+                        warn!(
+                            r#"Ignoring unknown group attribute "{:?}" in filter"#,
+                            field
+                        );
+                        Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
+                            vec![],
+                        ))))
                     }
                 }
             }
@@ -786,11 +795,20 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         ))))
                     }
                 } else {
-                    let field = map_field(field)?;
-                    if field == "user_id" {
-                        Ok(UserRequestFilter::UserId(UserId::new(value)))
-                    } else {
-                        Ok(UserRequestFilter::Equality(field, value.clone()))
+                    match map_field(field) {
+                        Ok(field) => {
+                            if field == "user_id" {
+                                Ok(UserRequestFilter::UserId(UserId::new(value)))
+                            } else {
+                                Ok(UserRequestFilter::Equality(field, value.clone()))
+                            }
+                        }
+                        Err(_) => {
+                            warn!(r#"Ignoring unknown user attribute "{}" in filter"#, field);
+                            Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
+                                vec![],
+                            ))))
+                        }
                     }
                 }
             }
@@ -1330,6 +1348,9 @@ mod tests {
                 GroupRequestFilter::Not(Box::new(GroupRequestFilter::Not(Box::new(
                     GroupRequestFilter::And(vec![]),
                 )))),
+                GroupRequestFilter::Not(Box::new(
+                    GroupRequestFilter::And(vec![]),
+                )),
             ]))))
             .times(1)
             .return_once(|_| {
@@ -1355,6 +1376,7 @@ mod tests {
                 LdapFilter::Not(Box::new(LdapFilter::Present(
                     "random_attribUte".to_string(),
                 ))),
+                LdapFilter::Equality("unknown_attribute".to_string(), "randomValue".to_string()),
             ]),
             vec!["1.1"],
         );
@@ -1449,9 +1471,9 @@ mod tests {
         let mut ldap_handler = setup_bound_handler(MockTestBackendHandler::new()).await;
         let request = make_search_request(
             "ou=groups,dc=example,dc=com",
-            LdapFilter::And(vec![LdapFilter::Equality(
+            LdapFilter::And(vec![LdapFilter::Substring(
                 "whatever".to_string(),
-                "group_1".to_string(),
+                ldap3_server::proto::LdapSubstringFilter::default(),
             )]),
             vec!["cn"],
         );
@@ -1459,7 +1481,8 @@ mod tests {
             ldap_handler.do_search(&request).await,
             vec![make_search_error(
                 LdapResultCode::UnwillingToPerform,
-                "Unsupported group filter: Unknown field: whatever".to_string()
+                r#"Unsupported group filter: Unsupported group filter: Substring("whatever", LdapSubstringFilter { initial: None, any: [], final_: None })"#
+                    .to_string()
             )]
         );
     }
@@ -1475,6 +1498,7 @@ mod tests {
                     UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
                     UserRequestFilter::And(vec![]),
                     UserRequestFilter::And(vec![]),
+                    UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
                     UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
                 ]),
             ]))))
@@ -1492,6 +1516,7 @@ mod tests {
                 LdapFilter::Present("objectClass".to_string()),
                 LdapFilter::Present("uid".to_string()),
                 LdapFilter::Present("unknown".to_string()),
+                LdapFilter::Equality("unknown_attribute".to_string(), "randomValue".to_string()),
             ])]),
             vec!["objectClass"],
         );
