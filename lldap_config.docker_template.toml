@@ -78,6 +78,14 @@ database_url = "sqlite:///data/users.db?mode=rwc"
 ## Randomly generated on first run if it doesn't exist.
 key_file = "/data/private_key"
 
+## Ignored attributes.
+## Some services will request attributes that are not present in LLDAP. When it
+## is the case, LLDAP will warn about the attribute being unknown. If you want
+## to ignore the attribute and the service works without, you can add it to this
+## list to silence the warning.
+#ignored_user_attributes = [ "sAMAccountName" ]
+#ignored_group_attributes = [ "mail", "userPrincipalName" ]
+
 ## Options to configure SMTP parameters, to send password reset emails.
 ## To set these options from environment variables, use the following format
 ## (example with "password"): LLDAP_SMTP_OPTIONS__PASSWORD

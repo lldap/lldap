@@ -102,8 +102,14 @@ fn get_user_id_from_distinguished_name(
     }
 }
 
-fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Option<Vec<String>>> {
-    Ok(Some(match attribute.to_ascii_lowercase().as_str() {
+fn get_user_attribute(
+    user: &User,
+    attribute: &str,
+    dn: &str,
+    ignored_user_attributes: &[String],
+) -> Result<Option<Vec<String>>> {
+    let attribute = attribute.to_ascii_lowercase();
+    Ok(Some(match attribute.as_str() {
         "objectclass" => vec![
             "inetOrgPerson".to_string(),
             "posixAccount".to_string(),
@@ -118,7 +124,7 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Option<V
         "cn" | "displayname" => vec![user.display_name.clone()],
         "createtimestamp" | "modifytimestamp" => vec![user.creation_date.to_rfc3339()],
         "1.1" => return Ok(None),
-        // We ignore the operational attribute wildcard
+        // We ignore the operational attribute wildcard.
         "+" => return Ok(None),
         "*" => {
             bail!(
@@ -127,7 +133,13 @@ fn get_user_attribute(user: &User, attribute: &str, dn: &str) -> Result<Option<V
             )
         }
         _ => {
-            warn!("Ignoring unrecognized group attribute: {}", attribute);
+            if !ignored_user_attributes.contains(&attribute) {
+                warn!(
+                    r#"Ignoring unrecognized group attribute: {}\n\
+                      To disable this warning, add it to "ignored_user_attributes" in the config."#,
+                    attribute
+                );
+            }
             return Ok(None);
         }
     }))
@@ -164,6 +176,7 @@ fn make_ldap_search_user_result_entry(
     user: User,
     base_dn_str: &str,
     attributes: &[String],
+    ignored_user_attributes: &[String],
 ) -> Result<LdapSearchResultEntry> {
     let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
 
@@ -173,7 +186,7 @@ fn make_ldap_search_user_result_entry(
         attributes: expanded_attributes
             .iter()
             .filter_map(|a| {
-                let values = match get_user_attribute(&user, a, &dn) {
+                let values = match get_user_attribute(&user, a, &dn, ignored_user_attributes) {
                     Err(e) => return Some(Err(e)),
                     Ok(v) => v,
                 }?;
@@ -191,8 +204,10 @@ fn get_group_attribute(
     base_dn_str: &str,
     attribute: &str,
     user_filter: &Option<&UserId>,
+    ignored_group_attributes: &[String],
 ) -> Result<Option<Vec<String>>> {
-    Ok(Some(match attribute.to_ascii_lowercase().as_str() {
+    let attribute = attribute.to_ascii_lowercase();
+    Ok(Some(match attribute.as_str() {
         "objectclass" => vec!["groupOfUniqueNames".to_string()],
         "dn" | "distinguishedname" => vec![format!(
             "cn={},ou=groups,{}",
@@ -215,7 +230,13 @@ fn get_group_attribute(
             )
         }
         _ => {
-            warn!("Ignoring unrecognized group attribute: {}", attribute);
+            if !ignored_group_attributes.contains(&attribute) {
+                warn!(
+                    r#"Ignoring unrecognized group attribute: {}\n\
+                      To disable this warning, add it to "ignored_group_attributes" in the config."#,
+                    attribute
+                );
+            }
             return Ok(None);
         }
     }))
@@ -229,6 +250,7 @@ fn make_ldap_search_group_result_entry(
     base_dn_str: &str,
     attributes: &[String],
     user_filter: &Option<&UserId>,
+    ignored_group_attributes: &[String],
 ) -> Result<LdapSearchResultEntry> {
     let expanded_attributes = expand_attribute_wildcards(attributes, ALL_GROUP_ATTRIBUTE_KEYS);
 
@@ -237,7 +259,13 @@ fn make_ldap_search_group_result_entry(
         attributes: expanded_attributes
             .iter()
             .filter_map(|a| {
-                let values = match get_group_attribute(&group, base_dn_str, a, user_filter) {
+                let values = match get_group_attribute(
+                    &group,
+                    base_dn_str,
+                    a,
+                    user_filter,
+                    ignored_group_attributes,
+                ) {
                     Err(e) => return Some(Err(e)),
                     Ok(v) => v,
                 }?;
@@ -361,10 +389,17 @@ pub struct LdapHandler<Backend: BackendHandler + LoginHandler + OpaqueHandler> {
     backend_handler: Backend,
     pub base_dn: Vec<(String, String)>,
     base_dn_str: String,
+    ignored_user_attributes: Vec<String>,
+    ignored_group_attributes: Vec<String>,
 }
 
 impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
-    pub fn new(backend_handler: Backend, mut ldap_base_dn: String) -> Self {
+    pub fn new(
+        backend_handler: Backend,
+        mut ldap_base_dn: String,
+        ignored_user_attributes: Vec<String>,
+        ignored_group_attributes: Vec<String>,
+    ) -> Self {
         ldap_base_dn.make_ascii_lowercase();
         Self {
             user_info: None,
@@ -376,6 +411,8 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 )
             }),
             base_dn_str: ldap_base_dn,
+            ignored_user_attributes,
+            ignored_group_attributes,
         }
     }
 
@@ -600,7 +637,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
         users
             .into_iter()
-            .map(|u| make_ldap_search_user_result_entry(u, &self.base_dn_str, &request.attrs))
+            .map(|u| {
+                make_ldap_search_user_result_entry(
+                    u,
+                    &self.base_dn_str,
+                    &request.attrs,
+                    &self.ignored_user_attributes,
+                )
+            })
             .map(|entry| Ok(LdapOp::SearchResultEntry(entry?)))
             .collect::<Result<Vec<_>>>()
             .unwrap_or_else(|e| {
@@ -650,6 +694,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     &self.base_dn_str,
                     &request.attrs,
                     user_filter,
+                    &self.ignored_group_attributes,
                 )
             })
             .map(|entry| Ok(LdapOp::SearchResultEntry(entry?)))
@@ -718,10 +763,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     {
                         Ok(GroupRequestFilter::DisplayName(value.clone()))
                     } else {
-                        warn!(
-                            r#"Ignoring unknown group attribute "{:?}" in filter"#,
-                            field
-                        );
+                        if !self.ignored_group_attributes.contains(field) {
+                            warn!(
+                                r#"Ignoring unknown group attribute "{:?}" in filter.\n\
+                                To disable this warning, add it to "ignored_group_attributes" in the config."#,
+                                field
+                            );
+                        }
                         Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
                             vec![],
                         ))))
@@ -804,7 +852,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                             }
                         }
                         Err(_) => {
-                            warn!(r#"Ignoring unknown user attribute "{}" in filter"#, field);
+                            if !self.ignored_user_attributes.contains(field) {
+                                warn!(
+                                    r#"Ignoring unknown user attribute "{}" in filter.\n\
+                                      To disable this warning, add it to "ignored_user_attributes" in the config"#,
+                                    field
+                                );
+                            }
                             Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
                                 vec![],
                             ))))
@@ -921,7 +975,8 @@ mod tests {
                 set.insert(GroupIdAndName(GroupId(42), "lldap_admin".to_string()));
                 Ok(set)
             });
-        let mut ldap_handler = LdapHandler::new(mock, "dc=Example,dc=com".to_string());
+        let mut ldap_handler =
+            LdapHandler::new(mock, "dc=Example,dc=com".to_string(), vec![], vec![]);
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=coM".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
@@ -946,7 +1001,8 @@ mod tests {
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
             .return_once(|_| Ok(HashSet::new()));
-        let mut ldap_handler = LdapHandler::new(mock, "dc=eXample,dc=com".to_string());
+        let mut ldap_handler =
+            LdapHandler::new(mock, "dc=eXample,dc=com".to_string(), vec![], vec![]);
 
         let request = LdapOp::BindRequest(LdapBindRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
@@ -983,7 +1039,8 @@ mod tests {
                 set.insert(GroupIdAndName(GroupId(42), "lldap_admin".to_string()));
                 Ok(set)
             });
-        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
+        let mut ldap_handler =
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), vec![], vec![]);
 
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
@@ -1020,7 +1077,8 @@ mod tests {
         mock.expect_get_user_groups()
             .with(eq(UserId::new("test")))
             .return_once(|_| Ok(HashSet::new()));
-        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
+        let mut ldap_handler =
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), vec![], vec![]);
 
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
@@ -1048,7 +1106,8 @@ mod tests {
     #[tokio::test]
     async fn test_bind_invalid_dn() {
         let mock = MockTestBackendHandler::new();
-        let mut ldap_handler = LdapHandler::new(mock, "dc=example,dc=com".to_string());
+        let mut ldap_handler =
+            LdapHandler::new(mock, "dc=example,dc=com".to_string(), vec![], vec![]);
 
         let request = LdapBindRequest {
             dn: "cn=bob,dc=example,dc=com".to_string(),
@@ -1348,9 +1407,7 @@ mod tests {
                 GroupRequestFilter::Not(Box::new(GroupRequestFilter::Not(Box::new(
                     GroupRequestFilter::And(vec![]),
                 )))),
-                GroupRequestFilter::Not(Box::new(
-                    GroupRequestFilter::And(vec![]),
-                )),
+                GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(vec![]))),
             ]))))
             .times(1)
             .return_once(|_| {
