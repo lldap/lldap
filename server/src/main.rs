@@ -4,7 +4,7 @@
 
 use crate::{
     domain::{
-        handler::{BackendHandler, CreateUserRequest},
+        handler::{BackendHandler, CreateUserRequest, GroupRequestFilter},
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
         sql_tables::PoolOptions,
@@ -61,6 +61,19 @@ async fn run_server(config: Configuration) -> Result<()> {
             .await
             .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))
             .context("while creating the admin user")?;
+    }
+    if backend_handler
+        .list_groups(Some(GroupRequestFilter::DisplayName(
+            "lldap_readonly".to_string(),
+        )))
+        .await?
+        .is_empty()
+    {
+        warn!("Could not find readonly group, trying to create it");
+        backend_handler
+            .create_group("lldap_readonly")
+            .await
+            .context("while creating readonly group")?;
     }
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,

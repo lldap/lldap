@@ -438,7 +438,11 @@ where
         }
         .into_inner();
     let user_id = &registration_start_request.username;
-    validation_result.can_access(user_id);
+    if !validation_result.can_write(user_id) {
+        return ApiResult::Right(
+            HttpResponse::Unauthorized().body("Not authorized to change the user's password"),
+        );
+    }
     data.backend_handler
         .registration_start(registration_start_request)
         .await
@@ -519,9 +523,16 @@ where
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Permission {
+    Admin,
+    Readonly,
+    Regular,
+}
+
 pub struct ValidationResults {
     pub user: String,
-    pub is_admin: bool,
+    pub permission: Permission,
 }
 
 impl ValidationResults {
@@ -529,12 +540,30 @@ impl ValidationResults {
     pub fn admin() -> Self {
         Self {
             user: "admin".to_string(),
-            is_admin: true,
+            permission: Permission::Admin,
         }
     }
 
-    pub fn can_access(&self, user: &str) -> bool {
-        self.is_admin || self.user == user
+    #[must_use]
+    pub fn is_admin(&self) -> bool {
+        self.permission == Permission::Admin
+    }
+
+    #[must_use]
+    pub fn is_admin_or_readonly(&self) -> bool {
+        self.permission == Permission::Admin || self.permission == Permission::Readonly
+    }
+
+    #[must_use]
+    pub fn can_read(&self, user: &str) -> bool {
+        self.permission == Permission::Admin
+            || self.permission == Permission::Readonly
+            || self.user == user
+    }
+
+    #[must_use]
+    pub fn can_write(&self, user: &str) -> bool {
+        self.permission == Permission::Admin || self.user == user
     }
 }
 
@@ -561,10 +590,16 @@ pub(crate) fn check_if_token_is_valid<Backend>(
     if state.jwt_blacklist.read().unwrap().contains(&jwt_hash) {
         return Err(ErrorUnauthorized("JWT was logged out"));
     }
-    let is_admin = token.claims().groups.contains("lldap_admin");
+    let is_in_group = |name| token.claims().groups.contains(name);
     Ok(ValidationResults {
         user: token.claims().user.clone(),
-        is_admin,
+        permission: if is_in_group("lldap_admin") {
+            Permission::Admin
+        } else if is_in_group("lldap_readonly") {
+            Permission::Readonly
+        } else {
+            Permission::Regular
+        },
     })
 }
 

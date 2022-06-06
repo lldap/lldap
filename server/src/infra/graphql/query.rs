@@ -107,7 +107,7 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
     }
 
     pub async fn user(context: &Context<Handler>, user_id: String) -> FieldResult<User<Handler>> {
-        if !context.validation_result.can_access(&user_id) {
+        if !context.validation_result.can_read(&user_id) {
             return Err("Unauthorized access to user data".into());
         }
         Ok(context
@@ -121,7 +121,7 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         context: &Context<Handler>,
         #[graphql(name = "where")] filters: Option<RequestFilter>,
     ) -> FieldResult<Vec<User<Handler>>> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin_or_readonly() {
             return Err("Unauthorized access to user list".into());
         }
         Ok(context
@@ -132,7 +132,7 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
     }
 
     async fn groups(context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin_or_readonly() {
             return Err("Unauthorized access to group list".into());
         }
         Ok(context
@@ -143,7 +143,7 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
     }
 
     async fn group(context: &Context<Handler>, group_id: i32) -> FieldResult<Group<Handler>> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin_or_readonly() {
             return Err("Unauthorized access to group data".into());
         }
         Ok(context
@@ -234,7 +234,7 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
     }
     /// The groups to which this user belongs.
     async fn users(&self, context: &Context<Handler>) -> FieldResult<Vec<User<Handler>>> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin_or_readonly() {
             return Err("Unauthorized access to group data".into());
         }
         Ok(context

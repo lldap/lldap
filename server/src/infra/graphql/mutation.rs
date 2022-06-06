@@ -63,7 +63,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         context: &Context<Handler>,
         user: CreateUserInput,
     ) -> FieldResult<super::query::User<Handler>> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin() {
             return Err("Unauthorized user creation".into());
         }
         let user_id = UserId::new(&user.id);
@@ -88,7 +88,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         context: &Context<Handler>,
         name: String,
     ) -> FieldResult<super::query::Group<Handler>> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin() {
             return Err("Unauthorized group creation".into());
         }
         let group_id = context.handler.create_group(&name).await?;
@@ -103,7 +103,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         context: &Context<Handler>,
         user: UpdateUserInput,
     ) -> FieldResult<Success> {
-        if !context.validation_result.can_access(&user.id) {
+        if !context.validation_result.can_write(&user.id) {
             return Err("Unauthorized user update".into());
         }
         context
@@ -123,7 +123,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         context: &Context<Handler>,
         group: UpdateGroupInput,
     ) -> FieldResult<Success> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin() {
             return Err("Unauthorized group update".into());
         }
         if group.id == 1 {
@@ -144,7 +144,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         user_id: String,
         group_id: i32,
     ) -> FieldResult<Success> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin() {
             return Err("Unauthorized group membership modification".into());
         }
         context
@@ -159,7 +159,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         user_id: String,
         group_id: i32,
     ) -> FieldResult<Success> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin() {
             return Err("Unauthorized group membership modification".into());
         }
         if context.validation_result.user == user_id && group_id == 1 {
@@ -173,7 +173,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
     }
 
     async fn delete_user(context: &Context<Handler>, user_id: String) -> FieldResult<Success> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin() {
             return Err("Unauthorized user deletion".into());
         }
         if context.validation_result.user == user_id {
@@ -184,7 +184,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
     }
 
     async fn delete_group(context: &Context<Handler>, group_id: i32) -> FieldResult<Success> {
-        if !context.validation_result.is_admin {
+        if !context.validation_result.is_admin() {
             return Err("Unauthorized group deletion".into());
         }
         if group_id == 1 {
