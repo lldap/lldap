@@ -198,8 +198,12 @@ configuration files, or guides. See the [`example_configs`](example_configs)
 folder for help with:
   - [Authelia](example_configs/authelia_config.yml)
   - [Bookstack](example_configs/bookstack.env.example)
-  - [KeyCloak](example_configs/keycloak.md)
+  - [Dolibarr](example_configs/dolibarr.md)
+  - [Jellyfin](example_configs/jellyfin.md)
   - [Jisti Meet](example_configs/jitsi_meet.conf)
+  - [KeyCloak](example_configs/keycloak.md)
+  - [Matrix](example_configs/matrix_synapse.yml)
+  - [Organizr](example_configs/Organizr.md)
 
 ## Comparisons with other services
 
@@ -250,7 +254,7 @@ set isn't working, try the following:
     for docker) has the rights to write to the `/data` folder. If in doubt, you
     can `chmod 777 /data` (or whatever the folder) to make it world-writeable.
   - Make sure you restart the server.
-  - If it's still not working, join the 
+  - If it's still not working, join the
     [Discord server](https://discord.gg/h5PEdRMNyP) to ask for help.
 
 ## Contributions

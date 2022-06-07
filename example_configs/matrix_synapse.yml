@@ -1,0 +1,14 @@
+modules:
+  - module: "ldap_auth_provider.LdapAuthProviderModule"
+    config:
+      enabled: true
+      uri: "ldap://lldap"
+      start_tls: false
+      base: "ou=people,dc=example,dc=com"
+      attributes:
+        uid: "uid"
+        mail: "mail"
+        name: "cn"
+        bind_dn: "uid=admin,ou=people,dc=example,dc=com"
+        bind_password: "password"
+        filter: "(objectClass=person)"
