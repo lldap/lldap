@@ -38,8 +38,8 @@ mockall::mock! {
     async fn list_users(&self, filters: Option<UserRequestFilter>, get_groups: bool) -> Result<Vec<UserAndGroups>>;
         async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
         async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
-        async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
-        async fn get_user_groups(&self, user: &UserId) -> Result<HashSet<GroupIdAndName>>;
+        async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
+        async fn get_user_groups(&self, user: &UserId) -> Result<HashSet<GroupDetails>>;
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
         async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
         async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;

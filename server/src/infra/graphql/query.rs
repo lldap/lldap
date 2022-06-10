@@ -1,4 +1,4 @@
-use crate::domain::handler::{BackendHandler, GroupId, GroupIdAndName, UserId};
+use crate::domain::handler::{BackendHandler, GroupDetails, GroupId, UserId};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument};
@@ -184,6 +184,7 @@ pub struct User<Handler: BackendHandler> {
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
 
+#[cfg(test)]
 impl<Handler: BackendHandler> Default for User<Handler> {
     fn default() -> Self {
         Self {
@@ -257,6 +258,7 @@ impl<Handler: BackendHandler> From<DomainUserAndGroups> for User<Handler> {
 pub struct Group<Handler: BackendHandler> {
     group_id: i32,
     display_name: String,
+    creation_date: chrono::DateTime<chrono::Utc>,
     members: Option<Vec<String>>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
@@ -291,11 +293,12 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
     }
 }
 
-impl<Handler: BackendHandler> From<GroupIdAndName> for Group<Handler> {
-    fn from(group_id_and_name: GroupIdAndName) -> Self {
+impl<Handler: BackendHandler> From<GroupDetails> for Group<Handler> {
+    fn from(group_details: GroupDetails) -> Self {
         Self {
-            group_id: group_id_and_name.0 .0,
-            display_name: group_id_and_name.1,
+            group_id: group_details.group_id.0,
+            display_name: group_details.display_name,
+            creation_date: group_details.creation_date,
             members: None,
             _phantom: std::marker::PhantomData,
         }
@@ -307,6 +310,7 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
         Self {
             group_id: group.id.0,
             display_name: group.display_name,
+            creation_date: group.creation_date,
             members: Some(group.users.into_iter().map(UserId::into_string).collect()),
             _phantom: std::marker::PhantomData,
         }
@@ -320,6 +324,7 @@ mod tests {
         domain::handler::{MockTestBackendHandler, UserRequestFilter},
         infra::auth_service::ValidationResults,
     };
+    use chrono::TimeZone;
     use juniper::{
         execute, graphql_value, DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType,
         RootNode, Variables,
@@ -361,7 +366,12 @@ mod tests {
                 })
             });
         let mut groups = HashSet::new();
-        groups.insert(GroupIdAndName(GroupId(3), "Bobbersons".to_string()));
+        groups.insert(GroupDetails {
+            group_id: GroupId(3),
+            display_name: "Bobbersons".to_string(),
+            creation_date: chrono::Utc.timestamp_nanos(42),
+            uuid: crate::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+        });
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
             .return_once(|_| Ok(groups));

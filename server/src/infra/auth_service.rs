@@ -25,7 +25,7 @@ use lldap_auth::{login, password_reset, registration, JWTClaims};
 use crate::{
     domain::{
         error::DomainError,
-        handler::{BackendHandler, BindRequest, GroupIdAndName, LoginHandler, UserId},
+        handler::{BackendHandler, BindRequest, GroupDetails, LoginHandler, UserId},
         opaque_handler::OpaqueHandler,
     },
     infra::{
@@ -37,12 +37,12 @@ use crate::{
 type Token<S> = jwt::Token<jwt::Header, JWTClaims, S>;
 type SignedToken = Token<jwt::token::Signed>;
 
-fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<GroupIdAndName>) -> SignedToken {
+fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<GroupDetails>) -> SignedToken {
     let claims = JWTClaims {
         exp: Utc::now() + chrono::Duration::days(1),
         iat: Utc::now(),
         user,
-        groups: groups.into_iter().map(|g| g.1).collect(),
+        groups: groups.into_iter().map(|g| g.display_name).collect(),
     };
     let header = jwt::Header {
         algorithm: jwt::AlgorithmType::Hs512,
