@@ -48,6 +48,49 @@ fn parse_distinguished_name(dn: &str) -> Result<Vec<(String, String)>> {
         .collect()
 }
 
+#[derive(Debug)]
+enum SearchScope {
+    Global,
+    Users,
+    Groups,
+    User(LdapFilter),
+    Group(LdapFilter),
+    Unknown,
+    Invalid,
+}
+fn get_search_scope(base_dn: &[(String, String)], dn_parts: &[(String, String)]) -> SearchScope {
+    let base_dn_len = base_dn.len();
+    if !is_subtree(dn_parts, base_dn) {
+        SearchScope::Invalid
+    } else if dn_parts.len() == base_dn_len {
+        SearchScope::Global
+    } else if dn_parts.len() == base_dn_len + 1
+        && dn_parts[0] == ("ou".to_string(), "people".to_string())
+    {
+        SearchScope::Users
+    } else if dn_parts.len() == base_dn_len + 1
+        && dn_parts[0] == ("ou".to_string(), "groups".to_string())
+    {
+        SearchScope::Groups
+    } else if dn_parts.len() == base_dn_len + 2
+        && dn_parts[1] == ("ou".to_string(), "people".to_string())
+    {
+        SearchScope::User(LdapFilter::Equality(
+            dn_parts[0].0.clone(),
+            dn_parts[0].1.clone(),
+        ))
+    } else if dn_parts.len() == base_dn_len + 2
+        && dn_parts[1] == ("ou".to_string(), "groups".to_string())
+    {
+        SearchScope::Group(LdapFilter::Equality(
+            dn_parts[0].0.clone(),
+            dn_parts[0].1.clone(),
+        ))
+    } else {
+        SearchScope::Unknown
+    }
+}
+
 fn get_group_id_from_distinguished_name(
     dn: &str,
     base_tree: &[(String, String)],
@@ -582,36 +625,50 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 )]
             }
         };
-        if !is_subtree(&dn_parts, &self.base_dn) {
-            // Search path is not in our tree, just return an empty success.
-            warn!(
-                "The specified search tree {:?} is not under the common subtree {:?}",
-                &dn_parts, &self.base_dn
-            );
-            return vec![make_search_success()];
-        }
-        let mut results = Vec::new();
-        let mut got_match = false;
-        if dn_parts.len() == self.base_dn.len()
-            || (dn_parts.len() == self.base_dn.len() + 1
-                && dn_parts[0] == ("ou".to_string(), "people".to_string()))
-        {
-            got_match = true;
-            results.extend(self.get_user_list(request, &user_filter).await);
-        }
-        if dn_parts.len() == self.base_dn.len()
-            || (dn_parts.len() == self.base_dn.len() + 1
-                && dn_parts[0] == ("ou".to_string(), "groups".to_string()))
-        {
-            got_match = true;
-            results.extend(self.get_groups_list(request, &user_filter).await);
-        }
-        if !got_match {
-            warn!(
-                r#"The requested search tree "{}" matches neither the user subtree "ou=people,{}" nor the group subtree "ou=groups,{}""#,
-                &request.base, &self.base_dn_str, &self.base_dn_str
-            );
-        }
+        let scope = get_search_scope(&self.base_dn, &dn_parts);
+        let get_user_list = || async {
+            self.get_user_list(&request.filter, &request.attrs, &request.base, &user_filter)
+                .await
+        };
+        let get_group_list = || async {
+            self.get_groups_list(&request.filter, &request.attrs, &request.base, &user_filter)
+                .await
+        };
+        let mut results = match scope {
+            SearchScope::Global => {
+                let mut results = Vec::new();
+                results.extend(get_user_list().await);
+                results.extend(get_group_list().await);
+                results
+            }
+            SearchScope::Users => get_user_list().await,
+            SearchScope::Groups => get_group_list().await,
+            SearchScope::User(filter) => {
+                let filter = LdapFilter::And(vec![request.filter.clone(), filter]);
+                self.get_user_list(&filter, &request.attrs, &request.base, &user_filter)
+                    .await
+            }
+            SearchScope::Group(filter) => {
+                let filter = LdapFilter::And(vec![request.filter.clone(), filter]);
+                self.get_groups_list(&filter, &request.attrs, &request.base, &user_filter)
+                    .await
+            }
+            SearchScope::Unknown => {
+                warn!(
+                    r#"The requested search tree "{}" matches neither the user subtree "ou=people,{}" nor the group subtree "ou=groups,{}""#,
+                    &request.base, &self.base_dn_str, &self.base_dn_str
+                );
+                Vec::new()
+            }
+            SearchScope::Invalid => {
+                // Search path is not in our tree, just return an empty success.
+                warn!(
+                    "The specified search tree {:?} is not under the common subtree {:?}",
+                    &dn_parts, &self.base_dn
+                );
+                Vec::new()
+            }
+        };
         if results.is_empty() || matches!(results[results.len() - 1], LdapOp::SearchResultEntry(_))
         {
             results.push(make_search_success());
@@ -621,10 +678,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     async fn get_user_list(
         &self,
-        request: &LdapSearchRequest,
+        filter: &LdapFilter,
+        attributes: &[String],
+        base: &str,
         user_filter: &Option<&UserId>,
     ) -> Vec<LdapOp> {
-        let filters = match self.convert_user_filter(&request.filter) {
+        let filters = match self.convert_user_filter(filter) {
             Ok(f) => f,
             Err(e) => {
                 return vec![make_search_error(
@@ -639,8 +698,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 UserRequestFilter::And(vec![filters, UserRequestFilter::UserId((*u).clone())])
             }
         };
-        let expanded_attributes =
-            expand_attribute_wildcards(&request.attrs, ALL_USER_ATTRIBUTE_KEYS);
+        let expanded_attributes = expand_attribute_wildcards(attributes, ALL_USER_ATTRIBUTE_KEYS);
         let need_groups = expanded_attributes
             .iter()
             .any(|s| s.to_ascii_lowercase() == "memberof");
@@ -653,7 +711,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             Err(e) => {
                 return vec![make_search_error(
                     LdapResultCode::Other,
-                    format!(r#"Error during searching user "{}": {:#}"#, request.base, e),
+                    format!(r#"Error while searching user "{}": {:#}"#, base, e),
                 )]
             }
         };
@@ -681,10 +739,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     async fn get_groups_list(
         &self,
-        request: &LdapSearchRequest,
+        filter: &LdapFilter,
+        attributes: &[String],
+        base: &str,
         user_filter: &Option<&UserId>,
     ) -> Vec<LdapOp> {
-        let filter = match self.convert_group_filter(&request.filter) {
+        let filter = match self.convert_group_filter(filter) {
             Ok(f) => f,
             Err(e) => {
                 return vec![make_search_error(
@@ -705,7 +765,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             Err(e) => {
                 return vec![make_search_error(
                     LdapResultCode::Other,
-                    format!(r#"Error while listing groups "{}": {:#}"#, request.base, e),
+                    format!(r#"Error while listing groups "{}": {:#}"#, base, e),
                 )]
             }
         };
@@ -716,7 +776,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 make_ldap_search_group_result_entry(
                     u,
                     &self.base_dn_str,
-                    &request.attrs,
+                    attributes,
                     user_filter,
                     &self.ignored_group_attributes,
                 )
@@ -1181,6 +1241,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_search_user_as_scope() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(
+                eq(Some(UserRequestFilter::And(vec![
+                    UserRequestFilter::And(vec![]),
+                    UserRequestFilter::UserId(UserId::new("bob")),
+                ]))),
+                eq(false),
+            )
+            .times(1)
+            .return_once(|_, _| Ok(vec![]));
+        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+
+        let request = LdapSearchRequest {
+            base: "uid=bob,ou=people,Dc=example,dc=com".to_string(),
+            scope: LdapSearchScope::Base,
+            aliases: LdapDerefAliases::Never,
+            sizelimit: 0,
+            timelimit: 0,
+            typesonly: false,
+            filter: LdapFilter::And(vec![]),
+            attrs: vec!["1.1".to_string()],
+        };
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![make_search_success()],
+        );
+    }
+
+    #[tokio::test]
     async fn test_bind_invalid_dn() {
         let mock = MockTestBackendHandler::new();
         let mut ldap_handler =
@@ -1570,6 +1661,34 @@ mod tests {
                 }),
                 make_search_success(),
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_group_as_scope() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::And(vec![
+                GroupRequestFilter::And(vec![]),
+                GroupRequestFilter::DisplayName("rockstars".to_string()),
+            ]))))
+            .times(1)
+            .return_once(|_| Ok(vec![]));
+        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+
+        let request = LdapSearchRequest {
+            base: "uid=rockstars,ou=groups,Dc=example,dc=com".to_string(),
+            scope: LdapSearchScope::Base,
+            aliases: LdapDerefAliases::Never,
+            sizelimit: 0,
+            timelimit: 0,
+            typesonly: false,
+            filter: LdapFilter::And(vec![]),
+            attrs: vec!["1.1".to_string()],
+        };
+        assert_eq!(
+            ldap_handler.do_search(&request).await,
+            vec![make_search_success()],
         );
     }
 
