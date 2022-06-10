@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
 type DomainUser = crate::domain::handler::User;
 type DomainGroup = crate::domain::handler::Group;
+type DomainUserAndGroups = crate::domain::handler::UserAndGroups;
 use super::api::Context;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
@@ -126,7 +127,7 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         }
         Ok(context
             .handler
-            .list_users(filters.map(TryInto::try_into).transpose()?)
+            .list_users(filters.map(TryInto::try_into).transpose()?, false)
             .await
             .map(|v| v.into_iter().map(Into::into).collect())?)
     }
@@ -215,6 +216,15 @@ impl<Handler: BackendHandler> From<DomainUser> for User<Handler> {
     }
 }
 
+impl<Handler: BackendHandler> From<DomainUserAndGroups> for User<Handler> {
+    fn from(user: DomainUserAndGroups) -> Self {
+        Self {
+            user: user.user,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 /// Represents a single group.
 pub struct Group<Handler: BackendHandler> {
@@ -239,9 +249,10 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
         }
         Ok(context
             .handler
-            .list_users(Some(DomainRequestFilter::MemberOfId(GroupId(
-                self.group_id,
-            ))))
+            .list_users(
+                Some(DomainRequestFilter::MemberOfId(GroupId(self.group_id))),
+                false,
+            )
             .await
             .map(|v| v.into_iter().map(Into::into).collect())?)
     }
@@ -365,21 +376,33 @@ mod tests {
 
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::Or(vec![
-                UserRequestFilter::Equality("id".to_string(), "bob".to_string()),
-                UserRequestFilter::Equality("email".to_string(), "robert@bobbers.on".to_string()),
-            ]))))
-            .return_once(|_| {
+            .with(
+                eq(Some(UserRequestFilter::Or(vec![
+                    UserRequestFilter::Equality("id".to_string(), "bob".to_string()),
+                    UserRequestFilter::Equality(
+                        "email".to_string(),
+                        "robert@bobbers.on".to_string(),
+                    ),
+                ]))),
+                eq(false),
+            )
+            .return_once(|_, _| {
                 Ok(vec![
-                    DomainUser {
-                        user_id: UserId::new("bob"),
-                        email: "bob@bobbers.on".to_string(),
-                        ..Default::default()
+                    DomainUserAndGroups {
+                        user: DomainUser {
+                            user_id: UserId::new("bob"),
+                            email: "bob@bobbers.on".to_string(),
+                            ..Default::default()
+                        },
+                        groups: None,
                     },
-                    DomainUser {
-                        user_id: UserId::new("robert"),
-                        email: "robert@bobbers.on".to_string(),
-                        ..Default::default()
+                    DomainUserAndGroups {
+                        user: DomainUser {
+                            user_id: UserId::new("robert"),
+                            email: "robert@bobbers.on".to_string(),
+                            ..Default::default()
+                        },
+                        groups: None,
                     },
                 ])
             });

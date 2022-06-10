@@ -35,7 +35,7 @@ mockall::mock! {
     }
     #[async_trait]
     impl BackendHandler for TestTcpBackendHandler {
-        async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>>;
+    async fn list_users(&self, filters: Option<UserRequestFilter>, get_groups: bool) -> Result<Vec<UserAndGroups>>;
         async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
         async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
         async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
