@@ -34,7 +34,7 @@ impl From<String> for UserId {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(sqlx::FromRow))]
 pub struct User {
     pub user_id: UserId,
@@ -134,9 +134,19 @@ pub struct GroupId(pub i32);
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::FromRow)]
 pub struct GroupIdAndName(pub GroupId, pub String);
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct UserAndGroups {
+    pub user: User,
+    pub groups: Option<Vec<GroupIdAndName>>,
+}
+
 #[async_trait]
 pub trait BackendHandler: Clone + Send {
-    async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>>;
+    async fn list_users(
+        &self,
+        filters: Option<UserRequestFilter>,
+        get_groups: bool,
+    ) -> Result<Vec<UserAndGroups>>;
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
     async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;
@@ -159,7 +169,7 @@ mockall::mock! {
     }
     #[async_trait]
     impl BackendHandler for TestBackendHandler {
-        async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>>;
+        async fn list_users(&self, filters: Option<UserRequestFilter>, get_groups: bool) -> Result<Vec<UserAndGroups>>;
         async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
         async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
         async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName>;

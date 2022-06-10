@@ -3,7 +3,7 @@ use crate::infra::configuration::Configuration;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use sea_query::{Expr, Iden, Order, Query, SimpleExpr};
-use sqlx::Row;
+use sqlx::{FromRow, Row};
 use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
@@ -109,7 +109,11 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> SimpleExpr {
 
 #[async_trait]
 impl BackendHandler for SqlBackendHandler {
-    async fn list_users(&self, filters: Option<UserRequestFilter>) -> Result<Vec<User>> {
+    async fn list_users(
+        &self,
+        filters: Option<UserRequestFilter>,
+        get_groups: bool,
+    ) -> Result<Vec<UserAndGroups>> {
         let query = {
             let mut query_builder = Query::select()
                 .column((Users::Table, Users::UserId))
@@ -122,6 +126,26 @@ impl BackendHandler for SqlBackendHandler {
                 .from(Users::Table)
                 .order_by((Users::Table, Users::UserId), Order::Asc)
                 .to_owned();
+            let add_join_group_tables = |builder: &mut sea_query::SelectStatement| {
+                builder
+                    .left_join(
+                        Memberships::Table,
+                        Expr::tbl(Users::Table, Users::UserId)
+                            .equals(Memberships::Table, Memberships::UserId),
+                    )
+                    .left_join(
+                        Groups::Table,
+                        Expr::tbl(Memberships::Table, Memberships::GroupId)
+                            .equals(Groups::Table, Groups::GroupId),
+                    );
+            };
+            if get_groups {
+                add_join_group_tables(&mut query_builder);
+                query_builder
+                    .column((Groups::Table, Groups::GroupId))
+                    .column((Groups::Table, Groups::DisplayName))
+                    .order_by((Groups::Table, Groups::DisplayName), Order::Asc);
+            }
             if let Some(filter) = filters {
                 if filter == UserRequestFilter::Not(Box::new(UserRequestFilter::And(Vec::new()))) {
                     return Ok(Vec::new());
@@ -131,31 +155,48 @@ impl BackendHandler for SqlBackendHandler {
                 {
                     let (RequiresGroup(requires_group), condition) = get_user_filter_expr(filter);
                     query_builder.and_where(condition);
-                    if requires_group {
-                        query_builder
-                            .left_join(
-                                Memberships::Table,
-                                Expr::tbl(Users::Table, Users::UserId)
-                                    .equals(Memberships::Table, Memberships::UserId),
-                            )
-                            .left_join(
-                                Groups::Table,
-                                Expr::tbl(Memberships::Table, Memberships::GroupId)
-                                    .equals(Groups::Table, Groups::GroupId),
-                            );
+                    if requires_group && !get_groups {
+                        add_join_group_tables(&mut query_builder);
                     }
                 }
             }
 
             query_builder.to_string(DbQueryBuilder {})
         };
+        log::error!("query: {}", &query);
 
-        let results = sqlx::query_as::<_, User>(&query)
-            .fetch(&self.sql_pool)
-            .collect::<Vec<sqlx::Result<User>>>()
-            .await;
+        // For group_by.
+        use itertools::Itertools;
+        let mut users = Vec::new();
+        // The rows are returned sorted by user_id. We group them by
+        // this key which gives us one element (`rows`) per group.
+        for (_, rows) in &sqlx::query(&query)
+            .fetch_all(&self.sql_pool)
+            .await?
+            .into_iter()
+            .group_by(|row| row.get::<UserId, _>(&*Users::UserId.to_string()))
+        {
+            let mut rows = rows.peekable();
+            users.push(UserAndGroups {
+                user: User::from_row(rows.peek().unwrap()).unwrap(),
+                groups: if get_groups {
+                    Some(
+                        rows.map(|row| {
+                            GroupIdAndName(
+                                GroupId(row.get::<i32, _>(&*Groups::GroupId.to_string())),
+                                row.get::<String, _>(&*Groups::DisplayName.to_string()),
+                            )
+                        })
+                        .filter(|g| !g.1.is_empty())
+                        .collect(),
+                    )
+                } else {
+                    None
+                },
+            });
+        }
 
-        Ok(results.into_iter().collect::<sqlx::Result<Vec<User>>>()?)
+        Ok(users)
     }
 
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
@@ -486,6 +527,19 @@ mod tests {
             .unwrap();
     }
 
+    async fn get_user_names(
+        handler: &SqlBackendHandler,
+        filters: Option<UserRequestFilter>,
+    ) -> Vec<String> {
+        handler
+            .list_users(filters, false)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|u| u.user.user_id.to_string())
+            .collect::<Vec<_>>()
+    }
+
     #[tokio::test]
     async fn test_bind_admin() {
         let sql_pool = get_in_memory_db().await;
@@ -558,50 +612,70 @@ mod tests {
         insert_user(&handler, "bob", "bob00").await;
         insert_user(&handler, "patrick", "pass").await;
         insert_user(&handler, "John", "Pa33w0rd!").await;
+        let group_1 = insert_group(&handler, "Best Group").await;
+        let group_2 = insert_group(&handler, "Worst Group").await;
+        insert_membership(&handler, group_1, "bob").await;
+        insert_membership(&handler, group_1, "patrick").await;
+        insert_membership(&handler, group_2, "patrick").await;
+        insert_membership(&handler, group_2, "John").await;
         {
-            let users = handler
-                .list_users(None)
-                .await
-                .unwrap()
-                .into_iter()
-                .map(|u| u.user_id.to_string())
-                .collect::<Vec<_>>();
+            let users = get_user_names(&handler, None).await;
             assert_eq!(users, vec!["bob", "john", "patrick"]);
         }
         {
-            let users = handler
-                .list_users(Some(UserRequestFilter::UserId(UserId::new("bob"))))
-                .await
-                .unwrap()
-                .into_iter()
-                .map(|u| u.user_id.to_string())
-                .collect::<Vec<_>>();
+            let users = get_user_names(
+                &handler,
+                Some(UserRequestFilter::UserId(UserId::new("bob"))),
+            )
+            .await;
             assert_eq!(users, vec!["bob"]);
         }
         {
-            let users = handler
-                .list_users(Some(UserRequestFilter::Or(vec![
+            let users = get_user_names(
+                &handler,
+                Some(UserRequestFilter::Or(vec![
                     UserRequestFilter::UserId(UserId::new("bob")),
                     UserRequestFilter::UserId(UserId::new("John")),
-                ])))
-                .await
-                .unwrap()
-                .into_iter()
-                .map(|u| u.user_id.to_string())
-                .collect::<Vec<_>>();
+                ])),
+            )
+            .await;
             assert_eq!(users, vec!["bob", "john"]);
         }
         {
+            let users = get_user_names(
+                &handler,
+                Some(UserRequestFilter::Not(Box::new(UserRequestFilter::UserId(
+                    UserId::new("bob"),
+                )))),
+            )
+            .await;
+            assert_eq!(users, vec!["john", "patrick"]);
+        }
+        {
             let users = handler
-                .list_users(Some(UserRequestFilter::Not(Box::new(
-                    UserRequestFilter::UserId(UserId::new("bob")),
-                ))))
+                .list_users(None, true)
                 .await
                 .unwrap()
                 .into_iter()
-                .map(|u| u.user_id.to_string())
+                .map(|u| {
+                    (
+                        u.user.user_id.to_string(),
+                        u.groups
+                            .unwrap()
+                            .into_iter()
+                            .map(|g| g.0)
+                            .collect::<Vec<_>>(),
+                    )
+                })
                 .collect::<Vec<_>>();
-            assert_eq!(users, vec!["john", "patrick"]);
+            assert_eq!(
+                users,
+                vec![
+                    ("bob".to_string(), vec![group_1]),
+                    ("john".to_string(), vec![group_2]),
+                    ("patrick".to_string(), vec![group_1, group_2]),
+                ]
+            );
         }
     }
 
@@ -763,29 +837,13 @@ mod tests {
         // Remove a user
         let _request_result = handler.delete_user(&UserId::new("Jennz")).await.unwrap();
 
-        let users = handler
-            .list_users(None)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|u| u.user_id.to_string())
-            .collect::<Vec<_>>();
-
-        assert_eq!(users, vec!["hector", "val"]);
+        assert_eq!(get_user_names(&handler, None).await, vec!["hector", "val"]);
 
         // Insert new user and remove two
         insert_user(&handler, "NewBoi", "Joni").await;
         let _request_result = handler.delete_user(&UserId::new("Hector")).await.unwrap();
         let _request_result = handler.delete_user(&UserId::new("NewBoi")).await.unwrap();
 
-        let users = handler
-            .list_users(None)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|u| u.user_id.to_string())
-            .collect::<Vec<_>>();
-
-        assert_eq!(users, vec!["val"]);
+        assert_eq!(get_user_names(&handler, None).await, vec!["val"]);
     }
 }
