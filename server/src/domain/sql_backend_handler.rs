@@ -98,6 +98,7 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> SimpleExpr {
         Not(f) => Expr::not(Expr::expr(get_group_filter_expr(*f))),
         DisplayName(name) => Expr::col((Groups::Table, Groups::DisplayName)).eq(name),
         GroupId(id) => Expr::col((Groups::Table, Groups::GroupId)).eq(id.0),
+        Uuid(uuid) => Expr::col((Groups::Table, Groups::Uuid)).eq(uuid.to_string()),
         // WHERE (group_id in (SELECT group_id FROM memberships WHERE user_id = user))
         Member(user) => Expr::col((Memberships::Table, Memberships::GroupId)).in_subquery(
             Query::select()
@@ -126,7 +127,8 @@ impl BackendHandler for SqlBackendHandler {
                 .column(Users::FirstName)
                 .column(Users::LastName)
                 .column(Users::Avatar)
-                .column(Users::CreationDate)
+                .column((Users::Table, Users::CreationDate))
+                .column((Users::Table, Users::Uuid))
                 .from(Users::Table)
                 .order_by((Users::Table, Users::UserId), Order::Asc)
                 .to_owned();
@@ -150,6 +152,14 @@ impl BackendHandler for SqlBackendHandler {
                     .expr_as(
                         Expr::col((Groups::Table, Groups::DisplayName)),
                         Alias::new("group_display_name"),
+                    )
+                    .expr_as(
+                        Expr::col((Groups::Table, Groups::CreationDate)),
+                        sea_query::Alias::new("group_creation_date"),
+                    )
+                    .expr_as(
+                        Expr::col((Groups::Table, Groups::Uuid)),
+                        sea_query::Alias::new("group_uuid"),
                     )
                     .order_by(Alias::new("group_display_name"), Order::Asc);
             }
@@ -189,13 +199,14 @@ impl BackendHandler for SqlBackendHandler {
                 user: User::from_row(rows.peek().unwrap()).unwrap(),
                 groups: if get_groups {
                     Some(
-                        rows.map(|row| {
-                            GroupIdAndName(
-                                GroupId(row.get::<i32, _>(&*Groups::GroupId.to_string())),
-                                row.get::<String, _>("group_display_name"),
-                            )
+                        rows.map(|row| GroupDetails {
+                            group_id: row.get::<GroupId, _>(&*Groups::GroupId.to_string()),
+                            display_name: row.get::<String, _>("group_display_name"),
+                            creation_date: row
+                                .get::<chrono::DateTime<chrono::Utc>, _>("group_creation_date"),
+                            uuid: row.get::<Uuid, _>("group_uuid"),
                         })
-                        .filter(|g| !g.1.is_empty())
+                        .filter(|g| !g.display_name.is_empty())
                         .collect(),
                     )
                 } else {
@@ -213,6 +224,8 @@ impl BackendHandler for SqlBackendHandler {
             let mut query_builder = Query::select()
                 .column((Groups::Table, Groups::GroupId))
                 .column(Groups::DisplayName)
+                .column(Groups::CreationDate)
+                .column(Groups::Uuid)
                 .column(Memberships::UserId)
                 .from(Groups::Table)
                 .left_join(
@@ -245,20 +258,17 @@ impl BackendHandler for SqlBackendHandler {
         let mut groups = Vec::new();
         // The rows are returned sorted by display_name, equivalent to group_id. We group them by
         // this key which gives us one element (`rows`) per group.
-        for ((group_id, display_name), rows) in &query_with(query.as_str(), values)
+        for (group_details, rows) in &query_with(&query, values)
             .fetch_all(&self.sql_pool)
             .await?
             .into_iter()
-            .group_by(|row| {
-                (
-                    GroupId(row.get::<i32, _>(&*Groups::GroupId.to_string())),
-                    row.get::<String, _>(&*Groups::DisplayName.to_string()),
-                )
-            })
+            .group_by(|row| GroupDetails::from_row(row).unwrap())
         {
             groups.push(Group {
-                id: group_id,
-                display_name,
+                id: group_details.group_id,
+                display_name: group_details.display_name,
+                creation_date: group_details.creation_date,
+                uuid: group_details.uuid,
                 users: rows
                     .map(|row| row.get::<UserId, _>(&*Memberships::UserId.to_string()))
                     // If a group has no users, an empty string is returned because of the left
@@ -281,6 +291,7 @@ impl BackendHandler for SqlBackendHandler {
             .column(Users::LastName)
             .column(Users::Avatar)
             .column(Users::CreationDate)
+            .column(Users::Uuid)
             .from(Users::Table)
             .cond_where(Expr::col(Users::UserId).eq(user_id))
             .build_sqlx(DbQueryBuilder {});
@@ -292,29 +303,31 @@ impl BackendHandler for SqlBackendHandler {
     }
 
     #[instrument(skip_all, level = "debug", ret, err)]
-    async fn get_group_details(&self, group_id: GroupId) -> Result<GroupIdAndName> {
+    async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails> {
         debug!(?group_id);
         let (query, values) = Query::select()
             .column(Groups::GroupId)
             .column(Groups::DisplayName)
+            .column(Groups::CreationDate)
+            .column(Groups::Uuid)
             .from(Groups::Table)
             .cond_where(Expr::col(Groups::GroupId).eq(group_id))
             .build_sqlx(DbQueryBuilder {});
         debug!(%query);
 
-        Ok(
-            query_as_with::<_, GroupIdAndName, _>(query.as_str(), values)
-                .fetch_one(&self.sql_pool)
-                .await?,
-        )
+        Ok(query_as_with::<_, GroupDetails, _>(&query, values)
+            .fetch_one(&self.sql_pool)
+            .await?)
     }
 
     #[instrument(skip_all, level = "debug", ret, err)]
-    async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupIdAndName>> {
+    async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>> {
         debug!(?user_id);
         let (query, values) = Query::select()
             .column((Groups::Table, Groups::GroupId))
             .column(Groups::DisplayName)
+            .column(Groups::CreationDate)
+            .column(Groups::Uuid)
             .from(Groups::Table)
             .inner_join(
                 Memberships::Table,
@@ -325,17 +338,10 @@ impl BackendHandler for SqlBackendHandler {
             .build_sqlx(DbQueryBuilder {});
         debug!(%query);
 
-        query_with(query.as_str(), values)
-            // Extract the group id from the row.
-            .map(|row: DbRow| {
-                GroupIdAndName(
-                    row.get::<GroupId, _>(&*Groups::GroupId.to_string()),
-                    row.get::<String, _>(&*Groups::DisplayName.to_string()),
-                )
-            })
+        query_as_with::<_, GroupDetails, _>(&query, values)
             .fetch(&self.sql_pool)
             // Collect the vector of rows, each potentially an error.
-            .collect::<Vec<sqlx::Result<GroupIdAndName>>>()
+            .collect::<Vec<sqlx::Result<GroupDetails>>>()
             .await
             .into_iter()
             // Transform it into a single result (the first error if any), and group the group_ids
@@ -355,18 +361,23 @@ impl BackendHandler for SqlBackendHandler {
             Users::FirstName,
             Users::LastName,
             Users::CreationDate,
+            Users::Uuid,
+        ];
+        let now = chrono::Utc::now();
+        let uuid = Uuid::from_name_and_date(request.user_id.as_str(), &now);
+        let values = vec![
+            request.user_id.into(),
+            request.email.into(),
+            request.display_name.unwrap_or_default().into(),
+            request.first_name.unwrap_or_default().into(),
+            request.last_name.unwrap_or_default().into(),
+            now.naive_utc().into(),
+            uuid.into(),
         ];
         let (query, values) = Query::insert()
             .into_table(Users::Table)
             .columns(columns)
-            .values_panic(vec![
-                request.user_id.into(),
-                request.email.into(),
-                request.display_name.unwrap_or_default().into(),
-                request.first_name.unwrap_or_default().into(),
-                request.last_name.unwrap_or_default().into(),
-                chrono::Utc::now().naive_utc().into(),
-            ])
+            .values_panic(values)
             .build_sqlx(DbQueryBuilder {});
         debug!(%query);
         query_with(query.as_str(), values)
@@ -445,10 +456,19 @@ impl BackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn create_group(&self, group_name: &str) -> Result<GroupId> {
         debug!(?group_name);
+        let now = chrono::Utc::now();
         let (query, values) = Query::insert()
             .into_table(Groups::Table)
-            .columns(vec![Groups::DisplayName])
-            .values_panic(vec![group_name.into()])
+            .columns(vec![
+                Groups::DisplayName,
+                Groups::CreationDate,
+                Groups::Uuid,
+            ])
+            .values_panic(vec![
+                group_name.into(),
+                now.naive_utc().into(),
+                Uuid::from_name_and_date(group_name, &now).into(),
+            ])
             .build_sqlx(DbQueryBuilder {});
         debug!(%query);
         query_with(query.as_str(), values)
@@ -707,7 +727,7 @@ mod tests {
                         u.groups
                             .unwrap()
                             .into_iter()
-                            .map(|g| g.0)
+                            .map(|g| g.group_id)
                             .collect::<Vec<_>>(),
                     )
                 })
@@ -720,6 +740,29 @@ mod tests {
                     ("patrick".to_string(), String::new(), vec![group_1, group_2]),
                 ]
             );
+        }
+        {
+            let users = handler
+                .list_users(None, true)
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|u| {
+                    (
+                        u.user.creation_date,
+                        u.groups
+                            .unwrap()
+                            .into_iter()
+                            .map(|g| g.creation_date)
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            for (user_date, groups) in users {
+                for group_date in groups {
+                    assert_ne!(user_date, group_date);
+                }
+            }
         }
     }
 
@@ -738,62 +781,33 @@ mod tests {
         insert_membership(&handler, group_1, "patrick").await;
         insert_membership(&handler, group_2, "patrick").await;
         insert_membership(&handler, group_2, "John").await;
+        let get_group_ids = |filter| async {
+            handler
+                .list_groups(filter)
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|g| g.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(get_group_ids(None).await, vec![group_1, group_3, group_2]);
         assert_eq!(
-            handler.list_groups(None).await.unwrap(),
-            vec![
-                Group {
-                    id: group_1,
-                    display_name: "Best Group".to_string(),
-                    users: vec![UserId::new("bob"), UserId::new("patrick")]
-                },
-                Group {
-                    id: group_3,
-                    display_name: "Empty Group".to_string(),
-                    users: vec![]
-                },
-                Group {
-                    id: group_2,
-                    display_name: "Worst Group".to_string(),
-                    users: vec![UserId::new("john"), UserId::new("patrick")]
-                },
-            ]
+            get_group_ids(Some(GroupRequestFilter::Or(vec![
+                GroupRequestFilter::DisplayName("Empty Group".to_string()),
+                GroupRequestFilter::Member(UserId::new("bob")),
+            ])))
+            .await,
+            vec![group_1, group_3]
         );
         assert_eq!(
-            handler
-                .list_groups(Some(GroupRequestFilter::Or(vec![
-                    GroupRequestFilter::DisplayName("Empty Group".to_string()),
-                    GroupRequestFilter::Member(UserId::new("bob")),
-                ])))
-                .await
-                .unwrap(),
-            vec![
-                Group {
-                    id: group_1,
-                    display_name: "Best Group".to_string(),
-                    users: vec![UserId::new("bob"), UserId::new("patrick")]
-                },
-                Group {
-                    id: group_3,
-                    display_name: "Empty Group".to_string(),
-                    users: vec![]
-                },
-            ]
-        );
-        assert_eq!(
-            handler
-                .list_groups(Some(GroupRequestFilter::And(vec![
-                    GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
-                        "value".to_string()
-                    ))),
-                    GroupRequestFilter::GroupId(group_1),
-                ])))
-                .await
-                .unwrap(),
-            vec![Group {
-                id: group_1,
-                display_name: "Best Group".to_string(),
-                users: vec![UserId::new("bob"), UserId::new("patrick")]
-            }]
+            get_group_ids(Some(GroupRequestFilter::And(vec![
+                GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
+                    "value".to_string()
+                ))),
+                GroupRequestFilter::GroupId(group_1),
+            ])))
+            .await,
+            vec![group_1]
         );
     }
 
@@ -846,26 +860,20 @@ mod tests {
         insert_membership(&handler, group_1, "bob").await;
         insert_membership(&handler, group_1, "patrick").await;
         insert_membership(&handler, group_2, "patrick").await;
-        let mut bob_groups = HashSet::new();
-        bob_groups.insert(GroupIdAndName(group_1, "Group1".to_string()));
-        let mut patrick_groups = HashSet::new();
-        patrick_groups.insert(GroupIdAndName(group_1, "Group1".to_string()));
-        patrick_groups.insert(GroupIdAndName(group_2, "Group2".to_string()));
-        assert_eq!(
-            handler.get_user_groups(&UserId::new("bob")).await.unwrap(),
-            bob_groups
-        );
-        assert_eq!(
-            handler
-                .get_user_groups(&UserId::new("patrick"))
+        let get_group_ids = |user: &'static str| async {
+            let mut groups = handler
+                .get_user_groups(&UserId::new(user))
                 .await
-                .unwrap(),
-            patrick_groups
-        );
-        assert_eq!(
-            handler.get_user_groups(&UserId::new("John")).await.unwrap(),
-            HashSet::new()
-        );
+                .unwrap()
+                .into_iter()
+                .map(|g| g.group_id)
+                .collect::<Vec<_>>();
+            groups.sort_by(|g1, g2| g1.0.cmp(&g2.0));
+            groups
+        };
+        assert_eq!(get_group_ids("bob").await, vec![group_1]);
+        assert_eq!(get_group_ids("patrick").await, vec![group_1, group_2]);
+        assert_eq!(get_group_ids("John").await, vec![]);
     }
 
     #[tokio::test]

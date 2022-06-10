@@ -17,54 +17,53 @@ anyhow = "*"
 async-trait = "0.1"
 base64 = "0.13"
 bincode = "1.3"
-chrono = { version = "*", features = [ "serde" ]}
-clap = { version = "3.1.15", features = [ "std", "color", "suggestions", "derive", "env" ] }
 cron = "*"
 derive_builder = "0.10.2"
 futures = "*"
 futures-util = "*"
 hmac = "0.10"
 http = "*"
+itertools = "0.10.1"
+juniper = "0.15.6"
+juniper_actix = "0.4.0"
 jwt = "0.13"
 ldap3_server = ">=0.1.9"
-lldap_auth = { path = "../auth" }
 log = "*"
-orion = "0.16"
 native-tls = "0.2.10"
+orion = "0.16"
 serde = "*"
 serde_json = "1"
 sha2 = "0.9"
 sqlx-core = "0.5.11"
 thiserror = "*"
 time = "0.2"
-tokio = { version = "1.13.1", features = ["full"] }
 tokio-native-tls = "0.3"
-tokio-util = "0.6.3"
 tokio-stream = "*"
+tokio-util = "0.6.3"
+tracing = "*"
 tracing-actix-web = "0.4.0-beta.7"
 tracing-attributes = "^0.1.21"
 tracing-log = "*"
-rand = { version = "0.8", features = ["small_rng", "getrandom"] }
-juniper_actix = "0.4.0"
-juniper = "0.15.6"
-itertools = "0.10.1"
 
-[dependencies.opaque-ke]
-version = "0.6"
+[dependencies.chrono]
+features = ["serde"]
+version = "*"
+
+[dependencies.clap]
+features = ["std", "color", "suggestions", "derive", "env"]
+version = "3.1.15"
+
+[dependencies.figment]
+features = ["env", "toml"]
+version = "*"
 
 [dependencies.tracing-subscriber]
 version = "0.3"
 features = ["env-filter", "tracing-log"]
 
 [dependencies.lettre]
+features = ["builder", "serde", "smtp-transport", "tokio1-native-tls", "tokio1"]
 version = "0.10.0-rc.3"
-features = [
-  "builder",
-  "serde",
-  "smtp-transport",
-  "tokio1-native-tls",
-  "tokio1",
-]
 
 [dependencies.sqlx]
 version = "0.5.11"
@@ -78,6 +77,9 @@ features = [
   "sqlite",
 ]
 
+[dependencies.lldap_auth]
+path = "../auth"
+
 [dependencies.sea-query]
 version = "^0.25"
 features = ["with-chrono", "sqlx-sqlite"]
@@ -86,24 +88,32 @@ features = ["with-chrono", "sqlx-sqlite"]
 version = "*"
 features = ["with-chrono", "sqlx-sqlite", "sqlx-any"]
 
-[dependencies.figment]
-features = ["env", "toml"]
-version = "*"
-
-[dependencies.secstr]
-features = ["serde"]
-version = "*"
+[dependencies.opaque-ke]
+version = "0.6"
 
 [dependencies.openssl-sys]
 features = ["vendored"]
 version = "*"
 
+[dependencies.rand]
+features = ["small_rng", "getrandom"]
+version = "0.8"
+
+[dependencies.secstr]
+features = ["serde"]
+version = "*"
+
+[dependencies.tokio]
+features = ["full"]
+version = "1.13.1"
+
+[dependencies.uuid]
+features = ["v3"]
+version = "*"
+
 [dependencies.tracing-forest]
 features = ["smallvec", "chrono", "tokio"]
 version = "^0.1.4"
-
-[dependencies.tracing]
-version = "*"
 
 [dev-dependencies]
 mockall = "0.9.1"
