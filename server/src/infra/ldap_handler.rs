@@ -148,6 +148,15 @@ fn get_user_id_from_distinguished_name(
     }
 }
 
+fn get_hash_as_uuid(dn: &str, creation_date: &chrono::DateTime<chrono::Utc>) -> String {
+    use uuid::Uuid;
+    Uuid::new_v3(
+        &Uuid::NAMESPACE_X500,
+        &[dn.as_bytes(), creation_date.to_rfc3339().as_bytes()].concat(),
+    )
+    .to_string()
+}
+
 fn get_user_attribute(
     user: &User,
     attribute: &str,
@@ -166,6 +175,7 @@ fn get_user_attribute(
         ],
         "dn" | "distinguishedname" => vec![dn.to_string()],
         "uid" => vec![user.user_id.to_string()],
+        "entryuuid" => vec![get_hash_as_uuid(dn, &user.creation_date)],
         "mail" => vec![user.email.clone()],
         "givenname" => vec![user.first_name.clone()],
         "sn" => vec![user.last_name.clone()],
@@ -1394,6 +1404,7 @@ mod tests {
                 "sn",
                 "cn",
                 "createTimestamp",
+                "entryUuid",
             ],
         );
         assert_eq!(
@@ -1438,7 +1449,11 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "createTimestamp".to_string(),
                             vals: vec!["1970-01-01T00:00:00+00:00".to_string()]
-                        }
+                        },
+                        LdapPartialAttribute {
+                            atype: "entryUuid".to_string(),
+                            vals: vec!["698e1d5f-7a40-3151-8745-b9b8a37839da".to_string()]
+                        },
                     ],
                 }),
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
@@ -1480,7 +1495,11 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "createTimestamp".to_string(),
                             vals: vec!["2014-07-08T09:10:11+00:00".to_string()]
-                        }
+                        },
+                        LdapPartialAttribute {
+                            atype: "entryUuid".to_string(),
+                            vals: vec!["04ac75e0-2900-3e21-926c-2f732c26b3fc".to_string()]
+                        },
                     ],
                 }),
                 make_search_success(),
@@ -2277,6 +2296,18 @@ mod tests {
                 root_dse_response("dc=example,dc=com"),
                 make_search_success()
             ]
+        );
+    }
+
+    #[test]
+    fn test_hash_time() {
+        use chrono::prelude::*;
+        let user_id = "bob";
+        let date1 = Utc.ymd(2014, 7, 8).and_hms(9, 10, 11);
+        let date2 = Utc.ymd(2014, 7, 8).and_hms(9, 10, 12);
+        assert_ne!(
+            get_hash_as_uuid(user_id, &date1),
+            get_hash_as_uuid(user_id, &date2)
         );
     }
 }

@@ -513,6 +513,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "block-buffer"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bf7fe51849ea569fd452f37822f606a5cabb684dc918707a0193fd4664ff324"
+dependencies = [
+ "generic-array",
+]
+
+[[package]]
 name = "boolinator"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -552,7 +561,7 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "serde_json",
- "uuid",
+ "uuid 0.8.2",
 ]
 
 [[package]]
@@ -832,6 +841,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crypto-common"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57952ca27b5e3606ff4dd79b0020231aaf9d6aa76dc05fd30137538c50bd3ce8"
+dependencies = [
+ "generic-array",
+ "typenum",
+]
+
+[[package]]
 name = "crypto-mac"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -864,7 +883,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
 dependencies = [
  "byteorder",
- "digest",
+ "digest 0.9.0",
  "rand_core 0.5.1",
  "serde",
  "subtle",
@@ -974,6 +993,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3dd60d1080a57a05ab032377049e0591415d2b31afd7028356dbf3cc6dcb066"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "digest"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2fb860ca6fafa5552fb6d0e816a69c8e49f0908bf524e30a90d97c85892d506"
+dependencies = [
+ "block-buffer 0.10.2",
+ "crypto-common",
 ]
 
 [[package]]
@@ -1485,7 +1514,7 @@ version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01706d578d5c281058480e673ae4086a9f4710d8df1ad80a5b03e39ece5f886b"
 dependencies = [
- "digest",
+ "digest 0.9.0",
  "hmac 0.11.0",
 ]
 
@@ -1496,7 +1525,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1441c6b1e930e2817404b5046f1f989899143a12bf92de603b69f4e0aee1e15"
 dependencies = [
  "crypto-mac 0.10.1",
- "digest",
+ "digest 0.9.0",
 ]
 
 [[package]]
@@ -1506,7 +1535,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a2a2320eb7ec0ebe8da8f744d7812d9fc4cb4d09344ac01898dbcb6a20ae69b"
 dependencies = [
  "crypto-mac 0.11.1",
- "digest",
+ "digest 0.9.0",
 ]
 
 [[package]]
@@ -1704,7 +1733,7 @@ dependencies = [
  "smartstring",
  "static_assertions",
  "url",
- "uuid",
+ "uuid 0.8.2",
 ]
 
 [[package]]
@@ -1746,7 +1775,7 @@ checksum = "86e46349d67dc03bdbdb28da0337a355a53ca1d5156452722c36fe21d0e6389b"
 dependencies = [
  "base64",
  "crypto-mac 0.10.1",
- "digest",
+ "digest 0.9.0",
  "hmac 0.10.1",
  "serde",
  "serde_json",
@@ -1939,6 +1968,7 @@ dependencies = [
  "tracing-actix-web",
  "tracing-log",
  "tracing-subscriber",
+ "uuid 1.1.1",
 ]
 
 [[package]]
@@ -1971,7 +2001,7 @@ version = "0.3.0-alpha.1"
 dependencies = [
  "chrono",
  "curve25519-dalek",
- "digest",
+ "digest 0.9.0",
  "generic-array",
  "getrandom 0.2.3",
  "opaque-ke",
@@ -2042,9 +2072,18 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b5a279bb9607f9f53c22d496eade00d138d1bdcccd07d74650387cf94942a15"
 dependencies = [
- "block-buffer",
- "digest",
+ "block-buffer 0.9.0",
+ "digest 0.9.0",
  "opaque-debug",
+]
+
+[[package]]
+name = "md-5"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "658646b21e0b72f7866c7038ab086d3d5e1cd6271f060fd37defb241949d0582"
+dependencies = [
+ "digest 0.10.3",
 ]
 
 [[package]]
@@ -2342,7 +2381,7 @@ checksum = "26772682ba4fa69f11ae6e4af8bc83946372981ff31a026648d4acb2553c9ee8"
 dependencies = [
  "base64",
  "curve25519-dalek",
- "digest",
+ "digest 0.9.0",
  "displaydoc",
  "generic-array",
  "generic-bytes",
@@ -2840,7 +2879,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3648b669b10afeab18972c105e284a7b953a669b0be3514c27f9b17acab2f9cd"
 dependencies = [
  "byteorder",
- "digest",
+ "digest 0.9.0",
  "lazy_static",
  "num-bigint-dig",
  "num-integer",
@@ -3060,10 +3099,10 @@ version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99cd6713db3cf16b6c84e06321e049a9b9f699826e16096d23bbcc44d15d51a6"
 dependencies = [
- "block-buffer",
+ "block-buffer 0.9.0",
  "cfg-if 1.0.0",
  "cpufeatures",
- "digest",
+ "digest 0.9.0",
  "opaque-debug",
 ]
 
@@ -3079,10 +3118,10 @@ version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9204c41a1597a8c5af23c82d1c921cb01ec0a4c59e07a9c7306062829a3903f3"
 dependencies = [
- "block-buffer",
+ "block-buffer 0.9.0",
  "cfg-if 1.0.0",
  "cpufeatures",
- "digest",
+ "digest 0.9.0",
  "opaque-debug",
 ]
 
@@ -3219,7 +3258,7 @@ dependencies = [
  "crossbeam-channel",
  "crossbeam-queue",
  "crossbeam-utils",
- "digest",
+ "digest 0.9.0",
  "either",
  "futures-channel",
  "futures-core",
@@ -3232,7 +3271,7 @@ dependencies = [
  "libc",
  "libsqlite3-sys",
  "log",
- "md-5",
+ "md-5 0.9.1",
  "memchr",
  "num-bigint 0.3.3",
  "once_cell",
@@ -3636,7 +3675,7 @@ dependencies = [
  "futures",
  "tracing",
  "tracing-futures",
- "uuid",
+ "uuid 0.8.2",
 ]
 
 [[package]]
@@ -3812,6 +3851,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
  "getrandom 0.2.3",
+]
+
+[[package]]
+name = "uuid"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6d5d669b51467dcf7b2f1a796ce0f955f05f01cafda6c19d6e95f730df29238"
+dependencies = [
+ "md-5 0.10.1",
 ]
 
 [[package]]

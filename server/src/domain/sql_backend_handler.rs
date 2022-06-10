@@ -163,7 +163,6 @@ impl BackendHandler for SqlBackendHandler {
 
             query_builder.to_string(DbQueryBuilder {})
         };
-        log::error!("query: {}", &query);
 
         // For group_by.
         use itertools::Itertools;
