@@ -1,0 +1,49 @@
+# This is only the ldap config, you also need to enable ldap support in the main config file
+# of Grafana. See https://grafana.com/docs/grafana/latest/auth/ldap/#enable-ldap
+# You can test that it is working correctly by trying usernames at: https://<your grafana instance>/admin/ldap
+
+[[servers]]
+# Ldap server host (specify multiple hosts space separated)
+host = "<your ldap host>"
+# Default port is 389 or 636 if use_ssl = true
+port = 3890
+# Set to true if LDAP server should use an encrypted TLS connection (either with STARTTLS or LDAPS)
+use_ssl = false
+# If set to true, use LDAP with STARTTLS instead of LDAPS
+start_tls = false
+# set to true if you want to skip SSL cert validation
+ssl_skip_verify = false
+# set to the path to your root CA certificate or leave unset to use system defaults
+# root_ca_cert = "/path/to/certificate.crt"
+# Authentication against LDAP servers requiring client certificates
+# client_cert = "/path/to/client.crt"
+# client_key = "/path/to/client.key"
+
+# Search user bind dn
+bind_dn = "cn=<your grafana user>,ou=people,dc=example,dc=org"
+# Search user bind password
+# If the password contains # or ; you have to wrap it with triple quotes. Ex """#password;"""
+bind_password = "<grafana user password>"
+
+# User search filter
+search_filter = "(uid=%s)"
+# If you want to limit to only users of a specific group use this instead:
+# search_filter = "(&(uid=%s)(memberOf=cn=<your group>,ou=groups,dc=example,dc=org))"
+
+# An array of base dns to search through
+search_base_dns = ["dc=example,dc=org"]
+
+# Specify names of the LDAP attributes your LDAP uses
+[servers.attributes]
+member_of = "memberOf"
+email = "mail"
+name = "givenName"
+surname = "sn"
+username = "uid"
+
+# If you want to map your ldap groups to grafana's groups, see: https://grafana.com/docs/grafana/latest/auth/ldap/#group-mappings
+# As a quick example, here is how you would map lldap's admin group to grafana's admin
+# [[servers.group_mappings]]
+# group_dn = "cn=lldap_admin,ou=groups,c=example,dc=org"
+# org_role = "Admin"
+# grafana_admin = true
