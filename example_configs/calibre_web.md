@@ -54,13 +54,13 @@ dc=example,dc=com
 ### LDAP User Object Filter
 
 ```
-(&(memberOf=CN=calibre_web,ou=groups,DC=example,DC=com)(uid=%s))
+(&(objectclass=person)(uid=%s))
 ```
 
 ### LDAP Server is OpenLDAP?
 
 ```
-no
+yes
 ```
 
 ### LDAP Group Object Filter
