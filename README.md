@@ -198,6 +198,7 @@ configuration files, or guides. See the [`example_configs`](example_configs)
 folder for help with:
   - [Authelia](example_configs/authelia_config.yml)
   - [Bookstack](example_configs/bookstack.env.example)
+  - [Calibre-Web](example_configs/calibre_web.md)
   - [Dolibarr](example_configs/dolibarr.md)
   - [Gitea](example_configs/gitea.md)
   - [Jellyfin](example_configs/jellyfin.md)
