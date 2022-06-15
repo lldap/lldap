@@ -199,11 +199,13 @@ folder for help with:
   - [Authelia](example_configs/authelia_config.yml)
   - [Bookstack](example_configs/bookstack.env.example)
   - [Dolibarr](example_configs/dolibarr.md)
+  - [Gitea](example_configs/gitea.md)
   - [Jellyfin](example_configs/jellyfin.md)
   - [Jisti Meet](example_configs/jitsi_meet.conf)
   - [KeyCloak](example_configs/keycloak.md)
   - [Matrix](example_configs/matrix_synapse.yml)
   - [Organizr](example_configs/Organizr.md)
+  - [Seafile](example_configs/seafile.md)
 
 ## Comparisons with other services
 
