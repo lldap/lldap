@@ -7,12 +7,11 @@ Add the following to your `seafile/conf/ccnet.conf` file:
 HOST = ldap://192.168.1.100:3890
 BASE = ou=people,dc=example,dc=com
 USER_DN = uid=admin,ou=people,dc=example,dc=com
-PASSWORD = YOURPASSWORDHERE
+PASSWORD = CHANGE_ME
 LOGIN_ATTR = mail
 ```
 * Replace `192.168.1.100:3890` with your lldap server's ip/hostname and port.
 * Replace every instance of `dc=example,dc=com` with your configured domain.
-* Replace `YOURPASSWORDHERE` with your bind user's password.
 
 __IMPORTANT__: Seafile requires the LOGIN_ATTR to be in an email-like format. You cannot use the uid as LOGIN_ATTR!
 
