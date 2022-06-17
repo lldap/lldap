@@ -205,7 +205,6 @@ folder for help with:
   - [KeyCloak](example_configs/keycloak.md)
   - [Matrix](example_configs/matrix_synapse.yml)
   - [Organizr](example_configs/Organizr.md)
-  - [Seafile](example_configs/seafile.md)
 
 ## Comparisons with other services
 
