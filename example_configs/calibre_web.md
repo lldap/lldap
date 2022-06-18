@@ -12,7 +12,7 @@ Use LDAP Authentication
 ### LDAP Server Host Name or IP Address
 
 ```
-192.168.X.X
+lldap
 ```
 
 ### LDAP Server Port
@@ -42,7 +42,7 @@ uid=admin,ou=people,dc=example,dc=com
 ### LDAP Administrator Password
 
 ```
-ADMIN_PASSWORD
+CHANGE_ME
 ```
 
 ### LDAP Distinguished Name (DN)
@@ -74,6 +74,8 @@ yes
 ```
 calibre_web
 ```
+
+Note: Create a group in lldap and add users to it that will have access to your Calibre-Web instance
 
 ### LDAP Group Members Field
 
