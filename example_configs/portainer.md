@@ -20,6 +20,7 @@ uid=admin,ou=people,dc=example,dc=com
 xxx
 ```
 
+
 ## User search configurations
 ### Base DN
 ```
@@ -29,10 +30,15 @@ ou=people,dc=example,dc=com
 ```
 uid
 ```
-### Filter 
+### Filter (all available user)
 ```
 (objectClass=person)
 ```
+### Filter by groups (assuming you already create and manage the user into group, in this example the user already in lldap_portainer group)
+```
+(&(objectClass=person)(memberof=cn=lldap_portainer,ou=groups,dc=example,dc=com))
+```
+
 
 ## Group search configurations 
 ### Group Base DN
