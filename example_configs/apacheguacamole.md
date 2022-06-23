@@ -22,11 +22,9 @@ ldap-search-bind-password: replacewithyoursecret
 ldap-user-search-filter: (memberof=cn=lldap_apacheguac,ou=groups,dc=example,dc=com)
 ```
 
-*Exclude `ldap-user-search-filter` if you do not want to limit users based on a group(s)
-
-*Replace `dc=example,dc=com` with your LLDAP configured domain for all occurances
-
-*Apache Guacamole does not lock you out when enabling LDAP.  Your `static` IDs still are able to log in.
+* Exclude `ldap-user-search-filter` if you do not want to limit users based on a group(s)
+* Replace `dc=example,dc=com` with your LLDAP configured domain for all occurances
+* Apache Guacamole does not lock you out when enabling LDAP.  Your `static` IDs still are able to log in.
 
 ##  To enable LDAP
 Restart your Apache Guacamole app for changes to take effect
