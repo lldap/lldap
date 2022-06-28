@@ -1,10 +1,9 @@
-name: Build LLDAP Bin and Dockerize
+name: Docker
 
 on:
   push:
     branches:
       - 'main'
-      - 'docker-build'
   release:
     types:
       - 'published'
