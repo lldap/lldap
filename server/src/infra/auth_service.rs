@@ -13,14 +13,14 @@ use actix_web_httpauth::extractors::bearer::BearerAuth;
 use anyhow::Result;
 use chrono::prelude::*;
 use futures::future::{ok, Ready};
-use futures_util::{FutureExt, TryFutureExt};
+use futures_util::FutureExt;
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
-use log::*;
 use sha2::Sha512;
 use time::ext::NumericalDuration;
+use tracing::{debug, instrument, warn};
 
-use lldap_auth::{login, opaque, password_reset, registration, JWTClaims};
+use lldap_auth::{login, password_reset, registration, JWTClaims};
 
 use crate::{
     domain::{
@@ -30,7 +30,7 @@ use crate::{
     },
     infra::{
         tcp_backend_handler::*,
-        tcp_server::{error_to_http_response, AppState},
+        tcp_server::{error_to_http_response, AppState, TcpError, TcpResult},
     },
 };
 
@@ -51,9 +51,9 @@ fn create_jwt(key: &Hmac<Sha512>, user: String, groups: HashSet<GroupIdAndName>)
     jwt::Token::new(header, claims).sign_with_key(key).unwrap()
 }
 
-fn parse_refresh_token(token: &str) -> std::result::Result<(u64, UserId), HttpResponse> {
+fn parse_refresh_token(token: &str) -> TcpResult<(u64, UserId)> {
     match token.split_once('+') {
-        None => Err(HttpResponse::Unauthorized().body("Invalid refresh token")),
+        None => Err(DomainError::AuthenticationError("Invalid refresh token".to_string()).into()),
         Some((token, u)) => {
             let refresh_token_hash = {
                 let mut s = DefaultHasher::new();
@@ -65,86 +65,92 @@ fn parse_refresh_token(token: &str) -> std::result::Result<(u64, UserId), HttpRe
     }
 }
 
-fn get_refresh_token(request: HttpRequest) -> std::result::Result<(u64, UserId), HttpResponse> {
+fn get_refresh_token(request: HttpRequest) -> TcpResult<(u64, UserId)> {
     match (
         request.cookie("refresh_token"),
         request.headers().get("refresh-token"),
     ) {
         (Some(c), _) => parse_refresh_token(c.value()),
         (_, Some(t)) => parse_refresh_token(t.to_str().unwrap()),
-        (None, None) => Err(HttpResponse::Unauthorized().body("Missing refresh token")),
+        (None, None) => {
+            Err(DomainError::AuthenticationError("Missing refresh token".to_string()).into())
+        }
     }
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn get_refresh<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
-) -> HttpResponse
+) -> TcpResult<HttpResponse>
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
     let backend_handler = &data.backend_handler;
     let jwt_key = &data.jwt_key;
-    let (refresh_token_hash, user) = match get_refresh_token(request) {
-        Ok(t) => t,
-        Err(http_response) => return http_response,
-    };
-    let res_found = data
+    let (refresh_token_hash, user) = get_refresh_token(request)?;
+    let found = data
         .backend_handler
         .check_token(refresh_token_hash, &user)
-        .await;
-    // Async closures are not supported yet.
-    match res_found {
-        Ok(found) => {
-            if found {
-                backend_handler.get_user_groups(&user).await
-            } else {
-                Err(DomainError::AuthenticationError(
-                    "Invalid refresh token".to_string(),
-                ))
-            }
-        }
-        Err(e) => Err(e),
+        .await?;
+    if !found {
+        return Err(TcpError::DomainError(DomainError::AuthenticationError(
+            "Invalid refresh token".to_string(),
+        )));
     }
-    .map(|groups| create_jwt(jwt_key, user.to_string(), groups))
-    .map(|token| {
-        HttpResponse::Ok()
-            .cookie(
-                Cookie::build("token", token.as_str())
-                    .max_age(1.days())
-                    .path("/")
-                    .http_only(true)
-                    .same_site(SameSite::Strict)
-                    .finish(),
-            )
-            .json(&login::ServerLoginResponse {
-                token: token.as_str().to_owned(),
-                refresh_token: None,
-            })
-    })
-    .unwrap_or_else(error_to_http_response)
+    Ok(backend_handler
+        .get_user_groups(&user)
+        .await
+        .map(|groups| create_jwt(jwt_key, user.to_string(), groups))
+        .map(|token| {
+            HttpResponse::Ok()
+                .cookie(
+                    Cookie::build("token", token.as_str())
+                        .max_age(1.days())
+                        .path("/")
+                        .http_only(true)
+                        .same_site(SameSite::Strict)
+                        .finish(),
+                )
+                .json(&login::ServerLoginResponse {
+                    token: token.as_str().to_owned(),
+                    refresh_token: None,
+                })
+        })?)
 }
 
-async fn get_password_reset_step1<Backend>(
+async fn get_refresh_handler<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
 ) -> HttpResponse
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
+    get_refresh(data, request)
+        .await
+        .unwrap_or_else(error_to_http_response)
+}
+
+#[instrument(skip_all, level = "debug")]
+async fn get_password_reset_step1<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: HttpRequest,
+) -> TcpResult<()>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
     let user_id = match request.match_info().get("user_id") {
-        None => return HttpResponse::BadRequest().body("Missing user ID"),
+        None => return Err(TcpError::BadRequest("Missing user ID".to_string())),
         Some(id) => UserId::new(id),
     };
-    let token = match data.backend_handler.start_password_reset(&user_id).await {
-        Err(e) => return HttpResponse::InternalServerError().body(e.to_string()),
-        Ok(None) => return HttpResponse::Ok().finish(),
-        Ok(Some(token)) => token,
+    let token = match data.backend_handler.start_password_reset(&user_id).await? {
+        None => return Ok(()),
+        Some(token) => token,
     };
     let user = match data.backend_handler.get_user_details(&user_id).await {
         Err(e) => {
             warn!("Error getting used details: {:#?}", e);
-            return HttpResponse::Ok().finish();
+            return Ok(());
         }
         Ok(u) => u,
     };
@@ -156,37 +162,50 @@ where
         &data.mail_options,
     ) {
         warn!("Error sending email: {:#?}", e);
-        return HttpResponse::InternalServerError().body(format!("Could not send email: {}", e));
+        return Err(TcpError::InternalServerError(format!(
+            "Could not send email: {}",
+            e
+        )));
     }
-    HttpResponse::Ok().finish()
+    Ok(())
 }
 
-async fn get_password_reset_step2<Backend>(
+async fn get_password_reset_step1_handler<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
 ) -> HttpResponse
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    let token = match request.match_info().get("token") {
-        None => return HttpResponse::BadRequest().body("Missing token"),
-        Some(token) => token,
-    };
-    let user_id = match data
+    get_password_reset_step1(data, request)
+        .await
+        .map(|()| HttpResponse::Ok().finish())
+        .unwrap_or_else(error_to_http_response)
+}
+
+#[instrument(skip_all, level = "debug")]
+async fn get_password_reset_step2<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: HttpRequest,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    let token = request
+        .match_info()
+        .get("token")
+        .ok_or_else(|| TcpError::BadRequest("Missing reset token".to_string()))?;
+    let user_id = data
         .backend_handler
         .get_user_id_for_password_reset_token(token)
-        .await
-    {
-        Err(_) => return HttpResponse::Unauthorized().body("Invalid or expired token"),
-        Ok(user_id) => user_id,
-    };
+        .await?;
     let _ = data
         .backend_handler
         .delete_password_reset_token(token)
         .await;
     let groups = HashSet::new();
     let token = create_jwt(&data.jwt_key, user_id.to_string(), groups);
-    HttpResponse::Ok()
+    Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", token.as_str())
                 .max_age(5.minutes())
@@ -199,43 +218,39 @@ where
         .json(&password_reset::ServerPasswordResetResponse {
             user_id: user_id.to_string(),
             token: token.as_str().to_owned(),
-        })
+        }))
 }
 
-async fn get_logout<Backend>(
+async fn get_password_reset_step2_handler<Backend>(
     data: web::Data<AppState<Backend>>,
     request: HttpRequest,
 ) -> HttpResponse
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    let (refresh_token_hash, user) = match get_refresh_token(request) {
-        Ok(t) => t,
-        Err(http_response) => return http_response,
-    };
-    if let Err(response) = data
-        .backend_handler
+    get_password_reset_step2(data, request)
+        .await
+        .unwrap_or_else(error_to_http_response)
+}
+
+#[instrument(skip_all, level = "debug")]
+async fn get_logout<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: HttpRequest,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    let (refresh_token_hash, user) = get_refresh_token(request)?;
+    data.backend_handler
         .delete_refresh_token(refresh_token_hash)
-        .map_err(error_to_http_response)
-        .await
-    {
-        return response;
-    };
-    match data
-        .backend_handler
-        .blacklist_jwts(&user)
-        .map_err(error_to_http_response)
-        .await
-    {
-        Ok(new_blacklisted_jwts) => {
-            let mut jwt_blacklist = data.jwt_blacklist.write().unwrap();
-            for jwt in new_blacklisted_jwts {
-                jwt_blacklist.insert(jwt);
-            }
-        }
-        Err(response) => return response,
-    };
-    HttpResponse::Ok()
+        .await?;
+    let new_blacklisted_jwts = data.backend_handler.blacklist_jwts(&user).await?;
+    let mut jwt_blacklist = data.jwt_blacklist.write().unwrap();
+    for jwt in new_blacklisted_jwts {
+        jwt_blacklist.insert(jwt);
+    }
+    Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", "")
                 .max_age(0.days())
@@ -252,15 +267,28 @@ where
                 .same_site(SameSite::Strict)
                 .finish(),
         )
-        .finish()
+        .finish())
 }
 
-pub(crate) fn error_to_api_response<T>(error: DomainError) -> ApiResult<T> {
-    ApiResult::Right(error_to_http_response(error))
+async fn get_logout_handler<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: HttpRequest,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    get_logout(data, request)
+        .await
+        .unwrap_or_else(error_to_http_response)
+}
+
+pub(crate) fn error_to_api_response<T, E: Into<TcpError>>(error: E) -> ApiResult<T> {
+    ApiResult::Right(error_to_http_response(error.into()))
 }
 
 pub type ApiResult<M> = actix_web::Either<web::Json<M>, HttpResponse>;
 
+#[instrument(skip_all, level = "debug")]
 async fn opaque_login_start<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<login::ClientLoginStartRequest>,
@@ -275,196 +303,201 @@ where
         .unwrap_or_else(error_to_api_response)
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn get_login_successful_response<Backend>(
     data: &web::Data<AppState<Backend>>,
     name: &UserId,
-) -> HttpResponse
+) -> TcpResult<HttpResponse>
 where
     Backend: TcpBackendHandler + BackendHandler,
 {
     // The authentication was successful, we need to fetch the groups to create the JWT
     // token.
-    data.backend_handler
-        .get_user_groups(name)
-        .and_then(|g| async { Ok((g, data.backend_handler.create_refresh_token(name).await?)) })
-        .await
-        .map(|(groups, (refresh_token, max_age))| {
-            let token = create_jwt(&data.jwt_key, name.to_string(), groups);
-            let refresh_token_plus_name = refresh_token + "+" + name.as_str();
+    let groups = data.backend_handler.get_user_groups(name).await?;
+    let (refresh_token, max_age) = data.backend_handler.create_refresh_token(name).await?;
+    let token = create_jwt(&data.jwt_key, name.to_string(), groups);
+    let refresh_token_plus_name = refresh_token + "+" + name.as_str();
 
-            HttpResponse::Ok()
-                .cookie(
-                    Cookie::build("token", token.as_str())
-                        .max_age(1.days())
-                        .path("/")
-                        .http_only(true)
-                        .same_site(SameSite::Strict)
-                        .finish(),
-                )
-                .cookie(
-                    Cookie::build("refresh_token", refresh_token_plus_name.clone())
-                        .max_age(max_age.num_days().days())
-                        .path("/auth")
-                        .http_only(true)
-                        .same_site(SameSite::Strict)
-                        .finish(),
-                )
-                .json(&login::ServerLoginResponse {
-                    token: token.as_str().to_owned(),
-                    refresh_token: Some(refresh_token_plus_name),
-                })
-        })
-        .unwrap_or_else(error_to_http_response)
+    Ok(HttpResponse::Ok()
+        .cookie(
+            Cookie::build("token", token.as_str())
+                .max_age(1.days())
+                .path("/")
+                .http_only(true)
+                .same_site(SameSite::Strict)
+                .finish(),
+        )
+        .cookie(
+            Cookie::build("refresh_token", refresh_token_plus_name.clone())
+                .max_age(max_age.num_days().days())
+                .path("/auth")
+                .http_only(true)
+                .same_site(SameSite::Strict)
+                .finish(),
+        )
+        .json(&login::ServerLoginResponse {
+            token: token.as_str().to_owned(),
+            refresh_token: Some(refresh_token_plus_name),
+        }))
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn opaque_login_finish<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login::ClientLoginFinishRequest>,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    let name = data
+        .backend_handler
+        .login_finish(request.into_inner())
+        .await?;
+    get_login_successful_response(&data, &name).await
+}
+
+async fn opaque_login_finish_handler<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<login::ClientLoginFinishRequest>,
 ) -> HttpResponse
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    let name = match data
-        .backend_handler
-        .login_finish(request.into_inner())
+    opaque_login_finish(data, request)
         .await
-    {
-        Ok(n) => n,
-        Err(e) => return error_to_http_response(e),
-    };
-    get_login_successful_response(&data, &name).await
+        .unwrap_or_else(error_to_http_response)
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn simple_login<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login::ClientSimpleLoginRequest>,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + LoginHandler + 'static,
+{
+    let user_id = UserId::new(&request.username);
+    let bind_request = BindRequest {
+        name: user_id.clone(),
+        password: request.password.clone(),
+    };
+    data.backend_handler.bind(bind_request).await?;
+    get_login_successful_response(&data, &user_id).await
+}
+
+async fn simple_login_handler<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<login::ClientSimpleLoginRequest>,
 ) -> HttpResponse
 where
-    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + LoginHandler + 'static,
 {
-    let password = &request.password;
-    let mut rng = rand::rngs::OsRng;
-    let opaque::client::login::ClientLoginStartResult { state, message } =
-        match opaque::client::login::start_login(password, &mut rng) {
-            Ok(n) => n,
-            Err(e) => {
-                return HttpResponse::InternalServerError()
-                    .body(format!("Internal Server Error: {:#?}", e))
-            }
-        };
+    simple_login(data, request)
+        .await
+        .unwrap_or_else(error_to_http_response)
+}
 
-    let username = request.username.clone();
-    let start_request = login::ClientLoginStartRequest {
-        username: username.clone(),
-        login_start_request: message,
-    };
-
-    let start_response = match data.backend_handler.login_start(start_request).await {
-        Ok(n) => n,
-        Err(e) => return error_to_http_response(e),
-    };
-
-    let login_finish =
-        match opaque::client::login::finish_login(state, start_response.credential_response) {
-            Err(_) => {
-                return error_to_http_response(DomainError::AuthenticationError(String::from(
-                    "Invalid username or password",
-                )))
-            }
-            Ok(l) => l,
-        };
-
-    let finish_request = login::ClientLoginFinishRequest {
-        server_data: start_response.server_data,
-        credential_finalization: login_finish.message,
-    };
-
-    let name = match data.backend_handler.login_finish(finish_request).await {
-        Ok(n) => n,
-        Err(e) => return error_to_http_response(e),
-    };
-
+#[instrument(skip_all, level = "debug")]
+async fn post_authorize<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<BindRequest>,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
+{
+    let name = request.name.clone();
+    debug!(%name);
+    data.backend_handler.bind(request.into_inner()).await?;
     get_login_successful_response(&data, &name).await
 }
 
-async fn post_authorize<Backend>(
+async fn post_authorize_handler<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<BindRequest>,
 ) -> HttpResponse
 where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
 {
-    let name = request.name.clone();
-    if let Err(e) = data.backend_handler.bind(request.into_inner()).await {
-        return error_to_http_response(e);
-    }
-    get_login_successful_response(&data, &name).await
+    post_authorize(data, request)
+        .await
+        .unwrap_or_else(error_to_http_response)
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn opaque_register_start<Backend>(
     request: actix_web::HttpRequest,
     mut payload: actix_web::web::Payload,
+    data: web::Data<AppState<Backend>>,
+) -> TcpResult<registration::ServerRegistrationStartResponse>
+where
+    Backend: OpaqueHandler + 'static,
+{
+    use actix_web::FromRequest;
+    let validation_result = BearerAuth::from_request(&request, &mut payload.0)
+        .await
+        .ok()
+        .and_then(|bearer| check_if_token_is_valid(&data, bearer.token()).ok())
+        .ok_or_else(|| {
+            TcpError::UnauthorizedError("Not authorized to change the user's password".to_string())
+        })?;
+    let registration_start_request =
+        web::Json::<registration::ClientRegistrationStartRequest>::from_request(
+            &request,
+            &mut payload.0,
+        )
+        .await
+        .map_err(|e| TcpError::BadRequest(format!("{:#?}", e)))?
+        .into_inner();
+    let user_id = &registration_start_request.username;
+    if !validation_result.can_write(user_id) {
+        return Err(TcpError::UnauthorizedError(
+            "Not authorized to change the user's password".to_string(),
+        ));
+    }
+    Ok(data
+        .backend_handler
+        .registration_start(registration_start_request)
+        .await?)
+}
+
+async fn opaque_register_start_handler<Backend>(
+    request: actix_web::HttpRequest,
+    payload: actix_web::web::Payload,
     data: web::Data<AppState<Backend>>,
 ) -> ApiResult<registration::ServerRegistrationStartResponse>
 where
     Backend: OpaqueHandler + 'static,
 {
-    use actix_web::FromRequest;
-    let validation_result = match BearerAuth::from_request(&request, &mut payload.0)
-        .await
-        .ok()
-        .and_then(|bearer| check_if_token_is_valid(&data, bearer.token()).ok())
-    {
-        Some(t) => t,
-        None => {
-            return ApiResult::Right(
-                HttpResponse::Unauthorized().body("Not authorized to change the user's password"),
-            )
-        }
-    };
-    let registration_start_request =
-        match web::Json::<registration::ClientRegistrationStartRequest>::from_request(
-            &request,
-            &mut payload.0,
-        )
-        .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                return ApiResult::Right(
-                    HttpResponse::BadRequest().body(format!("Bad request: {:#?}", e)),
-                )
-            }
-        }
-        .into_inner();
-    let user_id = &registration_start_request.username;
-    if !validation_result.can_write(user_id) {
-        return ApiResult::Right(
-            HttpResponse::Unauthorized().body("Not authorized to change the user's password"),
-        );
-    }
-    data.backend_handler
-        .registration_start(registration_start_request)
+    opaque_register_start(request, payload, data)
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
         .unwrap_or_else(error_to_api_response)
 }
 
+#[instrument(skip_all, level = "debug")]
 async fn opaque_register_finish<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<registration::ClientRegistrationFinishRequest>,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    data.backend_handler
+        .registration_finish(request.into_inner())
+        .await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+async fn opaque_register_finish_handler<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<registration::ClientRegistrationFinishRequest>,
 ) -> HttpResponse
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    if let Err(e) = data
-        .backend_handler
-        .registration_finish(request.into_inner())
+    opaque_register_finish(data, request)
         .await
-    {
-        return error_to_http_response(e);
-    }
-    HttpResponse::Ok().finish()
+        .unwrap_or_else(error_to_http_response)
 }
 
 pub struct CookieToHeaderTranslatorFactory;
@@ -530,6 +563,7 @@ pub enum Permission {
     Regular,
 }
 
+#[derive(Debug)]
 pub struct ValidationResults {
     pub user: String,
     pub permission: Permission,
@@ -567,6 +601,7 @@ impl ValidationResults {
     }
 }
 
+#[instrument(skip_all, level = "debug", err, ret)]
 pub(crate) fn check_if_token_is_valid<Backend>(
     state: &AppState<Backend>,
     token_str: &str,
@@ -607,35 +642,38 @@ pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig)
 where
     Backend: TcpBackendHandler + LoginHandler + OpaqueHandler + BackendHandler + 'static,
 {
-    cfg.service(web::resource("").route(web::post().to(post_authorize::<Backend>)))
+    cfg.service(web::resource("").route(web::post().to(post_authorize_handler::<Backend>)))
         .service(
             web::resource("/opaque/login/start")
                 .route(web::post().to(opaque_login_start::<Backend>)),
         )
         .service(
             web::resource("/opaque/login/finish")
-                .route(web::post().to(opaque_login_finish::<Backend>)),
+                .route(web::post().to(opaque_login_finish_handler::<Backend>)),
         )
-        .service(web::resource("/simple/login").route(web::post().to(simple_login::<Backend>)))
-        .service(web::resource("/refresh").route(web::get().to(get_refresh::<Backend>)))
+        .service(
+            web::resource("/simple/login").route(web::post().to(simple_login_handler::<Backend>)),
+        )
+        .service(web::resource("/refresh").route(web::get().to(get_refresh_handler::<Backend>)))
         .service(
             web::resource("/reset/step1/{user_id}")
-                .route(web::get().to(get_password_reset_step1::<Backend>)),
+                .route(web::get().to(get_password_reset_step1_handler::<Backend>)),
         )
         .service(
             web::resource("/reset/step2/{token}")
-                .route(web::get().to(get_password_reset_step2::<Backend>)),
+                .route(web::get().to(get_password_reset_step2_handler::<Backend>)),
         )
-        .service(web::resource("/logout").route(web::get().to(get_logout::<Backend>)))
+        .service(web::resource("/logout").route(web::get().to(get_logout_handler::<Backend>)))
         .service(
             web::scope("/opaque/register")
                 .wrap(CookieToHeaderTranslatorFactory)
                 .service(
-                    web::resource("/start").route(web::post().to(opaque_register_start::<Backend>)),
+                    web::resource("/start")
+                        .route(web::post().to(opaque_register_start_handler::<Backend>)),
                 )
                 .service(
                     web::resource("/finish")
-                        .route(web::post().to(opaque_register_finish::<Backend>)),
+                        .route(web::post().to(opaque_register_finish_handler::<Backend>)),
                 ),
         );
 }

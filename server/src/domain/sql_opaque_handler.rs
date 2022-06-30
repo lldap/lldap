@@ -7,14 +7,15 @@ use super::{
 };
 use async_trait::async_trait;
 use lldap_auth::opaque;
-use log::*;
 use sea_query::{Expr, Iden, Query};
 use sea_query_binder::SqlxBinder;
 use secstr::SecUtf8;
 use sqlx::Row;
+use tracing::{debug, instrument};
 
 type SqlOpaqueHandler = SqlBackendHandler;
 
+#[instrument(skip_all, level = "debug", err)]
 fn passwords_match(
     password_file_bytes: &[u8],
     clear_password: &str,
@@ -48,6 +49,7 @@ impl SqlBackendHandler {
         )?)
     }
 
+    #[instrument(skip_all, level = "debug", err)]
     async fn get_password_file_for_user(
         &self,
         username: &str,
@@ -86,18 +88,8 @@ impl SqlBackendHandler {
 
 #[async_trait]
 impl LoginHandler for SqlBackendHandler {
+    #[instrument(skip_all, level = "debug", err)]
     async fn bind(&self, request: BindRequest) -> Result<()> {
-        if request.name == self.config.ldap_user_dn {
-            if SecUtf8::from(request.password) == self.config.ldap_user_pass {
-                return Ok(());
-            } else {
-                debug!(r#"Invalid password for LDAP bind user"#);
-                return Err(DomainError::AuthenticationError(format!(
-                    " for user '{}'",
-                    request.name
-                )));
-            }
-        }
         let (query, values) = Query::select()
             .column(Users::PasswordHash)
             .from(Users::Table)
@@ -135,6 +127,7 @@ impl LoginHandler for SqlBackendHandler {
 
 #[async_trait]
 impl OpaqueHandler for SqlOpaqueHandler {
+    #[instrument(skip_all, level = "debug", err)]
     async fn login_start(
         &self,
         request: login::ClientLoginStartRequest,
@@ -163,6 +156,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         })
     }
 
+    #[instrument(skip_all, level = "debug", err)]
     async fn login_finish(&self, request: login::ClientLoginFinishRequest) -> Result<UserId> {
         let secret_key = self.get_orion_secret_key()?;
         let login::ServerData {
@@ -181,6 +175,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         Ok(UserId::new(&username))
     }
 
+    #[instrument(skip_all, level = "debug", err)]
     async fn registration_start(
         &self,
         request: registration::ClientRegistrationStartRequest,
@@ -202,6 +197,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         })
     }
 
+    #[instrument(skip_all, level = "debug", err)]
     async fn registration_finish(
         &self,
         request: registration::ClientRegistrationFinishRequest,
@@ -230,6 +226,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
 }
 
 /// Convenience function to set a user's password.
+#[instrument(skip_all, level = "debug", err)]
 pub(crate) async fn register_password(
     opaque_handler: &SqlOpaqueHandler,
     username: &UserId,

@@ -7,6 +7,7 @@ use crate::{
     infra::{
         auth_service,
         configuration::{Configuration, MailOptions},
+        logging::CustomRootSpanBuilder,
         tcp_backend_handler::*,
     },
 };
@@ -21,6 +22,7 @@ use sha2::Sha512;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::RwLock;
+use tracing::info;
 
 async fn index() -> actix_web::Result<NamedFile> {
     let mut path = PathBuf::new();
@@ -29,17 +31,36 @@ async fn index() -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open(path)?)
 }
 
-pub(crate) fn error_to_http_response(error: DomainError) -> HttpResponse {
+#[derive(thiserror::Error, Debug)]
+pub enum TcpError {
+    #[error("`{0}`")]
+    DomainError(#[from] DomainError),
+    #[error("Bad request: `{0}`")]
+    BadRequest(String),
+    #[error("Internal server error: `{0}`")]
+    InternalServerError(String),
+    #[error("Unauthorized: `{0}`")]
+    UnauthorizedError(String),
+}
+
+pub type TcpResult<T> = std::result::Result<T, TcpError>;
+
+pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
     match error {
-        DomainError::AuthenticationError(_) | DomainError::AuthenticationProtocolError(_) => {
-            HttpResponse::Unauthorized()
-        }
-        DomainError::DatabaseError(_)
-        | DomainError::InternalError(_)
-        | DomainError::UnknownCryptoError(_) => HttpResponse::InternalServerError(),
-        DomainError::Base64DecodeError(_) | DomainError::BinarySerializationError(_) => {
-            HttpResponse::BadRequest()
-        }
+        TcpError::DomainError(ref de) => match de {
+            DomainError::AuthenticationError(_) | DomainError::AuthenticationProtocolError(_) => {
+                HttpResponse::Unauthorized()
+            }
+            DomainError::DatabaseError(_)
+            | DomainError::InternalError(_)
+            | DomainError::UnknownCryptoError(_) => HttpResponse::InternalServerError(),
+            DomainError::Base64DecodeError(_) | DomainError::BinarySerializationError(_) => {
+                HttpResponse::BadRequest()
+            }
+        },
+        TcpError::BadRequest(_) => HttpResponse::BadRequest(),
+        TcpError::InternalServerError(_) => HttpResponse::InternalServerError(),
+        TcpError::UnauthorizedError(_) => HttpResponse::Unauthorized(),
     }
     .body(error.to_string())
 }
@@ -105,6 +126,7 @@ where
         .context("while getting the jwt blacklist")?;
     let server_url = config.http_url.clone();
     let mail_options = config.smtp_options.clone();
+    info!("Starting the API/web server on port {}", config.http_port);
     server_builder
         .bind("http", ("0.0.0.0", config.http_port), move || {
             let backend_handler = backend_handler.clone();
@@ -114,16 +136,18 @@ where
             let mail_options = mail_options.clone();
             HttpServiceBuilder::new()
                 .finish(map_config(
-                    App::new().configure(move |cfg| {
-                        http_config(
-                            cfg,
-                            backend_handler,
-                            jwt_secret,
-                            jwt_blacklist,
-                            server_url,
-                            mail_options,
-                        )
-                    }),
+                    App::new()
+                        .wrap(tracing_actix_web::TracingLogger::<CustomRootSpanBuilder>::new())
+                        .configure(move |cfg| {
+                            http_config(
+                                cfg,
+                                backend_handler,
+                                jwt_secret,
+                                jwt_blacklist,
+                                server_url,
+                                mail_options,
+                            )
+                        }),
                     |_| AppConfig::default(),
                 ))
                 .tcp()
