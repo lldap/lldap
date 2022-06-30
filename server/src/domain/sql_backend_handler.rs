@@ -2,7 +2,7 @@ use super::{error::*, handler::*, sql_tables::*};
 use crate::infra::configuration::Configuration;
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use sea_query::{Cond, Expr, Iden, Order, Query, SimpleExpr};
+use sea_query::{Alias, Cond, Expr, Iden, Order, Query, SimpleExpr};
 use sea_query_binder::SqlxBinder;
 use sqlx::{query_as_with, query_with, FromRow, Row};
 use std::collections::HashSet;
@@ -144,8 +144,11 @@ impl BackendHandler for SqlBackendHandler {
                 add_join_group_tables(&mut query_builder);
                 query_builder
                     .column((Groups::Table, Groups::GroupId))
-                    .column((Groups::Table, Groups::DisplayName))
-                    .order_by((Groups::Table, Groups::DisplayName), Order::Asc);
+                    .expr_as(
+                        Expr::col((Groups::Table, Groups::DisplayName)),
+                        Alias::new("group_display_name"),
+                    )
+                    .order_by(Alias::new("group_display_name"), Order::Asc);
             }
             if let Some(filter) = filters {
                 if filter == UserRequestFilter::Not(Box::new(UserRequestFilter::And(Vec::new()))) {
@@ -156,18 +159,8 @@ impl BackendHandler for SqlBackendHandler {
                 {
                     let (RequiresGroup(requires_group), condition) = get_user_filter_expr(filter);
                     query_builder.cond_where(condition);
-                    if requires_group {
-                        query_builder
-                            .left_join(
-                                Memberships::Table,
-                                Expr::tbl(Users::Table, Users::UserId)
-                                    .equals(Memberships::Table, Memberships::UserId),
-                            )
-                            .left_join(
-                                Groups::Table,
-                                Expr::tbl(Memberships::Table, Memberships::GroupId)
-                                    .equals(Groups::Table, Groups::GroupId),
-                            );
+                    if requires_group && !get_groups {
+                        add_join_group_tables(&mut query_builder);
                     }
                 }
             }
@@ -195,7 +188,7 @@ impl BackendHandler for SqlBackendHandler {
                         rows.map(|row| {
                             GroupIdAndName(
                                 GroupId(row.get::<i32, _>(&*Groups::GroupId.to_string())),
-                                row.get::<String, _>(&*Groups::DisplayName.to_string()),
+                                row.get::<String, _>("group_display_name"),
                             )
                         })
                         .filter(|g| !g.1.is_empty())
@@ -693,6 +686,7 @@ mod tests {
                 .map(|u| {
                     (
                         u.user.user_id.to_string(),
+                        u.user.display_name.to_string(),
                         u.groups
                             .unwrap()
                             .into_iter()
@@ -704,9 +698,9 @@ mod tests {
             assert_eq!(
                 users,
                 vec![
-                    ("bob".to_string(), vec![group_1]),
-                    ("john".to_string(), vec![group_2]),
-                    ("patrick".to_string(), vec![group_1, group_2]),
+                    ("bob".to_string(), String::new(), vec![group_1]),
+                    ("john".to_string(), String::new(), vec![group_2]),
+                    ("patrick".to_string(), String::new(), vec![group_1, group_2]),
                 ]
             );
         }
