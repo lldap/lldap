@@ -31,17 +31,36 @@ async fn index() -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open(path)?)
 }
 
-pub(crate) fn error_to_http_response(error: DomainError) -> HttpResponse {
+#[derive(thiserror::Error, Debug)]
+pub enum TcpError {
+    #[error("`{0}`")]
+    DomainError(#[from] DomainError),
+    #[error("Bad request: `{0}`")]
+    BadRequest(String),
+    #[error("Internal server error: `{0}`")]
+    InternalServerError(String),
+    #[error("Unauthorized: `{0}`")]
+    UnauthorizedError(String),
+}
+
+pub type TcpResult<T> = std::result::Result<T, TcpError>;
+
+pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
     match error {
-        DomainError::AuthenticationError(_) | DomainError::AuthenticationProtocolError(_) => {
-            HttpResponse::Unauthorized()
-        }
-        DomainError::DatabaseError(_)
-        | DomainError::InternalError(_)
-        | DomainError::UnknownCryptoError(_) => HttpResponse::InternalServerError(),
-        DomainError::Base64DecodeError(_) | DomainError::BinarySerializationError(_) => {
-            HttpResponse::BadRequest()
-        }
+        TcpError::DomainError(ref de) => match de {
+            DomainError::AuthenticationError(_) | DomainError::AuthenticationProtocolError(_) => {
+                HttpResponse::Unauthorized()
+            }
+            DomainError::DatabaseError(_)
+            | DomainError::InternalError(_)
+            | DomainError::UnknownCryptoError(_) => HttpResponse::InternalServerError(),
+            DomainError::Base64DecodeError(_) | DomainError::BinarySerializationError(_) => {
+                HttpResponse::BadRequest()
+            }
+        },
+        TcpError::BadRequest(_) => HttpResponse::BadRequest(),
+        TcpError::InternalServerError(_) => HttpResponse::InternalServerError(),
+        TcpError::UnauthorizedError(_) => HttpResponse::Unauthorized(),
     }
     .body(error.to_string())
 }

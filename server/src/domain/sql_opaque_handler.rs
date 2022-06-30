@@ -90,17 +90,6 @@ impl SqlBackendHandler {
 impl LoginHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn bind(&self, request: BindRequest) -> Result<()> {
-        if request.name == self.config.ldap_user_dn {
-            if SecUtf8::from(request.password) == self.config.ldap_user_pass {
-                return Ok(());
-            } else {
-                debug!(r#"Invalid password for LDAP bind user"#);
-                return Err(DomainError::AuthenticationError(format!(
-                    " for user '{}'",
-                    request.name
-                )));
-            }
-        }
         let (query, values) = Query::select()
             .column(Users::PasswordHash)
             .from(Users::Table)

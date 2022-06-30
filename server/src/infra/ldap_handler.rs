@@ -894,7 +894,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     .collect::<Result<_>>()?,
             )),
             LdapFilter::Not(filter) => Ok(GroupRequestFilter::Not(Box::new(
-                self.convert_group_filter(&*filter)?,
+                self.convert_group_filter(filter)?,
             ))),
             LdapFilter::Present(field) => {
                 if ALL_GROUP_ATTRIBUTE_KEYS.contains(&field.to_ascii_lowercase().as_str()) {
@@ -924,7 +924,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     .collect::<Result<_>>()?,
             )),
             LdapFilter::Not(filter) => Ok(UserRequestFilter::Not(Box::new(
-                self.convert_user_filter(&*filter)?,
+                self.convert_user_filter(filter)?,
             ))),
             LdapFilter::Equality(field, value) => {
                 let field = &field.to_ascii_lowercase();
