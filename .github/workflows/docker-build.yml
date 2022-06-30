@@ -261,7 +261,7 @@ jobs:
       - uses: docker/setup-buildx-action@v2
       
       - name: parse tag
-        uses: gacts/github-slugs@v1
+        uses: gacts/github-slug@v1
         id: slug
       
       - uses: docker/metadata-action@v3
