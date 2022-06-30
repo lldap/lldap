@@ -10,12 +10,13 @@ use actix_server::ServerBuilder;
 use actix_service::{fn_service, ServiceFactoryExt};
 use anyhow::{Context, Result};
 use ldap3_server::{proto::LdapMsg, LdapCodec};
-use log::*;
 use native_tls::{Identity, TlsAcceptor};
 use tokio_native_tls::TlsAcceptor as NativeTlsAcceptor;
 use tokio_util::codec::{FramedRead, FramedWrite};
+use tracing::{debug, error, info, instrument};
 
-async fn handle_incoming_message<Backend, Writer>(
+#[instrument(skip_all, level = "info", name = "LDAP request")]
+async fn handle_ldap_message<Backend, Writer>(
     msg: Result<LdapMsg, std::io::Error>,
     resp: &mut Writer,
     session: &mut LdapHandler<Backend>,
@@ -27,18 +28,18 @@ where
 {
     use futures_util::SinkExt;
     let msg = msg.context("while receiving LDAP op")?;
-    debug!("Received LDAP message: {:?}", &msg);
+    debug!(?msg);
     match session.handle_ldap_message(msg.op).await {
         None => return Ok(false),
         Some(result) => {
             if result.is_empty() {
                 debug!("No response");
             }
-            for result_op in result.into_iter() {
-                debug!("Replying with LDAP op: {:?}", &result_op);
+            for response in result.into_iter() {
+                debug!(?response);
                 resp.send(LdapMsg {
                     msgid: msg.msgid,
-                    op: result_op,
+                    op: response,
                     ctrl: vec![],
                 })
                 .await
@@ -66,6 +67,7 @@ fn get_file_as_byte_vec(filename: &str) -> Result<Vec<u8>> {
     .context(format!("while reading file {}", filename))
 }
 
+#[instrument(skip_all, level = "info", name = "LDAP session")]
 async fn handle_ldap_stream<Stream, Backend>(
     stream: Stream,
     backend_handler: Backend,
@@ -91,7 +93,7 @@ where
     );
 
     while let Some(msg) = requests.next().await {
-        if !handle_incoming_message(msg, &mut resp, &mut session)
+        if !handle_ldap_message(msg, &mut resp, &mut session)
             .await
             .context("while handling incoming messages")?
         {
@@ -145,6 +147,7 @@ where
         .map_err(|err: anyhow::Error| error!("[LDAP] Service Error: {:#}", err))
     };
 
+    info!("Starting the LDAP server on port {}", config.ldap_port);
     let server_builder = server_builder
         .bind("ldap", ("0.0.0.0", config.ldap_port), binder)
         .with_context(|| format!("while binding to the port {}", config.ldap_port));
@@ -176,6 +179,10 @@ where
             .map_err(|err: anyhow::Error| error!("[LDAPS] Service Error: {:#}", err))
         };
 
+        info!(
+            "Starting the LDAPS server on port {}",
+            config.ldaps_options.port
+        );
         server_builder.and_then(|s| {
             s.bind("ldaps", ("0.0.0.0", config.ldaps_options.port), tls_binder)
                 .with_context(|| format!("while binding to the port {}", config.ldaps_options.port))

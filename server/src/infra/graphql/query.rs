@@ -1,6 +1,7 @@
 use crate::domain::handler::{BackendHandler, GroupId, GroupIdAndName, UserId};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, debug_span, Instrument};
 
 type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
 type DomainUser = crate::domain::handler::User;
@@ -108,12 +109,18 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
     }
 
     pub async fn user(context: &Context<Handler>, user_id: String) -> FieldResult<User<Handler>> {
+        let span = debug_span!("[GraphQL query] user");
+        span.in_scope(|| {
+            debug!(?user_id);
+        });
         if !context.validation_result.can_read(&user_id) {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized access to user data".into());
         }
         Ok(context
             .handler
             .get_user_details(&UserId::new(&user_id))
+            .instrument(span)
             .await
             .map(Into::into)?)
     }
@@ -122,34 +129,49 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         context: &Context<Handler>,
         #[graphql(name = "where")] filters: Option<RequestFilter>,
     ) -> FieldResult<Vec<User<Handler>>> {
+        let span = debug_span!("[GraphQL query] users");
+        span.in_scope(|| {
+            debug!(?filters);
+        });
         if !context.validation_result.is_admin_or_readonly() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized access to user list".into());
         }
         Ok(context
             .handler
             .list_users(filters.map(TryInto::try_into).transpose()?, false)
+            .instrument(span)
             .await
             .map(|v| v.into_iter().map(Into::into).collect())?)
     }
 
     async fn groups(context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
+        let span = debug_span!("[GraphQL query] groups");
         if !context.validation_result.is_admin_or_readonly() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized access to group list".into());
         }
         Ok(context
             .handler
             .list_groups(None)
+            .instrument(span)
             .await
             .map(|v| v.into_iter().map(Into::into).collect())?)
     }
 
     async fn group(context: &Context<Handler>, group_id: i32) -> FieldResult<Group<Handler>> {
+        let span = debug_span!("[GraphQL query] group");
+        span.in_scope(|| {
+            debug!(?group_id);
+        });
         if !context.validation_result.is_admin_or_readonly() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized access to group data".into());
         }
         Ok(context
             .handler
             .get_group_details(GroupId(group_id))
+            .instrument(span)
             .await
             .map(Into::into)?)
     }
@@ -199,9 +221,14 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
 
     /// The groups to which this user belongs.
     async fn groups(&self, context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
+        let span = debug_span!("[GraphQL query] user::groups");
+        span.in_scope(|| {
+            debug!(user_id = ?self.user.user_id);
+        });
         Ok(context
             .handler
             .get_user_groups(&self.user.user_id)
+            .instrument(span)
             .await
             .map(|set| set.into_iter().map(Into::into).collect())?)
     }
@@ -244,7 +271,12 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
     }
     /// The groups to which this user belongs.
     async fn users(&self, context: &Context<Handler>) -> FieldResult<Vec<User<Handler>>> {
+        let span = debug_span!("[GraphQL query] group::users");
+        span.in_scope(|| {
+            debug!(name = %self.display_name);
+        });
         if !context.validation_result.is_admin_or_readonly() {
+            span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized access to group data".into());
         }
         Ok(context
@@ -253,6 +285,7 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
                 Some(DomainRequestFilter::MemberOfId(GroupId(self.group_id))),
                 false,
             )
+            .instrument(span)
             .await
             .map(|v| v.into_iter().map(Into::into).collect())?)
     }
