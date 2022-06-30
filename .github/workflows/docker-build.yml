@@ -259,6 +259,11 @@ jobs:
       - name: setup qemu
         uses: docker/setup-qemu-action@v1
       - uses: docker/setup-buildx-action@v2
+      
+      - name: parse tag
+        uses: gacts/github-slugs@v1
+        id: slug
+      
       - uses: docker/metadata-action@v3
         id: meta
         with:
