@@ -602,24 +602,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_bind_admin() {
-        let sql_pool = get_in_memory_db().await;
-        let config = ConfigurationBuilder::default()
-            .ldap_user_dn(UserId::new("admin"))
-            .ldap_user_pass(secstr::SecUtf8::from("test"))
-            .build()
-            .unwrap();
-        let handler = SqlBackendHandler::new(config, sql_pool);
-        handler
-            .bind(BindRequest {
-                name: UserId::new("admin"),
-                password: "test".to_string(),
-            })
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
     async fn test_bind_user() {
         let sql_pool = get_initialized_db().await;
         let config = get_default_config();
