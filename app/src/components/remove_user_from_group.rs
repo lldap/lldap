@@ -81,8 +81,8 @@ impl Component for RemoveUserFromGroupComponent {
         )
     }
 
-    fn change(&mut self, _: Self::Properties) -> ShouldRender {
-        false
+    fn change(&mut self, props: Self::Properties) -> ShouldRender {
+        self.common.change(props)
     }
 
     fn view(&self) -> Html {
