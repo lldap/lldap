@@ -287,6 +287,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           
+      -
+        name: Build and push
+        if: github.event_name != 'release'
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          tags: nitnelave/lldap:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
       - name: Build and push
         if: github.event_name == 'release'
         uses: docker/build-push-action@v3
