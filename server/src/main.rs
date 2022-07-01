@@ -48,7 +48,7 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
 
 #[instrument(skip_all)]
 async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
-    info!("Starting LLDAP....");
+    info!("Starting LLDAP version {}", env!("CARGO_PKG_VERSION"));
 
     let sql_pool = PoolOptions::new()
         .max_connections(5)
