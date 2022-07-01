@@ -1,0 +1,12 @@
+codecov:
+  require_ci_to_pass: yes
+comment:
+  layout: "diff,flags"
+  require_changes: true
+  require_base: true
+  require_head: true
+ignore:
+  - "app"
+  - "docs"
+  - "example_configs"
+  - "migration-tool"
