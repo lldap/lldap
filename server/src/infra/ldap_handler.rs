@@ -205,21 +205,27 @@ fn get_user_attribute(
 }
 
 #[instrument(skip_all, level = "debug")]
-fn expand_attribute_wildcards(
-    ldap_attributes: &[String],
-    all_attribute_keys: &[&str],
-) -> Vec<String> {
-    let mut attributes_out = ldap_attributes.to_owned();
+fn expand_attribute_wildcards<'a>(
+    ldap_attributes: &'a [String],
+    all_attribute_keys: &'a [&'static str],
+) -> Vec<&'a str> {
+    let mut attributes_out = ldap_attributes
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
 
-    if attributes_out.iter().any(|x| x == "*") || attributes_out.is_empty() {
+    if attributes_out.iter().any(|&x| x == "*") || attributes_out.is_empty() {
         // Remove occurrences of '*'
-        attributes_out.retain(|x| x != "*");
+        attributes_out.retain(|&x| x != "*");
         // Splice in all non-operational attributes
-        attributes_out.extend(all_attribute_keys.iter().map(|s| s.to_string()));
+        attributes_out.extend(all_attribute_keys.iter());
     }
 
     // Deduplicate, preserving order
-    let resolved_attributes = attributes_out.into_iter().unique().collect_vec();
+    let resolved_attributes = attributes_out
+        .into_iter()
+        .unique_by(|a| a.to_ascii_lowercase())
+        .collect_vec();
     debug!(?ldap_attributes, ?resolved_attributes);
     resolved_attributes
 }
@@ -238,7 +244,7 @@ const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
 fn make_ldap_search_user_result_entry(
     user: User,
     base_dn_str: &str,
-    attributes: &[String],
+    attributes: &[&str],
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[String],
 ) -> Result<LdapSearchResultEntry> {
@@ -2174,8 +2180,11 @@ mod tests {
             expected_result
         );
 
-        let request2 =
-            make_search_request("dc=example,dc=com", LdapFilter::And(vec![]), vec!["*", "*"]);
+        let request2 = make_search_request(
+            "dc=example,dc=com",
+            LdapFilter::And(vec![]),
+            vec!["objectclass", "obJEctclaSS", "dn", "*", "*"],
+        );
 
         assert_eq!(
             ldap_handler.do_search_or_dse(&request2).await,
