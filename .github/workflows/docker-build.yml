@@ -18,6 +18,10 @@ on:
         
 env:
   CARGO_TERM_COLOR: always
+  RUSTC_WRAPPER: sccache
+  SCCACHE_DIR: $GITHUB_WORKSPACE/.sccache
+  SCCACHE_VERSION: v0.3.0
+  LINK: https://github.com/mozilla/sccache/releases/download
 
 # In total 5 jobs, all of the jobs are containerized
 # ---
@@ -49,6 +53,11 @@ env:
 # On current https://hub.docker.com/_/rust
 # 1-bullseye, 1.61-bullseye, 1.61.0-bullseye, bullseye, 1, 1.61, 1.61.0, latest
 
+# cache
+## .sccache
+## cargo
+## target
+
 jobs:
   build-ui:
     runs-on: ubuntu-latest
@@ -64,16 +73,31 @@ jobs:
         run: curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
       - name: install nodejs
         run: apt install -y nodejs && npm -g install npm
-      - name: set default nightly
-        run: rustup default nightly
       - name: smoke test
         run: rustc --version
+      - name: Install sccache (ubuntu-latest)
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - uses: actions/cache@v3
+        with:
+          path: |
+            .sccache
+            /usr/local/cargo
+            target
+          key: lldap-ui-${{ github.sha }}
+          restore-keys: |
+            lldap-ui-
+      - name: Checkout repository
+        uses: actions/checkout@v2
       - name: install cargo wasm
         run: cargo install wasm-pack
       - name: install rollup nodejs
         run: npm install -g rollup
-      - name: Checkout repository
-        uses: actions/checkout@v2
       - name: build frontend
         run: ./app/build.sh
       - name: check path
@@ -98,29 +122,42 @@ jobs:
       - name: add armhf architecture
         run: dpkg --add-architecture armhf
       - name: install runtime
-        run: apt update && apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross libssl-dev:armhf
-      - name: set default nightly
-        run: rustup default nightly
+        run: apt update && apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross libssl-dev:armhf tar
       - name: smoke test
         run: rustc --version
       - name: add armhf target
         run: rustup target add armv7-unknown-linux-gnueabihf
-      - name: set default nightly
-        run: rustup default nightly
       - name: smoke test
         run: rustc --version
+      - name: Install sccache (ubuntu-latest)
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
       - name: Checkout repository
         uses: actions/checkout@v2
+      - uses: actions/cache@v3
+        with:
+          path: |
+            .sccache
+            /usr/local/cargo
+            target
+          key: lldap-bin-armhf-${{ github.sha }}
+          restore-keys: |
+            lldap-bin-armhf-
       - name: compile armhf
         run: cargo build --target=armv7-unknown-linux-gnueabihf --release -p lldap -p migration-tool
       - name: check path
         run: ls -al target/release
-      - name: upload armhf artifacts
+      - name: upload armhf lldap artifacts
         uses: actions/upload-artifact@v3
         with:
           name: armhf-lldap-bin
           path: target/armv7-unknown-linux-gnueabihf/release/lldap
-      - name: upload armhf artifacts
+      - name: upload armhfmigration-tool artifacts
         uses: actions/upload-artifact@v3
         with:
           name: armhf-migration-tool-bin
@@ -141,31 +178,44 @@ jobs:
       - name: add arm64 architecture
         run: dpkg --add-architecture arm64
       - name: install runtime
-        run: apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross libssl-dev:arm64
-      - name: set default nightly
-        run: rustup default nightly
+        run: apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross libssl-dev:arm64 tar
       - name: smoke test
         run: rustc --version
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: add arm64 target
         run: rustup target add aarch64-unknown-linux-gnu
-      - name: set default nightly
-        run: rustup default nightly
       - name: smoke test
         run: rustc --version
+      - name: Install sccache (ubuntu-latest)
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
       - name: Checkout repository
         uses: actions/checkout@v2
+      - uses: actions/cache@v3
+        with:
+          path: |
+            .sccache
+            /usr/local/cargo
+            target
+          key: lldap-bin-aarch64-${{ github.sha }}
+          restore-keys: |
+            lldap-bin-aarch64-
       - name: compile aarch64
         run: cargo build --target=aarch64-unknown-linux-gnu --release -p lldap -p migration-tool
       - name: check path
         run: ls -al target/aarch64-unknown-linux-gnu/release/
-      - name: upload aarch64 artifacts
+      - name: upload aarch64 lldap artifacts
         uses: actions/upload-artifact@v3
         with:
           name: aarch64-lldap-bin
           path: target/aarch64-unknown-linux-gnu/release/lldap
-      - name: upload aarch64 artifacts
+      - name: upload aarch64 migration-tool artifacts
         uses: actions/upload-artifact@v3
         with:
           name: aarch64-migration-tool-bin
@@ -180,13 +230,35 @@ jobs:
         RUSTFLAGS: -Ctarget-feature=-crt-static
     steps:
       - name: install runtime
-        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev libssl-dev
-      - name: set default nightly
-        run: rustup default nightly
+        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev libssl-dev tar
       - name: smoke test
         run: rustc --version
+      - name: Install sccache (ubuntu-latest)
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH  
       - name: Checkout repository
         uses: actions/checkout@v2
+      - name: cargo & sscache cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            .sccache
+            /usr/local/cargo
+            target
+          key: lldap-bin-amd64-${{ github.sha }}
+          restore-keys: |
+            lldap-bin-amd64-
+      #- name: add cargo chef
+      #  run: cargo install cargo-chef
+      #- name: chef prepare
+      #  run: cargo chef prepare  --recipe-path recipe.json
+      #- name: cook?
+      #  run: cargo chef cook --release --recipe-path recipe.json
       - name: compile amd64
         run: cargo build --target=x86_64-unknown-linux-gnu --release -p lldap -p migration-tool
       - name: check path
@@ -275,7 +347,14 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
-            
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      
       - name: parse tag
         uses: gacts/github-slug@v1
         id: slug
@@ -296,8 +375,10 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           file: ./.github/workflows/Dockerfile.ci
           tags: nitnelave/lldap:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          #cache-from: type=gha
+          #cache-to: type=gha,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
           
       - name: Build and push release
         if: github.event_name == 'release'
@@ -309,9 +390,15 @@ jobs:
           # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
           file: ./.github/workflows/Dockerfile.ci
           tags: nitnelave/lldap:stable, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max    
-
+          #cache-from: type=gha
+          #cache-to: type=gha,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
     
       - name: Update repo description
         if: github.event_name != 'pull_request'
