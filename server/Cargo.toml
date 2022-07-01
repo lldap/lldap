@@ -7,11 +7,12 @@ version = "0.3.0-alpha.1"
 [dependencies]
 actix = "0.12"
 actix-files = "0.6.0-beta.6"
-actix-http = "3.0.0-beta.9"
+actix-http = "=3.0.0-beta.9"
 actix-rt = "2.2.0"
-actix-server = "2.0.0-beta.5"
+actix-server = "=2.0.0-beta.5"
 actix-service = "2.0.0"
-actix-web = "4.0.0-beta.8"
+actix-tls = "=3.0.0-beta.5"
+actix-web = "=4.0.0-beta.8"
 actix-web-httpauth = "0.6.0-beta.2"
 anyhow = "*"
 async-trait = "0.1"
@@ -27,7 +28,7 @@ itertools = "0.10.1"
 juniper = "0.15.6"
 juniper_actix = "0.4.0"
 jwt = "0.13"
-ldap3_server = ">=0.1.9"
+ldap3_server = "=0.1.11"
 log = "*"
 native-tls = "0.2.10"
 orion = "0.16"
@@ -85,7 +86,7 @@ version = "^0.25"
 features = ["with-chrono", "sqlx-sqlite"]
 
 [dependencies.sea-query-binder]
-version = "*"
+version = "0.1"
 features = ["with-chrono", "sqlx-sqlite", "sqlx-any"]
 
 [dependencies.opaque-ke]
