@@ -43,6 +43,6 @@ authentication_backend:
     display_name_attribute: displayName
     # The username and password of the admin user.
     # "admin" should be the admin username you set in the LLDAP configuration
-    user: cn=admin,ou=people,dc=example,dc=com
+    user: uid=admin,ou=people,dc=example,dc=com
     # Password can also be set using a secret: https://www.authelia.com/docs/configuration/secrets.html
     password: 'REPLACE_ME'
