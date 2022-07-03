@@ -10,3 +10,29 @@ header h1 {
   font-weight: 700;
   text-decoration: none;
 }
+
+/* Super simple dark theme - By Jaiden W */
+
+body.dark-theme{
+  background:#202020;
+  color:#fff!;
+}
+.h1.dark-theme, .h2.dark-theme, .h3.dark-theme, .h4.dark-theme, .h5.dark-theme, .h6.dark-theme, h1.dark-theme, h2.dark-theme, h3.dark-theme, h4.dark-theme, h5.dark-theme, h6.dark-theme, p.dark-theme, th.dark-theme, tr.dark-theme, td.dark-theme, .link-dark.dark-theme {
+  color:#fff;
+}
+.link-dark.dark-theme:focus, .link-dark.dark-theme:hover {
+  color: #fff;
+}
+.dropdown-menu.dark-theme {
+  background:#202020;
+  border:1px solid #ffffff50;
+}
+.dropdown-item.dark-theme{
+  color:white;
+}
+.dropdown-divider.dark-theme{
+  color:white;}
+
+a.dark-theme {
+  color: #1E90FF;
+}
