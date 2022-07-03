@@ -17,7 +17,7 @@ body.dark-theme{
   background:#202020;
   color:#fff!;
 }
-.h1.dark-theme, .h2.dark-theme, .h3.dark-theme, .h4.dark-theme, .h5.dark-theme, .h6.dark-theme, h1.dark-theme, h2.dark-theme, h3.dark-theme, h4.dark-theme, h5.dark-theme, h6.dark-theme, p.dark-theme, th.dark-theme, tr.dark-theme, td.dark-theme, .link-dark.dark-theme {
+.h1.dark-theme, .h2.dark-theme, .h3.dark-theme, .h4.dark-theme, .h5.dark-theme, .h6.dark-theme, h1.dark-theme, h2.dark-theme, h3.dark-theme, h4.dark-theme, h5.dark-theme, h6.dark-theme, p.dark-theme, th.dark-theme, tr.dark-theme, td.dark-theme, .link-dark.dark-theme, label.dark-theme {
   color:#fff;
 }
 .link-dark.dark-theme:focus, .link-dark.dark-theme:hover {
@@ -27,12 +27,38 @@ body.dark-theme{
   background:#202020;
   border:1px solid #ffffff50;
 }
+
 .dropdown-item.dark-theme{
   color:white;
+}
+.dropdown-item.dark-theme:focus, .dropdown-item.dark-theme:hover {
+  color: #fff;
+  background-color: #262626;
 }
 .dropdown-divider.dark-theme{
   color:white;}
 
 a.dark-theme {
   color: #1E90FF;
+}
+.form-control.dark-theme {
+  background: #393939;
+  color: white;
+  border: 1px solid #5b5b5b;
+
+}
+.form-control.dark-theme:focus {
+  color: #fff;
+  background-color: #5e5e5e;
+}
+.bg-light.dark-theme{
+  background:#202020!important;
+}
+select.dark-theme {
+  word-wrap: normal;
+  color: white;
+  background: #202020;
+  border: 1px solid white;
+  border-radius: 5px;
+  padding: 5px;
 }
