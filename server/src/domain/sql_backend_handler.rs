@@ -207,15 +207,9 @@ impl BackendHandler for SqlBackendHandler {
                                 Some(GroupDetails {
                                     group_id: row.get::<GroupId, _>(&*Groups::GroupId.to_string()),
                                     display_name,
-                                    creation_date: {
-                                        debug!(
-                                            "creation_date: {}",
-                                            row.get::<String, _>("group_creation_date")
-                                        );
-                                        row.get::<chrono::DateTime<chrono::Utc>, _>(
-                                            "group_creation_date",
-                                        )
-                                    },
+                                    creation_date: row.get::<chrono::DateTime<chrono::Utc>, _>(
+                                        "group_creation_date",
+                                    ),
                                     uuid: row.get::<Uuid, _>("group_uuid"),
                                 })
                             }
