@@ -199,14 +199,27 @@ impl BackendHandler for SqlBackendHandler {
                 user: User::from_row(rows.peek().unwrap()).unwrap(),
                 groups: if get_groups {
                     Some(
-                        rows.map(|row| GroupDetails {
-                            group_id: row.get::<GroupId, _>(&*Groups::GroupId.to_string()),
-                            display_name: row.get::<String, _>("group_display_name"),
-                            creation_date: row
-                                .get::<chrono::DateTime<chrono::Utc>, _>("group_creation_date"),
-                            uuid: row.get::<Uuid, _>("group_uuid"),
+                        rows.filter_map(|row| {
+                            let display_name = row.get::<String, _>("group_display_name");
+                            if display_name.is_empty() {
+                                None
+                            } else {
+                                Some(GroupDetails {
+                                    group_id: row.get::<GroupId, _>(&*Groups::GroupId.to_string()),
+                                    display_name,
+                                    creation_date: {
+                                        debug!(
+                                            "creation_date: {}",
+                                            row.get::<String, _>("group_creation_date")
+                                        );
+                                        row.get::<chrono::DateTime<chrono::Utc>, _>(
+                                            "group_creation_date",
+                                        )
+                                    },
+                                    uuid: row.get::<Uuid, _>("group_uuid"),
+                                })
+                            }
                         })
-                        .filter(|g| !g.display_name.is_empty())
                         .collect(),
                     )
                 } else {
@@ -675,6 +688,7 @@ mod tests {
         insert_user(&handler, "bob", "bob00").await;
         insert_user(&handler, "patrick", "pass").await;
         insert_user(&handler, "John", "Pa33w0rd!").await;
+        insert_user(&handler, "NoGroup", "Pa33w0rd!").await;
         let group_1 = insert_group(&handler, "Best Group").await;
         let group_2 = insert_group(&handler, "Worst Group").await;
         insert_membership(&handler, group_1, "bob").await;
@@ -683,7 +697,7 @@ mod tests {
         insert_membership(&handler, group_2, "John").await;
         {
             let users = get_user_names(&handler, None).await;
-            assert_eq!(users, vec!["bob", "john", "patrick"]);
+            assert_eq!(users, vec!["bob", "john", "nogroup", "patrick"]);
         }
         {
             let users = get_user_names(
@@ -712,7 +726,7 @@ mod tests {
                 )))),
             )
             .await;
-            assert_eq!(users, vec!["john", "patrick"]);
+            assert_eq!(users, vec!["john", "nogroup", "patrick"]);
         }
         {
             let users = handler
@@ -737,6 +751,7 @@ mod tests {
                 vec![
                     ("bob".to_string(), String::new(), vec![group_1]),
                     ("john".to_string(), String::new(), vec![group_2]),
+                    ("nogroup".to_string(), String::new(), vec![]),
                     ("patrick".to_string(), String::new(), vec![group_1, group_2]),
                 ]
             );
