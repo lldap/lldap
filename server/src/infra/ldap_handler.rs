@@ -566,7 +566,22 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             (Some(user), Some(password)) => {
                 match get_user_id_from_distinguished_name(user, &self.base_dn, &self.base_dn_str) {
                     Ok(uid) => {
-                        if *permission != Permission::Admin && user_id != &uid {
+                        let user_is_admin = match self.backend_handler.get_user_groups(&uid).await {
+                            Ok(groups) => groups.iter().any(|g| g.display_name == "lldap_admin"),
+                            Err(e) => {
+                                return vec![make_extended_response(
+                                    LdapResultCode::OperationsError,
+                                    format!(
+                                        "Internal error while requesting user's groups: {:#?}",
+                                        e
+                                    ),
+                                )]
+                            }
+                        };
+                        if !(*permission == Permission::Admin
+                            || user_id == &uid
+                            || (*permission == Permission::Readonly && !user_is_admin))
+                        {
                             return vec![make_extended_response(
                                 LdapResultCode::InsufficentAccessRights,
                                 format!(
@@ -2258,6 +2273,9 @@ mod tests {
     #[tokio::test]
     async fn test_password_change() {
         let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .returning(|_| Ok(HashSet::new()));
         use lldap_auth::*;
         let mut rng = rand::rngs::OsRng;
         let registration_start_request =
@@ -2300,8 +2318,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_password_change_readonly() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .returning(|_| Ok(HashSet::new()));
+        use lldap_auth::*;
+        let mut rng = rand::rngs::OsRng;
+        let registration_start_request =
+            opaque::client::registration::start_registration("password", &mut rng).unwrap();
+        let request = registration::ClientRegistrationStartRequest {
+            username: "bob".to_string(),
+            registration_start_request: registration_start_request.message,
+        };
+        let start_response = opaque::server::registration::start_registration(
+            &opaque::server::ServerSetup::new(&mut rng),
+            request.registration_start_request,
+            &request.username,
+        )
+        .unwrap();
+        mock.expect_registration_start().times(1).return_once(|_| {
+            Ok(registration::ServerRegistrationStartResponse {
+                server_data: "".to_string(),
+                registration_response: start_response.message,
+            })
+        });
+        mock.expect_registration_finish()
+            .times(1)
+            .return_once(|_| Ok(()));
+        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        let request = LdapOp::ExtendedRequest(
+            LdapPasswordModifyRequest {
+                user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
+                old_password: None,
+                new_password: Some("password".to_string()),
+            }
+            .into(),
+        );
+        assert_eq!(
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![make_extended_response(
+                LdapResultCode::Success,
+                "".to_string(),
+            )])
+        );
+    }
+
+    #[tokio::test]
     async fn test_password_change_errors() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .returning(|_| Ok(HashSet::new()));
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
                 user_identity: None,
@@ -2346,8 +2415,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_password_change_unauthorized() {
-        let mut ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new()).await;
+    async fn test_password_change_unauthorized_readonly() {
+        let mut mock = MockTestBackendHandler::new();
+        let mut groups = HashSet::new();
+        groups.insert(GroupDetails {
+            group_id: GroupId(0),
+            display_name: "lldap_admin".to_string(),
+            creation_date: chrono::Utc.timestamp(42, 42),
+            uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+        });
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .times(1)
+            .return_once(|_| Ok(groups));
+        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
                 user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
