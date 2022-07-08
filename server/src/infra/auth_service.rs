@@ -430,7 +430,7 @@ async fn opaque_register_start<Backend>(
     data: web::Data<AppState<Backend>>,
 ) -> TcpResult<registration::ServerRegistrationStartResponse>
 where
-    Backend: OpaqueHandler + 'static,
+    Backend: BackendHandler + OpaqueHandler + 'static,
 {
     use actix_web::FromRequest;
     let validation_result = BearerAuth::from_request(&request, &mut payload.0)
@@ -448,8 +448,14 @@ where
         .await
         .map_err(|e| TcpError::BadRequest(format!("{:#?}", e)))?
         .into_inner();
-    let user_id = &registration_start_request.username;
-    if !validation_result.can_write(user_id) {
+    let user_id = UserId::new(&registration_start_request.username);
+    let user_is_admin = data
+        .backend_handler
+        .get_user_groups(&user_id)
+        .await?
+        .iter()
+        .any(|g| g.display_name == "lldap_admin");
+    if !validation_result.can_change_password(&user_id, user_is_admin) {
         return Err(TcpError::UnauthorizedError(
             "Not authorized to change the user's password".to_string(),
         ));
@@ -466,7 +472,7 @@ async fn opaque_register_start_handler<Backend>(
     data: web::Data<AppState<Backend>>,
 ) -> ApiResult<registration::ServerRegistrationStartResponse>
 where
-    Backend: OpaqueHandler + 'static,
+    Backend: BackendHandler + OpaqueHandler + 'static,
 {
     opaque_register_start(request, payload, data)
         .await
@@ -559,13 +565,14 @@ where
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Permission {
     Admin,
+    PasswordManager,
     Readonly,
     Regular,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ValidationResults {
-    pub user: String,
+    pub user: UserId,
     pub permission: Permission,
 }
 
@@ -573,7 +580,7 @@ impl ValidationResults {
     #[cfg(test)]
     pub fn admin() -> Self {
         Self {
-            user: "admin".to_string(),
+            user: UserId::new("admin"),
             permission: Permission::Admin,
         }
     }
@@ -585,19 +592,29 @@ impl ValidationResults {
 
     #[must_use]
     pub fn is_admin_or_readonly(&self) -> bool {
-        self.permission == Permission::Admin || self.permission == Permission::Readonly
-    }
-
-    #[must_use]
-    pub fn can_read(&self, user: &str) -> bool {
         self.permission == Permission::Admin
             || self.permission == Permission::Readonly
-            || self.user == user
+            || self.permission == Permission::PasswordManager
     }
 
     #[must_use]
-    pub fn can_write(&self, user: &str) -> bool {
-        self.permission == Permission::Admin || self.user == user
+    pub fn can_read(&self, user: &UserId) -> bool {
+        self.permission == Permission::Admin
+            || self.permission == Permission::PasswordManager
+            || self.permission == Permission::Readonly
+            || &self.user == user
+    }
+
+    #[must_use]
+    pub fn can_change_password(&self, user: &UserId, user_is_admin: bool) -> bool {
+        self.permission == Permission::Admin
+            || (self.permission == Permission::PasswordManager && !user_is_admin)
+            || &self.user == user
+    }
+
+    #[must_use]
+    pub fn can_write(&self, user: &UserId) -> bool {
+        self.permission == Permission::Admin || &self.user == user
     }
 }
 
@@ -627,10 +644,12 @@ pub(crate) fn check_if_token_is_valid<Backend>(
     }
     let is_in_group = |name| token.claims().groups.contains(name);
     Ok(ValidationResults {
-        user: token.claims().user.clone(),
+        user: UserId::new(&token.claims().user),
         permission: if is_in_group("lldap_admin") {
             Permission::Admin
-        } else if is_in_group("lldap_readonly") {
+        } else if is_in_group("lldap_password_manager") {
+            Permission::PasswordManager
+        } else if is_in_group("lldap_strict_readonly") {
             Permission::Readonly
         } else {
             Permission::Regular

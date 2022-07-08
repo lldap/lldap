@@ -121,14 +121,15 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user.id);
         });
-        if !context.validation_result.can_write(&user.id) {
+        let user_id = UserId::new(&user.id);
+        if !context.validation_result.can_write(&user_id) {
             span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized user update".into());
         }
         context
             .handler
             .update_user(UpdateUserRequest {
-                user_id: UserId::new(&user.id),
+                user_id,
                 email: user.email,
                 display_name: user.display_name,
                 first_name: user.first_name,
@@ -200,13 +201,14 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized group membership modification".into());
         }
+        let user_id = UserId::new(&user_id);
         if context.validation_result.user == user_id && group_id == 1 {
             span.in_scope(|| debug!("Cannot remove admin rights for current user"));
             return Err("Cannot remove admin rights for current user".into());
         }
         context
             .handler
-            .remove_user_from_group(&UserId::new(&user_id), GroupId(group_id))
+            .remove_user_from_group(&user_id, GroupId(group_id))
             .instrument(span)
             .await?;
         Ok(Success::new())
@@ -217,6 +219,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id);
         });
+        let user_id = UserId::new(&user_id);
         if !context.validation_result.is_admin() {
             span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized user deletion".into());
@@ -227,7 +230,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         }
         context
             .handler
-            .delete_user(&UserId::new(&user_id))
+            .delete_user(&user_id)
             .instrument(span)
             .await?;
         Ok(Success::new())

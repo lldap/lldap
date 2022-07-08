@@ -6,7 +6,7 @@ use crate::{
         },
         opaque_handler::OpaqueHandler,
     },
-    infra::auth_service::Permission,
+    infra::auth_service::{Permission, ValidationResults},
 };
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
@@ -450,7 +450,7 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
 }
 
 pub struct LdapHandler<Backend: BackendHandler + LoginHandler + OpaqueHandler> {
-    user_info: Option<(UserId, Permission)>,
+    user_info: Option<ValidationResults>,
     backend_handler: Backend,
     pub base_dn: Vec<(String, String)>,
     base_dn_str: String,
@@ -509,16 +509,18 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         .map(|groups| groups.iter().any(|g| g.display_name == name))
                         .unwrap_or(false)
                 };
-                self.user_info = Some((
-                    user_id,
-                    if is_in_group("lldap_admin") {
+                self.user_info = Some(ValidationResults {
+                    user: user_id,
+                    permission: if is_in_group("lldap_admin") {
                         Permission::Admin
-                    } else if is_in_group("lldap_readonly") {
+                    } else if is_in_group("lldap_password_manager") {
+                        Permission::PasswordManager
+                    } else if is_in_group("lldap_strict_readonly") {
                         Permission::Readonly
                     } else {
                         Permission::Regular
                     },
-                ));
+                });
                 debug!("Success!");
                 (LdapResultCode::Success, "".to_string())
             }
@@ -553,7 +555,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         &mut self,
         request: &LdapPasswordModifyRequest,
     ) -> Vec<LdapOp> {
-        let (user_id, permission) = match &self.user_info {
+        let credentials = match &self.user_info {
             Some(info) => info,
             _ => {
                 return vec![make_search_error(
@@ -578,15 +580,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                                 )]
                             }
                         };
-                        if !(*permission == Permission::Admin
-                            || user_id == &uid
-                            || (*permission == Permission::Readonly && !user_is_admin))
-                        {
+                        if !credentials.can_change_password(&uid, user_is_admin) {
                             return vec![make_extended_response(
                                 LdapResultCode::InsufficentAccessRights,
                                 format!(
                                     r#"User `{}` cannot modify the password of user `{}`"#,
-                                    &user_id, &uid
+                                    &credentials.user, &uid
                                 ),
                             )];
                         }
@@ -626,15 +625,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     pub async fn do_search_or_dse(&mut self, request: &LdapSearchRequest) -> Vec<LdapOp> {
-        let user_filter = match self.user_info.clone() {
-            Some((_, Permission::Admin)) | Some((_, Permission::Readonly)) => None,
-            Some((user_id, Permission::Regular)) => Some(user_id),
+        let user_info = match &self.user_info {
             None => {
                 return vec![make_search_error(
                     LdapResultCode::InsufficentAccessRights,
                     "No user currently bound".to_string(),
-                )];
+                )]
             }
+            Some(u) => u,
         };
         if request.base.is_empty()
             && request.scope == LdapSearchScope::Base
@@ -643,6 +641,11 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             debug!("rootDSE request");
             return vec![root_dse_response(&self.base_dn_str), make_search_success()];
         }
+        let user_filter = if user_info.is_admin_or_readonly() {
+            None
+        } else {
+            Some(user_info.user.clone())
+        };
         self.do_search(request, user_filter).await
     }
 
@@ -1135,7 +1138,13 @@ mod tests {
     async fn setup_bound_readonly_handler(
         mock: MockTestBackendHandler,
     ) -> LdapHandler<MockTestBackendHandler> {
-        setup_bound_handler_with_group(mock, "lldap_readonly").await
+        setup_bound_handler_with_group(mock, "lldap_strict_readonly").await
+    }
+
+    async fn setup_bound_password_manager_handler(
+        mock: MockTestBackendHandler,
+    ) -> LdapHandler<MockTestBackendHandler> {
+        setup_bound_handler_with_group(mock, "lldap_password_manager").await
     }
 
     async fn setup_bound_admin_handler(
@@ -2312,7 +2321,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_password_change_readonly() {
+    async fn test_password_change_password_manager() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
@@ -2340,7 +2349,7 @@ mod tests {
         mock.expect_registration_finish()
             .times(1)
             .return_once(|_| Ok(()));
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        let mut ldap_handler = setup_bound_password_manager_handler(mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
                 user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
@@ -2409,7 +2418,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_password_change_unauthorized_readonly() {
+    async fn test_password_change_unauthorized_password_manager() {
         let mut mock = MockTestBackendHandler::new();
         let mut groups = HashSet::new();
         groups.insert(GroupDetails {
@@ -2422,6 +2431,31 @@ mod tests {
             .with(eq(UserId::new("bob")))
             .times(1)
             .return_once(|_| Ok(groups));
+        let mut ldap_handler = setup_bound_password_manager_handler(mock).await;
+        let request = LdapOp::ExtendedRequest(
+            LdapPasswordModifyRequest {
+                user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
+                old_password: Some("pass".to_string()),
+                new_password: Some("password".to_string()),
+            }
+            .into(),
+        );
+        assert_eq!(
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![make_extended_response(
+                LdapResultCode::InsufficentAccessRights,
+                "User `test` cannot modify the password of user `bob`".to_string(),
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_password_change_unauthorized_readonly() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .times(1)
+            .return_once(|_| Ok(HashSet::new()));
         let mut ldap_handler = setup_bound_readonly_handler(mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
