@@ -190,8 +190,8 @@ filter like: `(memberOf=cn=admins,ou=groups,dc=example,dc=com)`.
 
 The administrator group for LLDAP is `lldap_admin`: anyone in this group has
 admin rights in the Web UI. Most LDAP integrations should instead use a user in
-the `lldap_readonly` group, to avoid granting full administration access to
-many services.
+the `lldap_strict_readonly` or `lldap_password_manager` group, to avoid granting full
+administration access to many services.
 
 ### Sample client configurations
 
