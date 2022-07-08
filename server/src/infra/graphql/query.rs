@@ -113,13 +113,14 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         span.in_scope(|| {
             debug!(?user_id);
         });
+        let user_id = UserId::new(&user_id);
         if !context.validation_result.can_read(&user_id) {
             span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized access to user data".into());
         }
         Ok(context
             .handler
-            .get_user_details(&UserId::new(&user_id))
+            .get_user_details(&user_id)
             .instrument(span)
             .await
             .map(Into::into)?)
