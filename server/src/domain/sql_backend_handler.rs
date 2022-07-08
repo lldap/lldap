@@ -463,24 +463,7 @@ impl BackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn create_group(&self, group_name: &str) -> Result<GroupId> {
         debug!(?group_name);
-        let now = chrono::Utc::now();
-        let (query, values) = Query::insert()
-            .into_table(Groups::Table)
-            .columns(vec![
-                Groups::DisplayName,
-                Groups::CreationDate,
-                Groups::Uuid,
-            ])
-            .values_panic(vec![
-                group_name.into(),
-                now.naive_utc().into(),
-                Uuid::from_name_and_date(group_name, &now).into(),
-            ])
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-        query_with(query.as_str(), values)
-            .execute(&self.sql_pool)
-            .await?;
+        crate::domain::sql_tables::create_group(group_name, &self.sql_pool).await?;
         let (query, values) = Query::select()
             .column(Groups::GroupId)
             .from(Groups::Table)

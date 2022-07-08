@@ -68,14 +68,18 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     }
     if backend_handler
         .list_groups(Some(GroupRequestFilter::DisplayName(
-            "lldap_readonly".to_string(),
+            "lldap_password_manager".to_string(),
         )))
         .await?
         .is_empty()
     {
-        warn!("Could not find readonly group, trying to create it");
+        warn!("Could not find password_manager group, trying to create it");
         backend_handler
-            .create_group("lldap_readonly")
+            .create_group("lldap_password_manager")
+            .await
+            .context("while creating password_manager group")?;
+        backend_handler
+            .create_group("lldap_strict_readonly")
             .await
             .context("while creating readonly group")?;
     }
