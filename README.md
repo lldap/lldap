@@ -57,6 +57,9 @@ many backends, from KeyCloak to Authelia to Nextcloud and
   align="right"
 />
 
+It comes with a frontend that makes user management easy, and allows users to
+edit their own details or reset their password by email.
+
 The goal is _not_ to provide a full LDAP server; if you're interested in that,
 check out OpenLDAP. This server is a user management system that is:
 * simple to setup (no messing around with `slapd`),
@@ -79,7 +82,7 @@ truth for users, via LDAP.
 
 The image is available at `nitnelave/lldap`. You should persist the `/data`
 folder, which contains your configuration, the database and the private key
-file (unless you move them in the config).
+file.
 
 Configure the server by copying the `lldap_config.docker_template.toml` to
 `/data/lldap_config.toml` and updating the configuration values (especially the
@@ -140,12 +143,9 @@ To bring up the server, just run `cargo run`. The default config is in
 
 ### Cross-compilation
 
-No Docker image is provided for other architectures, due to the difficulty of
-setting up cross-compilation inside a Docker image.
+Docker images are provided for AMD64, ARM64 and ARM/V7.
 
-Some pre-compiled binaries are provided for each release, starting with 0.2.
-
-If you want to cross-compile, you can do so by installing
+If you want to cross-compile yourself, you can do so by installing
 [`cross`](https://github.com/rust-embedded/cross):
 
 ```sh
@@ -189,24 +189,32 @@ Testing group membership through `memberOf` is supported, so you can have a
 filter like: `(memberOf=cn=admins,ou=groups,dc=example,dc=com)`.
 
 The administrator group for LLDAP is `lldap_admin`: anyone in this group has
-admin rights in the Web UI.
+admin rights in the Web UI. Most LDAP integrations should instead use a user in
+the `lldap_readonly` group, to avoid granting full administration access to
+many services.
 
 ### Sample client configurations
 
 Some specific clients have been tested to work and come with sample
 configuration files, or guides. See the [`example_configs`](example_configs)
 folder for help with:
+  - [Apache Guacamole](example_configs/apacheguacamole.md)
   - [Authelia](example_configs/authelia_config.yml)
   - [Bookstack](example_configs/bookstack.env.example)
   - [Calibre-Web](example_configs/calibre_web.md)
   - [Dolibarr](example_configs/dolibarr.md)
+  - [Emby](example_configs/emby.md)
   - [Gitea](example_configs/gitea.md)
+  - [Grafana](example_configs/grafana_ldap_config.toml)
   - [Jellyfin](example_configs/jellyfin.md)
   - [Jisti Meet](example_configs/jitsi_meet.conf)
   - [KeyCloak](example_configs/keycloak.md)
   - [Matrix](example_configs/matrix_synapse.yml)
   - [Organizr](example_configs/Organizr.md)
+  - [Portainer](example_configs/portainer.md)
   - [Seafile](example_configs/seafile.md)
+  - [Syncthing](example_configs/syncthing.md)
+  - [WG Portal](example_configs/wg_portal.env.example)
 
 ## Comparisons with other services
 

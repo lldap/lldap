@@ -16,6 +16,7 @@ Dockerfile
 # Don't track docs
 *.md
 LICENSE
+CHANGELOG.md
 docs/*
 example_configs/*
 
