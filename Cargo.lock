@@ -1959,7 +1959,7 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "lldap"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "actix",
  "actix-files",
@@ -2022,7 +2022,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_app"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "chrono",

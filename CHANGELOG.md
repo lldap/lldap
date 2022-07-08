@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2022-07-08
+
+### Breaking
+
+The `lldap_readonly` group has been renamed `lldap_password_manager` (migration happens automatically) and a new `lldap_strict_readonly` group was introduced.
+
+### Added
+  - A new `lldap_strict_readonly` group allows granting readonly rights to users (not able to change other's passwords, in particular).
+
+### Changed
+  - The `lldap_readonly` group is renamed `lldap_password_manager` since it still allows users to change (non-admin) passwords.
+
+### Removed
+  - The `lldap_readonly` group was removed.
+
 ## [0.3.0] - 2022-07-08
 
 ### Breaking
