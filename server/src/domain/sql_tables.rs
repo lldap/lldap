@@ -1,7 +1,8 @@
 use super::handler::{GroupId, UserId, Uuid};
 use sea_query::*;
+use sea_query_binder::SqlxBinder;
 use sqlx::Row;
-use tracing::warn;
+use tracing::{debug, warn};
 
 pub type Pool = sqlx::sqlite::SqlitePool;
 pub type PoolOptions = sqlx::sqlite::SqlitePoolOptions;
@@ -81,6 +82,28 @@ async fn column_exists(pool: &Pool, table_name: &str, column_name: &str) -> sqlx
         .await?
         .get::<i32, _>("col_count")
         > 0)
+}
+
+pub async fn create_group(group_name: &str, pool: &Pool) -> sqlx::Result<()> {
+    let now = chrono::Utc::now();
+    let (query, values) = Query::insert()
+        .into_table(Groups::Table)
+        .columns(vec![
+            Groups::DisplayName,
+            Groups::CreationDate,
+            Groups::Uuid,
+        ])
+        .values_panic(vec![
+            group_name.into(),
+            now.naive_utc().into(),
+            Uuid::from_name_and_date(group_name, &now).into(),
+        ])
+        .build_sqlx(DbQueryBuilder {});
+    debug!(%query);
+    sqlx::query_with(query.as_str(), values)
+        .execute(pool)
+        .await
+        .map(|_| ())
 }
 
 pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
@@ -298,6 +321,29 @@ pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
     .execute(pool)
     .await?;
 
+    if sqlx::query(
+        &Query::select()
+            .from(Groups::Table)
+            .column(Groups::DisplayName)
+            .cond_where(Expr::col(Groups::DisplayName).eq("lldap_readonly"))
+            .to_string(DbQueryBuilder {}),
+    )
+    .fetch_one(pool)
+    .await
+    .is_ok()
+    {
+        sqlx::query(
+            &Query::update()
+                .table(Groups::Table)
+                .values(vec![(Groups::DisplayName, "lldap_password_manager".into())])
+                .cond_where(Expr::col(Groups::DisplayName).eq("lldap_readonly"))
+                .to_string(DbQueryBuilder {}),
+        )
+        .execute(pool)
+        .await?;
+        create_group("lldap_strict_readonly", pool).await?
+    }
+
     Ok(())
 }
 
@@ -349,14 +395,21 @@ mod tests {
         .execute(&sql_pool)
         .await
         .unwrap();
-        sqlx::query(r#"CREATE TABLE groups ( group_id int, display_name TEXT );"#)
+        sqlx::query(r#"CREATE TABLE groups ( group_id INTEGER PRIMARY KEY, display_name TEXT );"#)
             .execute(&sql_pool)
             .await
             .unwrap();
+        sqlx::query(
+            r#"INSERT INTO groups (display_name)
+                      VALUES ("lldap_admin"), ("lldap_readonly")"#,
+        )
+        .execute(&sql_pool)
+        .await
+        .unwrap();
         init_table(&sql_pool).await.unwrap();
         sqlx::query(
-            r#"INSERT INTO groups (group_id, display_name, creation_date, uuid)
-                      VALUES (3, "test", "1970-01-01 00:00:00", "abc")"#,
+            r#"INSERT INTO groups (display_name, creation_date, uuid)
+                      VALUES ("test", "1970-01-01 00:00:00", "abc")"#,
         )
         .execute(&sql_pool)
         .await
@@ -370,6 +423,24 @@ mod tests {
                 .map(|row| row.get::<Uuid, _>("uuid"))
                 .collect::<Vec<_>>(),
             vec![crate::uuid!("a02eaf13-48a7-30f6-a3d4-040ff7c52b04")]
+        );
+        assert_eq!(
+            sqlx::query(r#"SELECT group_id, display_name FROM groups"#)
+                .fetch_all(&sql_pool)
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|row| (
+                    row.get::<GroupId, _>("group_id"),
+                    row.get::<String, _>("display_name")
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (GroupId(1), "lldap_admin".to_string()),
+                (GroupId(2), "lldap_password_manager".to_string()),
+                (GroupId(3), "lldap_strict_readonly".to_string()),
+                (GroupId(4), "test".to_string())
+            ]
         );
     }
 }

@@ -1959,7 +1959,7 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "lldap"
-version = "0.3.0-rc.1"
+version = "0.3.0"
 dependencies = [
  "actix",
  "actix-files",
@@ -2022,7 +2022,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_app"
-version = "0.3.0-alpha.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2035,7 +2035,7 @@ dependencies = [
  "serde",
  "serde_json",
  "validator",
- "validator_derive 0.15.0",
+ "validator_derive",
  "wasm-bindgen",
  "web-sys",
  "yew",
@@ -3973,7 +3973,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "url",
- "validator_types 0.14.0",
+ "validator_types",
 ]
 
 [[package]]
@@ -3989,23 +3989,7 @@ dependencies = [
  "quote",
  "regex",
  "syn",
- "validator_types 0.14.0",
-]
-
-[[package]]
-name = "validator_derive"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea7ed5e8cf2b6bdd64a6c4ce851da25388a89327b17b88424ceced6bd5017923"
-dependencies = [
- "if_chain",
- "lazy_static",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "regex",
- "syn",
- "validator_types 0.15.0",
+ "validator_types",
 ]
 
 [[package]]
@@ -4013,16 +3997,6 @@ name = "validator_types"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ded9d97e1d42327632f5f3bae6403c04886e2de3036261ef42deebd931a6a291"
-dependencies = [
- "proc-macro2",
- "syn",
-]
-
-[[package]]
-name = "validator_types"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2ddf34293296847abfc1493b15c6e2f5d3cd19f57ad7d22673bf4c6278da329"
 dependencies = [
  "proc-macro2",
  "syn",
@@ -4346,7 +4320,7 @@ version = "0.1.8"
 source = "git+https://github.com/sassman/yew_form/?rev=67050812695b7a8a90b81b0637e347fc6629daed#67050812695b7a8a90b81b0637e347fc6629daed"
 dependencies = [
  "validator",
- "validator_derive 0.14.0",
+ "validator_derive",
  "yew",
 ]
 
