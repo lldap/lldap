@@ -876,19 +876,18 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         )?;
                         Ok(GroupRequestFilter::Member(user_name))
                     }
-                    "objectclass" => {
-                        if value == "groupofuniquenames" || value == "groupofnames" {
+                    "objectclass" => match value.as_str() {
+                        "groupofuniquenames" | "groupofnames" => {
                             Ok(GroupRequestFilter::And(vec![]))
-                        } else {
-                            Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
-                                vec![],
-                            ))))
                         }
-                    }
+                        _ => Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
+                            vec![],
+                        )))),
+                    },
                     _ => {
                         match map_field(field) {
                             Ok("display_name") | Ok("user_id") => {
-                                return Ok(GroupRequestFilter::DisplayName(value.clone()));
+                                return Ok(GroupRequestFilter::DisplayName(value.to_string()));
                             }
                             Ok("uuid") => {
                                 return Ok(GroupRequestFilter::Uuid(Uuid::try_from(
@@ -966,19 +965,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         )?;
                         Ok(UserRequestFilter::MemberOf(group_name))
                     }
-                    "objectclass" => {
-                        if value == "person"
-                            || value == "inetOrgPerson"
-                            || value == "posixAccount"
-                            || value == "mailAccount"
-                        {
+                    "objectclass" => match value.to_ascii_lowercase().as_str() {
+                        "person" | "inetorgperson" | "posixaccount" | "mailaccount" => {
                             Ok(UserRequestFilter::And(vec![]))
-                        } else {
-                            Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
-                                vec![],
-                            ))))
                         }
-                    }
+                        _ => Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
+                            vec![],
+                        )))),
+                    },
                     _ => match map_field(field) {
                         Ok(field) => {
                             if field == "user_id" {
@@ -1699,7 +1693,7 @@ mod tests {
                     "uniqueMember".to_string(),
                     "uid=bob,ou=peopLe,Dc=eXample,dc=com".to_string(),
                 ),
-                LdapFilter::Equality("obJEctclass".to_string(), "groupOfUniqueNames".to_string()),
+                LdapFilter::Equality("obJEctclass".to_string(), "groupofUniqueNames".to_string()),
                 LdapFilter::Equality("objectclass".to_string(), "groupOfNames".to_string()),
                 LdapFilter::Present("objectclass".to_string()),
                 LdapFilter::Present("dn".to_string()),
@@ -1876,7 +1870,7 @@ mod tests {
                     "uid".to_string(),
                     "bob".to_string(),
                 ))),
-                LdapFilter::Equality("objectclass".to_string(), "person".to_string()),
+                LdapFilter::Equality("objectclass".to_string(), "persOn".to_string()),
                 LdapFilter::Equality("objectclass".to_string(), "other".to_string()),
                 LdapFilter::Present("objectClass".to_string()),
                 LdapFilter::Present("uid".to_string()),
