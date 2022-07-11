@@ -1,0 +1,376 @@
+name: Docker Static
+
+on:
+  push:
+    branches:
+      - 'main'
+  release:
+    types:
+      - 'published'
+  pull_request:
+    branches:
+      - 'main'
+  workflow_dispatch:
+    inputs:
+      msg:
+        description: "Set message"
+        default: "Manual trigger"
+        
+env:
+  CARGO_TERM_COLOR: always
+
+# In total 5 jobs, all of the jobs are containerized
+# ---
+
+# build-ui , create/compile the web
+## Use rustlang/rust:nighlty image
+### Install nodejs from nodesource repo
+### install wasm
+### install rollup
+### run app/build.sh 
+### upload artifacts
+
+# builds-armhf, build-aarch64, build-amd64 create binary for respective arch
+## Use rustlang/rust:nightly image
+### Add non native architecture dpkg --add-architecture XXX
+### Install dev tool gcc g++, etc per respective arch
+### Cargo build
+### Upload artifacts
+
+## the CARGO_ env
+#CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+#OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
+#OPENSSL_LIB_DIR: "/usr/lib/arm-linux-gnueabihf/"
+# This will determine which architecture lib will be used.
+
+# build-ui,builds-armhf, build-aarch64, build-amd64 will upload artifacts will be used next job
+# build-docker-image job will fetch artifacts and run Dockerfile.ci then push the image.
+
+# On current https://hub.docker.com/_/rust
+# 1-bullseye, 1.61-bullseye, 1.61.0-bullseye, bullseye, 1, 1.61, 1.61.0, latest
+
+# cache
+## .sccache
+## cargo
+## target
+
+jobs:
+  build-ui:
+    runs-on: ubuntu-latest
+    container: 
+      image: rust:1.61
+      env:
+        CARGO_TERM_COLOR: always
+        RUSTFLAGS: -Ctarget-feature=-crt-static
+    steps:
+      - name: install runtime
+        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev libssl-dev
+      - name: setup node repo LTS
+        run: curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+      - name: install nodejs
+        run: apt install -y nodejs && npm -g install npm
+      - name: smoke test
+        run: rustc --version
+      - uses: actions/cache@v3
+        with:
+          path: |
+            /usr/local/cargo/bin
+            /usr/local/cargo/registry/index
+            /usr/local/cargo/registry/cache
+            /usr/local/cargo/git/db
+            target
+          key: lldap-ui-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            lldap-ui-
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      # Prevent install error on existing cached
+      - name: install cargo wasm
+        run: cargo install wasm-pack || true
+      - name: install rollup nodejs
+        run: npm install -g rollup
+      - name: build frontend
+        run: ./app/build.sh
+      - name: check path
+        run: ls -al app/
+      - name: upload ui artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ui
+          path: app/
+          
+  build-armhf:
+    runs-on: ubuntu-latest
+    container: 
+      image: rust:1.61
+      env:
+        CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+        OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
+        OPENSSL_LIB_DIR: "/usr/lib/arm-linux-gnueabihf/"
+        CARGO_TERM_COLOR: always
+        RUSTFLAGS: -Ctarget-feature=+crt-static
+        CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
+    steps:
+      - name: add armhf architecture
+        run: dpkg --add-architecture armhf
+      - name: install runtime
+        run: apt update && apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross libssl-dev:armhf tar
+      - name: smoke test
+        run: rustc --version
+      - name: add armhf target
+        run: rustup target add armv7-unknown-linux-gnueabihf
+      - name: smoke test
+        run: rustc --version
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - uses: actions/cache@v3
+        with:
+          path: |
+            .cargo/bin
+            .cargo/registry/index
+            .cargo/registry/cache
+            .cargo/git/db
+            target
+          key: lldap-bin-armhf-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            lldap-bin-armhf-
+      - name: compile armhf
+        run: cargo build --target=armv7-unknown-linux-gnueabihf --release -p lldap -p migration-tool
+      - name: check path
+        run: ls -al target/release
+      - name: upload armhf lldap artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: armhf-lldap-bin
+          path: target/armv7-unknown-linux-gnueabihf/release/lldap
+      - name: upload armhfmigration-tool artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: armhf-migration-tool-bin
+          path: target/armv7-unknown-linux-gnueabihf/release/migration-tool
+
+
+  build-aarch64:
+    runs-on: ubuntu-latest
+    container: 
+      image: rust:1.61
+      env:
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
+        OPENSSL_LIB_DIR: "/usr/lib/aarch64-linux-gnu/"
+        CARGO_TERM_COLOR: always
+        RUSTFLAGS: -Ctarget-feature=+crt-static
+        CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
+    steps:
+      - name: add arm64 architecture
+        run: dpkg --add-architecture arm64
+      - name: install runtime
+        run: apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross libssl-dev:arm64 tar
+      - name: smoke test
+        run: rustc --version
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: add arm64 target
+        run: rustup target add aarch64-unknown-linux-gnu
+      - name: smoke test
+        run: rustc --version
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - uses: actions/cache@v3
+        with:
+          path: |
+            .cargo/bin
+            .cargo/registry/index
+            .cargo/registry/cache
+            .cargo/git/db
+            target
+          key: lldap-bin-aarch64-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            lldap-bin-aarch64-
+      - name: compile aarch64
+        run: cargo build --target=aarch64-unknown-linux-gnu --release -p lldap -p migration-tool
+      - name: check path
+        run: ls -al target/aarch64-unknown-linux-gnu/release/
+      - name: upload aarch64 lldap artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: aarch64-lldap-bin
+          path: target/aarch64-unknown-linux-gnu/release/lldap
+      - name: upload aarch64 migration-tool artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: aarch64-migration-tool-bin
+          path: target/aarch64-unknown-linux-gnu/release/migration-tool
+
+  build-amd64:
+    runs-on: ubuntu-latest
+    container: 
+      image: rust:1.61
+      env:
+        CARGO_TERM_COLOR: always
+        RUSTFLAGS: -Ctarget-feature=+crt-static
+        CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
+    steps:
+      - name: install runtime
+        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev libssl-dev tar
+      - name: smoke test
+        run: rustc --version
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: cargo & sscache cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            .cargo/bin
+            .cargo/registry/index
+            .cargo/registry/cache
+            .cargo/git/db
+            target
+          key: lldap-bin-amd64-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            lldap-bin-amd64-
+      - name: compile amd64
+        run: cargo build --target=x86_64-unknown-linux-gnu --release -p lldap -p migration-tool
+      - name: check path
+        run: ls -al target/x86_64-unknown-linux-gnu/release/
+      - name: upload amd64 lldap artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: amd64-lldap-bin
+          path: target/x86_64-unknown-linux-gnu/release/lldap
+      - name: upload amd64 migration-tool artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: amd64-migration-tool-bin
+          path: target/x86_64-unknown-linux-gnu/release/migration-tool
+
+
+  build-docker-image:
+    needs: [build-ui,build-armhf,build-aarch64,build-amd64]
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: install rsync
+        run: sudo apt update && sudo apt install -y rsync
+      - name: fetch repo
+        uses: actions/checkout@v2
+        
+      - name: Download armhf lldap artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: armhf-lldap-bin
+          path: bin/armhf-bin
+      - name: Download armhf migration-tool artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: armhf-migration-tool-bin
+          path: bin/armhf-bin
+          
+      - name: Download aarch64 lldap artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: aarch64-lldap-bin
+          path: bin/aarch64-bin
+      - name: Download aarch64 migration-tool artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: aarch64-migration-tool-bin
+          path: bin/aarch64-bin   
+          
+      - name: Download amd64 lldap artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: amd64-lldap-bin
+          path: bin/amd64-bin
+      - name: Download amd64 migration-tool artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: amd64-migration-tool-bin
+          path: bin/amd64-bin
+          
+      - name: check bin path
+        run: ls -al bin/
+        
+      - name: Download llap ui artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: ui
+          path: web
+          
+      - name: setup qemu
+        uses: docker/setup-qemu-action@v2
+      - uses: docker/setup-buildx-action@v2
+      
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            nitnelave/lldap
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      
+      - name: parse tag
+        uses: gacts/github-slug@v1
+        id: slug
+      
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          
+      - name: Build and push latest
+        if: github.event_name != 'release'
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          file: ./.github/workflows/Dockerfile.ci.alpine
+          tags: nitnelave/lldap:latest-alpine
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          
+      - name: Build and push release
+        if: github.event_name == 'release'
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
+          file: ./.github/workflows/Dockerfile.ci
+          tags: nitnelave/lldap:stable-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          
+      - name: Move cache
+        run: rsync -r /tmp/.buildx-cache-new /tmp/.buildx-cache --delete
+        
+      - name: Update repo description
+        if: github.event_name != 'pull_request'
+        uses: peter-evans/dockerhub-description@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          repository: nitnelave/lldap
+
