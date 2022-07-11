@@ -63,6 +63,5 @@ RUN apt update && \
 COPY --from=lldap --chown=$CONTAINERUSER:$CONTAINERUSER /lldap /app
 COPY --from=lldap --chown=$CONTAINERUSER:$CONTAINERUSER /docker-entrypoint.sh /docker-entrypoint.sh
 WORKDIR /app
-USER $USER
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
 CMD ["run", "--config-file", "/data/lldap_config.toml"]
