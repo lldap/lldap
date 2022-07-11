@@ -233,7 +233,7 @@ OpenLDAP doesn't come with a UI: if you want a web interface, you'll have to
 install one (not that many that look nice) and configure it.
 
 LLDAP is much simpler to setup, has a much smaller image (10x smaller, 20x if
-you add PhpLdapAdmin), and comes packed with its own purpose-built wed UI.
+you add PhpLdapAdmin), and comes packed with its own purpose-built web UI.
 
 ### vs FreeIPA
 
