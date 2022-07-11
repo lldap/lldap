@@ -56,7 +56,8 @@ WORKDIR /app
 ENV UID=1000
 ENV GID=1000
 ENV USER=lldap
-RUN apk add --no-cache tini ca-certificates bash gosu && \
+RUN echo http://mirror.math.princeton.edu/pub/alpinelinux/edge/testing/ >> /etc/apk/repositories && \
+    apk add --no-cache tini ca-certificates bash gosu && \
     addgroup -g $GID $USER && \
     adduser \
     --disabled-password \
