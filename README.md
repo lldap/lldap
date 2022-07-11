@@ -215,6 +215,7 @@ folder for help with:
   - [Seafile](example_configs/seafile.md)
   - [Syncthing](example_configs/syncthing.md)
   - [WG Portal](example_configs/wg_portal.env.example)
+  - [XBackBone](example_configs/xbackbone_config.php)
 
 ## Comparisons with other services
 
