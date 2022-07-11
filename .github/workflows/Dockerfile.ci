@@ -56,7 +56,7 @@ ENV UID=1000
 ENV GID=1000
 ENV USER=lldap
 RUN apt update && \
-    apt install -y --no-install-recommends tini ca-certificates && \
+    apt install -y --no-install-recommends tini ca-certificates gosu && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -g $GID $USER && useradd --system -m -g $USER --uid $UID $USER
