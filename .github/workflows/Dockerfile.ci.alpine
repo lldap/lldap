@@ -56,7 +56,7 @@ WORKDIR /app
 ENV UID=1000
 ENV GID=1000
 ENV USER=lldap
-RUN apk add --no-cache tini ca-certificates && \
+RUN apk add --no-cache tini ca-certificates bash && \
     addgroup -g $GID $USER && \
     adduser \
     --disabled-password \
