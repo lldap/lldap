@@ -56,7 +56,8 @@ WORKDIR /app
 ENV UID=1000
 ENV GID=1000
 ENV USER=lldap
-RUN apk add --no-cache tini ca-certificates bash && \
+RUN echo http://mirror.math.princeton.edu/pub/alpinelinux/edge/testing/ >> /etc/apk/repositories && \
+    apk add --no-cache tini ca-certificates bash gosu && \
     addgroup -g $GID $USER && \
     adduser \
     --disabled-password \
@@ -69,6 +70,5 @@ RUN apk add --no-cache tini ca-certificates bash && \
 COPY --from=lldap --chown=$CONTAINERUSER:$CONTAINERUSER /lldap /app
 COPY --from=lldap --chown=$CONTAINERUSER:$CONTAINERUSER /docker-entrypoint.sh /docker-entrypoint.sh
 WORKDIR /app
-USER $USER
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
 CMD ["run", "--config-file", "/data/lldap_config.toml"]
