@@ -245,7 +245,7 @@ management and so on.
 If you need all of that, go for it! Keep in mind that a more complex system is
 more complex to maintain, though.
 
-LLDAP is much lighter to run (<100 MB RAM including the DB), easier to
+LLDAP is much lighter to run (<10 MB RAM including the DB), easier to
 configure (no messing around with DNS or security policies) and simpler to
 use. It also comes conveniently packed in a docker container.
 
