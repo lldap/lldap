@@ -1,5 +1,16 @@
-# Get  rust image
-FROM rust:1.62-slim-bullseye
+# Create our development image
+FROM rust:1.62-slim-bullseye AS builder
+
+# Set env for our builder
+ENV CARGO_TERM_COLOR: always
+ENV RUSTFLAGS: -Ctarget-feature=+crt-static
+ENV OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
+ENV CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+### Only enable if building non-native architecture
+#ENV OPENSSL_LIB_DIR: "/usr/lib/arm-linux-gnueabihf/"
+#ENV OPENSSL_LIB_DIR: "/usr/lib/aarch64-linux-gnu/"
 
 # Get develop package and npm
 RUN apt update && \
@@ -17,19 +28,44 @@ RUN apt update && \
 RUN cargo install wasm-pack && \
     npm install -g rollup
 
+### aarch64 build 
+#RUN dpkg --add-architecture arm64 && \
+#    apt update && \
+#    apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross libssl-dev:arm64 && \
+#    apt clean && \
+#    rm -rf /var/lib/apt/lists/*
+### add arm64 target
+#RUN rustup target add aarch64-unknown-linux-gnu
+
+### armhf build
+#RUN dpkg --add-architecture arm64 && \
+#    apt update && \
+#    apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross libssl-dev:armhf && \
+#    apt clean && \
+#    rm -rf /var/lib/apt/lists/*
+### add armhf target
+#RUN rustup target add rustup target add armv7-unknown-linux-gnueabihf
+
 COPY . /lldap-src
 WORKDIR /lldap-src
 # Compiling application, take your time
-RUN cargo build --release -p lldap -p migration-tool && \
-    app/build.sh
+### amd64
+RUN cargo build --target=x86_64-unknown-linux-gnu --release -p lldap -p migration-tool
+### arm64
+#RUN cargo build --target=aarch64-unknown-linux-gnu --release -p lldap -p migration-tool
+### armhf
+#RUN cargo build --target=armv7-unknown-linux-gnueabihf --release -p lldap -p migration-tool
+
+### Build frontend
+RUN app/build.sh
 # Prepare our application path
 RUN mkdir -p /lldap/app
 # Web and App dir
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 COPY lldap_config.docker_template.toml /lldap/
 # The applications
-RUN cp target/release/lldap /lldap/ && \
-    cp target/release/migration-tool /lldap/ && \
+RUN cp target/*/release/lldap /lldap/lldap && \
+    cp target/*/release/migration-tool /lldap/migration-tool && \
     cp -R web/index.html \
           web/pkg \
           web/static \
@@ -45,21 +81,30 @@ RUN set -x \
     && chmod a+r -R .
 
 
-### aarch64 build 
-#RUN dpkg --add-architecture arm64 && \
-#    apt update && \
-#    apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross libssl-dev:arm64 && \
-#    apt clean && \
-#    rm -rf /var/lib/apt/lists/*
-### add arm64 target
-#RUN rustup target add aarch64-unknown-linux-gnu
-### armhf build
-#RUN dpkg --add-architecture arm64 && \
-#    apt update && \
-#    apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross libssl-dev:armhf && \
-#    apt clean && \
-#    rm -rf /var/lib/apt/lists/*
-### add armhf target
-#RUN rustup target add rustup target add armv7-unknown-linux-gnueabihf
 
-CMD ["bash"]
+### Final image
+FROM alpine:3.16
+WORKDIR /app
+ENV UID=1000
+ENV GID=1000
+ENV USER=lldap
+RUN echo http://mirror.math.princeton.edu/pub/alpinelinux/edge/testing/ >> /etc/apk/repositories && \
+    apk add --no-cache tini ca-certificates bash gosu && \
+    addgroup -g $GID $USER && \
+    adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "$(pwd)" \
+    --ingroup "$USER" \
+    --no-create-home \
+    --uid "$UID" \
+    "$USER" && \
+    mkdir -p /data && \
+    chown $USER:$USER /data
+### Copy out the binary and web from builder
+COPY --from=builder --chown=$CONTAINERUSER:$CONTAINERUSER /lldap /app
+COPY --from=builder --chown=$CONTAINERUSER:$CONTAINERUSER /docker-entrypoint.sh /docker-entrypoint.sh
+VOLUME ["/data"]
+WORKDIR /app
+ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+CMD ["run", "--config-file", "/data/lldap_config.toml"]
