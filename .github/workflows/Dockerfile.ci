@@ -59,9 +59,11 @@ RUN apt update && \
     apt install -y --no-install-recommends tini ca-certificates gosu && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
-    groupadd -g $GID $USER && useradd --system -m -g $USER --uid $UID $USER
+    groupadd -g $GID $USER && useradd --system -m -g $USER --uid $UID $USER && \
+    mkdir -p /data && chown $USER:$USER /data
 COPY --from=lldap --chown=$CONTAINERUSER:$CONTAINERUSER /lldap /app
 COPY --from=lldap --chown=$CONTAINERUSER:$CONTAINERUSER /docker-entrypoint.sh /docker-entrypoint.sh
+VOLUME ["/data"]
 WORKDIR /app
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
 CMD ["run", "--config-file", "/data/lldap_config.toml"]
