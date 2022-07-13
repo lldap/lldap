@@ -346,7 +346,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           file: ./.github/workflows/Dockerfile.ci.alpine
-          tags: nitnelave/lldap:latest-alpine
+          tags: nitnelave/lldap:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
           
@@ -359,7 +359,7 @@ jobs:
           push: true
           # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
           file: ./.github/workflows/Dockerfile.ci
-          tags: nitnelave/lldap:stable-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
+          tags: nitnelave/lldap:stable, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
           
