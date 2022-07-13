@@ -45,6 +45,11 @@
 ## For the administration interface, this is the username.
 #ldap_user_dn = "admin"
 
+## Admin email.
+## Email for the admin account. It is only used when initially creating
+## the admin user, and can safely be omitted.
+#ldap_user_email = "admin@example.com"
+
 ## Admin password.
 ## Password for the admin account, both for the LDAP bind and for the
 ## administration interface. It is only used when initially creating
