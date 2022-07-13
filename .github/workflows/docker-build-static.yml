@@ -217,8 +217,7 @@ jobs:
         run: rustc --version
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: cargo & sscache cache
-        uses: actions/cache@v3
+      - uses: actions/cache@v3
         with:
           path: |
             .cargo/bin
