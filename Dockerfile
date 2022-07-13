@@ -1,5 +1,5 @@
 # Create our development image
-FROM rust:1.62-slim-bullseye AS builder
+FROM rust:1.62-slim-bullseye AS builder-base
 
 # Set env for our builder
 ENV CARGO_TERM_COLOR=always
@@ -19,10 +19,6 @@ RUN apt update && \
     npm install -g npm && \
     npm install -g yarn && \
     npm install -g pnpm 
-    
-# Install wasm-pack and rollup
-RUN npm install -g wasm-pack && \
-    npm install -g rollup
 
 #######################################################
 ### Only enable if building non-native architecture ###
@@ -49,12 +45,32 @@ RUN npm install -g wasm-pack && \
 ### add armhf target
 #RUN rustup target add rustup target add armv7-unknown-linux-gnueabihf
 
+
+# Install cargo-chef and wasm-pack via cargo [npm dont have arm64 bin]    
+RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo install cargo-chef wasm-pack
+RUN rustup target add wasm32-unknown-unknown
+# Install rollup
+RUN npm install -g rollup
+
+
+# Prepare dependencies
+FROM builder-base AS planner
+WORKDIR /app
+COPY . .
+RUN cargo chef prepare --recipe-path /tmp/recipe.json
+
+# Build depedencies
+FROM builder-base AS builder
+COPY --from=planner /tmp/recipe.json recipe.json
+RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo chef cook --release -p lldap_app --target wasm32-unknown-unknown
+RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo chef cook --release -p lldap
+RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo chef cook --release -p migration-tool
 COPY . /lldap-src
 WORKDIR /lldap-src
+
 # Compiling application, take your time
 ### amd64
 RUN cargo build --target=x86_64-unknown-linux-gnu --release -p lldap -p migration-tool
-
 #######################################################
 ### Only enable if building non-native architecture ###
 #######################################################
@@ -62,6 +78,7 @@ RUN cargo build --target=x86_64-unknown-linux-gnu --release -p lldap -p migratio
 #RUN cargo build --target=aarch64-unknown-linux-gnu --release -p lldap -p migration-tool
 ### armhf
 #RUN cargo build --target=armv7-unknown-linux-gnueabihf --release -p lldap -p migration-tool
+
 
 ### Build frontend
 RUN app/build.sh
