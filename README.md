@@ -36,7 +36,7 @@
  - [Client configuration](#Client-configuration)
    - [Compatible services](#compatible-services)
    - [General configuration guide](#general-configuration-guide)
-   - [Sample cient configurations](#Sample-client-configurations)
+   - [Sample client configurations](#Sample-client-configurations)
  - [Comparisons with other services](#Comparisons-with-other-services)
    - [vs OpenLDAP](#vs-openldap)
    - [vs FreeIPA](#vs-freeipa)
@@ -90,12 +90,15 @@ Configure the server by copying the `lldap_config.docker_template.toml` to
 Environment variables should be prefixed with `LLDAP_` to override the
 configuration.
 
+If the `lldap_config.toml` doesn't exist when starting up, LLDAP will use default one. The default admin password is `password`, you can change the password later using the web interface.
+
 Secrets can also be set through a file. The filename should be specified by the
 variables `LLDAP_JWT_SECRET_FILE` or `LLDAP_LDAP_USER_PASS_FILE`, and the file
 contents are loaded into the respective configuration parameters. Note that
 `_FILE` variables take precedence.
 
-Example for docker compose:
+Example for docker compose for `:stable` tag:
+* When defined with `user: ##:##` , ensure `/data` directory had permission for the defined user, else `1000:1000` used.
 
 ```yaml
 volumes:
@@ -117,6 +120,35 @@ services:
       # Alternatively, you can mount a local folder
       # - "./lldap_data:/data"
     environment:
+      - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
+      - LLDAP_LDAP_USER_PASS=REPLACE_WITH_PASSWORD
+      - LLDAP_LDAP_BASE_DN=dc=example,dc=com
+```
+
+Example for docker compose for `:latest` tag:
+* `:latest` tag image contain recent pushed codes or feature test, breaks is expected.
+* If `UID` and `GID` no defined LLDAP will use default `UID` and `GID` number `1000`
+
+```yaml
+volumes:
+  lldap_data:
+    driver: local
+
+services:
+  lldap:
+    image: nitnelave/lldap:latest
+    ports:
+      # For LDAP
+      - "3890:3890"
+      # For the web front-end
+      - "17170:17170"
+    volumes:
+      - "lldap_data:/data"
+      # Alternatively, you can mount a local folder
+      # - "./lldap_data:/data"
+    environment:
+      - UID=####
+      - GID=####
       - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
       - LLDAP_LDAP_USER_PASS=REPLACE_WITH_PASSWORD
       - LLDAP_LDAP_BASE_DN=dc=example,dc=com
