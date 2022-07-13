@@ -71,6 +71,8 @@ pub struct Configuration {
     pub ldap_base_dn: String,
     #[builder(default = r#"UserId::new("admin")"#)]
     pub ldap_user_dn: UserId,
+    #[builder(default = r#"String::default()"#)]
+    pub ldap_user_email: String,
     #[builder(default = r#"SecUtf8::from("password")"#)]
     pub ldap_user_pass: SecUtf8,
     #[builder(default = r#"String::from("sqlite://users.db?mode=rwc")"#)]
