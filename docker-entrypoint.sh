@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for SECRET in LLDAP_JWT_SECRET LLDAP_LDAP_USER_PASS; do
+for SECRET in LLDAP_JWT_SECRET LLDAP_LDAP_USER_PASS LLDAP_SMTP_OPTIONS__PASSWORD; do
     FILE_VAR="${SECRET}_FILE"
     SECRET_FILE="${!FILE_VAR:-}"
     if [[ -n "$SECRET_FILE" ]]; then
