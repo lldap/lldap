@@ -2,15 +2,15 @@
 FROM rust:1.62-slim-bullseye AS builder
 
 # Set env for our builder
-ENV CARGO_TERM_COLOR: always
-ENV RUSTFLAGS: -Ctarget-feature=+crt-static
-ENV OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
-ENV CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+ENV CARGO_TERM_COLOR=always
+ENV RUSTFLAGS="-Ctarget-feature=+crt-static"
+ENV OPENSSL_INCLUDE_DIR="/usr/include/openssl/"
+ENV CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER="arm-linux-gnueabihf-gcc"
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="aarch64-linux-gnu-gcc"
 
 ### Only enable if building non-native architecture
-#ENV OPENSSL_LIB_DIR: "/usr/lib/arm-linux-gnueabihf/"
-#ENV OPENSSL_LIB_DIR: "/usr/lib/aarch64-linux-gnu/"
+#ENV OPENSSL_LIB_DIR="/usr/lib/arm-linux-gnueabihf/"
+#ENV OPENSSL_LIB_DIR="/usr/lib/aarch64-linux-gnu/"
 
 # Get develop package and npm
 RUN apt update && \
