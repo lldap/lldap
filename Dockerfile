@@ -8,10 +8,6 @@ ENV OPENSSL_INCLUDE_DIR="/usr/include/openssl/"
 ENV CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER="arm-linux-gnueabihf-gcc"
 ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="aarch64-linux-gnu-gcc"
 
-### Only enable if building non-native architecture
-#ENV OPENSSL_LIB_DIR="/usr/lib/arm-linux-gnueabihf/"
-#ENV OPENSSL_LIB_DIR="/usr/lib/aarch64-linux-gnu/"
-
 # Get develop package and npm
 RUN apt update && \
     apt install -y --no-install-recommends curl git wget libssl-dev build-essential make perl pkg-config && \
@@ -24,11 +20,16 @@ RUN apt update && \
     npm install -g yarn && \
     npm install -g pnpm 
     
-# Install cargo wasm-pack
-RUN cargo install wasm-pack && \
+# Install wasm-pack and rollup
+RUN npm install -g wasm-pack && \
     npm install -g rollup
 
-### aarch64 build 
+#######################################################
+### Only enable if building non-native architecture ###
+#######################################################
+## aarch64 build 
+### Set openssl path
+#ENV OPENSSL_LIB_DIR="/usr/lib/aarch64-linux-gnu/"
 #RUN dpkg --add-architecture arm64 && \
 #    apt update && \
 #    apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross libssl-dev:arm64 && \
@@ -37,8 +38,10 @@ RUN cargo install wasm-pack && \
 ### add arm64 target
 #RUN rustup target add aarch64-unknown-linux-gnu
 
-### armhf build
-#RUN dpkg --add-architecture arm64 && \
+## armhf build
+### Set openssl path
+#ENV OPENSSL_LIB_DIR="/usr/lib/arm-linux-gnueabihf/"
+#RUN dpkg --add-architecture armhf && \
 #    apt update && \
 #    apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross libssl-dev:armhf && \
 #    apt clean && \
@@ -51,6 +54,10 @@ WORKDIR /lldap-src
 # Compiling application, take your time
 ### amd64
 RUN cargo build --target=x86_64-unknown-linux-gnu --release -p lldap -p migration-tool
+
+#######################################################
+### Only enable if building non-native architecture ###
+#######################################################
 ### arm64
 #RUN cargo build --target=aarch64-unknown-linux-gnu --release -p lldap -p migration-tool
 ### armhf
@@ -66,9 +73,9 @@ COPY lldap_config.docker_template.toml /lldap/
 # The applications
 RUN cp target/*/release/lldap /lldap/lldap && \
     cp target/*/release/migration-tool /lldap/migration-tool && \
-    cp -R web/index.html \
-          web/pkg \
-          web/static \
+    cp -R app/index.html \
+          app/pkg \
+          app/static \
           /lldap/app/
 # Just checking
 RUN ls -al /lldap && \
@@ -88,7 +95,7 @@ WORKDIR /app
 ENV UID=1000
 ENV GID=1000
 ENV USER=lldap
-RUN echo http://mirror.math.princeton.edu/pub/alpinelinux/edge/testing/ >> /etc/apk/repositories && \
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing/" >> /etc/apk/repositories && \
     apk add --no-cache tini ca-certificates bash gosu && \
     addgroup -g $GID $USER && \
     adduser \
@@ -102,8 +109,8 @@ RUN echo http://mirror.math.princeton.edu/pub/alpinelinux/edge/testing/ >> /etc/
     mkdir -p /data && \
     chown $USER:$USER /data
 ### Copy out the binary and web from builder
-COPY --from=builder --chown=$CONTAINERUSER:$CONTAINERUSER /lldap /app
-COPY --from=builder --chown=$CONTAINERUSER:$CONTAINERUSER /docker-entrypoint.sh /docker-entrypoint.sh
+COPY --from=builder --chown=$USER:$USER /lldap /app
+COPY --from=builder --chown=$USER:$USER /docker-entrypoint.sh /docker-entrypoint.sh
 VOLUME ["/data"]
 WORKDIR /app
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
