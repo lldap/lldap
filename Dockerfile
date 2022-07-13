@@ -1,66 +1,65 @@
-# Build image
-FROM rust:alpine3.14 AS chef
+# Get  rust image
+FROM rust:1.62-slim-bullseye
 
+# Get develop package and npm
+RUN apt update && \
+    apt install -y --no-install-recommends curl git wget libssl-dev build-essential make perl pkg-config && \
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt update && \
+    apt install -y --no-install-recommends nodejs && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    npm install -g npm && \
+    npm install -g yarn && \
+    npm install -g pnpm 
+    
+# Install cargo wasm-pack
+RUN cargo install wasm-pack && \
+    npm install -g rollup
+
+COPY . /lldap-src
+WORKDIR /lldap-src
+# Compiling application, take your time
+RUN cargo build --release -p lldap -p migration-tool && \
+    app/build.sh
+# Prepare our application path
+RUN mkdir -p /lldap/app
+# Web and App dir
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY lldap_config.docker_template.toml /lldap/
+# The applications
+RUN cp target/release/lldap /lldap/ && \
+    cp target/release/migration-tool /lldap/ && \
+    cp -R web/index.html \
+          web/pkg \
+          web/static \
+          /lldap/app/
+# Just checking
+RUN ls -al /lldap && \
+    ls -al /lldap/app
+# Fetch our fonts
+WORKDIR /lldap
 RUN set -x \
-    # Add user
-    && addgroup --gid 10001 app \
-    && adduser --disabled-password \
-        --gecos '' \
-        --ingroup app \
-        --home /app \
-        --uid 10001 \
-        app \
-    # Install required packages
-    && apk add npm openssl-dev musl-dev make perl curl
-
-USER app
-WORKDIR /app
-
-RUN set -x \
-    # Install build tools
-    && RUSTFLAGS=-Ctarget-feature=-crt-static cargo install wasm-pack cargo-chef \
-    && npm install rollup \
-    && rustup target add wasm32-unknown-unknown
-
-# Prepare the dependency list.
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path /tmp/recipe.json
-
-# Build dependencies.
-FROM chef AS builder
-COPY --from=planner /tmp/recipe.json recipe.json
-RUN cargo chef cook --release -p lldap_app --target wasm32-unknown-unknown \
-    && cargo chef cook --release -p lldap \
-    && cargo chef cook --release -p migration-tool
-
-# Copy the source and build the app and server.
-COPY --chown=app:app . .
-RUN cargo build --release -p lldap -p migration-tool \
-    # Build the frontend.
-    && ./app/build.sh
-
-# Final image
-FROM alpine:3.14
-
-WORKDIR /app
-
-COPY --from=builder /app/app/index_local.html app/index.html
-COPY --from=builder /app/app/static app/static
-COPY --from=builder /app/app/pkg app/pkg
-COPY --from=builder /app/target/release/lldap /app/target/release/migration-tool ./
-COPY docker-entrypoint.sh lldap_config.docker_template.toml ./
-
-RUN set -x \
-    && apk add --no-cache bash \
-    && for file in $(cat app/static/libraries.txt); do wget -P app/static "$file"; done \
-    && for file in $(cat app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
+    && for file in $(cat /lldap/app/static/libraries.txt); do wget -P app/static "$file"; done \
+    && for file in $(cat /lldap/app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
     && chmod a+r -R .
 
-ENV LDAP_PORT=3890
-ENV HTTP_PORT=17170
 
-EXPOSE ${LDAP_PORT} ${HTTP_PORT}
+### aarch64 build 
+#RUN dpkg --add-architecture arm64 && \
+#    apt update && \
+#    apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross libssl-dev:arm64 && \
+#    apt clean && \
+#    rm -rf /var/lib/apt/lists/*
+### add arm64 target
+#RUN rustup target add aarch64-unknown-linux-gnu
+### armhf build
+#RUN dpkg --add-architecture arm64 && \
+#    apt update && \
+#    apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross libssl-dev:armhf && \
+#    apt clean && \
+#    rm -rf /var/lib/apt/lists/*
+### add armhf target
+#RUN rustup target add rustup target add armv7-unknown-linux-gnueabihf
 
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["run", "--config-file", "/data/lldap_config.toml"]
+CMD ["bash"]
