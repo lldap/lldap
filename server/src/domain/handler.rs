@@ -47,7 +47,7 @@ impl std::string::ToString for Uuid {
 #[macro_export]
 macro_rules! uuid {
     ($s:literal) => {
-        crate::domain::handler::Uuid::try_from($s).unwrap()
+        $crate::domain::handler::Uuid::try_from($s).unwrap()
     };
 }
 
