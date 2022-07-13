@@ -2,11 +2,11 @@
 FROM rust:1.62-slim-bullseye AS builder-base
 
 # Set env for our builder
-ENV CARGO_TERM_COLOR=always
-ENV RUSTFLAGS="-Ctarget-feature=+crt-static"
-ENV OPENSSL_INCLUDE_DIR="/usr/include/openssl/"
-ENV CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER="arm-linux-gnueabihf-gcc"
-ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="aarch64-linux-gnu-gcc"
+ENV CARGO_TERM_COLOR=always \
+    RUSTFLAGS="-Ctarget-feature=+crt-static" \
+    OPENSSL_INCLUDE_DIR="/usr/include/openssl/" \
+    CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER="arm-linux-gnueabihf-gcc" \
+    CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="aarch64-linux-gnu-gcc"
 
 # Get develop package and npm
 RUN apt update && \
@@ -46,7 +46,7 @@ RUN apt update && \
 #RUN rustup target add rustup target add armv7-unknown-linux-gnueabihf
 
 
-# Install cargo-chef and wasm-pack via cargo [npm dont have arm64 bin]    
+# Install cargo-chef and wasm-pack via cargo [npm doesn't have arm64 bin]    
 RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo install cargo-chef wasm-pack
 RUN rustup target add wasm32-unknown-unknown
 # Install rollup
@@ -55,7 +55,7 @@ RUN npm install -g rollup
 
 # Prepare dependencies
 FROM builder-base AS planner
-WORKDIR /app
+WORKDIR /lldap-src
 COPY . .
 RUN cargo chef prepare --recipe-path /tmp/recipe.json
 
@@ -65,8 +65,8 @@ COPY --from=planner /tmp/recipe.json recipe.json
 RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo chef cook --release -p lldap_app --target wasm32-unknown-unknown
 RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo chef cook --release -p lldap
 RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo chef cook --release -p migration-tool
-COPY . /lldap-src
 WORKDIR /lldap-src
+COPY . .
 
 # Compiling application, take your time
 ### amd64
