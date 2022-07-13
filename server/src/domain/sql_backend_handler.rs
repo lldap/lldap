@@ -879,14 +879,14 @@ mod tests {
         insert_user(&handler, "Jennz", "boupBoup").await;
 
         // Remove a user
-        let _request_result = handler.delete_user(&UserId::new("Jennz")).await.unwrap();
+        handler.delete_user(&UserId::new("Jennz")).await.unwrap();
 
         assert_eq!(get_user_names(&handler, None).await, vec!["hector", "val"]);
 
         // Insert new user and remove two
         insert_user(&handler, "NewBoi", "Joni").await;
-        let _request_result = handler.delete_user(&UserId::new("Hector")).await.unwrap();
-        let _request_result = handler.delete_user(&UserId::new("NewBoi")).await.unwrap();
+        handler.delete_user(&UserId::new("Hector")).await.unwrap();
+        handler.delete_user(&UserId::new("NewBoi")).await.unwrap();
 
         assert_eq!(get_user_names(&handler, None).await, vec!["val"]);
     }
