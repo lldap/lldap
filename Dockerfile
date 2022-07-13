@@ -2,7 +2,7 @@
 FROM rust:1.62-slim-bullseye AS builder-base
 
 # Set env for our builder
-ENV CARGO_TERM_COLOR=always \
+ENV CARGO_TERM_COLOR="always" \
     RUSTFLAGS="-Ctarget-feature=+crt-static" \
     OPENSSL_INCLUDE_DIR="/usr/include/openssl/" \
     CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER="arm-linux-gnueabihf-gcc" \
@@ -62,9 +62,9 @@ RUN cargo chef prepare --recipe-path /tmp/recipe.json
 # Build depedencies
 FROM builder-base AS builder
 COPY --from=planner /tmp/recipe.json recipe.json
+RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo chef cook --release -p migration-tool
 RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo chef cook --release -p lldap_app --target wasm32-unknown-unknown
 RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo chef cook --release -p lldap
-RUN RUSTFLAGS="-Ctarget-feature=-crt-static" cargo chef cook --release -p migration-tool
 WORKDIR /lldap-src
 COPY . .
 
@@ -94,9 +94,6 @@ RUN cp target/*/release/lldap /lldap/lldap && \
           app/pkg \
           app/static \
           /lldap/app/
-# Just checking
-RUN ls -al /lldap && \
-    ls -al /lldap/app
 # Fetch our fonts
 WORKDIR /lldap
 RUN set -x \
@@ -109,9 +106,9 @@ RUN set -x \
 ### Final image
 FROM alpine:3.16
 WORKDIR /app
-ENV UID=1000
-ENV GID=1000
-ENV USER=lldap
+ENV UID=1000 \
+    GID=1000 \
+    USER=lldap
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing/" >> /etc/apk/repositories && \
     apk add --no-cache tini ca-certificates bash gosu && \
     addgroup -g $GID $USER && \
@@ -131,4 +128,4 @@ COPY --from=builder --chown=$USER:$USER /docker-entrypoint.sh /docker-entrypoint
 VOLUME ["/data"]
 WORKDIR /app
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
-CMD ["run", "--config-file", "/data/lldap_config.toml"]
+#CMD ["run", "--config-file", "/data/lldap_config.toml"]

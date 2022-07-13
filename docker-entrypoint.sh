@@ -42,6 +42,6 @@ find /data \! -user "$UID" -exec chown "$UID:$GID" '{}' +
 
 echo "> Starting lldap.."
 echo ""
-exec gosu "$UID:$GID" /app/lldap "$@"
+exec gosu "$UID:$GID" /app/lldap run --config-file /data/lldap_config.toml
 
 exec "$@"
