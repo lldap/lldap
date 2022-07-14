@@ -51,12 +51,12 @@ RUN set -x \
     && for file in $(cat /lldap/app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
     && chmod a+r -R .
     
-FROM debian:bullseye
+FROM debian:bullseye-slim
 ENV UID=1000
 ENV GID=1000
 ENV USER=lldap
 RUN apt update && \
-    apt install -y --no-install-recommends tini ca-certificates gosu && \
+    apt install -y --no-install-recommends tini ca-certificates gosu openssl tzdata && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -g $GID $USER && useradd --system -m -g $USER --uid $UID $USER && \
