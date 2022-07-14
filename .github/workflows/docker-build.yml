@@ -1,5 +1,4 @@
-name: Docker Static
-
+name: Docker
 on:
   push:
     branches:
@@ -337,7 +336,7 @@ jobs:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64,linux/arm64,linux/arm/v7
-          file: ./.github/workflows/Dockerfile.ci.alpine
+          file: ./.github/workflows/Dockerfile.ci
           tags: nitnelave/lldap:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
