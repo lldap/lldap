@@ -18,6 +18,8 @@ on:
         
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Ctarget-feature=+crt-static
+  OPENSSL_INCLUDE_DIR: "/usr/include/gnutls/"
 
 # In total 5 jobs, all of the jobs are containerized
 # ---
@@ -58,10 +60,7 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     container: 
-      image: rust:1.61
-      env:
-        CARGO_TERM_COLOR: always
-        RUSTFLAGS: -Ctarget-feature=+crt-static
+      image: rust:1.62     
     steps:
       - name: install runtime
         run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev libgnutls28-dev
@@ -105,10 +104,7 @@ jobs:
       image: rust:1.61
       env:
         CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
         OPENSSL_LIB_DIR: "/usr/lib/arm-linux-gnueabihf/"
-        CARGO_TERM_COLOR: always
-        RUSTFLAGS: -Ctarget-feature=+crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: add armhf architecture
@@ -156,9 +152,7 @@ jobs:
       image: rust:1.61
       env:
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
         OPENSSL_LIB_DIR: "/usr/lib/aarch64-linux-gnu/"
-        CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
