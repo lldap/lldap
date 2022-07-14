@@ -20,7 +20,8 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Ctarget-feature=+crt-static
   OPENSSL_INCLUDE_DIR: "/usr/include/gnutls/"
-
+  CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
+  
 # In total 5 jobs, all of the jobs are containerized
 # ---
 
@@ -73,21 +74,20 @@ jobs:
       - uses: actions/cache@v3
         with:
           path: |
-            /usr/local/cargo/bin
-            /usr/local/cargo/registry/index
-            /usr/local/cargo/registry/cache
-            /usr/local/cargo/git/db
+            .cargo/bin
+            .cargo/registry/index
+            .cargo/registry/cache
+            .cargo/git/db
             target
           key: lldap-ui-static-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-ui-static-
       - name: Checkout repository
         uses: actions/checkout@v2
-      # Prevent install error on existing cached
-      - name: install cargo wasm
-        run: cargo install wasm-pack || true
-      - name: install rollup nodejs
-        run: npm install -g rollup
+      - name: install rollup wasm-pack nodejs
+        run: |
+             npm install -g rollup
+             npm install -g wasm-pack
       - name: build frontend
         run: ./app/build.sh
       - name: check path
@@ -104,8 +104,7 @@ jobs:
       image: rust:1.61
       env:
         CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        OPENSSL_LIB_DIR: "/usr/lib/arm-linux-gnueabihf/"
-        CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
+        OPENSSL_LIB_DIR: "/usr/lib/arm-linux-gnueabihf/"    
     steps:
       - name: add armhf architecture
         run: dpkg --add-architecture armhf
@@ -153,8 +152,6 @@ jobs:
       env:
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         OPENSSL_LIB_DIR: "/usr/lib/aarch64-linux-gnu/"
-        RUSTFLAGS: -Ctarget-feature=+crt-static
-        CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: add arm64 architecture
         run: dpkg --add-architecture arm64
@@ -202,8 +199,6 @@ jobs:
       image: rust:1.61
       env:
         CARGO_TERM_COLOR: always
-        RUSTFLAGS: -Ctarget-feature=+crt-static
-        CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: install runtime
         run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev libgnutls28-dev tar
