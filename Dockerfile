@@ -3,7 +3,7 @@ FROM rust:1.62-slim-bullseye AS builder-base
 
 # Set env for our builder
 ENV CARGO_TERM_COLOR="always" \
-    RUSTFLAGS="-Ctarget-feature=+crt-static" \
+    RUSTFLAGS="-Ctarget-feature=-crt-static" \
     OPENSSL_INCLUDE_DIR="/usr/include/openssl/" \
     CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER="arm-linux-gnueabihf-gcc" \
     CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="aarch64-linux-gnu-gcc"
@@ -70,12 +70,12 @@ COPY . .
 
 # Compiling application, take your time
 ### amd64
-RUN cargo build --target=x86_64-unknown-linux-gnu --release -p lldap -p migration-tool
+#RUN cargo build --target=x86_64-unknown-linux-gnu --release -p lldap -p migration-tool
 #######################################################
 ### Only enable if building non-native architecture ###
 #######################################################
 ### arm64
-#RUN cargo build --target=aarch64-unknown-linux-gnu --release -p lldap -p migration-tool
+RUN cargo build --target=aarch64-unknown-linux-gnu --release -p lldap -p migration-tool
 ### armhf
 #RUN cargo build --target=armv7-unknown-linux-gnueabihf --release -p lldap -p migration-tool
 
