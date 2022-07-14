@@ -101,7 +101,7 @@ jobs:
   build-armhf:
     runs-on: ubuntu-latest
     container: 
-      image: rust:1.61
+      image: rust:1.62
       env:
         CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
         OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
@@ -150,7 +150,7 @@ jobs:
   build-aarch64:
     runs-on: ubuntu-latest
     container: 
-      image: rust:1.61
+      image: rust:1.62
       env:
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
@@ -200,7 +200,7 @@ jobs:
   build-amd64:
     runs-on: ubuntu-latest
     container: 
-      image: rust:1.61
+      image: rust:1.62
       env:
         CARGO_TERM_COLOR: always
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
