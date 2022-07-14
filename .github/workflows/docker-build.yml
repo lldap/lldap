@@ -82,10 +82,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
       # Prevent install error on existing cached
-      - name: install cargo wasm
-        run: cargo install wasm-pack || true
-      - name: install rollup nodejs
-        run: npm install -g rollup
+      #- name: install cargo wasm
+      #  run: cargo install wasm-pack || true
+      - name: install rollup and wasm-pack nodejs
+        run: |
+             npm install -g rollup
+             npm install -g wasm-pack
       - name: build frontend
         run: ./app/build.sh
       - name: check path
