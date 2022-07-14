@@ -1,0 +1,69 @@
+FROM debian:bullseye AS lldap
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TARGETPLATFORM
+RUN apt update && apt install -y wget
+WORKDIR /dim
+COPY bin/ bin/
+COPY web/ web/
+
+RUN mkdir -p target/
+RUN mkdir -p /lldap/app
+
+RUN if [ "${TARGETPLATFORM}" = "linux/amd64" ]; then \
+    mv bin/amd64-bin/lldap target/lldap && \
+    mv bin/amd64-bin/migration-tool target/migration-tool && \
+    chmod +x target/lldap && \
+    chmod +x target/migration-tool && \
+    ls -la target/ . && \
+    pwd \
+    ; fi
+    
+RUN if [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
+    mv bin/aarch64-bin/lldap target/lldap && \
+    mv bin/aarch64-bin/migration-tool target/migration-tool && \
+    chmod +x target/lldap && \
+    chmod +x target/migration-tool && \
+    ls -la target/ . && \
+    pwd \
+    ; fi
+    
+RUN if [ "${TARGETPLATFORM}" = "linux/arm/v7" ]; then \
+    mv bin/armhf-bin/lldap target/lldap && \
+    mv bin/armhf-bin/migration-tool target/migration-tool && \
+    chmod +x target/lldap && \
+    chmod +x target/migration-tool && \
+    ls -la target/ . && \
+    pwd \
+    ; fi
+
+# Web and App dir
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY lldap_config.docker_template.toml /lldap/
+RUN cp target/lldap /lldap/ && \
+    cp target/migration-tool /lldap/ && \
+    cp -R web/index.html \
+          web/pkg \
+          web/static \
+          /lldap/app/
+
+RUN set -x \
+    && for file in $(cat /lldap/app/static/libraries.txt); do wget -P app/static "$file"; done \
+    && for file in $(cat /lldap/app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
+    && chmod a+r -R .
+    
+FROM debian:bullseye
+ENV UID=1000
+ENV GID=1000
+ENV USER=lldap
+RUN apt update && \
+    apt install -y --no-install-recommends tini ca-certificates gosu && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -g $GID $USER && useradd --system -m -g $USER --uid $UID $USER && \
+    mkdir -p /data && chown $USER:$USER /data
+COPY --from=lldap --chown=$CONTAINERUSER:$CONTAINERUSER /lldap /app
+COPY --from=lldap --chown=$CONTAINERUSER:$CONTAINERUSER /docker-entrypoint.sh /docker-entrypoint.sh
+VOLUME ["/data"]
+WORKDIR /app
+ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+CMD ["run", "--config-file", "/data/lldap_config.toml"]
