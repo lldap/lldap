@@ -61,7 +61,9 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     container: 
-      image: rust:1.62     
+      image: rust:1.62
+      env:
+        CARGO_HOME: /usr/local/cargo
     steps:
       - name: install runtime
         run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev libgnutls28-dev
@@ -74,10 +76,10 @@ jobs:
       - uses: actions/cache@v3
         with:
           path: |
-            .cargo/bin
-            .cargo/registry/index
-            .cargo/registry/cache
-            .cargo/git/db
+            /usr/local/cargo/bin
+            /usr/local/cargo/registry/index
+            /usr/local/cargo/registry/cache
+            /usr/local/cargo/git/db
             target
           key: lldap-ui-static-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
