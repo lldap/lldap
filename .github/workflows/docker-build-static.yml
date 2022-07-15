@@ -15,7 +15,7 @@ on:
       msg:
         description: "Set message"
         default: "Manual trigger"
-        
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -27,7 +27,7 @@ env:
 ### Install nodejs from nodesource repo
 ### install wasm
 ### install rollup
-### run app/build.sh 
+### run app/build.sh
 ### upload artifacts
 
 # builds-armhf, build-aarch64, build-amd64 create binary for respective arch
@@ -39,8 +39,6 @@ env:
 
 ## the CARGO_ env
 #CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-#OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
-#OPENSSL_LIB_DIR: "/usr/lib/arm-linux-gnueabihf/"
 # This will determine which architecture lib will be used.
 
 # build-ui,builds-armhf, build-aarch64, build-amd64 will upload artifacts will be used next job
@@ -57,14 +55,14 @@ env:
 jobs:
   build-ui:
     runs-on: ubuntu-latest
-    container: 
+    container:
       image: rust:1.61
       env:
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=-crt-static
     steps:
       - name: install runtime
-        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev libssl-dev
+        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev
       - name: setup node repo LTS
         run: curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
       - name: install nodejs
@@ -98,15 +96,13 @@ jobs:
         with:
           name: ui
           path: app/
-          
+
   build-armhf:
     runs-on: ubuntu-latest
-    container: 
+    container:
       image: rust:1.61
       env:
         CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
-        OPENSSL_LIB_DIR: "/usr/lib/arm-linux-gnueabihf/"
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
@@ -114,7 +110,7 @@ jobs:
       - name: add armhf architecture
         run: dpkg --add-architecture armhf
       - name: install runtime
-        run: apt update && apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross libssl-dev:armhf tar
+        run: apt update && apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross tar
       - name: smoke test
         run: rustc --version
       - name: add armhf target
@@ -152,12 +148,10 @@ jobs:
 
   build-aarch64:
     runs-on: ubuntu-latest
-    container: 
+    container:
       image: rust:1.61
       env:
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        OPENSSL_INCLUDE_DIR: "/usr/include/openssl/"
-        OPENSSL_LIB_DIR: "/usr/lib/aarch64-linux-gnu/"
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
@@ -165,7 +159,7 @@ jobs:
       - name: add arm64 architecture
         run: dpkg --add-architecture arm64
       - name: install runtime
-        run: apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross libssl-dev:arm64 tar
+        run: apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross tar
       - name: smoke test
         run: rustc --version
       - name: Checkout repository
@@ -204,7 +198,7 @@ jobs:
 
   build-amd64:
     runs-on: ubuntu-latest
-    container: 
+    container:
       image: rust:1.61
       env:
         CARGO_TERM_COLOR: always
@@ -212,7 +206,7 @@ jobs:
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: install runtime
-        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev libssl-dev tar
+        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev tar
       - name: smoke test
         run: rustc --version
       - name: Checkout repository
@@ -256,7 +250,7 @@ jobs:
         run: sudo apt update && sudo apt install -y rsync
       - name: fetch repo
         uses: actions/checkout@v2
-        
+
       - name: Download armhf lldap artifacts
         uses: actions/download-artifact@v3
         with:
@@ -267,7 +261,7 @@ jobs:
         with:
           name: armhf-migration-tool-bin
           path: bin/armhf-bin
-          
+
       - name: Download aarch64 lldap artifacts
         uses: actions/download-artifact@v3
         with:
@@ -277,8 +271,8 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: aarch64-migration-tool-bin
-          path: bin/aarch64-bin   
-          
+          path: bin/aarch64-bin
+
       - name: Download amd64 lldap artifacts
         uses: actions/download-artifact@v3
         with:
@@ -289,20 +283,20 @@ jobs:
         with:
           name: amd64-migration-tool-bin
           path: bin/amd64-bin
-          
+
       - name: check bin path
         run: ls -al bin/
-        
+
       - name: Download llap ui artifacts
         uses: actions/download-artifact@v3
         with:
           name: ui
           path: web
-          
+
       - name: setup qemu
         uses: docker/setup-qemu-action@v2
       - uses: docker/setup-buildx-action@v2
-      
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
@@ -325,18 +319,18 @@ jobs:
           key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-
-      
+
       - name: parse tag
         uses: gacts/github-slug@v1
         id: slug
-      
+
       - name: Login to Docker Hub
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
+
       - name: Build and push latest
         if: github.event_name != 'release'
         uses: docker/build-push-action@v3
@@ -348,7 +342,7 @@ jobs:
           tags: nitnelave/lldap:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
-          
+
       - name: Build and push release
         if: github.event_name == 'release'
         uses: docker/build-push-action@v3
@@ -361,10 +355,10 @@ jobs:
           tags: nitnelave/lldap:stable, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
-          
+
       - name: Move cache
         run: rsync -r /tmp/.buildx-cache-new /tmp/.buildx-cache --delete
-        
+
       - name: Update repo description
         if: github.event_name != 'pull_request'
         uses: peter-evans/dockerhub-description@v3
