@@ -4,7 +4,7 @@
 <i style="font-size:24px">LDAP made easy.</i>
 </p>
 
-<p align="center">
+<p align="center" >
   <a href="https://github.com/nitnelave/lldap/actions/workflows/rust.yml?query=branch%3Amain">
     <img
       src="https://github.com/nitnelave/lldap/actions/workflows/rust.yml/badge.svg"
