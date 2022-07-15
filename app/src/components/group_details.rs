@@ -69,42 +69,42 @@ impl GroupDetails {
     }
 
     fn view_details(&self, g: &Group) -> Html {
-      html! {
-        <>
-          <h3>{g.display_name.to_string()}</h3>
-          <div class="py-3">
-            <form class="form">
-              <div class="form-group row mb-3">
-                <label for="displayName"
-                  class="form-label col-4 col-form-label">
-                  {"Group: "}
-                </label>
-                <div class="col-8">
-                  <span id="groupId" class="form-constrol-static">{g.display_name.to_string()}</span>
+        html! {
+          <>
+            <h3>{g.display_name.to_string()}</h3>
+            <div class="py-3">
+              <form class="form">
+                <div class="form-group row mb-3">
+                  <label for="displayName"
+                    class="form-label col-4 col-form-label">
+                    {"Group: "}
+                  </label>
+                  <div class="col-8">
+                    <span id="groupId" class="form-constrol-static">{g.display_name.to_string()}</span>
+                  </div>
                 </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="creationDate"
-                  class="form-label col-4 col-form-label">
-                  {"Creation date: "}
-                </label>
-                <div class="col-8">
-                  <span id="creationDate" class="form-constrol-static">{g.creation_date.date().naive_local()}</span>
+                <div class="form-group row mb-3">
+                  <label for="creationDate"
+                    class="form-label col-4 col-form-label">
+                    {"Creation date: "}
+                  </label>
+                  <div class="col-8">
+                    <span id="creationDate" class="form-constrol-static">{g.creation_date.date().naive_local()}</span>
+                  </div>
                 </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="uuid"
-                  class="form-label col-4 col-form-label">
-                  {"UUID: "}
-                </label>
-                <div class="col-8">
-                  <span id="uuid" class="form-constrol-static">{g.uuid.to_string()}</span>
+                <div class="form-group row mb-3">
+                  <label for="uuid"
+                    class="form-label col-4 col-form-label">
+                    {"UUID: "}
+                  </label>
+                  <div class="col-8">
+                    <span id="uuid" class="form-constrol-static">{g.uuid.to_string()}</span>
+                  </div>
                 </div>
-              </div>
-            </form>
-          </div>
-        </>
-      }
+              </form>
+            </div>
+          </>
+        }
     }
 
     fn view_user_list(&self, g: &Group) -> Html {
