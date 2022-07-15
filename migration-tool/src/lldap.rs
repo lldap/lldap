@@ -30,7 +30,7 @@ impl GraphQLClient {
     where
         QueryType: GraphQLQuery + 'static,
     {
-        let unwrap_graphql_response = |graphql_client::Response { data, errors }| {
+        let unwrap_graphql_response = |graphql_client::Response { data, errors, .. }| {
             data.ok_or_else(|| {
                 anyhow!(
                     "Errors: [{}]",
@@ -69,13 +69,12 @@ pub struct User {
 
 impl User {
     // https://github.com/graphql-rust/graphql-client/issues/386
-    #[allow(non_snake_case)]
     pub fn new(
         id: String,
         email: String,
-        displayName: Option<String>,
-        firstName: Option<String>,
-        lastName: Option<String>,
+        display_name: Option<String>,
+        first_name: Option<String>,
+        last_name: Option<String>,
         password: Option<String>,
         dn: String,
     ) -> User {
@@ -83,9 +82,9 @@ impl User {
             user_input: create_user::CreateUserInput {
                 id,
                 email,
-                displayName,
-                firstName,
-                lastName,
+                display_name,
+                first_name,
+                last_name,
             },
             password,
             dn,
