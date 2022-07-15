@@ -10,8 +10,7 @@ use actix_server::ServerBuilder;
 use actix_service::{fn_service, ServiceFactoryExt};
 use anyhow::{Context, Result};
 use ldap3_server::{proto::LdapMsg, LdapCodec};
-use native_tls::{Identity, TlsAcceptor};
-use tokio_native_tls::TlsAcceptor as NativeTlsAcceptor;
+use tokio_rustls::TlsAcceptor as RustlsTlsAcceptor;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tracing::{debug, error, info, instrument};
 
@@ -54,19 +53,6 @@ where
     Ok(true)
 }
 
-fn get_file_as_byte_vec(filename: &str) -> Result<Vec<u8>> {
-    (|| -> Result<Vec<u8>> {
-        use std::fs::{metadata, File};
-        use std::io::Read;
-        let mut f = File::open(&filename).context("file not found")?;
-        let metadata = metadata(&filename).context("unable to read metadata")?;
-        let mut buffer = vec![0; metadata.len() as usize];
-        f.read(&mut buffer).context("buffer overflow")?;
-        Ok(buffer)
-    })()
-    .context(format!("while reading file {}", filename))
-}
-
 #[instrument(skip_all, level = "info", name = "LDAP session")]
 async fn handle_ldap_stream<Stream, Backend>(
     stream: Stream,
@@ -103,12 +89,31 @@ where
     Ok(requests.into_inner().unsplit(resp.into_inner()))
 }
 
-fn get_tls_acceptor(config: &Configuration) -> Result<NativeTlsAcceptor> {
+fn get_tls_acceptor(config: &Configuration) -> Result<RustlsTlsAcceptor> {
+    use rustls::{Certificate, PrivateKey, ServerConfig};
+    use rustls_pemfile::{certs, pkcs8_private_keys};
+    use std::{fs::File, io::BufReader};
     // Load TLS key and cert files
-    let cert_file = get_file_as_byte_vec(&config.ldaps_options.cert_file)?;
-    let key_file = get_file_as_byte_vec(&config.ldaps_options.key_file)?;
-    let identity = Identity::from_pkcs8(&cert_file, &key_file)?;
-    Ok(TlsAcceptor::new(identity)?.into())
+    let certs = certs(&mut BufReader::new(File::open(
+        &config.ldaps_options.cert_file,
+    )?))?
+    .into_iter()
+    .map(Certificate)
+    .collect::<Vec<_>>();
+    let private_key = pkcs8_private_keys(&mut BufReader::new(File::open(
+        &config.ldaps_options.key_file,
+    )?))?
+    .into_iter()
+    .map(PrivateKey)
+    .next()
+    .ok_or_else(|| anyhow::anyhow!("No private keys"))?;
+    let server_config = std::sync::Arc::new(
+        ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(certs, private_key)?,
+    );
+    Ok(server_config.into())
 }
 
 pub fn build_ldap_server<Backend>(
