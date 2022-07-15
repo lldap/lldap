@@ -272,6 +272,9 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
     fn display_name(&self) -> String {
         self.display_name.clone()
     }
+    fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
+        self.creation_date
+    }
     /// The groups to which this user belongs.
     async fn users(&self, context: &Context<Handler>) -> FieldResult<Vec<User<Handler>>> {
         let span = debug_span!("[GraphQL query] group::users");

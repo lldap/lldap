@@ -68,6 +68,36 @@ impl GroupDetails {
         }
     }
 
+    fn view_details(&self, g: &Group) -> Html {
+      html! {
+        <>
+          <h3>{g.display_name.to_string()}</h3>
+          <div class="py-3">
+            <form class="form">
+              <div class="form-group row mb-3">
+                <label for="displayName"
+                  class="form-label col-4 col-form-label">
+                  {"Group: "}
+                </label>
+                <div class="col-8">
+                  <span id="groupId" class="form-constrol-static">{g.display_name.to_string()}</span>
+                </div>
+              </div>
+              <div class="form-group row mb-3">
+                <label for="creationDate"
+                  class="form-label col-4 col-form-label">
+                  {"Creation date: "}
+                </label>
+                <div class="col-8">
+                  <span id="creationDate" class="form-constrol-static">{g.creation_date.date().naive_local()}</span>
+                </div>
+              </div>
+            </form>
+          </div>
+        </>
+      }
+    }
+
     fn view_user_list(&self, g: &Group) -> Html {
         let make_user_row = |user: &User| {
             let user_id = user.id.clone();
@@ -92,7 +122,6 @@ impl GroupDetails {
         };
         html! {
           <>
-            <h3>{g.display_name.to_string()}</h3>
             <h5 class="fw-bold">{"Members"}</h5>
             <div class="table-responsive">
               <table class="table table-striped">
@@ -201,6 +230,7 @@ impl Component for GroupDetails {
             (Some(u), error) => {
                 html! {
                     <div>
+                      {self.view_details(u)}
                       {self.view_user_list(u)}
                       {self.view_add_user_button(u)}
                       {self.view_messages(error)}

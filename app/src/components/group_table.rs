@@ -97,7 +97,8 @@ impl GroupTable {
                   <table class="table table-striped">
                     <thead>
                       <tr>
-                        <th>{"Groups"}</th>
+                        <th>{"Group name"}</th>
+                        <th>{"Creation date"}</th>
                         <th>{"Delete"}</th>
                       </tr>
                     </thead>
@@ -121,6 +122,9 @@ impl GroupTable {
                 <Link route=AppRoute::GroupDetails(group.id)>
                   {&group.display_name}
                 </Link>
+              </td>
+              <td>
+                {&group.creation_date.date().naive_local()}
               </td>
               <td>
                 <DeleteGroup

@@ -2,6 +2,7 @@ query GetGroupDetails($id: Int!) {
   group(groupId: $id) {
     id
     displayName
+    creationDate
     users {
       id
       displayName

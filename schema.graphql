@@ -17,6 +17,7 @@ type Mutation {
 type Group {
   id: Int!
   displayName: String!
+  creationDate: DateTimeUtc!
   "The groups to which this user belongs."
   users: [User!]!
 }

@@ -2,5 +2,6 @@ query GetGroupList {
   groups {
     id
     displayName
+    creationDate
   }
 }
