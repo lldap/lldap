@@ -195,6 +195,15 @@ impl Component for UserDetailsForm {
                   <span id="creationDate" class="form-constrol-static">{&self.common.user.creation_date.date().naive_local()}</span>
                 </div>
               </div>
+              <div class="form-group row mb-3">
+                <label for="uuid"
+                class="form-label col-4 col-form-label">
+                {"UUID: "}
+                </label>
+                <div class="col-8">
+                  <span id="creationDate" class="form-constrol-static">{&self.common.user.uuid}</span>
+                </div>
+              </div>
               <div class="form-group row justify-content-center">
                 <button
                   type="submit"
@@ -267,6 +276,7 @@ impl UserDetailsForm {
                     first_name: model.first_name,
                     last_name: model.last_name,
                     creation_date: self.common.user.creation_date,
+                    uuid: self.common.user.uuid.clone(),
                     groups: self.common.user.groups.clone(),
                 };
                 self.just_updated = true;

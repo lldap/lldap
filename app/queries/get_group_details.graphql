@@ -3,6 +3,7 @@ query GetGroupDetails($id: Int!) {
     id
     displayName
     creationDate
+    uuid
     users {
       id
       displayName

@@ -92,6 +92,15 @@ impl GroupDetails {
                   <span id="creationDate" class="form-constrol-static">{g.creation_date.date().naive_local()}</span>
                 </div>
               </div>
+              <div class="form-group row mb-3">
+                <label for="uuid"
+                  class="form-label col-4 col-form-label">
+                  {"UUID: "}
+                </label>
+                <div class="col-8">
+                  <span id="uuid" class="form-constrol-static">{g.uuid.to_string()}</span>
+                </div>
+              </div>
             </form>
           </div>
         </>

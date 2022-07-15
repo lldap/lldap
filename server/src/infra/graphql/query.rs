@@ -221,6 +221,10 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
         self.user.creation_date
     }
 
+    fn uuid(&self) -> &str {
+        self.user.uuid.as_str()
+    }
+
     /// The groups to which this user belongs.
     async fn groups(&self, context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
         let span = debug_span!("[GraphQL query] user::groups");
@@ -260,6 +264,7 @@ pub struct Group<Handler: BackendHandler> {
     group_id: i32,
     display_name: String,
     creation_date: chrono::DateTime<chrono::Utc>,
+    uuid: String,
     members: Option<Vec<String>>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
@@ -274,6 +279,9 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
     }
     fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
         self.creation_date
+    }
+    fn uuid(&self) -> String {
+        self.uuid.clone()
     }
     /// The groups to which this user belongs.
     async fn users(&self, context: &Context<Handler>) -> FieldResult<Vec<User<Handler>>> {
@@ -303,6 +311,7 @@ impl<Handler: BackendHandler> From<GroupDetails> for Group<Handler> {
             group_id: group_details.group_id.0,
             display_name: group_details.display_name,
             creation_date: group_details.creation_date,
+            uuid: group_details.uuid.into_string(),
             members: None,
             _phantom: std::marker::PhantomData,
         }
@@ -315,6 +324,7 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
             group_id: group.id.0,
             display_name: group.display_name,
             creation_date: group.creation_date,
+            uuid: group.uuid.into_string(),
             members: Some(group.users.into_iter().map(UserId::into_string).collect()),
             _phantom: std::marker::PhantomData,
         }
