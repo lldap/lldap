@@ -56,10 +56,11 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     container:
-      image: rust:1.61
+      image: rust:1.62
       env:
         CARGO_TERM_COLOR: always
-        RUSTFLAGS: -Ctarget-feature=-crt-static
+        RUSTFLAGS: -Ctarget-feature=+crt-static
+        #CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: install runtime
         run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev
@@ -82,11 +83,10 @@ jobs:
             lldap-ui-
       - name: Checkout repository
         uses: actions/checkout@v2
-      # Prevent install error on existing cached
-      - name: install cargo wasm
-        run: cargo install wasm-pack || true
-      - name: install rollup nodejs
-        run: npm install -g rollup
+      - name: install rollup nodejs and wasm-pack
+        run: |
+             npm install -g rollup
+             npm install -g wasm-pack
       - name: build frontend
         run: ./app/build.sh
       - name: check path
@@ -100,11 +100,11 @@ jobs:
   build-armhf:
     runs-on: ubuntu-latest
     container:
-      image: rust:1.61
+      image: rust:1.62
       env:
         CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
         CARGO_TERM_COLOR: always
-        RUSTFLAGS: -Ctarget-feature=+crt-static
+        RUSTFLAGS: -Ctarget-feature=-crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: add armhf architecture
@@ -159,13 +159,9 @@ jobs:
       - name: add arm64 architecture
         run: dpkg --add-architecture arm64
       - name: install runtime
-        run: apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross tar
-      - name: smoke test
-        run: rustc --version
+        run: apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross tar wget
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: add arm64 target
-        run: rustup target add aarch64-unknown-linux-gnu
       - name: smoke test
         run: rustc --version
       - name: Checkout repository
@@ -181,34 +177,32 @@ jobs:
           key: lldap-bin-aarch64-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-bin-aarch64-
-      - name: compile aarch64
-        run: cargo build --target=aarch64-unknown-linux-gnu --release -p lldap -p migration-tool
+      - name: build
+        run: ./build-arm64.sh
       - name: check path
-        run: ls -al target/aarch64-unknown-linux-gnu/release/
+        run: ls -al target/aarch64-unknown-linux-musl/release/
       - name: upload aarch64 lldap artifacts
         uses: actions/upload-artifact@v3
         with:
           name: aarch64-lldap-bin
-          path: target/aarch64-unknown-linux-gnu/release/lldap
+          path: target/aarch64-unknown-linux-musl/release/lldap
       - name: upload aarch64 migration-tool artifacts
         uses: actions/upload-artifact@v3
         with:
           name: aarch64-migration-tool-bin
-          path: target/aarch64-unknown-linux-gnu/release/migration-tool
+          path: target/aarch64-unknown-linux-musl/release/migration-tool
 
   build-amd64:
     runs-on: ubuntu-latest
     container:
-      image: rust:1.61
+      image: rust:1.62
       env:
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: install runtime
-        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev tar
-      - name: smoke test
-        run: rustc --version
+        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev tar wget musl-tools
       - name: Checkout repository
         uses: actions/checkout@v2
       - uses: actions/cache@v3
@@ -222,20 +216,20 @@ jobs:
           key: lldap-bin-amd64-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-bin-amd64-
-      - name: compile amd64
-        run: cargo build --target=x86_64-unknown-linux-gnu --release -p lldap -p migration-tool
+      - name: build
+        run: ./build-amd64.sh
       - name: check path
-        run: ls -al target/x86_64-unknown-linux-gnu/release/
+        run: ls -al target/x86_64-unknown-linux-musl/release/
       - name: upload amd64 lldap artifacts
         uses: actions/upload-artifact@v3
         with:
           name: amd64-lldap-bin
-          path: target/x86_64-unknown-linux-gnu/release/lldap
+          path: target/x86_64-unknown-linux-musl/release/lldap
       - name: upload amd64 migration-tool artifacts
         uses: actions/upload-artifact@v3
         with:
           name: amd64-migration-tool-bin
-          path: target/x86_64-unknown-linux-gnu/release/migration-tool
+          path: target/x86_64-unknown-linux-musl/release/migration-tool
 
 
   build-docker-image:
@@ -330,20 +324,51 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push latest
+          
+######################
+#### latest build ####
+######################
+      - name: Build and push latest alpine
+        if: github.event_name != 'release'
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: linux/amd64,linux/arm64
+          file: ./.github/workflows/Dockerfile.ci.alpine
+          tags: nitnelave/lldap:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          
+      - name: Build and push latest debian
         if: github.event_name != 'release'
         uses: docker/build-push-action@v3
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64,linux/arm64,linux/arm/v7
+          file: ./.github/workflows/Dockerfile.ci.debian
+          tags: nitnelave/lldap:latest-debian
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          
+#######################
+#### release build ####
+#######################        
+      - name: Build and push release alpine
+        if: github.event_name == 'release'
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
           file: ./.github/workflows/Dockerfile.ci.alpine
-          tags: nitnelave/lldap:latest
+          tags: nitnelave/lldap:stable, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
 
-      - name: Build and push release
+      - name: Build and push release debian
         if: github.event_name == 'release'
         uses: docker/build-push-action@v3
         with:
@@ -351,8 +376,8 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
-          file: ./.github/workflows/Dockerfile.ci
-          tags: nitnelave/lldap:stable, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}
+          file: ./.github/workflows/Dockerfile.ci.debian
+          tags: nitnelave/lldap:stable-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
 
