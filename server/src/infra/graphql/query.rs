@@ -363,8 +363,12 @@ mod tests {
           user(userId: "bob") {
             id
             email
+            creationDate
+            uuid
             groups {
               id
+              creationDate
+              uuid
             }
           }
         }"#;
@@ -376,6 +380,8 @@ mod tests {
                 Ok(DomainUser {
                     user_id: UserId::new("bob"),
                     email: "bob@bobbers.on".to_string(),
+                    creation_date: chrono::Utc.timestamp_millis(42),
+                    uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     ..Default::default()
                 })
             });
@@ -404,7 +410,13 @@ mod tests {
                     "user": {
                         "id": "bob",
                         "email": "bob@bobbers.on",
-                        "groups": [{"id": 3}]
+                        "creationDate": "1970-01-01T00:00:00.042+00:00",
+                        "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+                        "groups": [{
+                            "id": 3,
+                            "creationDate": "1970-01-01T00:00:00.000000042+00:00",
+                            "uuid": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
+                        }]
                     }
                 }),
                 vec![]
