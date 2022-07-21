@@ -221,6 +221,10 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
         self.user.creation_date
     }
 
+    fn uuid(&self) -> &str {
+        self.user.uuid.as_str()
+    }
+
     /// The groups to which this user belongs.
     async fn groups(&self, context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
         let span = debug_span!("[GraphQL query] user::groups");
@@ -260,6 +264,7 @@ pub struct Group<Handler: BackendHandler> {
     group_id: i32,
     display_name: String,
     creation_date: chrono::DateTime<chrono::Utc>,
+    uuid: String,
     members: Option<Vec<String>>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
@@ -271,6 +276,12 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
     }
     fn display_name(&self) -> String {
         self.display_name.clone()
+    }
+    fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
+        self.creation_date
+    }
+    fn uuid(&self) -> String {
+        self.uuid.clone()
     }
     /// The groups to which this user belongs.
     async fn users(&self, context: &Context<Handler>) -> FieldResult<Vec<User<Handler>>> {
@@ -300,6 +311,7 @@ impl<Handler: BackendHandler> From<GroupDetails> for Group<Handler> {
             group_id: group_details.group_id.0,
             display_name: group_details.display_name,
             creation_date: group_details.creation_date,
+            uuid: group_details.uuid.into_string(),
             members: None,
             _phantom: std::marker::PhantomData,
         }
@@ -312,6 +324,7 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
             group_id: group.id.0,
             display_name: group.display_name,
             creation_date: group.creation_date,
+            uuid: group.uuid.into_string(),
             members: Some(group.users.into_iter().map(UserId::into_string).collect()),
             _phantom: std::marker::PhantomData,
         }
@@ -350,8 +363,12 @@ mod tests {
           user(userId: "bob") {
             id
             email
+            creationDate
+            uuid
             groups {
               id
+              creationDate
+              uuid
             }
           }
         }"#;
@@ -363,6 +380,8 @@ mod tests {
                 Ok(DomainUser {
                     user_id: UserId::new("bob"),
                     email: "bob@bobbers.on".to_string(),
+                    creation_date: chrono::Utc.timestamp_millis(42),
+                    uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     ..Default::default()
                 })
             });
@@ -391,7 +410,13 @@ mod tests {
                     "user": {
                         "id": "bob",
                         "email": "bob@bobbers.on",
-                        "groups": [{"id": 3}]
+                        "creationDate": "1970-01-01T00:00:00.042+00:00",
+                        "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+                        "groups": [{
+                            "id": 3,
+                            "creationDate": "1970-01-01T00:00:00.000000042+00:00",
+                            "uuid": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
+                        }]
                     }
                 }),
                 vec![]
