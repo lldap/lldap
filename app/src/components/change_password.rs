@@ -252,6 +252,7 @@ impl Component for ChangePasswordForm {
                   <Field
                     form=&self.form
                     field_name="password"
+                    input_type="password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
@@ -271,6 +272,7 @@ impl Component for ChangePasswordForm {
                   <Field
                     form=&self.form
                     field_name="confirm_password"
+                    input_type="password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
