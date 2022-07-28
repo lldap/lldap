@@ -101,6 +101,8 @@ Example for docker compose for `:stable` tag:
 * When defined with `user: ##:##` , ensure `/data` directory had permission for the defined user, else `1000:1000` used.
 
 ```yaml
+version: '3'
+
 volumes:
   lldap_data:
     driver: local
@@ -130,6 +132,8 @@ Example for docker compose for `:latest` tag:
 * If `UID` and `GID` no defined LLDAP will use default `UID` and `GID` number `1000`
 
 ```yaml
+version: '3'
+
 volumes:
   lldap_data:
     driver: local
