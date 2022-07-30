@@ -1,4 +1,4 @@
-use crate::infra::configuration::MailOptions;
+use crate::infra::{cli::SmtpEncryption, configuration::MailOptions};
 use anyhow::Result;
 use lettre::{
     message::Mailbox, transport::smtp::authentication::Credentials, Message, SmtpTransport,
@@ -26,9 +26,11 @@ fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOptions) -
         options.user.clone(),
         options.password.unsecure().to_string(),
     );
-    let mailer = SmtpTransport::relay(&options.server)?
-        .credentials(creds)
-        .build();
+    let relay_factory = match options.smtp_encryption {
+        SmtpEncryption::TLS => SmtpTransport::relay,
+        SmtpEncryption::STARTTLS => SmtpTransport::starttls_relay,
+    };
+    let mailer = relay_factory(&options.server)?.credentials(creds).build();
     mailer.send(&email)?;
     Ok(())
 }
