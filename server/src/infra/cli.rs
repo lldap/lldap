@@ -1,5 +1,6 @@
 use clap::Parser;
 use lettre::message::Mailbox;
+use serde::{Deserialize, Serialize};
 
 /// lldap is a lightweight LDAP server
 #[derive(Debug, Parser, Clone)]
@@ -102,6 +103,14 @@ pub struct LdapsOpts {
     pub ldaps_key_file: Option<String>,
 }
 
+clap::arg_enum! {
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum SmtpEncryption {
+    TLS,
+    STARTTLS,
+}
+}
+
 #[derive(Debug, Parser, Clone)]
 #[clap(next_help_heading = Some("SMTP"), setting = clap::AppSettings::DeriveDisplayOrder)]
 pub struct SmtpOpts {
@@ -130,8 +139,11 @@ pub struct SmtpOpts {
     pub smtp_password: Option<String>,
 
     /// Whether TLS should be used to connect to SMTP.
-    #[clap(long, env = "LLDAP_SMTP_OPTIONS__TLS_REQUIRED")]
+    #[clap(long, env = "LLDAP_SMTP_OPTIONS__TLS_REQUIRED", setting=clap::ArgSettings::Hidden)]
     pub smtp_tls_required: Option<bool>,
+
+    #[clap(long, env = "LLDAP_SMTP_OPTIONS__ENCRYPTION", possible_values = SmtpEncryption::variants(), case_insensitive = true)]
+    pub smtp_encryption: Option<SmtpEncryption>,
 }
 
 #[derive(Debug, Parser, Clone)]
