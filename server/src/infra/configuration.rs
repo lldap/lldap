@@ -1,6 +1,6 @@
 use crate::{
     domain::handler::UserId,
-    infra::cli::{GeneralConfigOpts, LdapsOpts, RunOpts, SmtpOpts, TestEmailOpts},
+    infra::cli::{GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts},
 };
 use anyhow::{Context, Result};
 use figment::{
@@ -29,8 +29,11 @@ pub struct MailOptions {
     pub user: String,
     #[builder(default = r#"SecUtf8::from("")"#)]
     pub password: SecUtf8,
-    #[builder(default = "true")]
-    pub tls_required: bool,
+    #[builder(default = "SmtpEncryption::TLS")]
+    pub smtp_encryption: SmtpEncryption,
+    /// Deprecated.
+    #[builder(default = "None")]
+    pub tls_required: Option<bool>,
 }
 
 impl std::default::Default for MailOptions {
@@ -234,7 +237,7 @@ impl ConfigOverrider for SmtpOpts {
             config.smtp_options.password = SecUtf8::from(password.clone());
         }
         if let Some(tls_required) = self.smtp_tls_required {
-            config.smtp_options.tls_required = tls_required;
+            config.smtp_options.tls_required = Some(tls_required);
         }
     }
 }
@@ -267,6 +270,9 @@ where
     }
     if config.ldap_user_pass == SecUtf8::from("password") {
         println!("WARNING: Unsecure default admin password is used.");
+    }
+    if config.smtp_options.tls_required.is_some() {
+        println!("DEPRECATED: smtp_options.tls_required field is deprecated, it never did anything. You can replace it with smtp_options.smtp_encryption.");
     }
     Ok(config)
 }
