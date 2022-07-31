@@ -63,7 +63,7 @@ jobs:
         #CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: install runtime
-        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev
+        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev ca-cerfiticates
       - name: setup node repo LTS
         run: curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
       - name: install nodejs
@@ -110,7 +110,7 @@ jobs:
       - name: add armhf architecture
         run: dpkg --add-architecture armhf
       - name: install runtime
-        run: apt update && apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross tar
+        run: apt update && apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross tar ca-certificates
       - name: smoke test
         run: rustc --version
       - name: add armhf target
@@ -159,7 +159,7 @@ jobs:
       - name: add arm64 architecture
         run: dpkg --add-architecture arm64
       - name: install runtime
-        run: apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross tar wget
+        run: apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross tar wget ca-certificates
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: smoke test
@@ -202,7 +202,7 @@ jobs:
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: install runtime
-        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev tar wget musl-tools
+        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev tar wget musl-tools ca-certificates
       - name: Checkout repository
         uses: actions/checkout@v2
       - uses: actions/cache@v3
