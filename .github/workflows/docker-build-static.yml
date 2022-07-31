@@ -63,7 +63,7 @@ jobs:
         #CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: install runtime
-        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev ca-cerfiticates
+        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev ca-certificates
       - name: setup node repo LTS
         run: curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
       - name: install nodejs
@@ -103,6 +103,7 @@ jobs:
       image: rust:1.62
       env:
         CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+        CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER: arm-linux-gnueabihf-ld
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=-crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
@@ -149,21 +150,19 @@ jobs:
   build-aarch64:
     runs-on: ubuntu-latest
     container:
-      image: rust:1.61
+      image: martadinata666/debian:rust-dev
       env:
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
-      - name: add arm64 architecture
-        run: dpkg --add-architecture arm64
-      - name: install runtime
-        run: apt update && apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross tar wget ca-certificates
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: smoke test
-        run: rustc --version
+        run: |
+             rustc --version
       - name: Checkout repository
         uses: actions/checkout@v2
       - uses: actions/cache@v3
@@ -177,8 +176,12 @@ jobs:
           key: lldap-bin-aarch64-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-bin-aarch64-
-      - name: build
-        run: ./build-arm64.sh
+#      - name: build
+#        run: ./build-arm64.sh
+      - name: add musl aarch64 target
+        run: rustup target add aarch64-unknown-linux-musl
+      - name: build lldap aarch4
+        run: cargo build --target=aarch64-unknown-linux-musl --release -p lldap -p migration-tool
       - name: check path
         run: ls -al target/aarch64-unknown-linux-musl/release/
       - name: upload aarch64 lldap artifacts
@@ -195,14 +198,13 @@ jobs:
   build-amd64:
     runs-on: ubuntu-latest
     container:
-      image: rust:1.62
+      image: martadinata666/debian:rust-dev
       env:
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
+        CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: x86_64-linux-musl-gcc
     steps:
-      - name: install runtime
-        run: apt update && apt install -y gcc-x86-64-linux-gnu g++-x86-64-linux-gnu libc6-dev tar wget musl-tools ca-certificates
       - name: Checkout repository
         uses: actions/checkout@v2
       - uses: actions/cache@v3
@@ -216,8 +218,10 @@ jobs:
           key: lldap-bin-amd64-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-bin-amd64-
-      - name: build
-        run: ./build-amd64.sh
+      - name: add x86_64 target
+        run: rustup target add x86_64-unknown-linux-musl
+      - name: build x86_64 lldap
+        run: cargo build --target=x86_64-unknown-linux-musl --release -p lldap -p migration-tool
       - name: check path
         run: ls -al target/x86_64-unknown-linux-musl/release/
       - name: upload amd64 lldap artifacts
