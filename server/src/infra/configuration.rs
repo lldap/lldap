@@ -110,6 +110,15 @@ impl ConfigurationBuilder {
         let server_setup = get_server_setup(self.key_file.as_deref().unwrap_or("server_key"))?;
         Ok(self.server_setup(Some(server_setup)).private_build()?)
     }
+
+    #[cfg(test)]
+    pub fn for_tests() -> Configuration {
+        ConfigurationBuilder::default()
+            .verbose(true)
+            .server_setup(Some(generate_random_private_key()))
+            .private_build()
+            .unwrap()
+    }
 }
 
 impl Configuration {
@@ -122,17 +131,34 @@ impl Configuration {
     }
 }
 
+fn generate_random_private_key() -> ServerSetup {
+    let mut rng = rand::rngs::OsRng;
+    ServerSetup::new(&mut rng)
+}
+
+fn write_to_readonly_file(path: &std::path::Path, buffer: &[u8]) -> Result<()> {
+    use std::{fs::File, io::Write};
+    assert!(!path.exists());
+    let mut file = File::create(path)?;
+    let mut permissions = file.metadata()?.permissions();
+    permissions.set_readonly(true);
+    if cfg!(unix) {
+        use std::os::unix::fs::PermissionsExt;
+        permissions.set_mode(0o400);
+    }
+    file.set_permissions(permissions)?;
+    Ok(file.write_all(buffer)?)
+}
+
 fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
-    use std::path::Path;
-    let path = Path::new(file_path);
+    use std::fs::read;
+    let path = std::path::Path::new(file_path);
     if path.exists() {
-        let bytes =
-            std::fs::read(file_path).context(format!("Could not read key file `{}`", file_path))?;
+        let bytes = read(file_path).context(format!("Could not read key file `{}`", file_path))?;
         Ok(ServerSetup::deserialize(&bytes)?)
     } else {
-        let mut rng = rand::rngs::OsRng;
-        let server_setup = ServerSetup::new(&mut rng);
-        std::fs::write(path, server_setup.serialize()).context(format!(
+        let server_setup = generate_random_private_key();
+        write_to_readonly_file(path, &server_setup.serialize()).context(format!(
             "Could not write the generated server setup to file `{}`",
             file_path,
         ))?;
