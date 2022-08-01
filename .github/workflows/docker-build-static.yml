@@ -180,9 +180,9 @@ jobs:
            lldap-bin-aarch64-
 #      - name: fetch musl-gcc
 #        run: |
-#             wget -c https://musl.cc/aarch64-linux-musl-cross.tgz 
+#             wget -c https://musl.cc/aarch64-linux-musl-cross.tgz
 #             tar zxf ./x86_64-linux-musl-cross.tgz -C /opt
-#             echo "/opt/aarch64-linux-musl-cross:/opt/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH 
+#             echo "/opt/aarch64-linux-musl-cross:/opt/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH
       - name: add musl aarch64 target
         run: rustup target add aarch64-unknown-linux-musl
       - name: build lldap aarch4
@@ -228,7 +228,7 @@ jobs:
         run: apt update && apt install -y musl-tools tar wget
 #      - name: fetch musl-gcc
 #        run: |
-#             wget -c https://musl.cc/x86_64-linux-musl-cross.tgz 
+#             wget -c https://musl.cc/x86_64-linux-musl-cross.tgz
 #             tar zxf ./x86_64-linux-musl-cross.tgz -C /opt
 #             echo "/opt/x86_64-linux-musl-cross:/opt/x86_64-linux-musl-cross/bin" >> $GITHUB_PATH
       - name: add x86_64 target
@@ -341,7 +341,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
+
 ######################
 #### latest build ####
 ######################
@@ -353,10 +353,10 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64,linux/arm64
           file: ./.github/workflows/Dockerfile.ci.alpine
-          tags: nitnelave/lldap:latest, nitnelave/lldap:latest-alpime
+          tags: nitnelave/lldap:latest, nitnelave/lldap:latest-alpine
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
-          
+
       - name: Build and push latest debian
         if: github.event_name != 'release'
         uses: docker/build-push-action@v3
@@ -368,10 +368,10 @@ jobs:
           tags: nitnelave/lldap:latest-debian
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
-          
+
 #######################
 #### release build ####
-#######################        
+#######################
       - name: Build and push release alpine
         if: github.event_name == 'release'
         uses: docker/build-push-action@v3
