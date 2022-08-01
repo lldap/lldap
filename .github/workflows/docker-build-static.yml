@@ -51,10 +51,6 @@ env:
 ## cargo
 ## target
 
-# Github actions currently timeout when downloading musl-gcc
-## Using lldap dev image based on rust:1.62-slim-bullseye and musl-gcc bundled
-### Job aarch64 and amd64 build
-
 jobs:
   build-ui:
     runs-on: ubuntu-latest
@@ -85,10 +81,10 @@ jobs:
             lldap-ui-
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: install rollup nodejs and wasm-pack
-        run: |
-             npm install -g rollup
-             npm install -g wasm-pack
+      - name: install rollup nodejs
+        run: npm install -g rollup
+      - name: install wasm-pack with cargo
+        run: cargo install wasm-pack || true
       - name: build frontend
         run: ./app/build.sh
       - name: check path
@@ -152,6 +148,11 @@ jobs:
   build-aarch64:
     runs-on: ubuntu-latest
     container:
+##################################################################################
+# Github actions currently timeout when downloading musl-gcc                     #
+# Using lldap dev image based on rust:1.62-slim-bullseye and musl-gcc bundled    #
+# Only for Job build aarch64 and amd64                                           #
+###################################################################################
       #image: rust:1.62
       image: nitnelave/rust-dev:latest
       env:
@@ -163,8 +164,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: smoke test
-        run: |
-             rustc --version
+        run: rustc --version
       - name: Checkout repository
         uses: actions/checkout@v2
       - uses: actions/cache@v3
