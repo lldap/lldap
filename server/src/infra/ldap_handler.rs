@@ -15,7 +15,7 @@ use ldap3_server::proto::{
     LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest, LdapResult,
     LdapResultCode, LdapSearchRequest, LdapSearchResultEntry, LdapSearchScope,
 };
-use tracing::{debug, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct LdapDn(String);
@@ -738,6 +738,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         let parsed_filters = match user_filter {
             None => filters,
             Some(u) => {
+                info!("Unpriviledged search, limiting results");
                 UserRequestFilter::And(vec![filters, UserRequestFilter::UserId((*u).clone())])
             }
         };
@@ -802,6 +803,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         let parsed_filters = match user_filter {
             None => filter,
             Some(u) => {
+                info!("Unpriviledged search, limiting results");
                 GroupRequestFilter::And(vec![filter, GroupRequestFilter::Member((*u).clone())])
             }
         };
