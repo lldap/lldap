@@ -101,8 +101,8 @@ key_file = "/data/private_key"
 #server="smtp.gmail.com"
 ## The SMTP port.
 #port=587
-## Whether to connect with TLS.
-#tls_required=true
+## How the connection is encrypted, either "TLS" or "STARTTLS".
+#smtp_encryption = "TLS"
 ## The SMTP user, usually your email address.
 #user="sender@gmail.com"
 ## The SMTP password.
