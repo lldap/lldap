@@ -77,11 +77,10 @@ async fn column_exists(pool: &Pool, table_name: &str, column_name: &str) -> sqlx
         "SELECT COUNT(*) AS col_count FROM pragma_table_info('{}') WHERE name = '{}'",
         table_name, column_name
     );
-    Ok(sqlx::query(&query)
-        .fetch_one(pool)
-        .await?
-        .get::<i32, _>("col_count")
-        > 0)
+    match sqlx::query(&query).fetch_one(pool).await {
+        Err(_) => Ok(false),
+        Ok(row) => Ok(row.get::<i32, _>("col_count") > 0),
+    }
 }
 
 pub async fn create_group(group_name: &str, pool: &Pool) -> sqlx::Result<()> {
