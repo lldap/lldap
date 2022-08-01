@@ -532,10 +532,7 @@ mod tests {
     use lldap_auth::{opaque, registration};
 
     fn get_default_config() -> Configuration {
-        ConfigurationBuilder::default()
-            .verbose(true)
-            .build()
-            .unwrap()
+        ConfigurationBuilder::for_tests()
     }
 
     async fn get_in_memory_db() -> Pool {
