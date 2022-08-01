@@ -1,0 +1,22 @@
+[Unit]
+Description=Nitnelave LLDAP
+Documentation=https://github.com/nitnelave/lldap
+
+# Only sqlite
+After=network.target
+
+[Service]
+# The user/group LLDAP is run under. The working directory (see below) should allow write and read access to this user/group.
+User=root
+Group=root
+
+# The location of the compiled binary
+ExecStart=/opt/nitnelave/lldap \
+  run
+
+# Only allow writes to the following directory and set it to the working directory (user and password data are stored here).
+WorkingDirectory=/opt/nitnelave/
+ReadWriteDirectories=/opt/nitnelave/
+
+[Install]
+WantedBy=multi-user.target
