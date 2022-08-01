@@ -151,7 +151,6 @@ fn get_user_id_from_distinguished_name(
 fn get_user_attribute(
     user: &User,
     attribute: &str,
-    dn: &str,
     base_dn_str: &str,
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[String],
@@ -164,7 +163,8 @@ fn get_user_attribute(
             "mailAccount".to_string(),
             "person".to_string(),
         ],
-        "dn" | "distinguishedname" => vec![dn.to_string()],
+        // dn is always returned as part of the base response.
+        "dn" | "distinguishedname" => return Ok(None),
         "uid" => vec![user.user_id.to_string()],
         "entryuuid" => vec![user.uuid.to_string()],
         "mail" => vec![user.email.clone()],
@@ -232,7 +232,6 @@ fn expand_attribute_wildcards<'a>(
 
 const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
     "objectclass",
-    "dn",
     "uid",
     "mail",
     "givenname",
@@ -251,14 +250,13 @@ fn make_ldap_search_user_result_entry(
     let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
 
     Ok(LdapSearchResultEntry {
-        dn: dn.clone(),
+        dn,
         attributes: attributes
             .iter()
             .filter_map(|a| {
                 let values = match get_user_attribute(
                     &user,
                     a,
-                    &dn,
                     base_dn_str,
                     groups,
                     ignored_user_attributes,
@@ -285,10 +283,8 @@ fn get_group_attribute(
     let attribute = attribute.to_ascii_lowercase();
     Ok(Some(match attribute.as_str() {
         "objectclass" => vec!["groupOfUniqueNames".to_string()],
-        "dn" | "distinguishedname" => vec![format!(
-            "cn={},ou=groups,{}",
-            group.display_name, base_dn_str
-        )],
+        // Always returned as part of the base response.
+        "dn" | "distinguishedname" => return Ok(None),
         "cn" | "uid" => vec![group.display_name.clone()],
         "entryuuid" => vec![group.uuid.to_string()],
         "member" | "uniquemember" => group
@@ -319,8 +315,7 @@ fn get_group_attribute(
     }))
 }
 
-const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] =
-    &["objectclass", "dn", "uid", "cn", "member", "uniquemember"];
+const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] = &["objectclass", "uid", "cn", "member", "uniquemember"];
 
 fn make_ldap_search_group_result_entry(
     group: Group,
@@ -930,7 +925,11 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 self.convert_group_filter(filter)?,
             ))),
             LdapFilter::Present(field) => {
-                if ALL_GROUP_ATTRIBUTE_KEYS.contains(&field.to_ascii_lowercase().as_str()) {
+                let field = &field.to_ascii_lowercase();
+                if field == "dn"
+                    || field == "distinguishedname"
+                    || ALL_GROUP_ATTRIBUTE_KEYS.contains(&field.as_str())
+                {
                     Ok(GroupRequestFilter::And(vec![]))
                 } else {
                     Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
@@ -1007,7 +1006,11 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             LdapFilter::Present(field) => {
                 let field = &field.to_ascii_lowercase();
                 // Check that it's a field we support.
-                if field == "objectclass" || map_field(field).is_ok() {
+                if field == "objectclass"
+                    || field == "dn"
+                    || field == "distinguishedname"
+                    || map_field(field).is_ok()
+                {
                     Ok(UserRequestFilter::And(vec![]))
                 } else {
                     Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
@@ -1494,10 +1497,6 @@ mod tests {
                             ]
                         },
                         LdapPartialAttribute {
-                            atype: "dn".to_string(),
-                            vals: vec!["uid=bob_1,ou=people,dc=example,dc=com".to_string()]
-                        },
-                        LdapPartialAttribute {
                             atype: "uid".to_string(),
                             vals: vec!["bob_1".to_string()]
                         },
@@ -1538,10 +1537,6 @@ mod tests {
                                 "mailAccount".to_string(),
                                 "person".to_string()
                             ]
-                        },
-                        LdapPartialAttribute {
-                            atype: "dn".to_string(),
-                            vals: vec!["uid=jim,ou=people,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),
@@ -1619,10 +1614,6 @@ mod tests {
                             vals: vec!["groupOfUniqueNames".to_string(),]
                         },
                         LdapPartialAttribute {
-                            atype: "dn".to_string(),
-                            vals: vec!["cn=group_1,ou=groups,dc=example,dc=com".to_string()]
-                        },
-                        LdapPartialAttribute {
                             atype: "cn".to_string(),
                             vals: vec!["group_1".to_string()]
                         },
@@ -1645,10 +1636,6 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
                             vals: vec!["groupOfUniqueNames".to_string(),]
-                        },
-                        LdapPartialAttribute {
-                            atype: "dn".to_string(),
-                            vals: vec!["cn=BestGroup,ou=groups,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
@@ -2044,10 +2031,6 @@ mod tests {
                             ]
                         },
                         LdapPartialAttribute {
-                            atype: "dn".to_string(),
-                            vals: vec!["uid=bob_1,ou=people,dc=example,dc=com".to_string()]
-                        },
-                        LdapPartialAttribute {
                             atype: "cn".to_string(),
                             vals: vec!["Bôb Böbberson".to_string()]
                         },
@@ -2059,10 +2042,6 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
                             vals: vec!["groupOfUniqueNames".to_string(),]
-                        },
-                        LdapPartialAttribute {
-                            atype: "dn".to_string(),
-                            vals: vec!["cn=group_1,ou=groups,dc=example,dc=com".to_string()]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
@@ -2125,10 +2104,6 @@ mod tests {
                         ],
                     },
                     LdapPartialAttribute {
-                        atype: "dn".to_string(),
-                        vals: vec!["uid=bob_1,ou=people,dc=example,dc=com".to_string()],
-                    },
-                    LdapPartialAttribute {
                         atype: "uid".to_string(),
                         vals: vec!["bob_1".to_string()],
                     },
@@ -2161,10 +2136,6 @@ mod tests {
                     LdapPartialAttribute {
                         atype: "objectclass".to_string(),
                         vals: vec!["groupOfUniqueNames".to_string()],
-                    },
-                    LdapPartialAttribute {
-                        atype: "dn".to_string(),
-                        vals: vec!["cn=group_1,ou=groups,dc=example,dc=com".to_string()],
                     },
                     // UID
                     LdapPartialAttribute {
