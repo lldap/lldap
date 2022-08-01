@@ -153,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       #image: rust:1.62
-      image: martadinata666/debian:rust-dev
+      image: nitnelave/rust-dev:latest
       env:
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
         CARGO_TERM_COLOR: always
@@ -204,7 +204,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
 #      image: rust:1.62
-      image: martadinata666/debian:rust-dev
+      image: nitnelave/rust-dev:latest
       env:
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
