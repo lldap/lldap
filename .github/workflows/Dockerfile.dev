@@ -1,0 +1,42 @@
+FROM rust:1.62-slim-bullseye
+# Set needed env path
+ENV PATH="/opt/aarch64-linux-musl-cross/:/opt/aarch64-linux-musl-cross/bin/:/opt/x86_64-linux-musl-cross/:/opt/x86_64-linux-musl-cross/bin/:$PATH"
+
+### Install build deps x86_64
+RUN apt update && \
+    apt install -y --no-install-recommends curl git wget build-essential make perl pkg-config curl tar jq musl-tools && \
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt update && \
+    apt install -y --no-install-recommends nodejs && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    npm install -g npm && \
+    npm install -g yarn && \
+    npm install -g pnpm
+
+### Install build deps aarch64 build
+RUN dpkg --add-architecture arm64 && \
+    apt update && \
+    apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    rustup target add aarch64-unknown-linux-gnu
+
+### Install build deps armhf build
+#RUN dpkg --add-architecture armhf && \
+#    apt update && \
+#    apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross && \
+#    apt clean && \
+#    rm -rf /var/lib/apt/lists/*
+### add armhf target
+#RUN rustup target add rustup target add armv7-unknown-linux-gnueabihf
+
+### Add musl-gcc aarch64 and x86_64
+RUN wget -c https://musl.cc/x86_64-linux-musl-cross.tgz && \
+    tar zxf ./x86_64-linux-musl-cross.tgz -C /opt && \
+    wget -c https://musl.cc/aarch64-linux-musl-cross.tgz && \
+    tar zxf ./aarch64-linux-musl-cross.tgz -C /opt && \
+    rm ./x86_64-linux-musl-cross.tgz && \
+    rm ./aarch64-linux-musl-cross.tgz
+
+CMD ["bash"]
