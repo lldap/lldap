@@ -150,7 +150,7 @@ jobs:
   build-aarch64:
     runs-on: ubuntu-latest
     container:
-      image: martadinata666/debian:rust-dev
+      image: rust:1.62
       env:
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
@@ -175,7 +175,12 @@ jobs:
             target
           key: lldap-bin-aarch64-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            lldap-bin-aarch64-
+           lldap-bin-aarch64-
+      - name: fetch musl-gcc
+        run: |
+             wget -c https://musl.cc/aarch64-linux-musl-cross.tgz 
+             tar zxf ./x86_64-linux-musl-cross.tgz -C /opt
+             echo "/opt/aarch64-linux-musl-cross:/opt/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH 
 #      - name: build
 #        run: ./build-arm64.sh
       - name: add musl aarch64 target
