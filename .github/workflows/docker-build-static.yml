@@ -219,13 +219,18 @@ jobs:
           restore-keys: |
             lldap-bin-amd64-
       - name: install musl
-        run: apt update && apt install -y musl-tools
-      - name: fetch musl gcc and build
-        run: ./build-amd64.sh
-#      - name: add x86_64 target
-#        run: rustup target add x86_64-unknown-linux-musl
-#      - name: build x86_64 lldap
-#        run: cargo build --target=x86_64-unknown-linux-musl --release -p lldap -p migration-tool
+        run: apt update && apt install -y musl-tools tar wget
+      - name: fetch musl-gcc
+        run: |
+             wget -c https://musl.cc/x86_64-linux-musl-cross.tgz 
+             tar zxf ./x86_64-linux-musl-cross.tgz -C /opt
+             echo "/opt/x86_64-linux-musl-cross:/opt/x86_64-linux-musl-cross/bin" >> $GITHUB_PATH
+#      - name: fetch musl gcc and build
+#        run: ./build-amd64.sh
+      - name: add x86_64 target
+        run: rustup target add x86_64-unknown-linux-musl
+      - name: build x86_64 lldap
+        run: cargo build --target=x86_64-unknown-linux-musl --release -p lldap -p migration-tool
       - name: check path
         run: ls -al target/x86_64-unknown-linux-musl/release/
       - name: upload amd64 lldap artifacts
