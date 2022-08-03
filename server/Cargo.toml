@@ -45,6 +45,7 @@ tracing-actix-web = "0.4.0-beta.7"
 tracing-attributes = "^0.1.21"
 tracing-log = "*"
 rustls-pemfile = "1.0.0"
+serde_bytes = "0.11.7"
 
 [dependencies.chrono]
 features = ["serde"]
@@ -116,6 +117,11 @@ version = "^0.1.4"
 [dependencies.actix-tls]
 features = ["default", "rustls"]
 version = "=3.0.0-beta.5"
+
+[dependencies.image]
+features = ["jpeg"]
+default-features = false
+version = "0.24"
 
 [dev-dependencies]
 mockall = "0.9.1"

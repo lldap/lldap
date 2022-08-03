@@ -60,6 +60,7 @@ input CreateUserInput {
   displayName: String
   firstName: String
   lastName: String
+  avatar: String
 }
 
 type User {
@@ -68,6 +69,7 @@ type User {
   displayName: String!
   firstName: String!
   lastName: String!
+  avatar: String!
   creationDate: DateTimeUtc!
   uuid: String!
   "The groups to which this user belongs."
@@ -85,6 +87,7 @@ input UpdateUserInput {
   displayName: String
   firstName: String
   lastName: String
+  avatar: String
 }
 
 schema {

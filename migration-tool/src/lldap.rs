@@ -85,6 +85,7 @@ impl User {
                 display_name,
                 first_name,
                 last_name,
+                avatar: None,
             },
             password,
             dn,

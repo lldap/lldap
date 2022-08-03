@@ -367,6 +367,7 @@ impl BackendHandler for SqlBackendHandler {
             Users::DisplayName,
             Users::FirstName,
             Users::LastName,
+            Users::Avatar,
             Users::CreationDate,
             Users::Uuid,
         ];
@@ -378,6 +379,7 @@ impl BackendHandler for SqlBackendHandler {
             request.display_name.unwrap_or_default().into(),
             request.first_name.unwrap_or_default().into(),
             request.last_name.unwrap_or_default().into(),
+            request.avatar.unwrap_or_default().into(),
             now.naive_utc().into(),
             uuid.into(),
         ];
@@ -408,6 +410,9 @@ impl BackendHandler for SqlBackendHandler {
         }
         if let Some(last_name) = request.last_name {
             values.push((Users::LastName, last_name.into()));
+        }
+        if let Some(avatar) = request.avatar {
+            values.push((Users::Avatar, avatar.into()));
         }
         if values.is_empty() {
             return Ok(());

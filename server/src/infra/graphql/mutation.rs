@@ -1,6 +1,8 @@
 use crate::domain::handler::{
-    BackendHandler, CreateUserRequest, GroupId, UpdateGroupRequest, UpdateUserRequest, UserId,
+    BackendHandler, CreateUserRequest, GroupId, JpegPhoto, UpdateGroupRequest, UpdateUserRequest,
+    UserId,
 };
+use anyhow::Context as AnyhowContext;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
 use tracing::{debug, debug_span, Instrument};
 
@@ -28,6 +30,8 @@ pub struct CreateUserInput {
     display_name: Option<String>,
     first_name: Option<String>,
     last_name: Option<String>,
+    // Base64 encoded JpegPhoto.
+    avatar: Option<String>,
 }
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
@@ -38,6 +42,8 @@ pub struct UpdateUserInput {
     display_name: Option<String>,
     first_name: Option<String>,
     last_name: Option<String>,
+    // Base64 encoded JpegPhoto.
+    avatar: Option<String>,
 }
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
@@ -73,6 +79,14 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             return Err("Unauthorized user creation".into());
         }
         let user_id = UserId::new(&user.id);
+        let avatar = user
+            .avatar
+            .map(base64::decode)
+            .transpose()
+            .context("Invalid base64 image")?
+            .map(JpegPhoto::try_from)
+            .transpose()
+            .context("Provided image is not a valid JPEG")?;
         context
             .handler
             .create_user(CreateUserRequest {
@@ -81,6 +95,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
                 display_name: user.display_name,
                 first_name: user.first_name,
                 last_name: user.last_name,
+                avatar,
             })
             .instrument(span.clone())
             .await?;
@@ -126,6 +141,14 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized user update".into());
         }
+        let avatar = user
+            .avatar
+            .map(base64::decode)
+            .transpose()
+            .context("Invalid base64 image")?
+            .map(JpegPhoto::try_from)
+            .transpose()
+            .context("Provided image is not a valid JPEG")?;
         context
             .handler
             .update_user(UpdateUserRequest {
@@ -134,6 +157,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
                 display_name: user.display_name,
                 first_name: user.first_name,
                 last_name: user.last_name,
+                avatar,
             })
             .instrument(span)
             .await?;
