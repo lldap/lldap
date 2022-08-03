@@ -217,6 +217,10 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
         &self.user.last_name
     }
 
+    fn avatar(&self) -> String {
+        (&self.user.avatar).into()
+    }
+
     fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
         self.user.creation_date
     }

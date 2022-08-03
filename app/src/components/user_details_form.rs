@@ -234,6 +234,7 @@ impl UserDetailsForm {
             displayName: None,
             firstName: None,
             lastName: None,
+            avatar: None,
         };
         let default_user_input = user_input.clone();
         let model = self.form.model();

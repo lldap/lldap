@@ -90,6 +90,7 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                         displayName: to_option(model.display_name),
                         firstName: to_option(model.first_name),
                         lastName: to_option(model.last_name),
+                        avatar: None,
                     },
                 };
                 self.common.call_graphql::<CreateUser, _>(

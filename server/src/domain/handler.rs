@@ -82,6 +82,69 @@ impl From<String> for UserId {
     }
 }
 
+#[derive(PartialEq, Eq, Clone, Debug, Default, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(transparent)]
+pub struct JpegPhoto(#[serde(with = "serde_bytes")] Vec<u8>);
+
+impl From<JpegPhoto> for sea_query::Value {
+    fn from(photo: JpegPhoto) -> Self {
+        photo.0.into()
+    }
+}
+
+impl From<&JpegPhoto> for sea_query::Value {
+    fn from(photo: &JpegPhoto) -> Self {
+        photo.0.as_slice().into()
+    }
+}
+
+impl TryFrom<Vec<u8>> for JpegPhoto {
+    type Error = anyhow::Error;
+    fn try_from(bytes: Vec<u8>) -> anyhow::Result<Self> {
+        // Confirm that it's a valid Jpeg, then store only the bytes.
+        image::io::Reader::with_format(
+            std::io::Cursor::new(bytes.as_slice()),
+            image::ImageFormat::Jpeg,
+        )
+        .decode()?;
+        Ok(JpegPhoto(bytes))
+    }
+}
+
+impl TryFrom<String> for JpegPhoto {
+    type Error = anyhow::Error;
+    fn try_from(string: String) -> anyhow::Result<Self> {
+        // The String format is in base64.
+        Self::try_from(base64::decode(string.as_str())?)
+    }
+}
+
+impl From<&JpegPhoto> for String {
+    fn from(val: &JpegPhoto) -> Self {
+        base64::encode(&val.0)
+    }
+}
+
+impl JpegPhoto {
+    pub fn for_tests() -> Self {
+        use image::{ImageOutputFormat, Rgb, RgbImage};
+        let img = RgbImage::from_fn(32, 32, |x, y| {
+            if (x + y) % 2 == 0 {
+                Rgb([0, 0, 0])
+            } else {
+                Rgb([255, 255, 255])
+            }
+        });
+        let mut bytes: Vec<u8> = Vec::new();
+        img.write_to(
+            &mut std::io::Cursor::new(&mut bytes),
+            ImageOutputFormat::Jpeg(0),
+        )
+        .unwrap();
+        Self(bytes)
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
     pub user_id: UserId,
@@ -89,7 +152,7 @@ pub struct User {
     pub display_name: String,
     pub first_name: String,
     pub last_name: String,
-    // pub avatar: ?,
+    pub avatar: JpegPhoto,
     pub creation_date: chrono::DateTime<chrono::Utc>,
     pub uuid: Uuid,
 }
@@ -105,6 +168,7 @@ impl Default for User {
             display_name: String::new(),
             first_name: String::new(),
             last_name: String::new(),
+            avatar: JpegPhoto::default(),
             creation_date: epoch,
             uuid: Uuid::from_name_and_date("", &epoch),
         }
@@ -159,6 +223,7 @@ pub struct CreateUserRequest {
     pub display_name: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
+    pub avatar: Option<JpegPhoto>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
@@ -169,6 +234,7 @@ pub struct UpdateUserRequest {
     pub display_name: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
+    pub avatar: Option<JpegPhoto>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
@@ -262,5 +328,12 @@ mod tests {
             Uuid::from_name_and_date(user_id, &date1),
             Uuid::from_name_and_date(user_id, &date2)
         );
+    }
+
+    #[test]
+    fn test_jpeg_try_from_bytes() {
+        let base64_raw = "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCADqATkDASIAAhEBAxEB/8QAFwABAQEBAAAAAAAAAAAAAAAAAAECA//EACQQAQEBAAIBBAMBAQEBAAAAAAABESExQQISUXFhgZGxocHw/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAH/xAAWEQEBAQAAAAAAAAAAAAAAAAAAEQH/2gAMAwEAAhEDEQA/AMriLyCKgg1gQwCgs4FTMOdutepjQak+FzMSVqgxZdRdPPIIvH5WzzGdBriphtTeAXg2ZjKA1pqKDUGZca3foBek8gFv8Ie3fKdA1qb8s7hoL6eLVt51FsAnql3Ut1M7AWbflLMDkEMX/F6/YjK/pADFQAUNA6alYagKk72m/j9p4Bq2fDDSYKLNXPNLoHE/NT6RYC31cJxZ3yWVM+aBYi/S2ZgiAsnYJx5D21vPmqrm3PTfpQQwyAC8JZvSKDni41ZrMuUVVl+Uz9w9v/1QWrZsZ5nFPHYH+JZyureQSF5M+fJ0CAfwRAVRBQA1DAWVUayoJUWoDpsxntPsueBV4+VxhdyAtv8AjOLGpIDMLbeGvbF4iozJfr/WukAVABAXAQXEAAASzVAZdO2WNordm+emFl7XcQSNZiFtv0C9w90nhJf4mA1u+GcJFwIyAqL/AOovwgGNfSRqdIrNa29M0gKCAojU9PAMjWXpckEJFNFEAAXEUBABYz6rZ0ureQc9vyt9XxDF2QAXtABcQAs0AZywkvluJbyipifas52DcyxjlZweAO0xri/hc+wZOEKIu6nSyeToVZyWXwvCg53gW81QQ7aTNAn5dGZJPs1UXURQAUEMCXQLZE93PRZ5hPTgNMrbIzKCm52LZwCs+2M8w2g3sjPuZAXb4IsMAUACzVUGM4/K+md6vEXUUyM5PDR0IxYe6ramih0VNBrS4xoqN8Q1BFQk3yqyAsioioAAKgDSJL4/jQIn5igLrPqtOuf6oOaxbMoAltUAhhIoJiiggrPu+AaOIxtAX3JbaAIaLwi4t9X4T3fg2AFtqcrUUarP20zUDAmqoE0WRBZPNVUVEAAAAVAC8kvih2DSKxOdBqs7Z0l0gI0mKAC4AuHE7ZtBriM+744QAAAAABAFsveIttBICyaikvy1+r/Cen5rWQHIBQa4rIDRqSl5qDWqziqgAAAATA7BpGdqXb2C2+J/UgAtRQBSQtkBWb6vhLbQAAAAAEBRAAAAAUbm+GZNdPxAP+ql2Tjwx7/wIgZ8iKvBk+CJoCXii9gaqZ/qqihAAAEVABGkBFUwBftNkZ3QW34QAAABFAQAVAAAAAARVkl8gs/43sk1jL45LvHArepk+E9XTG35oLqsmIKmLAEygKg0y1AFQBUXwgAAAoBC34S3UAAABAVAAAAAABAUQAVABdRQa1PcYyit2z58M8C4ouM2NXpOEGeWtNZUatiAIoAKIoCoAoG4C9MW6dgIoAIAAAAAAACKWAgL0CAAAALiANCKioNLgM1CrLihmTafkt1EF3SZ5ZVUW4mnIKvAi5fhEURVDWVQBRAAAAAAAAQFRVyAyulgAqCKlF8IqLsEgC9mGoC+IusqCrv5ZEUVOk1RuJfwSLOOkGFi4XPCoYYrNiKauosBGi9ICstM1UAAAAAAFQ0VcTBAXUGgIqGoKhKAzRRUQUAwxoSrGRpkQA/qiosOL9oJptMRRVZa0VUqSiChE6BqMgCwqKqIogAIAqKCKgKoogg0lBFuIKgAAAKNRlf2gqsftsEtZWoAAqAACKoMqAAeSoqp39kL2AqLOlE8rEBFQARYALhigrNC9gGmooLp4TweEQFFBFAECgIoAu0ifIAqAAA//9k=";
+        let base64_jpeg = base64::decode(base64_raw).unwrap();
+        JpegPhoto::try_from(base64_jpeg).unwrap();
     }
 }

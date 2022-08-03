@@ -1459,6 +1459,7 @@ mod tests {
                         display_name: "Jimminy Cricket".to_string(),
                         first_name: "Jim".to_string(),
                         last_name: "Cricket".to_string(),
+                        avatar: JpegPhoto::for_tests(),
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                         creation_date: Utc.ymd(2014, 7, 8).and_hms(9, 10, 11),
                     },
