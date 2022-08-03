@@ -174,7 +174,9 @@ fn try_login(
             response.status().as_str()
         );
     }
-    Ok(response.text()?)
+    let json = serde_json::from_str::<lldap_auth::login::ServerLoginResponse>(&response.text()?)
+        .context("Could not parse response")?;
+    Ok(json.token)
 }
 
 pub fn get_lldap_user_and_password(
