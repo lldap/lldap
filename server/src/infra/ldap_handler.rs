@@ -170,6 +170,13 @@ fn get_user_attribute(
         "mail" => vec![user.email.clone().into_bytes()],
         "givenname" => vec![user.first_name.clone().into_bytes()],
         "sn" => vec![user.last_name.clone().into_bytes()],
+        "jpegphoto" => {
+            let bytes = user.avatar.clone().into_bytes();
+            if bytes.is_empty() {
+                return Ok(None);
+            }
+            vec![bytes]
+        }
         "memberof" => groups
             .into_iter()
             .flatten()
@@ -238,6 +245,7 @@ const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
     "givenname",
     "sn",
     "cn",
+    "jpegPhoto",
     "createtimestamp",
 ];
 
@@ -1481,6 +1489,7 @@ mod tests {
                 "cn",
                 "createTimestamp",
                 "entryUuid",
+                "jpegPhoto",
             ],
         );
         assert_eq!(
@@ -1567,6 +1576,10 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
                             vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "jpegPhoto".to_string(),
+                            vals: vec![JpegPhoto::for_tests().into_bytes()]
                         },
                     ],
                 }),
@@ -2067,6 +2080,7 @@ mod tests {
                     display_name: "Bôb Böbberson".to_string(),
                     first_name: "Bôb".to_string(),
                     last_name: "Böbberson".to_string(),
+                    avatar: JpegPhoto::for_tests(),
                     ..Default::default()
                 },
                 groups: None,
@@ -2124,6 +2138,10 @@ mod tests {
                     LdapPartialAttribute {
                         atype: "cn".to_string(),
                         vals: vec!["Bôb Böbberson".to_string().into_bytes()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "jpegPhoto".to_string(),
+                        vals: vec![JpegPhoto::for_tests().into_bytes()],
                     },
                     LdapPartialAttribute {
                         atype: "createtimestamp".to_string(),
