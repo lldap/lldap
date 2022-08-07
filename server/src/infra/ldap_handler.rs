@@ -156,7 +156,7 @@ fn get_user_attribute(
     ignored_user_attributes: &[String],
 ) -> Result<Option<Vec<Vec<u8>>>> {
     let attribute = attribute.to_ascii_lowercase();
-    Ok(Some(match attribute.as_str() {
+    let attribute_values = match attribute.as_str() {
         "objectclass" => vec![
             b"inetOrgPerson".to_vec(),
             b"posixAccount".to_vec(),
@@ -170,13 +170,7 @@ fn get_user_attribute(
         "mail" => vec![user.email.clone().into_bytes()],
         "givenname" => vec![user.first_name.clone().into_bytes()],
         "sn" => vec![user.last_name.clone().into_bytes()],
-        "jpegphoto" => {
-            let bytes = user.avatar.clone().into_bytes();
-            if bytes.is_empty() {
-                return Ok(None);
-            }
-            vec![bytes]
-        }
+        "jpegphoto" => vec![user.avatar.clone().into_bytes()],
         "memberof" => groups
             .into_iter()
             .flatten()
@@ -209,7 +203,12 @@ fn get_user_attribute(
             }
             return Ok(None);
         }
-    }))
+    };
+    if attribute_values.len() == 1 && attribute_values[0].is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(attribute_values))
+    }
 }
 
 #[instrument(skip_all, level = "debug")]
@@ -290,7 +289,7 @@ fn get_group_attribute(
     ignored_group_attributes: &[String],
 ) -> Result<Option<Vec<Vec<u8>>>> {
     let attribute = attribute.to_ascii_lowercase();
-    Ok(Some(match attribute.as_str() {
+    let attribute_values = match attribute.as_str() {
         "objectclass" => vec![b"groupOfUniqueNames".to_vec()],
         // Always returned as part of the base response.
         "dn" | "distinguishedname" => return Ok(None),
@@ -321,7 +320,12 @@ fn get_group_attribute(
             }
             return Ok(None);
         }
-    }))
+    };
+    if attribute_values.len() == 1 && attribute_values[0].is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(attribute_values))
+    }
 }
 
 const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] = &["objectclass", "uid", "cn", "member", "uniquemember"];
@@ -2078,7 +2082,6 @@ mod tests {
                     user_id: UserId::new("bob_1"),
                     email: "bob@bobmail.bob".to_string(),
                     display_name: "Bôb Böbberson".to_string(),
-                    first_name: "Bôb".to_string(),
                     last_name: "Böbberson".to_string(),
                     avatar: JpegPhoto::for_tests(),
                     ..Default::default()
@@ -2126,10 +2129,6 @@ mod tests {
                     LdapPartialAttribute {
                         atype: "mail".to_string(),
                         vals: vec![b"bob@bobmail.bob".to_vec()],
-                    },
-                    LdapPartialAttribute {
-                        atype: "givenname".to_string(),
-                        vals: vec!["Bôb".to_string().into_bytes()],
                     },
                     LdapPartialAttribute {
                         atype: "sn".to_string(),
