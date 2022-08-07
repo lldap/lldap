@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
-use ldap3_server::proto::{
+use ldap3_proto::proto::{
     LdapBindCred, LdapBindRequest, LdapBindResponse, LdapExtendedRequest, LdapExtendedResponse,
     LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest, LdapResult,
     LdapResultCode, LdapSearchRequest, LdapSearchResultEntry, LdapSearchScope,
@@ -154,22 +154,22 @@ fn get_user_attribute(
     base_dn_str: &str,
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[String],
-) -> Result<Option<Vec<String>>> {
+) -> Result<Option<Vec<Vec<u8>>>> {
     let attribute = attribute.to_ascii_lowercase();
     Ok(Some(match attribute.as_str() {
         "objectclass" => vec![
-            "inetOrgPerson".to_string(),
-            "posixAccount".to_string(),
-            "mailAccount".to_string(),
-            "person".to_string(),
+            b"inetOrgPerson".to_vec(),
+            b"posixAccount".to_vec(),
+            b"mailAccount".to_vec(),
+            b"person".to_vec(),
         ],
         // dn is always returned as part of the base response.
         "dn" | "distinguishedname" => return Ok(None),
-        "uid" => vec![user.user_id.to_string()],
-        "entryuuid" => vec![user.uuid.to_string()],
-        "mail" => vec![user.email.clone()],
-        "givenname" => vec![user.first_name.clone()],
-        "sn" => vec![user.last_name.clone()],
+        "uid" => vec![user.user_id.to_string().into_bytes()],
+        "entryuuid" => vec![user.uuid.to_string().into_bytes()],
+        "mail" => vec![user.email.clone().into_bytes()],
+        "givenname" => vec![user.first_name.clone().into_bytes()],
+        "sn" => vec![user.last_name.clone().into_bytes()],
         "memberof" => groups
             .into_iter()
             .flatten()
@@ -178,10 +178,11 @@ fn get_user_attribute(
                     "uid={},ou=groups,{}",
                     &id_and_name.display_name, base_dn_str
                 )
+                .into_bytes()
             })
             .collect(),
-        "cn" | "displayname" => vec![user.display_name.clone()],
-        "createtimestamp" | "modifytimestamp" => vec![user.creation_date.to_rfc3339()],
+        "cn" | "displayname" => vec![user.display_name.clone().into_bytes()],
+        "createtimestamp" | "modifytimestamp" => vec![user.creation_date.to_rfc3339().into_bytes()],
         "1.1" => return Ok(None),
         // We ignore the operational attribute wildcard.
         "+" => return Ok(None),
@@ -279,19 +280,19 @@ fn get_group_attribute(
     attribute: &str,
     user_filter: &Option<&UserId>,
     ignored_group_attributes: &[String],
-) -> Result<Option<Vec<String>>> {
+) -> Result<Option<Vec<Vec<u8>>>> {
     let attribute = attribute.to_ascii_lowercase();
     Ok(Some(match attribute.as_str() {
-        "objectclass" => vec!["groupOfUniqueNames".to_string()],
+        "objectclass" => vec![b"groupOfUniqueNames".to_vec()],
         // Always returned as part of the base response.
         "dn" | "distinguishedname" => return Ok(None),
-        "cn" | "uid" => vec![group.display_name.clone()],
-        "entryuuid" => vec![group.uuid.to_string()],
+        "cn" | "uid" => vec![group.display_name.clone().into_bytes()],
+        "entryuuid" => vec![group.uuid.to_string().into_bytes()],
         "member" | "uniquemember" => group
             .users
             .iter()
             .filter(|u| user_filter.map(|f| *u == f).unwrap_or(true))
-            .map(|u| format!("uid={},ou=people,{}", u, base_dn_str))
+            .map(|u| format!("uid={},ou=people,{}", u, base_dn_str).into_bytes())
             .collect(),
         "1.1" => return Ok(None),
         // We ignore the operational attribute wildcard
@@ -418,27 +419,27 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
         attributes: vec![
             LdapPartialAttribute {
                 atype: "objectClass".to_string(),
-                vals: vec!["top".to_string()],
+                vals: vec![b"top".to_vec()],
             },
             LdapPartialAttribute {
                 atype: "vendorName".to_string(),
-                vals: vec!["LLDAP".to_string()],
+                vals: vec![b"LLDAP".to_vec()],
             },
             LdapPartialAttribute {
                 atype: "vendorVersion".to_string(),
-                vals: vec!["lldap_0.2.0".to_string()],
+                vals: vec![b"lldap_0.2.0".to_vec()],
             },
             LdapPartialAttribute {
                 atype: "supportedLDAPVersion".to_string(),
-                vals: vec!["3".to_string()],
+                vals: vec![b"3".to_vec()],
             },
             LdapPartialAttribute {
                 atype: "supportedExtension".to_string(),
-                vals: vec!["1.3.6.1.4.1.4203.1.11.1".to_string()],
+                vals: vec![b"1.3.6.1.4.1.4203.1.11.1".to_vec()],
             },
             LdapPartialAttribute {
                 atype: "defaultnamingcontext".to_string(),
-                vals: vec![base_dn.to_string()],
+                vals: vec![base_dn.to_string().into_bytes()],
             },
         ],
     })
@@ -1032,7 +1033,7 @@ mod tests {
     };
     use async_trait::async_trait;
     use chrono::TimeZone;
-    use ldap3_server::proto::{LdapDerefAliases, LdapSearchScope};
+    use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope};
     use mockall::predicate::eq;
     use std::collections::HashSet;
     use tokio;
@@ -1314,7 +1315,7 @@ mod tests {
                     dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![LdapPartialAttribute {
                         atype: "memberOf".to_string(),
-                        vals: vec!["uid=rockstars,ou=groups,dc=example,dc=com".to_string()]
+                        vals: vec![b"uid=rockstars,ou=groups,dc=example,dc=com".to_vec()]
                     }],
                 }),
                 make_search_success(),
@@ -1491,39 +1492,39 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
                             vals: vec![
-                                "inetOrgPerson".to_string(),
-                                "posixAccount".to_string(),
-                                "mailAccount".to_string(),
-                                "person".to_string()
+                                b"inetOrgPerson".to_vec(),
+                                b"posixAccount".to_vec(),
+                                b"mailAccount".to_vec(),
+                                b"person".to_vec()
                             ]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),
-                            vals: vec!["bob_1".to_string()]
+                            vals: vec![b"bob_1".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "mail".to_string(),
-                            vals: vec!["bob@bobmail.bob".to_string()]
+                            vals: vec![b"bob@bobmail.bob".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "givenName".to_string(),
-                            vals: vec!["Bôb".to_string()]
+                            vals: vec!["Bôb".to_string().into_bytes()]
                         },
                         LdapPartialAttribute {
                             atype: "sn".to_string(),
-                            vals: vec!["Böbberson".to_string()]
+                            vals: vec!["Böbberson".to_string().into_bytes()]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
-                            vals: vec!["Bôb Böbberson".to_string()]
+                            vals: vec!["Bôb Böbberson".to_string().into_bytes()]
                         },
                         LdapPartialAttribute {
                             atype: "createTimestamp".to_string(),
-                            vals: vec!["1970-01-01T00:00:00+00:00".to_string()]
+                            vals: vec![b"1970-01-01T00:00:00+00:00".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
-                            vals: vec!["698e1d5f-7a40-3151-8745-b9b8a37839da".to_string()]
+                            vals: vec![b"698e1d5f-7a40-3151-8745-b9b8a37839da".to_vec()]
                         },
                     ],
                 }),
@@ -1533,39 +1534,39 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
                             vals: vec![
-                                "inetOrgPerson".to_string(),
-                                "posixAccount".to_string(),
-                                "mailAccount".to_string(),
-                                "person".to_string()
+                                b"inetOrgPerson".to_vec(),
+                                b"posixAccount".to_vec(),
+                                b"mailAccount".to_vec(),
+                                b"person".to_vec()
                             ]
                         },
                         LdapPartialAttribute {
                             atype: "uid".to_string(),
-                            vals: vec!["jim".to_string()]
+                            vals: vec![b"jim".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "mail".to_string(),
-                            vals: vec!["jim@cricket.jim".to_string()]
+                            vals: vec![b"jim@cricket.jim".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "givenName".to_string(),
-                            vals: vec!["Jim".to_string()]
+                            vals: vec![b"Jim".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "sn".to_string(),
-                            vals: vec!["Cricket".to_string()]
+                            vals: vec![b"Cricket".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
-                            vals: vec!["Jimminy Cricket".to_string()]
+                            vals: vec![b"Jimminy Cricket".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "createTimestamp".to_string(),
-                            vals: vec!["2014-07-08T09:10:11+00:00".to_string()]
+                            vals: vec![b"2014-07-08T09:10:11+00:00".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
-                            vals: vec!["04ac75e0-2900-3e21-926c-2f732c26b3fc".to_string()]
+                            vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()]
                         },
                     ],
                 }),
@@ -1612,22 +1613,22 @@ mod tests {
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec!["groupOfUniqueNames".to_string(),]
+                            vals: vec![b"groupOfUniqueNames".to_vec(),]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
-                            vals: vec!["group_1".to_string()]
+                            vals: vec![b"group_1".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "uniqueMember".to_string(),
                             vals: vec![
-                                "uid=bob,ou=people,dc=example,dc=com".to_string(),
-                                "uid=john,ou=people,dc=example,dc=com".to_string(),
+                                b"uid=bob,ou=people,dc=example,dc=com".to_vec(),
+                                b"uid=john,ou=people,dc=example,dc=com".to_vec(),
                             ]
                         },
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
-                            vals: vec!["04ac75e0-2900-3e21-926c-2f732c26b3fc".to_string()],
+                            vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
                         },
                     ],
                 }),
@@ -1636,19 +1637,19 @@ mod tests {
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec!["groupOfUniqueNames".to_string(),]
+                            vals: vec![b"groupOfUniqueNames".to_vec(),]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
-                            vals: vec!["BestGroup".to_string()]
+                            vals: vec![b"BestGroup".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "uniqueMember".to_string(),
-                            vals: vec!["uid=john,ou=people,dc=example,dc=com".to_string()]
+                            vals: vec![b"uid=john,ou=people,dc=example,dc=com".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
-                            vals: vec!["04ac75e0-2900-3e21-926c-2f732c26b3fc".to_string()],
+                            vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
                         },
                     ],
                 }),
@@ -1750,7 +1751,7 @@ mod tests {
                     dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
                     attributes: vec![LdapPartialAttribute {
                         atype: "cn".to_string(),
-                        vals: vec!["group_1".to_string()]
+                        vals: vec![b"group_1".to_vec()]
                     },],
                 }),
                 make_search_success(),
@@ -1826,7 +1827,7 @@ mod tests {
             "ou=groups,dc=example,dc=com",
             LdapFilter::And(vec![LdapFilter::Substring(
                 "whatever".to_string(),
-                ldap3_server::proto::LdapSubstringFilter::default(),
+                ldap3_proto::proto::LdapSubstringFilter::default(),
             )]),
             vec!["cn"],
         );
@@ -1970,10 +1971,10 @@ mod tests {
                     attributes: vec![LdapPartialAttribute {
                         atype: "objectclass".to_string(),
                         vals: vec![
-                            "inetOrgPerson".to_string(),
-                            "posixAccount".to_string(),
-                            "mailAccount".to_string(),
-                            "person".to_string()
+                            b"inetOrgPerson".to_vec(),
+                            b"posixAccount".to_vec(),
+                            b"mailAccount".to_vec(),
+                            b"person".to_vec()
                         ]
                     },]
                 }),
@@ -2025,15 +2026,15 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
                             vals: vec![
-                                "inetOrgPerson".to_string(),
-                                "posixAccount".to_string(),
-                                "mailAccount".to_string(),
-                                "person".to_string()
+                                b"inetOrgPerson".to_vec(),
+                                b"posixAccount".to_vec(),
+                                b"mailAccount".to_vec(),
+                                b"person".to_vec()
                             ]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
-                            vals: vec!["Bôb Böbberson".to_string()]
+                            vals: vec!["Bôb Böbberson".to_string().into_bytes()]
                         },
                     ],
                 }),
@@ -2042,11 +2043,11 @@ mod tests {
                     attributes: vec![
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec!["groupOfUniqueNames".to_string(),]
+                            vals: vec![b"groupOfUniqueNames".to_vec(),]
                         },
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
-                            vals: vec!["group_1".to_string()]
+                            vals: vec![b"group_1".to_vec()]
                         },
                     ],
                 }),
@@ -2098,35 +2099,35 @@ mod tests {
                     LdapPartialAttribute {
                         atype: "objectclass".to_string(),
                         vals: vec![
-                            "inetOrgPerson".to_string(),
-                            "posixAccount".to_string(),
-                            "mailAccount".to_string(),
-                            "person".to_string(),
+                            b"inetOrgPerson".to_vec(),
+                            b"posixAccount".to_vec(),
+                            b"mailAccount".to_vec(),
+                            b"person".to_vec(),
                         ],
                     },
                     LdapPartialAttribute {
                         atype: "uid".to_string(),
-                        vals: vec!["bob_1".to_string()],
+                        vals: vec![b"bob_1".to_vec()],
                     },
                     LdapPartialAttribute {
                         atype: "mail".to_string(),
-                        vals: vec!["bob@bobmail.bob".to_string()],
+                        vals: vec![b"bob@bobmail.bob".to_vec()],
                     },
                     LdapPartialAttribute {
                         atype: "givenname".to_string(),
-                        vals: vec!["Bôb".to_string()],
+                        vals: vec!["Bôb".to_string().into_bytes()],
                     },
                     LdapPartialAttribute {
                         atype: "sn".to_string(),
-                        vals: vec!["Böbberson".to_string()],
+                        vals: vec!["Böbberson".to_string().into_bytes()],
                     },
                     LdapPartialAttribute {
                         atype: "cn".to_string(),
-                        vals: vec!["Bôb Böbberson".to_string()],
+                        vals: vec!["Bôb Böbberson".to_string().into_bytes()],
                     },
                     LdapPartialAttribute {
                         atype: "createtimestamp".to_string(),
-                        vals: vec![chrono::Utc.timestamp(0, 0).to_rfc3339()],
+                        vals: vec![chrono::Utc.timestamp(0, 0).to_rfc3339().into_bytes()],
                     },
                 ],
             }),
@@ -2136,30 +2137,30 @@ mod tests {
                 attributes: vec![
                     LdapPartialAttribute {
                         atype: "objectclass".to_string(),
-                        vals: vec!["groupOfUniqueNames".to_string()],
+                        vals: vec![b"groupOfUniqueNames".to_vec()],
                     },
                     // UID
                     LdapPartialAttribute {
                         atype: "uid".to_string(),
-                        vals: vec!["group_1".to_string()],
+                        vals: vec![b"group_1".to_vec()],
                     },
                     LdapPartialAttribute {
                         atype: "cn".to_string(),
-                        vals: vec!["group_1".to_string()],
+                        vals: vec![b"group_1".to_vec()],
                     },
                     //member / uniquemember : "uid={},ou=people,{}"
                     LdapPartialAttribute {
                         atype: "member".to_string(),
                         vals: vec![
-                            "uid=bob,ou=people,dc=example,dc=com".to_string(),
-                            "uid=john,ou=people,dc=example,dc=com".to_string(),
+                            b"uid=bob,ou=people,dc=example,dc=com".to_vec(),
+                            b"uid=john,ou=people,dc=example,dc=com".to_vec(),
                         ],
                     },
                     LdapPartialAttribute {
                         atype: "uniquemember".to_string(),
                         vals: vec![
-                            "uid=bob,ou=people,dc=example,dc=com".to_string(),
-                            "uid=john,ou=people,dc=example,dc=com".to_string(),
+                            b"uid=bob,ou=people,dc=example,dc=com".to_vec(),
+                            b"uid=john,ou=people,dc=example,dc=com".to_vec(),
                         ],
                     },
                 ],
@@ -2234,7 +2235,7 @@ mod tests {
         let request = make_user_search_request(
             LdapFilter::Substring(
                 "uid".to_string(),
-                ldap3_server::proto::LdapSubstringFilter::default(),
+                ldap3_proto::proto::LdapSubstringFilter::default(),
             ),
             vec!["objectClass"],
         );

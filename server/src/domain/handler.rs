@@ -126,6 +126,11 @@ impl From<&JpegPhoto> for String {
 }
 
 impl JpegPhoto {
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+
+    #[cfg(test)]
     pub fn for_tests() -> Self {
         use image::{ImageOutputFormat, Rgb, RgbImage};
         let img = RgbImage::from_fn(32, 32, |x, y| {

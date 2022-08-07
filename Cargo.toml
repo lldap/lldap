@@ -7,3 +7,8 @@ members = [
 ]
 
 default-members = ["server"]
+
+# Remove once https://github.com/kanidm/ldap3_proto/pull/8 is merged.
+[patch.crates-io.ldap3_proto]
+git = 'https://github.com/nitnelave/ldap3_server/'
+rev = '7b50b2b82c383f5f70e02e11072bb916629ed2bc'

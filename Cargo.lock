@@ -2009,14 +2009,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "ldap3_server"
-version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7873d5bd5baabdb77aa2d8a762bf8b1136f9f90cc90f44639b4c0d4486281dcb"
+name = "ldap3_proto"
+version = "0.2.3"
+source = "git+https://github.com/nitnelave/ldap3_server/?rev=7b50b2b82c383f5f70e02e11072bb916629ed2bc#7b50b2b82c383f5f70e02e11072bb916629ed2bc"
 dependencies = [
  "bytes",
  "lber",
- "tokio-util 0.6.10",
+ "tokio-util 0.7.3",
+ "tracing",
 ]
 
 [[package]]
@@ -2120,7 +2120,7 @@ dependencies = [
  "juniper",
  "juniper_actix",
  "jwt",
- "ldap3_server",
+ "ldap3_proto",
  "lettre",
  "lldap_auth",
  "log",
@@ -2144,7 +2144,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.23.4",
  "tokio-stream",
- "tokio-util 0.6.10",
+ "tokio-util 0.7.3",
  "tracing",
  "tracing-actix-web",
  "tracing-attributes",

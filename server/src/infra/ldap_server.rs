@@ -9,7 +9,7 @@ use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{fn_service, ServiceFactoryExt};
 use anyhow::{Context, Result};
-use ldap3_server::{proto::LdapMsg, LdapCodec};
+use ldap3_proto::{proto::LdapMsg, LdapCodec};
 use tokio_rustls::TlsAcceptor as RustlsTlsAcceptor;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tracing::{debug, error, info, instrument};

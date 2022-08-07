@@ -27,7 +27,7 @@ itertools = "0.10.1"
 juniper = "0.15.10"
 juniper_actix = "0.4.0"
 jwt = "0.13"
-ldap3_server = "=0.1.11"
+ldap3_proto = "*"
 log = "*"
 orion = "0.16"
 rustls = "0.20"
@@ -39,7 +39,7 @@ thiserror = "*"
 time = "0.2"
 tokio-rustls = "0.23"
 tokio-stream = "*"
-tokio-util = "0.6.3"
+tokio-util = "0.7.3"
 tracing = "*"
 tracing-actix-web = "0.4.0-beta.7"
 tracing-attributes = "^0.1.21"
@@ -104,7 +104,7 @@ version = "*"
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.13.1"
+version = "1.17"
 
 [dependencies.uuid]
 features = ["v3"]
