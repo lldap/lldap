@@ -26,7 +26,11 @@ use anyhow::{Error, Result};
 use graphql_client::GraphQLQuery;
 use yew::{
     prelude::*,
-    services::{fetch::FetchTask, ConsoleService},
+    services::{
+        fetch::FetchTask,
+        reader::{FileData, ReaderService, ReaderTask},
+        ConsoleService,
+    },
 };
 use yewtil::NeqAssign;
 
@@ -40,13 +44,34 @@ pub trait CommonComponent<C: Component + CommonComponent<C>>: Component {
     fn mut_common(&mut self) -> &mut CommonComponentParts<C>;
 }
 
+enum AnyTask {
+    None,
+    FetchTask(FetchTask),
+    ReaderTask(ReaderTask),
+}
+
+impl AnyTask {
+    fn is_some(&self) -> bool {
+        !matches!(self, AnyTask::None)
+    }
+}
+
+impl From<Option<FetchTask>> for AnyTask {
+    fn from(task: Option<FetchTask>) -> Self {
+        match task {
+            Some(t) => AnyTask::FetchTask(t),
+            None => AnyTask::None,
+        }
+    }
+}
+
 /// Structure that contains the common parts needed by most components.
 /// The fields of [`props`] are directly accessible through a `Deref` implementation.
 pub struct CommonComponentParts<C: CommonComponent<C>> {
     link: ComponentLink<C>,
     pub props: <C as Component>::Properties,
     pub error: Option<Error>,
-    task: Option<FetchTask>,
+    task: AnyTask,
 }
 
 impl<C: CommonComponent<C>> CommonComponentParts<C> {
@@ -57,7 +82,7 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
 
     /// Cancel any background task.
     pub fn cancel_task(&mut self) {
-        self.task = None;
+        self.task = AnyTask::None;
     }
 
     pub fn create(props: <C as Component>::Properties, link: ComponentLink<C>) -> Self {
@@ -65,7 +90,7 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
             link,
             props,
             error: None,
-            task: None,
+            task: AnyTask::None,
         }
     }
 
@@ -131,7 +156,7 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         M: Fn(Req, Callback<Resp>) -> Result<FetchTask>,
         Cb: FnOnce(Resp) -> <C as Component>::Message + 'static,
     {
-        self.task = Some(method(req, self.link.callback_once(callback))?);
+        self.task = AnyTask::FetchTask(method(req, self.link.callback_once(callback))?);
         Ok(())
     }
 
@@ -156,7 +181,19 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
             ConsoleService::log(&e.to_string());
             self.error = Some(e);
         })
-        .ok();
+        .ok()
+        .into();
+    }
+
+    pub(crate) fn read_file<Cb>(&mut self, file: web_sys::File, callback: Cb) -> Result<()>
+    where
+        Cb: FnOnce(FileData) -> <C as Component>::Message + 'static,
+    {
+        self.task = AnyTask::ReaderTask(ReaderService::read_file(
+            file,
+            self.link.callback_once(callback),
+        )?);
+        Ok(())
     }
 }
 

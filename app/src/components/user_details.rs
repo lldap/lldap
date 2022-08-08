@@ -198,8 +198,7 @@ impl Component for UserDetails {
                   <>
                     <h3>{u.id.to_string()}</h3>
                     <UserDetailsForm
-                      user=u.clone()
-                      on_error=self.common.callback(Msg::OnError)/>
+                      user=u.clone() />
                     <div class="row justify-content-center">
                       <NavButton
                         route=AppRoute::ChangePassword(u.id.clone())

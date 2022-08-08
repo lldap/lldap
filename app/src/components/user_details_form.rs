@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::{
     components::user_details::User,
     infra::common_component::{CommonComponent, CommonComponentParts},
@@ -5,8 +7,36 @@ use crate::{
 use anyhow::{bail, Error, Result};
 use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
-use yew::prelude::*;
+use wasm_bindgen::JsCast;
+use yew::{prelude::*, services::ConsoleService};
 use yew_form_derive::Model;
+
+#[derive(PartialEq, Clone, Default)]
+struct JsFile {
+    file: Option<web_sys::File>,
+    contents: Option<Vec<u8>>,
+}
+
+impl ToString for JsFile {
+    fn to_string(&self) -> String {
+        self.file
+            .as_ref()
+            .map(web_sys::File::name)
+            .unwrap_or_else(String::new)
+    }
+}
+
+impl FromStr for JsFile {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        if s.is_empty() {
+            Ok(JsFile::default())
+        } else {
+            bail!("Building file from non-empty string")
+        }
+    }
+}
 
 /// The fields of the form, with the editable details and the constraints.
 #[derive(Model, Validate, PartialEq, Clone)]
@@ -34,6 +64,7 @@ pub struct UpdateUser;
 pub struct UserDetailsForm {
     common: CommonComponentParts<Self>,
     form: yew_form::Form<UserModel>,
+    avatar: JsFile,
     /// True if we just successfully updated the user, to display a success message.
     just_updated: bool,
 }
@@ -43,6 +74,8 @@ pub enum Msg {
     Update,
     /// The "Submit" button was clicked.
     SubmitClicked,
+    /// A picked file finished loading.
+    FileLoaded(yew::services::reader::FileData),
     /// We got the response from the server about our update message.
     UserUpdated(Result<update_user::ResponseData>),
 }
@@ -51,16 +84,58 @@ pub enum Msg {
 pub struct Props {
     /// The current user details.
     pub user: User,
-    /// Callback to report errors (e.g. server error).
-    pub on_error: Callback<Error>,
 }
 
 impl CommonComponent<UserDetailsForm> for UserDetailsForm {
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
-            Msg::Update => Ok(true),
+            Msg::Update => {
+                let window = web_sys::window().expect("no global `window` exists");
+                let document = window.document().expect("should have a document on window");
+                let input = document
+                    .get_element_by_id("avatarInput")
+                    .expect("Form field avatarInput should be present")
+                    .dyn_into::<web_sys::HtmlInputElement>()
+                    .expect("Should be an HtmlInputElement");
+                ConsoleService::log("Form update");
+                if let Some(files) = input.files() {
+                    ConsoleService::log("Got file list");
+                    if files.length() > 0 {
+                        ConsoleService::log("Got a file");
+                        let new_avatar = JsFile {
+                            file: files.item(0),
+                            contents: None,
+                        };
+                        if self.avatar.file.as_ref().map(|f| f.name())
+                            != new_avatar.file.as_ref().map(|f| f.name())
+                        {
+                            if let Some(ref file) = new_avatar.file {
+                                self.mut_common().read_file(file.clone(), Msg::FileLoaded)?;
+                            }
+                            self.avatar = new_avatar;
+                        }
+                    }
+                }
+                Ok(true)
+            }
             Msg::SubmitClicked => self.submit_user_update_form(),
             Msg::UserUpdated(response) => self.user_update_finished(response),
+            Msg::FileLoaded(data) => {
+                self.common.cancel_task();
+                if let Some(file) = &self.avatar.file {
+                    if file.name() == data.name {
+                        if !is_valid_jpeg(data.content.as_slice()) {
+                            // Clear the selection.
+                            self.avatar = JsFile::default();
+                            bail!("Chosen image is not a valid JPEG");
+                        } else {
+                            self.avatar.contents = Some(data.content);
+                            return Ok(true);
+                        }
+                    }
+                }
+                Ok(false)
+            }
         }
     }
 
@@ -83,17 +158,14 @@ impl Component for UserDetailsForm {
         Self {
             common: CommonComponentParts::<Self>::create(props, link),
             form: yew_form::Form::new(model),
+            avatar: JsFile::default(),
             just_updated: false,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         self.just_updated = false;
-        CommonComponentParts::<Self>::update_and_report_error(
-            self,
-            msg,
-            self.common.on_error.clone(),
-        )
+        CommonComponentParts::<Self>::update(self, msg)
     }
 
     fn change(&mut self, props: Self::Properties) -> ShouldRender {
@@ -102,6 +174,9 @@ impl Component for UserDetailsForm {
 
     fn view(&self) -> Html {
         type Field = yew_form::Field<UserModel>;
+
+        let avatar_base64 = maybe_to_base64(&self.avatar).unwrap_or_default();
+        let avatar_string = avatar_base64.as_ref().unwrap_or(&self.common.user.avatar);
         html! {
           <div class="py-3">
             <form class="form">
@@ -111,7 +186,24 @@ impl Component for UserDetailsForm {
                   {"User ID: "}
                 </label>
                 <div class="col-8">
-                  <span id="userId" class="form-constrol-static">{&self.common.user.id}</span>
+                  <span id="userId" class="form-constrol-static"><b>{&self.common.user.id}</b></span>
+                </div>
+              </div>
+              <div class="form-group row mb-3">
+                <div class="col-4 col-form-label">
+                  <img
+                    id="avatarDisplay"
+                    src={format!("data:image/jpeg;base64, {}", avatar_string)}
+                    style="max-height:128px;max-width:128px;height:auto;width:auto;"
+                    alt="Avatar" />
+                </div>
+                <div class="col-8">
+                  <input
+                    class="form-control"
+                    id="avatarInput"
+                    type="file"
+                    accept="image/jpeg"
+                    oninput=self.common.callback(|_| Msg::Update) />
                 </div>
               </div>
               <div class="form-group row mb-3">
@@ -214,6 +306,14 @@ impl Component for UserDetailsForm {
                 </button>
               </div>
             </form>
+            { if let Some(e) = &self.common.error {
+                html! {
+                  <div class="alert alert-danger">
+                    {e.to_string() }
+                  </div>
+                }
+              } else { html! {} }
+            }
             <div hidden=!self.just_updated>
               <span>{"User successfully updated!"}</span>
             </div>
@@ -224,9 +324,19 @@ impl Component for UserDetailsForm {
 
 impl UserDetailsForm {
     fn submit_user_update_form(&mut self) -> Result<bool> {
+        ConsoleService::log("Submit");
         if !self.form.validate() {
             bail!("Invalid inputs");
         }
+        ConsoleService::log("Valid inputs");
+        if let JsFile {
+            file: Some(_),
+            contents: None,
+        } = &self.avatar
+        {
+            bail!("Image file hasn't finished loading, try again");
+        }
+        ConsoleService::log("File is correctly loaded");
         let base_user = &self.common.user;
         let mut user_input = update_user::UpdateUserInput {
             id: self.common.user.id.clone(),
@@ -251,11 +361,14 @@ impl UserDetailsForm {
         if base_user.last_name != model.last_name {
             user_input.lastName = Some(model.last_name);
         }
+        user_input.avatar = maybe_to_base64(&self.avatar)?;
         // Nothing changed.
         if user_input == default_user_input {
+            ConsoleService::log("No changes");
             return Ok(false);
         }
         let req = update_user::Variables { user: user_input };
+        ConsoleService::log("Querying");
         self.common.call_graphql::<UpdateUser, _>(
             req,
             Msg::UserUpdated,
@@ -270,19 +383,44 @@ impl UserDetailsForm {
             Err(e) => return Err(e),
             Ok(_) => {
                 let model = self.form.model();
-                self.common.user = User {
-                    id: self.common.user.id.clone(),
-                    email: model.email,
-                    display_name: model.display_name,
-                    first_name: model.first_name,
-                    last_name: model.last_name,
-                    creation_date: self.common.user.creation_date,
-                    uuid: self.common.user.uuid.clone(),
-                    groups: self.common.user.groups.clone(),
-                };
+                self.common.user.email = model.email;
+                self.common.user.display_name = model.display_name;
+                self.common.user.first_name = model.first_name;
+                self.common.user.last_name = model.last_name;
+                if let Some(avatar) = maybe_to_base64(&self.avatar)? {
+                    self.common.user.avatar = avatar;
+                }
                 self.just_updated = true;
             }
         };
         Ok(true)
+    }
+}
+
+fn is_valid_jpeg(bytes: &[u8]) -> bool {
+    image::io::Reader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Jpeg)
+        .decode()
+        .is_ok()
+}
+
+fn maybe_to_base64(file: &JsFile) -> Result<Option<String>> {
+    match file {
+        JsFile {
+            file: None,
+            contents: _,
+        } => Ok(None),
+        JsFile {
+            file: Some(_),
+            contents: None,
+        } => bail!("Image file hasn't finished loading, try again"),
+        JsFile {
+            file: Some(_),
+            contents: Some(data),
+        } => {
+            if !is_valid_jpeg(data.as_slice()) {
+                bail!("Chosen image is not a valid JPEG");
+            }
+            Ok(Some(base64::encode(data)))
+        }
     }
 }
