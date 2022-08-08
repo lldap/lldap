@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
+base64 = "0.13"
 graphql_client = "0.10"
 http = "0.2"
 jwt = "0.13"
@@ -27,6 +28,7 @@ version = "0.3"
 features = [
   "Document",
   "Element",
+  "FileReader",
   "HtmlDocument",
   "HtmlInputElement",
   "HtmlOptionElement",
