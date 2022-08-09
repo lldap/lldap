@@ -131,7 +131,7 @@ fn bind_ldap(
     };
     if let Err(e) = ldap_connection
         .simple_bind(&binddn, &password)
-        .and_then(|r| r.success())
+        .and_then(ldap3::LdapResult::success)
     {
         println!("Error connecting as '{}': {}", binddn, e);
         bind_ldap(ldap_connection, Some(binddn))
@@ -150,12 +150,11 @@ impl TryFrom<ResultEntry> for User {
                 .attrs
                 .get(attr)
                 .ok_or_else(|| anyhow!("Missing {} for user", attr))
-                .and_then(|u| {
-                    if u.len() > 1 {
-                        Err(anyhow!("Too many {}s", attr))
-                    } else {
-                        Ok(u.first().unwrap().to_owned())
-                    }
+                .and_then(|u| -> Result<String> {
+                    u.iter()
+                        .next()
+                        .map(String::to_owned)
+                        .ok_or_else(|| anyhow!("Too many {}s", attr))
                 })
         };
         let id = get_required_attribute("uid")
@@ -170,13 +169,8 @@ impl TryFrom<ResultEntry> for User {
                 .attrs
                 .get(attr)
                 .and_then(|v| v.first().map(|s| s.as_str()))
-                .and_then(|s| {
-                    if s.is_empty() {
-                        None
-                    } else {
-                        Some(s.to_owned())
-                    }
-                })
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned)
         };
         let last_name = get_optional_attribute("sn").or_else(|| get_optional_attribute("surname"));
         let display_name = get_optional_attribute("cn")
