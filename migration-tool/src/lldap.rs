@@ -70,23 +70,12 @@ pub struct User {
 impl User {
     // https://github.com/graphql-rust/graphql-client/issues/386
     pub fn new(
-        id: String,
-        email: String,
-        display_name: Option<String>,
-        first_name: Option<String>,
-        last_name: Option<String>,
+        user_input: create_user::CreateUserInput,
         password: Option<String>,
         dn: String,
     ) -> User {
         User {
-            user_input: create_user::CreateUserInput {
-                id,
-                email,
-                display_name,
-                first_name,
-                last_name,
-                avatar: None,
-            },
+            user_input,
             password,
             dn,
         }
@@ -102,6 +91,8 @@ impl User {
     custom_scalars_module = "crate::infra::graphql"
 )]
 struct CreateUser;
+
+pub type CreateUserInput = create_user::CreateUserInput;
 
 #[derive(GraphQLQuery)]
 #[graphql(

@@ -6,6 +6,7 @@ authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
 
 [dependencies]
 anyhow = "*"
+base64 = "0.13"
 rand = "0.8"
 requestty = "0.4.1"
 serde = "1"

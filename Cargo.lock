@@ -2278,6 +2278,7 @@ name = "migration-tool"
 version = "0.3.0-alpha.1"
 dependencies = [
  "anyhow",
+ "base64",
  "graphql_client 0.11.0",
  "ldap3",
  "lldap_auth",
