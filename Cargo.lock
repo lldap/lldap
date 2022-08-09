@@ -599,6 +599,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ccbd214614c6783386c1af30caf03192f17891059cecc394b4fb119e363de3"
 
 [[package]]
+name = "bytemuck"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5377c8865e74a160d21f29c2d40669f53286db6eab59b88540cbb12ffc8b835"
+
+[[package]]
 name = "byteorder"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -694,6 +700,12 @@ checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
 dependencies = [
  "os_str_bytes",
 ]
+
+[[package]]
+name = "color_quant"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
 name = "combine"
@@ -1785,6 +1797,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb56e1aa765b4b4f3aadfab769793b7087bb03a4ea4920644a6d238e2df5b9ed"
 
 [[package]]
+name = "image"
+version = "0.24.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e30ca2ecf7666107ff827a8e481de6a132a9b687ed3bb20bb1c144a36c00964"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "color_quant",
+ "jpeg-decoder",
+ "num-rational",
+ "num-traits",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1845,6 +1871,12 @@ checksum = "af25a77299a7f711a01975c35a6a424eb6862092cc2d6c72c4ed6cbc56dfc1fa"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "jpeg-decoder"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9478aa10f73e7528198d75109c8be5cd7d15fb530238040148d5f9a22d4c5b3b"
 
 [[package]]
 name = "js-sys"
@@ -2128,6 +2160,7 @@ dependencies = [
  "chrono",
  "graphql_client 0.10.0",
  "http",
+ "image",
  "indexmap",
  "jwt",
  "lldap_auth",
@@ -2442,6 +2475,17 @@ name = "num-iter"
 version = "0.1.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d03e6c028c5dc5cac6e2dec0efda81fc887605bb3d884578bb6d6bf7514e252"
+dependencies = [
+ "autocfg 1.1.0",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
 dependencies = [
  "autocfg 1.1.0",
  "num-integer",
@@ -4559,7 +4603,7 @@ dependencies = [
 [[package]]
 name = "yew_form"
 version = "0.1.8"
-source = "git+https://github.com/sassman/yew_form/?rev=67050812695b7a8a90b81b0637e347fc6629daed#67050812695b7a8a90b81b0637e347fc6629daed"
+source = "git+https://github.com/jfbilodeau/yew_form?rev=67050812695b7a8a90b81b0637e347fc6629daed#67050812695b7a8a90b81b0637e347fc6629daed"
 dependencies = [
  "validator",
  "validator_derive",
@@ -4569,7 +4613,7 @@ dependencies = [
 [[package]]
 name = "yew_form_derive"
 version = "0.1.8"
-source = "git+https://github.com/sassman/yew_form/?rev=67050812695b7a8a90b81b0637e347fc6629daed#67050812695b7a8a90b81b0637e347fc6629daed"
+source = "git+https://github.com/jfbilodeau/yew_form?rev=67050812695b7a8a90b81b0637e347fc6629daed#67050812695b7a8a90b81b0637e347fc6629daed"
 dependencies = [
  "proc-macro2",
  "quote",

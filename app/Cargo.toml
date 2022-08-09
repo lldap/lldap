@@ -18,8 +18,6 @@ wasm-bindgen = "0.2"
 yew = "0.18"
 yewtil = "*"
 yew-router = "0.15"
-yew_form = "0.1.8"
-yew_form_derive = "*"
 
 # Needed because of https://github.com/tkaitchuck/aHash/issues/95
 indexmap = "=1.6.2"
@@ -46,6 +44,19 @@ features = [
 [dependencies.lldap_auth]
 path = "../auth"
 features = [ "opaque_client" ]
+
+[dependencies.image]
+features = ["jpeg"]
+default-features = false
+version = "0.24"
+
+[dependencies.yew_form]
+git = "https://github.com/jfbilodeau/yew_form"
+rev = "67050812695b7a8a90b81b0637e347fc6629daed"
+
+[dependencies.yew_form_derive]
+git = "https://github.com/jfbilodeau/yew_form"
+rev = "67050812695b7a8a90b81b0637e347fc6629daed"
 
 [lib]
 crate-type = ["cdylib"]
