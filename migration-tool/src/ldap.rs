@@ -184,14 +184,23 @@ impl TryFrom<ResultEntry> for User {
             .or_else(|| get_optional_attribute("name"))
             .or_else(|| get_optional_attribute("displayName"));
         let first_name = get_optional_attribute("givenName");
+        let avatar = entry
+            .attrs
+            .get("jpegPhoto")
+            .map(|v| v.iter().map(|s| s.as_bytes().to_vec()).collect::<Vec<_>>())
+            .or_else(|| entry.bin_attrs.get("jpegPhoto").map(Clone::clone))
+            .and_then(|v| v.into_iter().next().filter(|s| !s.is_empty()));
         let password =
             get_optional_attribute("userPassword").or_else(|| get_optional_attribute("password"));
         Ok(User::new(
-            id,
-            email,
-            display_name,
-            first_name,
-            last_name,
+            crate::lldap::CreateUserInput {
+                id,
+                email,
+                display_name,
+                first_name,
+                last_name,
+                avatar: avatar.map(base64::encode),
+            },
             password,
             entry.dn,
         ))
