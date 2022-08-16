@@ -260,7 +260,7 @@ folder for help with:
   - [Gitea](example_configs/gitea.md)
   - [Grafana](example_configs/grafana_ldap_config.toml)
   - [Jellyfin](example_configs/jellyfin.md)
-  - [Jisti Meet](example_configs/jitsi_meet.conf)
+  - [Jitsi Meet](example_configs/jitsi_meet.conf)
   - [KeyCloak](example_configs/keycloak.md)
   - [Matrix](example_configs/matrix_synapse.yml)
   - [Organizr](example_configs/Organizr.md)
