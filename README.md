@@ -251,6 +251,7 @@ administration access to many services.
 Some specific clients have been tested to work and come with sample
 configuration files, or guides. See the [`example_configs`](example_configs)
 folder for help with:
+  - [Airsonic Advanced](example_configs/airsonic-advanced.md)
   - [Apache Guacamole](example_configs/apacheguacamole.md)
   - [Authelia](example_configs/authelia_config.yml)
   - [Bookstack](example_configs/bookstack.env.example)
