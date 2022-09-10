@@ -263,6 +263,7 @@ folder for help with:
   - [Jitsi Meet](example_configs/jitsi_meet.conf)
   - [KeyCloak](example_configs/keycloak.md)
   - [Matrix](example_configs/matrix_synapse.yml)
+  - [Nextcloud](example_configs/nextcloud.md)
   - [Organizr](example_configs/Organizr.md)
   - [Portainer](example_configs/portainer.md)
   - [Seafile](example_configs/seafile.md)
