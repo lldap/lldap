@@ -85,6 +85,8 @@ jobs:
         run: npm install -g rollup
       - name: install wasm-pack with cargo
         run: cargo install wasm-pack || true
+        env:
+          RUSTFLAGS: ""
       - name: build frontend
         run: ./app/build.sh
       - name: check path
