@@ -1203,6 +1203,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "figment_file_provider_adapter"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c33106424fdbb9b1fd89c18072ba94666496a8a468178911b832a3e406988500"
+dependencies = [
+ "figment",
+]
+
+[[package]]
 name = "firestorm"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2111,6 +2120,7 @@ dependencies = [
  "cron",
  "derive_builder",
  "figment",
+ "figment_file_provider_adapter",
  "futures",
  "futures-util",
  "hmac 0.10.1",

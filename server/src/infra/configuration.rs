@@ -279,11 +279,13 @@ where
         overrides.general_config().config_file
     );
 
+    use figment_file_provider_adapter::FileAdapter;
+    let ignore_keys = ["key_file", "cert_file"];
     let mut config: Configuration = Figment::from(Serialized::defaults(
         ConfigurationBuilder::default().private_build().unwrap(),
     ))
-    .merge(Toml::file(config_file))
-    .merge(Env::prefixed("LLDAP_").split("__"))
+    .merge(FileAdapter::wrap(Toml::file(config_file)).ignore(&ignore_keys))
+    .merge(FileAdapter::wrap(Env::prefixed("LLDAP_").split("__")).ignore(&ignore_keys))
     .extract()?;
 
     overrides.override_config(&mut config);
