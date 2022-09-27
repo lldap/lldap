@@ -32,7 +32,7 @@ pub struct CreateUserForm {
     form: yew_form::Form<CreateUserModel>,
 }
 
-#[derive(Model, Validate, PartialEq, Clone, Default)]
+#[derive(Model, Validate, PartialEq, Eq, Clone, Default)]
 pub struct CreateUserModel {
     #[validate(length(min = 1, message = "Username is required"))]
     username: String,

@@ -265,7 +265,7 @@ pub struct GroupDetails {
     pub uuid: Uuid,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserAndGroups {
     pub user: User,
     pub groups: Option<Vec<GroupDetails>>,

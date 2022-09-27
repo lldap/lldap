@@ -40,7 +40,7 @@ pub enum Msg {
     OnUserRemovedFromGroup((String, i64)),
 }
 
-#[derive(yew::Properties, Clone, PartialEq)]
+#[derive(yew::Properties, Clone, PartialEq, Eq)]
 pub struct Props {
     pub group_id: i64,
 }

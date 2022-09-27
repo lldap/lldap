@@ -19,7 +19,7 @@ pub struct LoginForm {
 }
 
 /// The fields of the form, with the constraints.
-#[derive(Model, Validate, PartialEq, Clone, Default)]
+#[derive(Model, Validate, PartialEq, Eq, Clone, Default)]
 pub struct FormModel {
     #[validate(length(min = 1, message = "Missing username"))]
     username: String,

@@ -20,7 +20,7 @@ use yew_router::{
 };
 
 /// The fields of the form, with the constraints.
-#[derive(Model, Validate, PartialEq, Clone, Default)]
+#[derive(Model, Validate, PartialEq, Eq, Clone, Default)]
 pub struct FormModel {
     #[validate(length(min = 8, message = "Invalid password. Min length: 8"))]
     password: String,
@@ -36,7 +36,7 @@ pub struct ResetPasswordStep2Form {
     route_dispatcher: RouteAgentDispatcher,
 }
 
-#[derive(Clone, PartialEq, Properties)]
+#[derive(Clone, PartialEq, Eq, Properties)]
 pub struct Props {
     pub token: String,
 }

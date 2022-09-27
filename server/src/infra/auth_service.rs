@@ -562,7 +562,7 @@ where
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Permission {
     Admin,
     PasswordManager,
@@ -570,7 +570,7 @@ pub enum Permission {
     Regular,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationResults {
     pub user: UserId,
     pub permission: Permission,

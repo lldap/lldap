@@ -81,7 +81,7 @@ pub struct SelectOption {
     props: SelectOptionProps,
 }
 
-#[derive(yew::Properties, Clone, PartialEq, Debug)]
+#[derive(yew::Properties, Clone, PartialEq, Eq, Debug)]
 pub struct SelectOptionProps {
     pub value: String,
     pub text: String,
