@@ -36,7 +36,7 @@ impl OpaqueData {
 }
 
 /// The fields of the form, with the constraints.
-#[derive(Model, Validate, PartialEq, Clone, Default)]
+#[derive(Model, Validate, PartialEq, Eq, Clone, Default)]
 pub struct FormModel {
     #[validate(custom(
         function = "empty_or_long",
@@ -64,7 +64,7 @@ pub struct ChangePasswordForm {
     route_dispatcher: RouteAgentDispatcher,
 }
 
-#[derive(Clone, PartialEq, Properties)]
+#[derive(Clone, PartialEq, Eq, Properties)]
 pub struct Props {
     pub username: String,
     pub is_admin: bool,

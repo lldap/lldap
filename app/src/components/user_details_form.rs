@@ -11,7 +11,7 @@ use wasm_bindgen::JsCast;
 use yew::{prelude::*, services::ConsoleService};
 use yew_form_derive::Model;
 
-#[derive(PartialEq, Clone, Default)]
+#[derive(PartialEq, Eq, Clone, Default)]
 struct JsFile {
     file: Option<web_sys::File>,
     contents: Option<Vec<u8>>,
@@ -39,7 +39,7 @@ impl FromStr for JsFile {
 }
 
 /// The fields of the form, with the editable details and the constraints.
-#[derive(Model, Validate, PartialEq, Clone)]
+#[derive(Model, Validate, PartialEq, Eq, Clone)]
 pub struct UserModel {
     #[validate(email)]
     email: String,
@@ -55,7 +55,7 @@ pub struct UserModel {
     schema_path = "../schema.graphql",
     query_path = "queries/update_user.graphql",
     response_derives = "Debug",
-    variables_derives = "Clone,PartialEq",
+    variables_derives = "Clone,PartialEq,Eq",
     custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct UpdateUser;
@@ -80,7 +80,7 @@ pub enum Msg {
     UserUpdated(Result<update_user::ResponseData>),
 }
 
-#[derive(yew::Properties, Clone, PartialEq)]
+#[derive(yew::Properties, Clone, PartialEq, Eq)]
 pub struct Props {
     /// The current user details.
     pub user: User,

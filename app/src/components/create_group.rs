@@ -28,7 +28,7 @@ pub struct CreateGroupForm {
     form: yew_form::Form<CreateGroupModel>,
 }
 
-#[derive(Model, Validate, PartialEq, Clone, Default)]
+#[derive(Model, Validate, PartialEq, Eq, Clone, Default)]
 pub struct CreateGroupModel {
     #[validate(length(min = 1, message = "Groupname is required"))]
     groupname: String,

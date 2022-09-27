@@ -13,7 +13,7 @@ use yew::prelude::*;
 #[graphql(
     schema_path = "../schema.graphql",
     query_path = "queries/get_group_list.graphql",
-    response_derives = "Debug,Clone,PartialEq",
+    response_derives = "Debug,Clone,PartialEq,Eq",
     custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct GetGroupList;
