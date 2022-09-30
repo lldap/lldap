@@ -8,8 +8,9 @@ use crate::{
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{fn_service, ServiceFactoryExt};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use ldap3_proto::{proto::LdapMsg, LdapCodec};
+use rustls::PrivateKey;
 use tokio_rustls::TlsAcceptor as RustlsTlsAcceptor;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tracing::{debug, error, info, instrument};
@@ -89,9 +90,37 @@ where
     Ok(requests.into_inner().unsplit(resp.into_inner()))
 }
 
+fn read_private_key(key_file: &str) -> Result<PrivateKey> {
+    use rustls_pemfile::{pkcs8_private_keys, rsa_private_keys};
+    use std::{fs::File, io::BufReader};
+    pkcs8_private_keys(&mut BufReader::new(File::open(key_file)?))
+        .map_err(anyhow::Error::from)
+        .and_then(|keys| {
+            keys.into_iter()
+                .next()
+                .ok_or_else(|| anyhow!("No PKCS8 key"))
+        })
+        .or_else(|_| {
+            rsa_private_keys(&mut BufReader::new(File::open(key_file)?))
+                .map_err(anyhow::Error::from)
+                .and_then(|keys| {
+                    keys.into_iter()
+                        .next()
+                        .ok_or_else(|| anyhow!("No PKCS1 key"))
+                })
+        })
+        .with_context(|| {
+            format!(
+                "Cannot read either PKCS1 or PKCS8 private key from {}",
+                key_file
+            )
+        })
+        .map(rustls::PrivateKey)
+}
+
 fn get_tls_acceptor(config: &Configuration) -> Result<RustlsTlsAcceptor> {
-    use rustls::{Certificate, PrivateKey, ServerConfig};
-    use rustls_pemfile::{certs, pkcs8_private_keys};
+    use rustls::{Certificate, ServerConfig};
+    use rustls_pemfile::certs;
     use std::{fs::File, io::BufReader};
     // Load TLS key and cert files
     let certs = certs(&mut BufReader::new(File::open(
@@ -100,13 +129,7 @@ fn get_tls_acceptor(config: &Configuration) -> Result<RustlsTlsAcceptor> {
     .into_iter()
     .map(Certificate)
     .collect::<Vec<_>>();
-    let private_key = pkcs8_private_keys(&mut BufReader::new(File::open(
-        &config.ldaps_options.key_file,
-    )?))?
-    .into_iter()
-    .map(PrivateKey)
-    .next()
-    .ok_or_else(|| anyhow::anyhow!("No private keys"))?;
+    let private_key = read_private_key(&config.ldaps_options.key_file)?;
     let server_config = std::sync::Arc::new(
         ServerConfig::builder()
             .with_safe_defaults()
