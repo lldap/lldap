@@ -286,7 +286,7 @@ impl BackendHandler for SqlBackendHandler {
         Ok(groups)
     }
 
-    #[instrument(skip_all, level = "debug", ret, err)]
+    #[instrument(skip_all, level = "debug", ret)]
     async fn get_user_details(&self, user_id: &UserId) -> Result<User> {
         debug!(?user_id);
         let (query, values) = Query::select()
