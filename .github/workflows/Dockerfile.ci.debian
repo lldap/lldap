@@ -46,10 +46,13 @@ RUN cp target/lldap /lldap/ && \
           web/static \
           /lldap/app/
 
+WORKDIR /lldap
 RUN set -x \
     && for file in $(cat /lldap/app/static/libraries.txt); do wget -P app/static "$file"; done \
     && for file in $(cat /lldap/app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
     && chmod a+r -R .
+    && ls -al app/static
+    && ls -al app/static/fonts
     
 FROM debian:bullseye-slim
 ENV UID=1000
