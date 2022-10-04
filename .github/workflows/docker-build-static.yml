@@ -91,6 +91,8 @@ jobs:
         run: ./app/build.sh
       - name: check path
         run: ls -al app/
+      - name: overwrite index.html with index_local.html
+        run: mv app/index_local.html app/index.html
       - name: upload ui artifacts
         uses: actions/upload-artifact@v3
         with:
