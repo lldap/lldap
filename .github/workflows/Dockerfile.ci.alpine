@@ -39,6 +39,7 @@ RUN if [ "${TARGETPLATFORM}" = "linux/arm/v7" ]; then \
 # Web and App dir
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 COPY lldap_config.docker_template.toml /lldap/
+COPY web/index_local.html web/index.html
 RUN cp target/lldap /lldap/ && \
     cp target/migration-tool /lldap/ && \
     cp -R web/index.html \
@@ -50,9 +51,11 @@ WORKDIR /lldap
 RUN set -x \
     && for file in $(cat /lldap/app/static/libraries.txt); do wget -P app/static "$file"; done \
     && for file in $(cat /lldap/app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
-    && chmod a+r -R .
-RUN ls -al app/static && \
-    ls -al app/static/fonts
+    && chmod a+r -R .; \
+    && ls -al .; \
+    && ls -al app/static; \
+    && cat app/static/index.html; \
+    && ls -al app/static/fonts;
     
 FROM alpine:3.16
 WORKDIR /app
