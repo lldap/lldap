@@ -54,7 +54,7 @@ RUN set -x \
     && chmod a+r -R .; \
     ls -al .; \
     ls -al app/; \
-    cat app/static/index.html; \
+    cat app/index.html; \
     ls -al app/static; \
     ls -al app/static/fonts;
     
