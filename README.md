@@ -260,6 +260,7 @@ folder for help with:
   - [Emby](example_configs/emby.md)
   - [Gitea](example_configs/gitea.md)
   - [Grafana](example_configs/grafana_ldap_config.toml)
+  - [Hedgedoc](example_configs/hedgedoc.md)
   - [Jellyfin](example_configs/jellyfin.md)
   - [Jitsi Meet](example_configs/jitsi_meet.conf)
   - [KeyCloak](example_configs/keycloak.md)
