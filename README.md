@@ -97,39 +97,11 @@ variables `LLDAP_JWT_SECRET_FILE` or `LLDAP_LDAP_USER_PASS_FILE`, and the file
 contents are loaded into the respective configuration parameters. Note that
 `_FILE` variables take precedence.
 
-Example for docker compose for `:stable` tag:
-* When defined with `user: ##:##` , ensure `/data` directory had permission for the defined user, else `1000:1000` used.
-
-```yaml
-version: '3'
-
-volumes:
-  lldap_data:
-    driver: local
-
-services:
-  lldap:
-    image: nitnelave/lldap:stable
-    # Change this to the user:group you want.
-    user: "33:33"
-    ports:
-      # For LDAP
-      - "3890:3890"
-      # For the web front-end
-      - "17170:17170"
-    volumes:
-      - "lldap_data:/data"
-      # Alternatively, you can mount a local folder
-      # - "./lldap_data:/data"
-    environment:
-      - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
-      - LLDAP_LDAP_USER_PASS=REPLACE_WITH_PASSWORD
-      - LLDAP_LDAP_BASE_DN=dc=example,dc=com
-```
-
 Example for docker compose for `:latest` tag:
-* `:latest` tag image contain recent pushed codes or feature test, breaks is expected.
+* `:latest` tag image contains recently pushed code or feature tests, some broken parts are to be expected.
+* Change the image to `nitnelave/lldap:stable` to get the stable version.
 * If `UID` and `GID` no defined LLDAP will use default `UID` and `GID` number `1000`
+
 
 ```yaml
 version: '3'
