@@ -97,9 +97,9 @@ variables `LLDAP_JWT_SECRET_FILE` or `LLDAP_LDAP_USER_PASS_FILE`, and the file
 contents are loaded into the respective configuration parameters. Note that
 `_FILE` variables take precedence.
 
-Example for docker compose for `:latest` tag:
-* `:latest` tag image contains recently pushed code or feature tests, some broken parts are to be expected.
-* Change the image to `nitnelave/lldap:stable` to get the stable version.
+Example for docker compose:
+* You can use either the `:latest` tag image or `:stable` as used in this example.
+* `:latest` tag image contains recently pushed code or feature tests, in which some instability can be expected.
 * If `UID` and `GID` no defined LLDAP will use default `UID` and `GID` number `1000`
 
 
@@ -112,7 +112,7 @@ volumes:
 
 services:
   lldap:
-    image: nitnelave/lldap:latest
+    image: nitnelave/lldap:stable
     ports:
       # For LDAP
       - "3890:3890"
