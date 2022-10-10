@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2022-10-10
+
+### Added
+
+ - Added support for STARTTLS for SMTP.
+ - Added support for user profile pictures, including importing them from OpenLDAP.
+ - Added support for every config value to be specified in a file.
+ - Added support for PKCS1 keys.
+
+### Changed
+
+ - The `dn` attribute is no longer returned as an attribute (it's still part of the response).
+ - Empty attributes are no longer returned.
+ - The docker image now uses the locally-downloaded assets.
+
 ## [0.4.0] - 2022-07-08
 
 ### Breaking
