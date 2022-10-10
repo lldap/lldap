@@ -2,7 +2,7 @@
 authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
 edition = "2021"
 name = "lldap"
-version = "0.4.0"
+version = "0.4.1"
 
 [dependencies]
 actix = "0.12"
