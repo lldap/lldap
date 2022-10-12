@@ -17,7 +17,7 @@ RUN if [ "${TARGETPLATFORM}" = "linux/amd64" ]; then \
     ls -la target/ . && \
     pwd \
     ; fi
-    
+
 RUN if [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
     mv bin/aarch64-bin/lldap target/lldap && \
     mv bin/aarch64-bin/migration-tool target/migration-tool && \
@@ -26,7 +26,7 @@ RUN if [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
     ls -la target/ . && \
     pwd \
     ; fi
-    
+
 RUN if [ "${TARGETPLATFORM}" = "linux/arm/v7" ]; then \
     mv bin/armhf-bin/lldap target/lldap && \
     mv bin/armhf-bin/migration-tool target/migration-tool && \
@@ -51,8 +51,8 @@ WORKDIR /lldap
 RUN set -x \
     && for file in $(cat /lldap/app/static/libraries.txt); do wget -P app/static "$file"; done \
     && for file in $(cat /lldap/app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
-    && chmod a+r -R .  
- 
+    && chmod a+r -R .
+
 FROM debian:bullseye-slim
 ENV UID=1000
 ENV GID=1000
@@ -69,3 +69,4 @@ VOLUME ["/data"]
 WORKDIR /app
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
 CMD ["run", "--config-file", "/data/lldap_config.toml"]
+HEALTHCHECK CMD ["/app/lldap", "run", "--config-file", "/data/lldap_config.toml"]
