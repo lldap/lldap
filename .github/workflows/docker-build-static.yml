@@ -250,6 +250,64 @@ jobs:
           name: amd64-migration-tool-bin
           path: target/x86_64-unknown-linux-musl/release/migration-tool
 
+  create-release-artifacts:
+     needs: [build-ui,build-armhf,build-aarch64,build-amd64]
+     name: create artifacts
+     runs-on: ubuntu-latest
+     steps:
+       
+      - name: Download armhf lldap artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: armhf-lldap-bin
+          path: bin/armhf-bin
+      - name: Download armhf migration-tool artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: armhf-migration-tool-bin
+          path: bin/armhf-bin
+
+      - name: Download aarch64 lldap artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: aarch64-lldap-bin
+          path: bin/aarch64-bin
+      - name: Download aarch64 migration-tool artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: aarch64-migration-tool-bin
+          path: bin/aarch64-bin
+
+      - name: Download amd64 lldap artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: amd64-lldap-bin
+          path: bin/amd64-bin
+      - name: Download amd64 migration-tool artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: amd64-migration-tool-bin
+          path: bin/amd64-bin
+
+      - name: check bin path
+        run: ls -al bin/
+
+      - name: Download llap ui artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: ui
+          path: web
+
+      - name: upload artifacts release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: true
+          tag_name: ${{ github.ref }}
+          artifacts: "bin/*,web/*"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
   build-docker-image:
     needs: [build-ui,build-armhf,build-aarch64,build-amd64]
