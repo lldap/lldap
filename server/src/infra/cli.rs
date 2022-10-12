@@ -20,6 +20,9 @@ pub enum Command {
     /// Run the LDAP and GraphQL server.
     #[clap(name = "run")]
     Run(RunOpts),
+    /// Test whether the LDAP and GraphQL server are responsive.
+    #[clap(name = "healthcheck")]
+    HealthCheck(RunOpts),
     /// Send a test email.
     #[clap(name = "send_test_email")]
     SendTestEmail(TestEmailOpts),

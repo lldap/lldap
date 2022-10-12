@@ -37,9 +37,9 @@ impl RootSpanBuilder for CustomRootSpanBuilder {
 pub fn init(config: &Configuration) -> anyhow::Result<()> {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::new(if config.verbose {
-            "sqlx=warn,debug"
+            "sqlx=warn,reqwest=warn,debug"
         } else {
-            "sqlx=warn,info"
+            "sqlx=warn,reqwest=warn,info"
         })
     });
     tracing_subscriber::registry()

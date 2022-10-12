@@ -633,6 +633,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     pub async fn do_search_or_dse(&mut self, request: &LdapSearchRequest) -> Vec<LdapOp> {
+        if request.base.is_empty()
+            && request.scope == LdapSearchScope::Base
+            && request.filter == LdapFilter::Present("objectClass".to_string())
+        {
+            debug!("rootDSE request");
+            return vec![root_dse_response(&self.base_dn_str), make_search_success()];
+        }
         let user_info = match &self.user_info {
             None => {
                 return vec![make_search_error(
@@ -642,13 +649,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             }
             Some(u) => u,
         };
-        if request.base.is_empty()
-            && request.scope == LdapSearchScope::Base
-            && request.filter == LdapFilter::Present("objectClass".to_string())
-        {
-            debug!("rootDSE request");
-            return vec![root_dse_response(&self.base_dn_str), make_search_success()];
-        }
         let user_filter = if user_info.is_admin_or_readonly() {
             None
         } else {
