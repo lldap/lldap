@@ -246,6 +246,7 @@ const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
     "cn",
     "jpegPhoto",
     "createtimestamp",
+    "entryuuid",
 ];
 
 fn make_ldap_search_user_result_entry(
@@ -328,7 +329,14 @@ fn get_group_attribute(
     }
 }
 
-const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] = &["objectclass", "uid", "cn", "member", "uniquemember"];
+const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] = &[
+    "objectclass",
+    "uid",
+    "cn",
+    "member",
+    "uniquemember",
+    "entryuuid",
+];
 
 fn make_ldap_search_group_result_entry(
     group: Group,
@@ -2084,6 +2092,7 @@ mod tests {
                     display_name: "Bôb Böbberson".to_string(),
                     last_name: "Böbberson".to_string(),
                     avatar: JpegPhoto::for_tests(),
+                    uuid: uuid!("b4ac75e0-2900-3e21-926c-2f732c26b3fc"),
                     ..Default::default()
                 },
                 groups: None,
@@ -2146,6 +2155,10 @@ mod tests {
                         atype: "createtimestamp".to_string(),
                         vals: vec![chrono::Utc.timestamp(0, 0).to_rfc3339().into_bytes()],
                     },
+                    LdapPartialAttribute {
+                        atype: "entryuuid".to_string(),
+                        vals: vec![b"b4ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
+                    },
                 ],
             }),
             // "objectclass", "dn", "uid", "cn", "member", "uniquemember"
@@ -2179,6 +2192,10 @@ mod tests {
                             b"uid=bob,ou=people,dc=example,dc=com".to_vec(),
                             b"uid=john,ou=people,dc=example,dc=com".to_vec(),
                         ],
+                    },
+                    LdapPartialAttribute {
+                        atype: "entryuuid".to_string(),
+                        vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
                     },
                 ],
             }),
