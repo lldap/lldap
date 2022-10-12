@@ -82,6 +82,7 @@ fn http_config<Backend>(
         server_url,
         mail_options,
     }))
+    .route("/health", web::get().to(|| HttpResponse::Ok().finish()))
     .service(web::scope("/auth").configure(auth_service::configure_server::<Backend>))
     // API endpoint.
     .service(

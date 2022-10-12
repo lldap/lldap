@@ -47,6 +47,7 @@ tracing-attributes = "^0.1.21"
 tracing-log = "*"
 rustls-pemfile = "1.0.0"
 serde_bytes = "0.11.7"
+webpki-roots = "*"
 
 [dependencies.chrono]
 features = ["serde"]
@@ -123,6 +124,11 @@ version = "=3.0.0-beta.5"
 features = ["jpeg"]
 default-features = false
 version = "0.24"
+
+[dependencies.reqwest]
+version = "0.11"
+default-features = false
+features = ["rustls-tls-webpki-roots"]
 
 [dev-dependencies]
 mockall = "0.9.1"

@@ -2,6 +2,8 @@
 #![forbid(non_ascii_idents)]
 #![allow(clippy::nonstandard_macro_braces)]
 
+use std::time::Duration;
+
 use crate::{
     domain::{
         handler::{BackendHandler, CreateUserRequest, GroupRequestFilter},
@@ -9,7 +11,7 @@ use crate::{
         sql_opaque_handler::register_password,
         sql_tables::PoolOptions,
     },
-    infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler, mail},
+    infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler, healthcheck, mail},
 };
 use actix::Actor;
 use actix_server::ServerBuilder;
@@ -132,11 +134,42 @@ fn send_test_email_command(opts: TestEmailOpts) -> Result<()> {
     mail::send_test_email(to, &config.smtp_options)
 }
 
+fn run_healthcheck(opts: RunOpts) -> Result<()> {
+    debug!("CLI: {:#?}", &opts);
+    let config = infra::configuration::init(opts)?;
+    infra::logging::init(&config)?;
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+
+    use tokio::time::timeout;
+    let delay = Duration::from_millis(3000);
+    let (ldap, ldaps, api) = runtime.block_on(async {
+        tokio::join!(
+            timeout(delay, healthcheck::check_ldap(config.ldap_port)),
+            timeout(delay, healthcheck::check_ldaps(&config.ldaps_options)),
+            timeout(delay, healthcheck::check_api(config.http_port)),
+        )
+    });
+
+    let mut failure = false;
+    [ldap, ldaps, api]
+        .into_iter()
+        .filter_map(Result::err)
+        .for_each(|e| {
+            failure = true;
+            error!("{:#}", e)
+        });
+    std::process::exit(if failure { 1 } else { 0 })
+}
+
 fn main() -> Result<()> {
     let cli_opts = infra::cli::init();
     match cli_opts.command {
         Command::ExportGraphQLSchema(opts) => infra::graphql::api::export_schema(opts),
         Command::Run(opts) => run_server_command(opts),
+        Command::HealthCheck(opts) => run_healthcheck(opts),
         Command::SendTestEmail(opts) => send_test_email_command(opts),
     }
 }
