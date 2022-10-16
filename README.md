@@ -228,6 +228,7 @@ folder for help with:
   - [Authelia](example_configs/authelia_config.yml)
   - [Bookstack](example_configs/bookstack.env.example)
   - [Calibre-Web](example_configs/calibre_web.md)
+  - [Dell iDRAC](example_configs/dell_idrac.md)
   - [Dokuwiki](example_configs/dokuwiki.md)
   - [Dolibarr](example_configs/dolibarr.md)
   - [Emby](example_configs/emby.md)
