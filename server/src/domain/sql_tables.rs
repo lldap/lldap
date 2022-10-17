@@ -1,13 +1,19 @@
-use super::handler::{GroupId, UserId, Uuid};
+use super::{
+    handler::{GroupId, UserId, Uuid},
+    sql_migrations::{get_schema_version, migrate_from_version, upgrade_to_v1},
+};
 use sea_query::*;
-use sea_query_binder::SqlxBinder;
-use sqlx::Row;
-use tracing::{debug, warn};
+
+pub use super::sql_migrations::create_group;
 
 pub type Pool = sqlx::sqlite::SqlitePool;
 pub type PoolOptions = sqlx::sqlite::SqlitePoolOptions;
 pub type DbRow = sqlx::sqlite::SqliteRow;
 pub type DbQueryBuilder = SqliteQueryBuilder;
+
+#[derive(Copy, PartialEq, Eq, Debug, Clone, sqlx::FromRow, sqlx::Type)]
+#[sqlx(transparent)]
+pub struct SchemaVersion(pub u8);
 
 impl From<GroupId> for Value {
     fn from(group_id: GroupId) -> Self {
@@ -36,6 +42,12 @@ impl From<Uuid> for sea_query::Value {
 impl From<&Uuid> for sea_query::Value {
     fn from(uuid: &Uuid) -> Self {
         uuid.as_str().into()
+    }
+}
+
+impl From<SchemaVersion> for Value {
+    fn from(version: SchemaVersion) -> Self {
+        version.0.into()
     }
 }
 
@@ -71,278 +83,24 @@ pub enum Memberships {
     GroupId,
 }
 
-async fn column_exists(pool: &Pool, table_name: &str, column_name: &str) -> sqlx::Result<bool> {
-    // Sqlite specific
-    let query = format!(
-        "SELECT COUNT(*) AS col_count FROM pragma_table_info('{}') WHERE name = '{}'",
-        table_name, column_name
-    );
-    match sqlx::query(&query).fetch_one(pool).await {
-        Err(_) => Ok(false),
-        Ok(row) => Ok(row.get::<i32, _>("col_count") > 0),
-    }
+// Metadata about the SQL DB.
+#[derive(Iden)]
+pub enum Metadata {
+    Table,
+    // Which version of the schema we're at.
+    Version,
 }
 
-pub async fn create_group(group_name: &str, pool: &Pool) -> sqlx::Result<()> {
-    let now = chrono::Utc::now();
-    let (query, values) = Query::insert()
-        .into_table(Groups::Table)
-        .columns(vec![
-            Groups::DisplayName,
-            Groups::CreationDate,
-            Groups::Uuid,
-        ])
-        .values_panic(vec![
-            group_name.into(),
-            now.naive_utc().into(),
-            Uuid::from_name_and_date(group_name, &now).into(),
-        ])
-        .build_sqlx(DbQueryBuilder {});
-    debug!(%query);
-    sqlx::query_with(query.as_str(), values)
-        .execute(pool)
-        .await
-        .map(|_| ())
-}
-
-pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
-    // SQLite needs this pragma to be turned on. Other DB might not understand this, so ignore the
-    // error.
-    let _ = sqlx::query("PRAGMA foreign_keys = ON").execute(pool).await;
-    sqlx::query(
-        &Table::create()
-            .table(Users::Table)
-            .if_not_exists()
-            .col(
-                ColumnDef::new(Users::UserId)
-                    .string_len(255)
-                    .not_null()
-                    .primary_key(),
-            )
-            .col(ColumnDef::new(Users::Email).string_len(255).not_null())
-            .col(
-                ColumnDef::new(Users::DisplayName)
-                    .string_len(255)
-                    .not_null(),
-            )
-            .col(ColumnDef::new(Users::FirstName).string_len(255).not_null())
-            .col(ColumnDef::new(Users::LastName).string_len(255).not_null())
-            .col(ColumnDef::new(Users::Avatar).binary())
-            .col(ColumnDef::new(Users::CreationDate).date_time().not_null())
-            .col(ColumnDef::new(Users::PasswordHash).binary())
-            .col(ColumnDef::new(Users::TotpSecret).string_len(64))
-            .col(ColumnDef::new(Users::MfaType).string_len(64))
-            .col(ColumnDef::new(Users::Uuid).string_len(36).not_null())
-            .to_string(DbQueryBuilder {}),
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        &Table::create()
-            .table(Groups::Table)
-            .if_not_exists()
-            .col(
-                ColumnDef::new(Groups::GroupId)
-                    .integer()
-                    .not_null()
-                    .primary_key(),
-            )
-            .col(
-                ColumnDef::new(Groups::DisplayName)
-                    .string_len(255)
-                    .unique_key()
-                    .not_null(),
-            )
-            .col(ColumnDef::new(Users::CreationDate).date_time().not_null())
-            .col(ColumnDef::new(Users::Uuid).string_len(36).not_null())
-            .to_string(DbQueryBuilder {}),
-    )
-    .execute(pool)
-    .await?;
-
-    // If the creation_date column doesn't exist, add it.
-    if !column_exists(
-        pool,
-        &*Groups::Table.to_string(),
-        &*Groups::CreationDate.to_string(),
-    )
-    .await?
-    {
-        warn!("`creation_date` column not found in `groups`, creating it");
-        sqlx::query(
-            &Table::alter()
-                .table(Groups::Table)
-                .add_column(
-                    ColumnDef::new(Groups::CreationDate)
-                        .date_time()
-                        .not_null()
-                        .default(chrono::Utc::now().naive_utc()),
-                )
-                .to_string(DbQueryBuilder {}),
-        )
-        .execute(pool)
-        .await?;
-    }
-
-    // If the uuid column doesn't exist, add it.
-    if !column_exists(
-        pool,
-        &*Groups::Table.to_string(),
-        &*Groups::Uuid.to_string(),
-    )
-    .await?
-    {
-        warn!("`uuid` column not found in `groups`, creating it");
-        sqlx::query(
-            &Table::alter()
-                .table(Groups::Table)
-                .add_column(
-                    ColumnDef::new(Groups::Uuid)
-                        .string_len(36)
-                        .not_null()
-                        .default(""),
-                )
-                .to_string(DbQueryBuilder {}),
-        )
-        .execute(pool)
-        .await?;
-        for row in sqlx::query(
-            &Query::select()
-                .from(Groups::Table)
-                .column(Groups::GroupId)
-                .column(Groups::DisplayName)
-                .column(Groups::CreationDate)
-                .to_string(DbQueryBuilder {}),
-        )
-        .fetch_all(pool)
-        .await?
-        {
-            sqlx::query(
-                &Query::update()
-                    .table(Groups::Table)
-                    .value(
-                        Groups::Uuid,
-                        Uuid::from_name_and_date(
-                            &row.get::<String, _>(&*Groups::DisplayName.to_string()),
-                            &row.get::<chrono::DateTime<chrono::Utc>, _>(
-                                &*Groups::CreationDate.to_string(),
-                            ),
-                        )
-                        .into(),
-                    )
-                    .and_where(
-                        Expr::col(Groups::GroupId)
-                            .eq(row.get::<GroupId, _>(&*Groups::GroupId.to_string())),
-                    )
-                    .to_string(DbQueryBuilder {}),
-            )
-            .execute(pool)
-            .await?;
+pub async fn init_table(pool: &Pool) -> anyhow::Result<()> {
+    let version = {
+        if let Some(version) = get_schema_version(pool).await {
+            version
+        } else {
+            upgrade_to_v1(pool).await?;
+            SchemaVersion(1)
         }
-    }
-
-    if !column_exists(pool, &*Users::Table.to_string(), &*Users::Uuid.to_string()).await? {
-        warn!("`uuid` column not found in `users`, creating it");
-        sqlx::query(
-            &Table::alter()
-                .table(Users::Table)
-                .add_column(
-                    ColumnDef::new(Users::Uuid)
-                        .string_len(36)
-                        .not_null()
-                        .default(""),
-                )
-                .to_string(DbQueryBuilder {}),
-        )
-        .execute(pool)
-        .await?;
-        for row in sqlx::query(
-            &Query::select()
-                .from(Users::Table)
-                .column(Users::UserId)
-                .column(Users::CreationDate)
-                .to_string(DbQueryBuilder {}),
-        )
-        .fetch_all(pool)
-        .await?
-        {
-            let user_id = row.get::<UserId, _>(&*Users::UserId.to_string());
-            sqlx::query(
-                &Query::update()
-                    .table(Users::Table)
-                    .value(
-                        Users::Uuid,
-                        Uuid::from_name_and_date(
-                            user_id.as_str(),
-                            &row.get::<chrono::DateTime<chrono::Utc>, _>(
-                                &*Users::CreationDate.to_string(),
-                            ),
-                        )
-                        .into(),
-                    )
-                    .and_where(Expr::col(Users::UserId).eq(user_id))
-                    .to_string(DbQueryBuilder {}),
-            )
-            .execute(pool)
-            .await?;
-        }
-    }
-
-    sqlx::query(
-        &Table::create()
-            .table(Memberships::Table)
-            .if_not_exists()
-            .col(
-                ColumnDef::new(Memberships::UserId)
-                    .string_len(255)
-                    .not_null(),
-            )
-            .col(ColumnDef::new(Memberships::GroupId).integer().not_null())
-            .foreign_key(
-                ForeignKey::create()
-                    .name("MembershipUserForeignKey")
-                    .from(Memberships::Table, Memberships::UserId)
-                    .to(Users::Table, Users::UserId)
-                    .on_delete(ForeignKeyAction::Cascade)
-                    .on_update(ForeignKeyAction::Cascade),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("MembershipGroupForeignKey")
-                    .from(Memberships::Table, Memberships::GroupId)
-                    .to(Groups::Table, Groups::GroupId)
-                    .on_delete(ForeignKeyAction::Cascade)
-                    .on_update(ForeignKeyAction::Cascade),
-            )
-            .to_string(DbQueryBuilder {}),
-    )
-    .execute(pool)
-    .await?;
-
-    if sqlx::query(
-        &Query::select()
-            .from(Groups::Table)
-            .column(Groups::DisplayName)
-            .cond_where(Expr::col(Groups::DisplayName).eq("lldap_readonly"))
-            .to_string(DbQueryBuilder {}),
-    )
-    .fetch_one(pool)
-    .await
-    .is_ok()
-    {
-        sqlx::query(
-            &Query::update()
-                .table(Groups::Table)
-                .values(vec![(Groups::DisplayName, "lldap_password_manager".into())])
-                .cond_where(Expr::col(Groups::DisplayName).eq("lldap_readonly"))
-                .to_string(DbQueryBuilder {}),
-        )
-        .execute(pool)
-        .await?;
-        create_group("lldap_strict_readonly", pool).await?
-    }
-
+    };
+    migrate_from_version(pool, version).await?;
     Ok(())
 }
 
@@ -441,5 +199,30 @@ mod tests {
                 (GroupId(4), "test".to_string())
             ]
         );
+        assert_eq!(
+            sqlx::query(r#"SELECT version FROM metadata"#)
+                .map(|row: DbRow| row.get::<SchemaVersion, _>("version"))
+                .fetch_one(&sql_pool)
+                .await
+                .unwrap(),
+            SchemaVersion(1)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_too_high_version() {
+        let sql_pool = PoolOptions::new().connect("sqlite::memory:").await.unwrap();
+        sqlx::query(r#"CREATE TABLE metadata ( version INTEGER);"#)
+            .execute(&sql_pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO metadata (version)
+                       VALUES (127)"#,
+        )
+        .execute(&sql_pool)
+        .await
+        .unwrap();
+        assert!(init_table(&sql_pool).await.is_err());
     }
 }
