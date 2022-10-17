@@ -1,52 +1,29 @@
 use crate::{
     domain::{
-        handler::{
-            BackendHandler, BindRequest, Group, GroupDetails, GroupRequestFilter, LoginHandler,
-            User, UserId, UserRequestFilter, Uuid,
+        handler::{BackendHandler, BindRequest, LoginHandler, UserId},
+        ldap::{
+            error::{LdapError, LdapResult},
+            group::get_groups_list,
+            user::get_user_list,
+            utils::{
+                get_user_id_from_distinguished_name, is_subtree, parse_distinguished_name, LdapInfo,
+            },
         },
         opaque_handler::OpaqueHandler,
     },
     infra::auth_service::{Permission, ValidationResults},
 };
-use anyhow::{bail, Context, Result};
-use itertools::Itertools;
+use anyhow::Result;
 use ldap3_proto::proto::{
     LdapBindCred, LdapBindRequest, LdapBindResponse, LdapExtendedRequest, LdapExtendedResponse,
-    LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest, LdapResult,
-    LdapResultCode, LdapSearchRequest, LdapSearchResultEntry, LdapSearchScope,
+    LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
+    LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
+    LdapSearchScope,
 };
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, instrument, warn};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct LdapDn(String);
-
-fn make_dn_pair<I>(mut iter: I) -> Result<(String, String)>
-where
-    I: Iterator<Item = String>,
-{
-    let pair = (
-        iter.next()
-            .ok_or_else(|| anyhow::Error::msg("Empty DN element"))?,
-        iter.next()
-            .ok_or_else(|| anyhow::Error::msg("Missing DN value"))?,
-    );
-    if let Some(e) = iter.next() {
-        bail!(
-            r#"Too many elements in distinguished name: "{:?}", "{:?}", "{:?}""#,
-            pair.0,
-            pair.1,
-            e
-        )
-    }
-    Ok(pair)
-}
-
-fn parse_distinguished_name(dn: &str) -> Result<Vec<(String, String)>> {
-    assert!(dn == dn.to_ascii_lowercase());
-    dn.split(',')
-        .map(|s| make_dn_pair(s.split('=').map(str::trim).map(String::from)))
-        .collect()
-}
 
 #[derive(Debug)]
 enum SearchScope {
@@ -58,6 +35,7 @@ enum SearchScope {
     Unknown,
     Invalid,
 }
+
 fn get_search_scope(base_dn: &[(String, String)], dn_parts: &[(String, String)]) -> SearchScope {
     let base_dn_len = base_dn.len();
     if !is_subtree(dn_parts, base_dn) {
@@ -91,328 +69,12 @@ fn get_search_scope(base_dn: &[(String, String)], dn_parts: &[(String, String)])
     }
 }
 
-fn get_group_id_from_distinguished_name(
-    dn: &str,
-    base_tree: &[(String, String)],
-    base_dn_str: &str,
-) -> Result<String> {
-    let parts = parse_distinguished_name(dn).context("while parsing a group ID")?;
-    if !is_subtree(&parts, base_tree) {
-        bail!("Not a subtree of the base tree");
-    }
-    if parts.len() == base_tree.len() + 2 {
-        if parts[1].0 != "ou" || parts[1].1 != "groups" || parts[0].0 != "cn" {
-            bail!(
-                r#"Unexpected group DN format. Got "{}", expected: "cn=groupname,ou=groups,{}""#,
-                dn,
-                base_dn_str
-            );
-        }
-        Ok(parts[0].1.to_string())
-    } else {
-        bail!(
-            r#"Unexpected group DN format. Got "{}", expected: "cn=groupname,ou=groups,{}""#,
-            dn,
-            base_dn_str
-        );
-    }
-}
-
-fn get_user_id_from_distinguished_name(
-    dn: &str,
-    base_tree: &[(String, String)],
-    base_dn_str: &str,
-) -> Result<UserId> {
-    let parts = parse_distinguished_name(dn).context("while parsing a user ID")?;
-    if !is_subtree(&parts, base_tree) {
-        bail!("Not a subtree of the base tree");
-    }
-    if parts.len() == base_tree.len() + 2 {
-        if parts[1].0 != "ou"
-            || parts[1].1 != "people"
-            || (parts[0].0 != "cn" && parts[0].0 != "uid")
-        {
-            bail!(
-                r#"Unexpected user DN format. Got "{}", expected: "uid=username,ou=people,{}""#,
-                dn,
-                base_dn_str
-            );
-        }
-        Ok(UserId::new(&parts[0].1))
-    } else {
-        bail!(
-            r#"Unexpected user DN format. Got "{}", expected: "uid=username,ou=people,{}""#,
-            dn,
-            base_dn_str
-        );
-    }
-}
-
-fn get_user_attribute(
-    user: &User,
-    attribute: &str,
-    base_dn_str: &str,
-    groups: Option<&[GroupDetails]>,
-    ignored_user_attributes: &[String],
-) -> Result<Option<Vec<Vec<u8>>>> {
-    let attribute = attribute.to_ascii_lowercase();
-    let attribute_values = match attribute.as_str() {
-        "objectclass" => vec![
-            b"inetOrgPerson".to_vec(),
-            b"posixAccount".to_vec(),
-            b"mailAccount".to_vec(),
-            b"person".to_vec(),
-        ],
-        // dn is always returned as part of the base response.
-        "dn" | "distinguishedname" => return Ok(None),
-        "uid" => vec![user.user_id.to_string().into_bytes()],
-        "entryuuid" => vec![user.uuid.to_string().into_bytes()],
-        "mail" => vec![user.email.clone().into_bytes()],
-        "givenname" => vec![user.first_name.clone().into_bytes()],
-        "sn" => vec![user.last_name.clone().into_bytes()],
-        "jpegphoto" => vec![user.avatar.clone().into_bytes()],
-        "memberof" => groups
-            .into_iter()
-            .flatten()
-            .map(|id_and_name| {
-                format!(
-                    "uid={},ou=groups,{}",
-                    &id_and_name.display_name, base_dn_str
-                )
-                .into_bytes()
-            })
-            .collect(),
-        "cn" | "displayname" => vec![user.display_name.clone().into_bytes()],
-        "createtimestamp" | "modifytimestamp" => vec![user.creation_date.to_rfc3339().into_bytes()],
-        "1.1" => return Ok(None),
-        // We ignore the operational attribute wildcard.
-        "+" => return Ok(None),
-        "*" => {
-            bail!(
-                "Matched {}, * should have been expanded into attribute list and * removed",
-                attribute
-            )
-        }
-        _ => {
-            if !ignored_user_attributes.contains(&attribute) {
-                warn!(
-                    r#"Ignoring unrecognized group attribute: {}\n\
-                      To disable this warning, add it to "ignored_user_attributes" in the config."#,
-                    attribute
-                );
-            }
-            return Ok(None);
-        }
-    };
-    if attribute_values.len() == 1 && attribute_values[0].is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(attribute_values))
-    }
-}
-
-#[instrument(skip_all, level = "debug")]
-fn expand_attribute_wildcards<'a>(
-    ldap_attributes: &'a [String],
-    all_attribute_keys: &'a [&'static str],
-) -> Vec<&'a str> {
-    let mut attributes_out = ldap_attributes
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>();
-
-    if attributes_out.iter().any(|&x| x == "*") || attributes_out.is_empty() {
-        // Remove occurrences of '*'
-        attributes_out.retain(|&x| x != "*");
-        // Splice in all non-operational attributes
-        attributes_out.extend(all_attribute_keys.iter());
-    }
-
-    // Deduplicate, preserving order
-    let resolved_attributes = attributes_out
-        .into_iter()
-        .unique_by(|a| a.to_ascii_lowercase())
-        .collect_vec();
-    debug!(?ldap_attributes, ?resolved_attributes);
-    resolved_attributes
-}
-
-const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
-    "objectclass",
-    "uid",
-    "mail",
-    "givenname",
-    "sn",
-    "cn",
-    "jpegPhoto",
-    "createtimestamp",
-    "entryuuid",
-];
-
-fn make_ldap_search_user_result_entry(
-    user: User,
-    base_dn_str: &str,
-    attributes: &[&str],
-    groups: Option<&[GroupDetails]>,
-    ignored_user_attributes: &[String],
-) -> Result<LdapSearchResultEntry> {
-    let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
-
-    Ok(LdapSearchResultEntry {
-        dn,
-        attributes: attributes
-            .iter()
-            .filter_map(|a| {
-                let values = match get_user_attribute(
-                    &user,
-                    a,
-                    base_dn_str,
-                    groups,
-                    ignored_user_attributes,
-                ) {
-                    Err(e) => return Some(Err(e)),
-                    Ok(v) => v,
-                }?;
-                Some(Ok(LdapPartialAttribute {
-                    atype: a.to_string(),
-                    vals: values,
-                }))
-            })
-            .collect::<Result<Vec<LdapPartialAttribute>>>()?,
-    })
-}
-
-fn get_group_attribute(
-    group: &Group,
-    base_dn_str: &str,
-    attribute: &str,
-    user_filter: &Option<&UserId>,
-    ignored_group_attributes: &[String],
-) -> Result<Option<Vec<Vec<u8>>>> {
-    let attribute = attribute.to_ascii_lowercase();
-    let attribute_values = match attribute.as_str() {
-        "objectclass" => vec![b"groupOfUniqueNames".to_vec()],
-        // Always returned as part of the base response.
-        "dn" | "distinguishedname" => return Ok(None),
-        "cn" | "uid" => vec![group.display_name.clone().into_bytes()],
-        "entryuuid" => vec![group.uuid.to_string().into_bytes()],
-        "member" | "uniquemember" => group
-            .users
-            .iter()
-            .filter(|u| user_filter.map(|f| *u == f).unwrap_or(true))
-            .map(|u| format!("uid={},ou=people,{}", u, base_dn_str).into_bytes())
-            .collect(),
-        "1.1" => return Ok(None),
-        // We ignore the operational attribute wildcard
-        "+" => return Ok(None),
-        "*" => {
-            bail!(
-                "Matched {}, * should have been expanded into attribute list and * removed",
-                attribute
-            )
-        }
-        _ => {
-            if !ignored_group_attributes.contains(&attribute) {
-                warn!(
-                    r#"Ignoring unrecognized group attribute: {}\n\
-                      To disable this warning, add it to "ignored_group_attributes" in the config."#,
-                    attribute
-                );
-            }
-            return Ok(None);
-        }
-    };
-    if attribute_values.len() == 1 && attribute_values[0].is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(attribute_values))
-    }
-}
-
-const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] = &[
-    "objectclass",
-    "uid",
-    "cn",
-    "member",
-    "uniquemember",
-    "entryuuid",
-];
-
-fn make_ldap_search_group_result_entry(
-    group: Group,
-    base_dn_str: &str,
-    attributes: &[String],
-    user_filter: &Option<&UserId>,
-    ignored_group_attributes: &[String],
-) -> Result<LdapSearchResultEntry> {
-    let expanded_attributes = expand_attribute_wildcards(attributes, ALL_GROUP_ATTRIBUTE_KEYS);
-
-    Ok(LdapSearchResultEntry {
-        dn: format!("cn={},ou=groups,{}", group.display_name, base_dn_str),
-        attributes: expanded_attributes
-            .iter()
-            .filter_map(|a| {
-                let values = match get_group_attribute(
-                    &group,
-                    base_dn_str,
-                    a,
-                    user_filter,
-                    ignored_group_attributes,
-                ) {
-                    Err(e) => return Some(Err(e)),
-                    Ok(v) => v,
-                }?;
-                Some(Ok(LdapPartialAttribute {
-                    atype: a.to_string(),
-                    vals: values,
-                }))
-            })
-            .collect::<Result<Vec<LdapPartialAttribute>>>()?,
-    })
-}
-
-fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) -> bool {
-    for (k, v) in subtree {
-        assert!(k == &k.to_ascii_lowercase());
-        assert!(v == &v.to_ascii_lowercase());
-    }
-    for (k, v) in base_tree {
-        assert!(k == &k.to_ascii_lowercase());
-        assert!(v == &v.to_ascii_lowercase());
-    }
-    if subtree.len() < base_tree.len() {
-        return false;
-    }
-    let size_diff = subtree.len() - base_tree.len();
-    for i in 0..base_tree.len() {
-        if subtree[size_diff + i] != base_tree[i] {
-            return false;
-        }
-    }
-    true
-}
-
-fn map_field(field: &str) -> Result<&'static str> {
-    assert!(field == field.to_ascii_lowercase());
-    Ok(match field {
-        "uid" => "user_id",
-        "mail" => "email",
-        "cn" | "displayname" => "display_name",
-        "givenname" => "first_name",
-        "sn" => "last_name",
-        "avatar" => "avatar",
-        "creationdate" | "createtimestamp" | "modifytimestamp" => "creation_date",
-        "entryuuid" => "uuid",
-        _ => bail!("Unknown field: {}", field),
-    })
-}
-
 fn make_search_success() -> LdapOp {
     make_search_error(LdapResultCode::Success, "".to_string())
 }
 
 fn make_search_error(code: LdapResultCode, message: String) -> LdapOp {
-    LdapOp::SearchResultDone(LdapResult {
+    LdapOp::SearchResultDone(LdapResultOp {
         code,
         matcheddn: "".to_string(),
         message,
@@ -422,7 +84,7 @@ fn make_search_error(code: LdapResultCode, message: String) -> LdapOp {
 
 fn make_extended_response(code: LdapResultCode, message: String) -> LdapOp {
     LdapOp::ExtendedResponse(LdapExtendedResponse {
-        res: LdapResult {
+        res: LdapResultOp {
             code,
             matcheddn: "".to_string(),
             message,
@@ -468,10 +130,7 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
 pub struct LdapHandler<Backend: BackendHandler + LoginHandler + OpaqueHandler> {
     user_info: Option<ValidationResults>,
     backend_handler: Backend,
-    pub base_dn: Vec<(String, String)>,
-    base_dn_str: String,
-    ignored_user_attributes: Vec<String>,
-    ignored_group_attributes: Vec<String>,
+    ldap_info: LdapInfo,
 }
 
 impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
@@ -485,15 +144,17 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         Self {
             user_info: None,
             backend_handler,
-            base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
-                panic!(
-                    "Invalid value for ldap_base_dn in configuration: {}",
-                    ldap_base_dn
-                )
-            }),
-            base_dn_str: ldap_base_dn,
-            ignored_user_attributes,
-            ignored_group_attributes,
+            ldap_info: LdapInfo {
+                base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
+                    panic!(
+                        "Invalid value for ldap_base_dn in configuration: {}",
+                        ldap_base_dn
+                    )
+                }),
+                base_dn_str: ldap_base_dn,
+                ignored_user_attributes,
+                ignored_group_attributes,
+            },
         }
     }
 
@@ -502,8 +163,8 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         debug!("DN: {}", &request.dn);
         let user_id = match get_user_id_from_distinguished_name(
             &request.dn.to_ascii_lowercase(),
-            &self.base_dn,
-            &self.base_dn_str,
+            &self.ldap_info.base_dn,
+            &self.ldap_info.base_dn_str,
         ) {
             Ok(s) => s,
             Err(e) => return (LdapResultCode::NamingViolation, e.to_string()),
@@ -570,69 +231,71 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     async fn do_password_modification(
         &mut self,
         request: &LdapPasswordModifyRequest,
-    ) -> Vec<LdapOp> {
-        let credentials = match &self.user_info {
-            Some(info) => info,
-            _ => {
-                return vec![make_search_error(
-                    LdapResultCode::InsufficentAccessRights,
-                    "No user currently bound".to_string(),
-                )];
-            }
-        };
+    ) -> LdapResult<Vec<LdapOp>> {
+        let credentials = self.user_info.as_ref().ok_or_else(|| LdapError {
+            code: LdapResultCode::InsufficentAccessRights,
+            message: "No user currently bound".to_string(),
+        })?;
         match (&request.user_identity, &request.new_password) {
             (Some(user), Some(password)) => {
-                match get_user_id_from_distinguished_name(user, &self.base_dn, &self.base_dn_str) {
+                match get_user_id_from_distinguished_name(
+                    user,
+                    &self.ldap_info.base_dn,
+                    &self.ldap_info.base_dn_str,
+                ) {
                     Ok(uid) => {
-                        let user_is_admin = match self.backend_handler.get_user_groups(&uid).await {
-                            Ok(groups) => groups.iter().any(|g| g.display_name == "lldap_admin"),
-                            Err(e) => {
-                                return vec![make_extended_response(
-                                    LdapResultCode::OperationsError,
-                                    format!(
-                                        "Internal error while requesting user's groups: {:#?}",
-                                        e
-                                    ),
-                                )]
-                            }
-                        };
+                        let user_is_admin = self
+                            .backend_handler
+                            .get_user_groups(&uid)
+                            .await
+                            .map_err(|e| LdapError {
+                                code: LdapResultCode::OperationsError,
+                                message: format!(
+                                    "Internal error while requesting user's groups: {:#?}",
+                                    e
+                                ),
+                            })?
+                            .iter()
+                            .any(|g| g.display_name == "lldap_admin");
                         if !credentials.can_change_password(&uid, user_is_admin) {
-                            return vec![make_extended_response(
-                                LdapResultCode::InsufficentAccessRights,
-                                format!(
+                            Err(LdapError {
+                                code: LdapResultCode::InsufficentAccessRights,
+                                message: format!(
                                     r#"User `{}` cannot modify the password of user `{}`"#,
                                     &credentials.user, &uid
                                 ),
-                            )];
-                        }
-                        if let Err(e) = self.change_password(&uid, password).await {
-                            vec![make_extended_response(
-                                LdapResultCode::Other,
-                                format!("Error while changing the password: {:#?}", e),
-                            )]
+                            })
+                        } else if let Err(e) = self.change_password(&uid, password).await {
+                            Err(LdapError {
+                                code: LdapResultCode::Other,
+                                message: format!("Error while changing the password: {:#?}", e),
+                            })
                         } else {
-                            vec![make_extended_response(
+                            Ok(vec![make_extended_response(
                                 LdapResultCode::Success,
                                 "".to_string(),
-                            )]
+                            )])
                         }
                     }
-                    Err(e) => vec![make_extended_response(
-                        LdapResultCode::InvalidDNSyntax,
-                        format!("Invalid username: {:#?}", e),
-                    )],
+                    Err(e) => Err(LdapError {
+                        code: LdapResultCode::InvalidDNSyntax,
+                        message: format!("Invalid username: {}", e),
+                    }),
                 }
             }
-            _ => vec![make_extended_response(
-                LdapResultCode::ConstraintViolation,
-                "Missing either user_id or password".to_string(),
-            )],
+            _ => Err(LdapError {
+                code: LdapResultCode::ConstraintViolation,
+                message: "Missing either user_id or password".to_string(),
+            }),
         }
     }
 
     async fn do_extended_request(&mut self, request: &LdapExtendedRequest) -> Vec<LdapOp> {
         match LdapPasswordModifyRequest::try_from(request) {
-            Ok(password_request) => self.do_password_modification(&password_request).await,
+            Ok(password_request) => self
+                .do_password_modification(&password_request)
+                .await
+                .unwrap_or_else(|e: LdapError| vec![make_extended_response(e.code, e.message)]),
             Err(_) => vec![make_extended_response(
                 LdapResultCode::UnwillingToPerform,
                 format!("Unsupported extended operation: {}", &request.name),
@@ -640,23 +303,24 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
-    pub async fn do_search_or_dse(&mut self, request: &LdapSearchRequest) -> Vec<LdapOp> {
+    pub async fn do_search_or_dse(
+        &mut self,
+        request: &LdapSearchRequest,
+    ) -> LdapResult<Vec<LdapOp>> {
         if request.base.is_empty()
             && request.scope == LdapSearchScope::Base
             && request.filter == LdapFilter::Present("objectClass".to_string())
         {
             debug!("rootDSE request");
-            return vec![root_dse_response(&self.base_dn_str), make_search_success()];
+            return Ok(vec![
+                root_dse_response(&self.ldap_info.base_dn_str),
+                make_search_success(),
+            ]);
         }
-        let user_info = match &self.user_info {
-            None => {
-                return vec![make_search_error(
-                    LdapResultCode::InsufficentAccessRights,
-                    "No user currently bound".to_string(),
-                )]
-            }
-            Some(u) => u,
-        };
+        let user_info = self.user_info.as_ref().ok_or_else(|| LdapError {
+            code: LdapResultCode::InsufficentAccessRights,
+            message: "No user currently bound".to_string(),
+        })?;
         let user_filter = if user_info.is_admin_or_readonly() {
             None
         } else {
@@ -670,50 +334,64 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         &mut self,
         request: &LdapSearchRequest,
         user_filter: Option<UserId>,
-    ) -> Vec<LdapOp> {
+    ) -> LdapResult<Vec<LdapOp>> {
         let user_filter = user_filter.as_ref();
-        let dn_parts = match parse_distinguished_name(&request.base.to_ascii_lowercase()) {
-            Ok(dn) => dn,
-            Err(_) => {
-                return vec![make_search_error(
-                    LdapResultCode::OperationsError,
-                    format!(r#"Could not parse base DN: "{}""#, request.base),
-                )]
-            }
-        };
-        let scope = get_search_scope(&self.base_dn, &dn_parts);
+        let dn_parts = parse_distinguished_name(&request.base.to_ascii_lowercase())?;
+        let scope = get_search_scope(&self.ldap_info.base_dn, &dn_parts);
         debug!(?request.base, ?scope);
-        let get_user_list = || async {
-            self.get_user_list(&request.filter, &request.attrs, &request.base, &user_filter)
-                .await
-        };
-        let get_group_list = || async {
-            self.get_groups_list(&request.filter, &request.attrs, &request.base, &user_filter)
-                .await
-        };
-        let mut results = match scope {
+        // Disambiguate the lifetimes.
+        fn cast<T, R, B: 'a, 'a>(x: T) -> T
+        where
+            T: Fn(&'a mut B, &'a LdapFilter) -> R + 'a,
+        {
+            x
+        }
+
+        let get_user_list = cast(|backend_handler: &mut Backend, filter: &LdapFilter| async {
+            get_user_list(
+                &self.ldap_info,
+                filter,
+                &request.attrs,
+                &request.base,
+                &user_filter,
+                backend_handler,
+            )
+            .await
+        });
+        let get_group_list = cast(|backend_handler: &mut Backend, filter: &LdapFilter| async {
+            get_groups_list(
+                &self.ldap_info,
+                filter,
+                &request.attrs,
+                &request.base,
+                &user_filter,
+                backend_handler,
+            )
+            .await
+        });
+        let mut results: Vec<_> = match scope {
             SearchScope::Global => {
                 let mut results = Vec::new();
-                results.extend(get_user_list().await);
-                results.extend(get_group_list().await);
+                results.extend(get_user_list(&mut self.backend_handler, &request.filter).await?);
+                results.extend(get_group_list(&mut self.backend_handler, &request.filter).await?);
                 results
             }
-            SearchScope::Users => get_user_list().await,
-            SearchScope::Groups => get_group_list().await,
+            SearchScope::Users => get_user_list(&mut self.backend_handler, &request.filter).await?,
+            SearchScope::Groups => {
+                get_group_list(&mut self.backend_handler, &request.filter).await?
+            }
             SearchScope::User(filter) => {
                 let filter = LdapFilter::And(vec![request.filter.clone(), filter]);
-                self.get_user_list(&filter, &request.attrs, &request.base, &user_filter)
-                    .await
+                get_user_list(&mut self.backend_handler, &filter).await?
             }
             SearchScope::Group(filter) => {
                 let filter = LdapFilter::And(vec![request.filter.clone(), filter]);
-                self.get_groups_list(&filter, &request.attrs, &request.base, &user_filter)
-                    .await
+                get_group_list(&mut self.backend_handler, &filter).await?
             }
             SearchScope::Unknown => {
                 warn!(
                     r#"The requested search tree "{}" matches neither the user subtree "ou=people,{}" nor the group subtree "ou=groups,{}""#,
-                    &request.base, &self.base_dn_str, &self.base_dn_str
+                    &request.base, &self.ldap_info.base_dn_str, &self.ldap_info.base_dn_str
                 );
                 Vec::new()
             }
@@ -721,7 +399,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 // Search path is not in our tree, just return an empty success.
                 warn!(
                     "The specified search tree {:?} is not under the common subtree {:?}",
-                    &dn_parts, &self.base_dn
+                    &dn_parts, &self.ldap_info.base_dn
                 );
                 Vec::new()
             }
@@ -730,129 +408,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         {
             results.push(make_search_success());
         }
-        results
-    }
-
-    #[instrument(skip_all, level = "debug")]
-    async fn get_user_list(
-        &self,
-        ldap_filter: &LdapFilter,
-        attributes: &[String],
-        base: &str,
-        user_filter: &Option<&UserId>,
-    ) -> Vec<LdapOp> {
-        debug!(?ldap_filter);
-        let filters = match self.convert_user_filter(ldap_filter) {
-            Ok(f) => f,
-            Err(e) => {
-                return vec![make_search_error(
-                    LdapResultCode::UnwillingToPerform,
-                    format!("Unsupported user filter: {:#}", e),
-                )]
-            }
-        };
-        let parsed_filters = match user_filter {
-            None => filters,
-            Some(u) => {
-                info!("Unpriviledged search, limiting results");
-                UserRequestFilter::And(vec![filters, UserRequestFilter::UserId((*u).clone())])
-            }
-        };
-        debug!(?parsed_filters);
-        let expanded_attributes = expand_attribute_wildcards(attributes, ALL_USER_ATTRIBUTE_KEYS);
-        let need_groups = expanded_attributes
-            .iter()
-            .any(|s| s.to_ascii_lowercase() == "memberof");
-        let users = match self
-            .backend_handler
-            .list_users(Some(parsed_filters), need_groups)
-            .await
-        {
-            Ok(users) => users,
-            Err(e) => {
-                return vec![make_search_error(
-                    LdapResultCode::Other,
-                    format!(r#"Error while searching user "{}": {:#}"#, base, e),
-                )]
-            }
-        };
-
-        users
-            .into_iter()
-            .map(|u| {
-                make_ldap_search_user_result_entry(
-                    u.user,
-                    &self.base_dn_str,
-                    &expanded_attributes,
-                    u.groups.as_deref(),
-                    &self.ignored_user_attributes,
-                )
-            })
-            .map(|entry| Ok(LdapOp::SearchResultEntry(entry?)))
-            .collect::<Result<Vec<_>>>()
-            .unwrap_or_else(|e| {
-                vec![make_search_error(
-                    LdapResultCode::NoSuchAttribute,
-                    e.to_string(),
-                )]
-            })
-    }
-
-    #[instrument(skip_all, level = "debug")]
-    async fn get_groups_list(
-        &self,
-        ldap_filter: &LdapFilter,
-        attributes: &[String],
-        base: &str,
-        user_filter: &Option<&UserId>,
-    ) -> Vec<LdapOp> {
-        debug!(?ldap_filter);
-        let filter = match self.convert_group_filter(ldap_filter) {
-            Ok(f) => f,
-            Err(e) => {
-                return vec![make_search_error(
-                    LdapResultCode::UnwillingToPerform,
-                    format!("Unsupported group filter: {:#}", e),
-                )]
-            }
-        };
-        let parsed_filters = match user_filter {
-            None => filter,
-            Some(u) => {
-                info!("Unpriviledged search, limiting results");
-                GroupRequestFilter::And(vec![filter, GroupRequestFilter::Member((*u).clone())])
-            }
-        };
-        debug!(?parsed_filters);
-        let groups = match self.backend_handler.list_groups(Some(parsed_filters)).await {
-            Ok(groups) => groups,
-            Err(e) => {
-                return vec![make_search_error(
-                    LdapResultCode::Other,
-                    format!(r#"Error while listing groups "{}": {:#}"#, base, e),
-                )]
-            }
-        };
-
-        groups
-            .into_iter()
-            .map(|u| {
-                make_ldap_search_group_result_entry(
-                    u,
-                    &self.base_dn_str,
-                    attributes,
-                    user_filter,
-                    &self.ignored_group_attributes,
-                )
-            })
-            .map(|entry| Ok(LdapOp::SearchResultEntry(entry?)))
-            .collect::<Result<Vec<_>>>()
-            .unwrap_or_else(|e| {
-                vec![make_search_error(
-                    LdapResultCode::NoSuchAttribute,
-                    e.to_string(),
-                )]
-            })
+        Ok(results)
     }
 
     pub async fn handle_ldap_message(&mut self, ldap_op: LdapOp) -> Option<Vec<LdapOp>> {
@@ -860,7 +416,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             LdapOp::BindRequest(request) => {
                 let (code, message) = self.do_bind(&request).await;
                 vec![LdapOp::BindResponse(LdapBindResponse {
-                    res: LdapResult {
+                    res: LdapResultOp {
                         code,
                         matcheddn: "".to_string(),
                         message,
@@ -869,7 +425,10 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     saslcreds: None,
                 })]
             }
-            LdapOp::SearchRequest(request) => self.do_search_or_dse(&request).await,
+            LdapOp::SearchRequest(request) => self
+                .do_search_or_dse(&request)
+                .await
+                .unwrap_or_else(|e: LdapError| vec![make_search_error(e.code, e.message)]),
             LdapOp::UnbindRequest => {
                 self.user_info = None;
                 // No need to notify on unbind (per rfc4511)
@@ -881,166 +440,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 format!("Unsupported operation: {:#?}", op),
             )],
         })
-    }
-
-    fn convert_group_filter(&self, filter: &LdapFilter) -> Result<GroupRequestFilter> {
-        match filter {
-            LdapFilter::Equality(field, value) => {
-                let field = &field.to_ascii_lowercase();
-                let value = &value.to_ascii_lowercase();
-                match field.as_str() {
-                    "member" | "uniquemember" => {
-                        let user_name = get_user_id_from_distinguished_name(
-                            value,
-                            &self.base_dn,
-                            &self.base_dn_str,
-                        )?;
-                        Ok(GroupRequestFilter::Member(user_name))
-                    }
-                    "objectclass" => match value.as_str() {
-                        "groupofuniquenames" | "groupofnames" => {
-                            Ok(GroupRequestFilter::And(vec![]))
-                        }
-                        _ => Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
-                            vec![],
-                        )))),
-                    },
-                    _ => {
-                        match map_field(field) {
-                            Ok("display_name") | Ok("user_id") => {
-                                return Ok(GroupRequestFilter::DisplayName(value.to_string()));
-                            }
-                            Ok("uuid") => {
-                                return Ok(GroupRequestFilter::Uuid(Uuid::try_from(
-                                    value.as_str(),
-                                )?));
-                            }
-                            _ => (),
-                        };
-                        if !self.ignored_group_attributes.contains(field) {
-                            warn!(
-                                r#"Ignoring unknown group attribute "{:?}" in filter.\n\
-                                To disable this warning, add it to "ignored_group_attributes" in the config."#,
-                                field
-                            );
-                        }
-                        Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
-                            vec![],
-                        ))))
-                    }
-                }
-            }
-            LdapFilter::And(filters) => Ok(GroupRequestFilter::And(
-                filters
-                    .iter()
-                    .map(|f| self.convert_group_filter(f))
-                    .collect::<Result<_>>()?,
-            )),
-            LdapFilter::Or(filters) => Ok(GroupRequestFilter::Or(
-                filters
-                    .iter()
-                    .map(|f| self.convert_group_filter(f))
-                    .collect::<Result<_>>()?,
-            )),
-            LdapFilter::Not(filter) => Ok(GroupRequestFilter::Not(Box::new(
-                self.convert_group_filter(filter)?,
-            ))),
-            LdapFilter::Present(field) => {
-                let field = &field.to_ascii_lowercase();
-                if field == "dn"
-                    || field == "distinguishedname"
-                    || ALL_GROUP_ATTRIBUTE_KEYS.contains(&field.as_str())
-                {
-                    Ok(GroupRequestFilter::And(vec![]))
-                } else {
-                    Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
-                        vec![],
-                    ))))
-                }
-            }
-            _ => bail!("Unsupported group filter: {:?}", filter),
-        }
-    }
-
-    fn convert_user_filter(&self, filter: &LdapFilter) -> Result<UserRequestFilter> {
-        match filter {
-            LdapFilter::And(filters) => Ok(UserRequestFilter::And(
-                filters
-                    .iter()
-                    .map(|f| self.convert_user_filter(f))
-                    .collect::<Result<_>>()?,
-            )),
-            LdapFilter::Or(filters) => Ok(UserRequestFilter::Or(
-                filters
-                    .iter()
-                    .map(|f| self.convert_user_filter(f))
-                    .collect::<Result<_>>()?,
-            )),
-            LdapFilter::Not(filter) => Ok(UserRequestFilter::Not(Box::new(
-                self.convert_user_filter(filter)?,
-            ))),
-            LdapFilter::Equality(field, value) => {
-                let field = &field.to_ascii_lowercase();
-                match field.as_str() {
-                    "memberof" => {
-                        let group_name = get_group_id_from_distinguished_name(
-                            &value.to_ascii_lowercase(),
-                            &self.base_dn,
-                            &self.base_dn_str,
-                        )?;
-                        Ok(UserRequestFilter::MemberOf(group_name))
-                    }
-                    "objectclass" => match value.to_ascii_lowercase().as_str() {
-                        "person" | "inetorgperson" | "posixaccount" | "mailaccount" => {
-                            Ok(UserRequestFilter::And(vec![]))
-                        }
-                        _ => Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
-                            vec![],
-                        )))),
-                    },
-                    _ => match map_field(field) {
-                        Ok(field) => {
-                            if field == "user_id" {
-                                Ok(UserRequestFilter::UserId(UserId::new(value)))
-                            } else {
-                                Ok(UserRequestFilter::Equality(
-                                    field.to_string(),
-                                    value.clone(),
-                                ))
-                            }
-                        }
-                        Err(_) => {
-                            if !self.ignored_user_attributes.contains(field) {
-                                warn!(
-                                    r#"Ignoring unknown user attribute "{}" in filter.\n\
-                                      To disable this warning, add it to "ignored_user_attributes" in the config"#,
-                                    field
-                                );
-                            }
-                            Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
-                                vec![],
-                            ))))
-                        }
-                    },
-                }
-            }
-            LdapFilter::Present(field) => {
-                let field = &field.to_ascii_lowercase();
-                // Check that it's a field we support.
-                if field == "objectclass"
-                    || field == "dn"
-                    || field == "distinguishedname"
-                    || map_field(field).is_ok()
-                {
-                    Ok(UserRequestFilter::And(vec![]))
-                } else {
-                    Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
-                        vec![],
-                    ))))
-                }
-            }
-            _ => bail!("Unsupported user filter: {:?}", filter),
-        }
     }
 }
 
@@ -1202,7 +601,7 @@ mod tests {
         assert_eq!(
             ldap_handler.handle_ldap_message(request).await,
             Some(vec![LdapOp::BindResponse(LdapBindResponse {
-                res: LdapResult {
+                res: LdapResultOp {
                     code: LdapResultCode::Success,
                     matcheddn: "".to_string(),
                     message: "".to_string(),
@@ -1275,13 +674,13 @@ mod tests {
             make_user_search_request::<String>(LdapFilter::And(vec![]), vec!["1.1".to_string()]);
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![
+            Ok(vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![],
                 }),
                 make_search_success()
-            ],
+            ]),
         );
     }
 
@@ -1298,7 +697,7 @@ mod tests {
             make_user_search_request::<String>(LdapFilter::And(vec![]), vec!["1.1".to_string()]);
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_success()],
+            Ok(vec![make_search_success()]),
         );
     }
 
@@ -1330,7 +729,7 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![
+            Ok(vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![LdapPartialAttribute {
@@ -1339,7 +738,7 @@ mod tests {
                     }],
                 }),
                 make_search_success(),
-            ],
+            ]),
         );
     }
 
@@ -1370,7 +769,7 @@ mod tests {
         };
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_success()],
+            Ok(vec![make_search_success()]),
         );
     }
 
@@ -1506,7 +905,7 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![
+            Ok(vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
@@ -1596,7 +995,7 @@ mod tests {
                     ],
                 }),
                 make_search_success(),
-            ]
+            ])
         );
     }
 
@@ -1632,7 +1031,7 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![
+            Ok(vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
                     attributes: vec![
@@ -1679,7 +1078,7 @@ mod tests {
                     ],
                 }),
                 make_search_success(),
-            ]
+            ])
         );
     }
 
@@ -1731,13 +1130,13 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![
+            Ok(vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
                     attributes: vec![],
                 }),
                 make_search_success(),
-            ]
+            ])
         );
     }
 
@@ -1771,7 +1170,7 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![
+            Ok(vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
                     attributes: vec![LdapPartialAttribute {
@@ -1780,7 +1179,7 @@ mod tests {
                     },],
                 }),
                 make_search_success(),
-            ]
+            ])
         );
     }
 
@@ -1808,7 +1207,7 @@ mod tests {
         };
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_success()],
+            Ok(vec![make_search_success()]),
         );
     }
 
@@ -1838,10 +1237,10 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_error(
-                LdapResultCode::Other,
-                r#"Error while listing groups "ou=groups,dc=example,dc=com": Internal error: `Error getting groups`"#.to_string()
-            )]
+            Err(LdapError{
+                code: LdapResultCode::Other,
+                message: r#"Error while listing groups "ou=groups,dc=example,dc=com": Internal error: `Error getting groups`"#.to_string()
+            })
         );
     }
 
@@ -1858,11 +1257,11 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_error(
-                LdapResultCode::UnwillingToPerform,
-                r#"Unsupported group filter: Unsupported group filter: Substring("whatever", LdapSubstringFilter { initial: None, any: [], final_: None })"#
+            Err(LdapError{
+                code: LdapResultCode::UnwillingToPerform,
+                message: r#"Unsupported group filter: Substring("whatever", LdapSubstringFilter { initial: None, any: [], final_: None })"#
                     .to_string()
-            )]
+            })
         );
     }
 
@@ -1906,7 +1305,7 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_success()]
+            Ok(vec![make_search_success()])
         );
     }
 
@@ -1930,7 +1329,7 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_success()]
+            Ok(vec![make_search_success()])
         );
         let request = make_user_search_request(
             LdapFilter::Equality("memberOf".to_string(), "group_1".to_string()),
@@ -1938,10 +1337,10 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_error(
-                LdapResultCode::UnwillingToPerform,
-                "Unsupported user filter: while parsing a group ID: Missing DN value".to_string()
-            )]
+            Err(LdapError {
+                code: LdapResultCode::InvalidDNSyntax,
+                message: "Missing DN value".to_string()
+            })
         );
         let request = make_user_search_request(
             LdapFilter::Equality(
@@ -1952,10 +1351,10 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_error(
-                LdapResultCode::UnwillingToPerform,
-                "Unsupported user filter: Unexpected group DN format. Got \"cn=mygroup,dc=example,dc=com\", expected: \"cn=groupname,ou=groups,dc=example,dc=com\"".to_string()
-            )]
+            Err(LdapError{
+                code: LdapResultCode::InvalidDNSyntax,
+                message: r#"Unexpected DN format. Got "cn=mygroup,dc=example,dc=com", expected: "uid=id,ou=groups,dc=example,dc=com""#.to_string()
+            })
         );
     }
 
@@ -1990,7 +1389,7 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![
+            Ok(vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![LdapPartialAttribute {
@@ -2004,7 +1403,7 @@ mod tests {
                     },]
                 }),
                 make_search_success()
-            ]
+            ])
         );
     }
 
@@ -2044,7 +1443,7 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![
+            Ok(vec![
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
@@ -2077,9 +1476,10 @@ mod tests {
                     ],
                 }),
                 make_search_success(),
-            ]
+            ])
         );
     }
+
     #[tokio::test]
     async fn test_search_wildcards() {
         let mut mock = MockTestBackendHandler::new();
@@ -2118,7 +1518,7 @@ mod tests {
         // all: "objectclass", "dn", "uid", "mail", "givenname", "sn", "cn"
         // Operational: "createtimestamp"
 
-        let expected_result = vec![
+        let expected_result = Ok(vec![
             LdapOp::SearchResultEntry(LdapSearchResultEntry {
                 dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
                 attributes: vec![
@@ -2200,7 +1600,7 @@ mod tests {
                 ],
             }),
             make_search_success(),
-        ];
+        ]);
 
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
@@ -2259,7 +1659,7 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_success()]
+            Ok(vec![make_search_success()])
         );
     }
 
@@ -2275,10 +1675,10 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![make_search_error(
-                LdapResultCode::UnwillingToPerform,
-                "Unsupported user filter: Unsupported user filter: Substring(\"uid\", LdapSubstringFilter { initial: None, any: [], final_: None })".to_string()
-            )]
+            Err(LdapError{
+                code: LdapResultCode::UnwillingToPerform,
+                message: r#"Unsupported user filter: Substring("uid", LdapSubstringFilter { initial: None, any: [], final_: None })"#.to_string()
+            })
         );
     }
 
@@ -2410,7 +1810,7 @@ mod tests {
             ldap_handler.handle_ldap_message(request).await,
             Some(vec![make_extended_response(
                 LdapResultCode::InvalidDNSyntax,
-                r#"Invalid username: "Unexpected user DN format. Got \"uid=bob,ou=groups,ou=people,dc=example,dc=com\", expected: \"uid=username,ou=people,dc=example,dc=com\"""#.to_string(),
+                r#"Invalid username: Unexpected DN format. Got "uid=bob,ou=groups,ou=people,dc=example,dc=com", expected: "uid=id,ou=people,dc=example,dc=com""#.to_string(),
             )])
         );
         let request = LdapOp::ExtendedRequest(LdapExtendedRequest {
@@ -2498,10 +1898,10 @@ mod tests {
         };
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            vec![
+            Ok(vec![
                 root_dse_response("dc=example,dc=com"),
                 make_search_success()
-            ]
+            ])
         );
     }
 }
