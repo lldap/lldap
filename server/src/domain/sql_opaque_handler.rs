@@ -1,9 +1,9 @@
 use super::{
-    error::*,
+    error::{DomainError, Result},
     handler::{BindRequest, LoginHandler, UserId},
-    opaque_handler::*,
+    opaque_handler::{login, registration, OpaqueHandler},
     sql_backend_handler::SqlBackendHandler,
-    sql_tables::*,
+    sql_tables::{DbQueryBuilder, Users},
 };
 use async_trait::async_trait;
 use lldap_auth::opaque;
@@ -258,42 +258,7 @@ pub(crate) async fn register_password(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        domain::{
-            handler::{BackendHandler, CreateUserRequest},
-            sql_backend_handler::SqlBackendHandler,
-            sql_tables::init_table,
-        },
-        infra::configuration::{Configuration, ConfigurationBuilder},
-    };
-
-    fn get_default_config() -> Configuration {
-        ConfigurationBuilder::default()
-            .verbose(true)
-            .build()
-            .unwrap()
-    }
-
-    async fn get_in_memory_db() -> Pool {
-        PoolOptions::new().connect("sqlite::memory:").await.unwrap()
-    }
-
-    async fn get_initialized_db() -> Pool {
-        let sql_pool = get_in_memory_db().await;
-        init_table(&sql_pool).await.unwrap();
-        sql_pool
-    }
-
-    async fn insert_user_no_password(handler: &SqlBackendHandler, name: &str) {
-        handler
-            .create_user(CreateUserRequest {
-                user_id: UserId::new(name),
-                email: "bob@bob.bob".to_string(),
-                ..Default::default()
-            })
-            .await
-            .unwrap();
-    }
+    use crate::domain::sql_backend_handler::tests::*;
 
     async fn attempt_login(
         opaque_handler: &SqlOpaqueHandler,
@@ -323,7 +288,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_flow() -> Result<()> {
+    async fn test_opaque_flow() -> Result<()> {
         let sql_pool = get_initialized_db().await;
         let config = get_default_config();
         let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
@@ -343,5 +308,51 @@ mod tests {
             .unwrap_err();
         attempt_login(&opaque_handler, "bob", "bob00").await?;
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_bind_user() {
+        let sql_pool = get_initialized_db().await;
+        let config = get_default_config();
+        let handler = SqlOpaqueHandler::new(config, sql_pool.clone());
+        insert_user(&handler, "bob", "bob00").await;
+
+        handler
+            .bind(BindRequest {
+                name: UserId::new("bob"),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap();
+        handler
+            .bind(BindRequest {
+                name: UserId::new("andrew"),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap_err();
+        handler
+            .bind(BindRequest {
+                name: UserId::new("bob"),
+                password: "wrong_password".to_string(),
+            })
+            .await
+            .unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn test_user_no_password() {
+        let sql_pool = get_initialized_db().await;
+        let config = get_default_config();
+        let handler = SqlBackendHandler::new(config, sql_pool.clone());
+        insert_user_no_password(&handler, "bob").await;
+
+        handler
+            .bind(BindRequest {
+                name: UserId::new("bob"),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap_err();
     }
 }

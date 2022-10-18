@@ -467,21 +467,26 @@ mod tests {
             async fn bind(&self, request: BindRequest) -> Result<()>;
         }
         #[async_trait]
-        impl BackendHandler for TestBackendHandler {
-            async fn list_users(&self, filters: Option<UserRequestFilter>, get_groups: bool) -> Result<Vec<UserAndGroups>>;
+        impl GroupBackendHandler for TestBackendHandler {
             async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
-            async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
             async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
-            async fn get_user_groups(&self, user: &UserId) -> Result<HashSet<GroupDetails>>;
-            async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
-            async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
             async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
-            async fn delete_user(&self, user_id: &UserId) -> Result<()>;
             async fn create_group(&self, group_name: &str) -> Result<GroupId>;
             async fn delete_group(&self, group_id: GroupId) -> Result<()>;
+        }
+        #[async_trait]
+        impl UserBackendHandler for TestBackendHandler {
+            async fn list_users(&self, filters: Option<UserRequestFilter>, get_groups: bool) -> Result<Vec<UserAndGroups>>;
+            async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
+            async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
+            async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
+            async fn delete_user(&self, user_id: &UserId) -> Result<()>;
+            async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>>;
             async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
             async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
         }
+        #[async_trait]
+        impl BackendHandler for TestBackendHandler {}
         #[async_trait]
         impl OpaqueHandler for TestBackendHandler {
             async fn login_start(
