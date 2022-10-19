@@ -54,14 +54,10 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> (RequiresGroup, Cond) {
         ),
         Equality(s1, s2) => (
             RequiresGroup(false),
-            if s1 == Users::DisplayName.to_string() {
-                Expr::col((Users::Table, Users::DisplayName))
-                    .eq(s2)
-                    .into_condition()
-            } else if s1 == Users::UserId.to_string() {
+            if s1 == Users::UserId {
                 panic!("User id should be wrapped")
             } else {
-                Expr::expr(Expr::cust(&s1)).eq(s2).into_condition()
+                Expr::col((Users::Table, s1)).eq(s2).into_condition()
             },
         ),
         MemberOf(group) => (
@@ -360,7 +356,9 @@ impl UserBackendHandler for SqlBackendHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{handler::JpegPhoto, sql_backend_handler::tests::*};
+    use crate::domain::{
+        handler::JpegPhoto, sql_backend_handler::tests::*, sql_tables::UserColumn,
+    };
 
     #[tokio::test]
     async fn test_list_users_no_filter() {
@@ -386,7 +384,7 @@ mod tests {
         let users = get_user_names(
             &fixture.handler,
             Some(UserRequestFilter::Equality(
-                "display_name".to_string(),
+                UserColumn::DisplayName,
                 "display bob".to_string(),
             )),
         )
@@ -400,7 +398,7 @@ mod tests {
         let users = get_user_names(
             &fixture.handler,
             Some(UserRequestFilter::Equality(
-                "first_name".to_string(),
+                UserColumn::FirstName,
                 "first bob".to_string(),
             )),
         )
@@ -433,6 +431,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_list_users_member_of_and_uuid() {
+        let fixture = TestFixture::new().await;
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::Or(vec![
+                UserRequestFilter::MemberOf("Best Group".to_string()),
+                UserRequestFilter::Equality(UserColumn::Uuid, "abc".to_string()),
+            ])),
+        )
+        .await;
+        assert_eq!(users, vec!["bob", "patrick"]);
+    }
+
+    #[tokio::test]
     async fn test_list_users_member_of_id() {
         let fixture = TestFixture::new().await;
         let users = get_user_names(
@@ -450,7 +462,7 @@ mod tests {
         get_user_names(
             &fixture.handler,
             Some(UserRequestFilter::Equality(
-                "user_id".to_string(),
+                UserColumn::UserId,
                 "first bob".to_string(),
             )),
         )

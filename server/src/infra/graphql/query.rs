@@ -1,4 +1,8 @@
-use crate::domain::handler::{BackendHandler, GroupDetails, GroupId, UserId};
+use crate::domain::{
+    handler::{BackendHandler, GroupDetails, GroupId, UserId},
+    ldap::utils::map_user_field,
+    sql_tables::UserColumn,
+};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument};
@@ -50,10 +54,14 @@ impl TryInto<DomainRequestFilter> for RequestFilter {
             return Err("Multiple fields specified in request filter".to_string());
         }
         if let Some(e) = self.eq {
-            if e.field.to_lowercase() == "uid" {
-                return Ok(DomainRequestFilter::UserId(UserId::new(&e.value)));
+            if let Some(column) = map_user_field(&e.field) {
+                if column == UserColumn::UserId {
+                    return Ok(DomainRequestFilter::UserId(UserId::new(&e.value)));
+                }
+                return Ok(DomainRequestFilter::Equality(column, e.value));
+            } else {
+                return Err(format!("Unknown request filter: {}", &e.field));
             }
-            return Ok(DomainRequestFilter::Equality(e.field, e.value));
         }
         if let Some(c) = self.any {
             return Ok(DomainRequestFilter::Or(
@@ -451,11 +459,8 @@ mod tests {
         mock.expect_list_users()
             .with(
                 eq(Some(UserRequestFilter::Or(vec![
-                    UserRequestFilter::Equality("id".to_string(), "bob".to_string()),
-                    UserRequestFilter::Equality(
-                        "email".to_string(),
-                        "robert@bobbers.on".to_string(),
-                    ),
+                    UserRequestFilter::UserId(UserId::new("bob")),
+                    UserRequestFilter::Equality(UserColumn::Email, "robert@bobbers.on".to_string()),
                 ]))),
                 eq(false),
             )

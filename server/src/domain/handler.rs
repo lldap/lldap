@@ -1,4 +1,4 @@
-use super::error::*;
+use super::{error::*, sql_tables::UserColumn};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -201,7 +201,7 @@ pub enum UserRequestFilter {
     Or(Vec<UserRequestFilter>),
     Not(Box<UserRequestFilter>),
     UserId(UserId),
-    Equality(String, String),
+    Equality(UserColumn, String),
     // Check if a user belongs to a group identified by name.
     MemberOf(String),
     // Same, by id.
