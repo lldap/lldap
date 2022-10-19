@@ -109,7 +109,9 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
             },
             LdapPartialAttribute {
                 atype: "vendorVersion".to_string(),
-                vals: vec![b"lldap_0.2.0".to_vec()],
+                vals: vec![concat!("lldap_", env!("CARGO_PKG_VERSION"))
+                    .to_string()
+                    .into_bytes()],
             },
             LdapPartialAttribute {
                 atype: "supportedLDAPVersion".to_string(),
@@ -117,11 +119,29 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
             },
             LdapPartialAttribute {
                 atype: "supportedExtension".to_string(),
+                // Password modification extension.
                 vals: vec![b"1.3.6.1.4.1.4203.1.11.1".to_vec()],
             },
             LdapPartialAttribute {
-                atype: "defaultnamingcontext".to_string(),
+                atype: "supportedControl".to_string(),
+                vals: vec![],
+            },
+            LdapPartialAttribute {
+                atype: "supportedFeatures".to_string(),
+                // Attribute "+"
+                vals: vec![b"1.3.6.1.4.1.4203.1.5.1".to_vec()],
+            },
+            LdapPartialAttribute {
+                atype: "defaultNamingContext".to_string(),
                 vals: vec![base_dn.to_string().into_bytes()],
+            },
+            LdapPartialAttribute {
+                atype: "namingContexts".to_string(),
+                vals: vec![base_dn.to_string().into_bytes()],
+            },
+            LdapPartialAttribute {
+                atype: "isGlobalCatalogReady".to_string(),
+                vals: vec![b"false".to_vec()],
             },
         ],
     })
@@ -307,15 +327,16 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         &mut self,
         request: &LdapSearchRequest,
     ) -> LdapResult<Vec<LdapOp>> {
-        if request.base.is_empty()
-            && request.scope == LdapSearchScope::Base
-            && request.filter == LdapFilter::Present("objectClass".to_string())
-        {
-            debug!("rootDSE request");
-            return Ok(vec![
-                root_dse_response(&self.ldap_info.base_dn_str),
-                make_search_success(),
-            ]);
+        if request.base.is_empty() && request.scope == LdapSearchScope::Base {
+            if let LdapFilter::Present(attribute) = &request.filter {
+                if attribute.to_ascii_lowercase() == "objectclass" {
+                    debug!("rootDSE request");
+                    return Ok(vec![
+                        root_dse_response(&self.ldap_info.base_dn_str),
+                        make_search_success(),
+                    ]);
+                }
+            }
         }
         let user_info = self.user_info.as_ref().ok_or_else(|| LdapError {
             code: LdapResultCode::InsufficentAccessRights,
