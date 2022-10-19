@@ -6,11 +6,12 @@ use tracing::{debug, info, instrument, warn};
 use crate::domain::{
     handler::{BackendHandler, GroupDetails, User, UserId, UserRequestFilter},
     ldap::{error::LdapError, utils::expand_attribute_wildcards},
+    sql_tables::UserColumn,
 };
 
 use super::{
     error::LdapResult,
-    utils::{get_group_id_from_distinguished_name, map_field, LdapInfo},
+    utils::{get_group_id_from_distinguished_name, map_user_field, LdapInfo},
 };
 
 fn get_user_attribute(
@@ -142,17 +143,9 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                         vec![],
                     )))),
                 },
-                _ => match map_field(field) {
-                    Some(field) => {
-                        if field == "user_id" {
-                            Ok(UserRequestFilter::UserId(UserId::new(value)))
-                        } else {
-                            Ok(UserRequestFilter::Equality(
-                                field.to_string(),
-                                value.clone(),
-                            ))
-                        }
-                    }
+                _ => match map_user_field(field) {
+                    Some(UserColumn::UserId) => Ok(UserRequestFilter::UserId(UserId::new(value))),
+                    Some(field) => Ok(UserRequestFilter::Equality(field, value.clone())),
                     None => {
                         if !ldap_info.ignored_user_attributes.contains(field) {
                             warn!(

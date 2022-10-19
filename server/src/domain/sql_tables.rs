@@ -3,6 +3,7 @@ use super::{
     sql_migrations::{get_schema_version, migrate_from_version, upgrade_to_v1},
 };
 use sea_query::*;
+use serde::{Deserialize, Serialize};
 
 pub use super::sql_migrations::create_group;
 
@@ -51,7 +52,7 @@ impl From<SchemaVersion> for Value {
     }
 }
 
-#[derive(Iden)]
+#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum Users {
     Table,
     UserId,
@@ -67,7 +68,9 @@ pub enum Users {
     Uuid,
 }
 
-#[derive(Iden)]
+pub type UserColumn = Users;
+
+#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum Groups {
     Table,
     GroupId,
@@ -75,6 +78,8 @@ pub enum Groups {
     CreationDate,
     Uuid,
 }
+
+pub type GroupColumn = Groups;
 
 #[derive(Iden)]
 pub enum Memberships {

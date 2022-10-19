@@ -447,7 +447,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 mod tests {
     use super::*;
     use crate::{
-        domain::{error::Result, handler::*, opaque_handler::*},
+        domain::{error::Result, handler::*, opaque_handler::*, sql_tables::UserColumn},
         uuid,
     };
     use async_trait::async_trait;
@@ -1370,7 +1370,7 @@ mod tests {
             .with(
                 eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(
                     vec![UserRequestFilter::Not(Box::new(
-                        UserRequestFilter::Equality("first_name".to_string(), "bob".to_string()),
+                        UserRequestFilter::Equality(UserColumn::FirstName, "bob".to_string()),
                     ))],
                 )]))),
                 eq(false),

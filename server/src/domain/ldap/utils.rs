@@ -2,7 +2,10 @@ use itertools::Itertools;
 use ldap3_proto::LdapResultCode;
 use tracing::{debug, instrument, warn};
 
-use crate::domain::handler::UserId;
+use crate::domain::{
+    handler::UserId,
+    sql_tables::{GroupColumn, UserColumn},
+};
 
 use super::error::{LdapError, LdapResult};
 
@@ -134,17 +137,31 @@ pub fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) 
     true
 }
 
-pub fn map_field(field: &str) -> Option<&'static str> {
+pub fn map_user_field(field: &str) -> Option<UserColumn> {
     assert!(field == field.to_ascii_lowercase());
     Some(match field {
-        "uid" => "user_id",
-        "mail" => "email",
-        "cn" | "displayname" => "display_name",
-        "givenname" => "first_name",
-        "sn" => "last_name",
-        "avatar" => "avatar",
-        "creationdate" | "createtimestamp" | "modifytimestamp" => "creation_date",
-        "entryuuid" => "uuid",
+        "uid" | "user_id" | "id" => UserColumn::UserId,
+        "mail" | "email" => UserColumn::Email,
+        "cn" | "displayname" | "display_name" => UserColumn::DisplayName,
+        "givenname" | "first_name" => UserColumn::FirstName,
+        "sn" | "last_name" => UserColumn::LastName,
+        "avatar" => UserColumn::Avatar,
+        "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => {
+            UserColumn::CreationDate
+        }
+        "entryuuid" | "uuid" => UserColumn::Uuid,
+        _ => return None,
+    })
+}
+
+pub fn map_group_field(field: &str) -> Option<GroupColumn> {
+    assert!(field == field.to_ascii_lowercase());
+    Some(match field {
+        "cn" | "displayname" | "uid" | "display_name" => GroupColumn::DisplayName,
+        "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => {
+            GroupColumn::CreationDate
+        }
+        "entryuuid" | "uuid" => GroupColumn::Uuid,
         _ => return None,
     })
 }

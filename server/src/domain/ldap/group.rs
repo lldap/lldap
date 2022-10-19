@@ -6,11 +6,14 @@ use tracing::{debug, info, instrument, warn};
 use crate::domain::{
     handler::{BackendHandler, Group, GroupRequestFilter, UserId, Uuid},
     ldap::error::LdapError,
+    sql_tables::GroupColumn,
 };
 
 use super::{
     error::LdapResult,
-    utils::{expand_attribute_wildcards, get_user_id_from_distinguished_name, map_field, LdapInfo},
+    utils::{
+        expand_attribute_wildcards, get_user_id_from_distinguished_name, map_group_field, LdapInfo,
+    },
 };
 
 fn get_group_attribute(
@@ -123,11 +126,11 @@ fn convert_group_filter(
                         vec![],
                     )))),
                 },
-                _ => match map_field(field) {
-                    Some("display_name") | Some("user_id") => {
+                _ => match map_group_field(field) {
+                    Some(GroupColumn::DisplayName) => {
                         Ok(GroupRequestFilter::DisplayName(value.to_string()))
                     }
-                    Some("uuid") => Ok(GroupRequestFilter::Uuid(
+                    Some(GroupColumn::Uuid) => Ok(GroupRequestFilter::Uuid(
                         Uuid::try_from(value.as_str()).map_err(|e| LdapError {
                             code: LdapResultCode::InappropriateMatching,
                             message: format!("Invalid UUID: {:#}", e),
