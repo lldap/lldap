@@ -90,6 +90,7 @@ where
             .into()
         });
     cfg.app_data(json_config);
+    cfg.app_data(web::PayloadConfig::new(1 << 24)); // Max payload size: 16MB, allows for a 12MB image.
     cfg.service(
         web::resource("/graphql")
             .route(web::post().to(graphql_route::<Backend>))
