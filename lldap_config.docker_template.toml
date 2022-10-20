@@ -27,7 +27,7 @@
 ## This can also be set from a file's contents by specifying the file path
 ## in the LLDAP_JWT_SECRET_FILE environment variable
 ## You can generate it with (on linux):
-## LC_ALL=C tr -dc 'A-Za-z0-9!"#%&'\''()*+,-./:;<=>?@[\]^_{|}~' </dev/urandom | head -c 32; echo ''
+## LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\''()*+,-./:;<=>?@[\]^_{|}~' </dev/urandom | head -c 32; echo ''
 #jwt_secret = "REPLACE_WITH_RANDOM"
 
 ## Base DN for LDAP.
