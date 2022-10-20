@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+
 use crate::{
     domain::{
-        handler::{BackendHandler, BindRequest, LoginHandler, UserId},
+        handler::{
+            BackendHandler, BindRequest, CreateUserRequest, JpegPhoto, LoginHandler, UserId,
+        },
         ldap::{
             error::{LdapError, LdapResult},
             group::get_groups_list,
@@ -15,8 +19,8 @@ use crate::{
 };
 use anyhow::Result;
 use ldap3_proto::proto::{
-    LdapBindCred, LdapBindRequest, LdapBindResponse, LdapExtendedRequest, LdapExtendedResponse,
-    LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
+    LdapAddRequest, LdapBindCred, LdapBindRequest, LdapBindResponse, LdapExtendedRequest,
+    LdapExtendedResponse, LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
     LdapSearchScope,
 };
@@ -75,6 +79,15 @@ fn make_search_success() -> LdapOp {
 
 fn make_search_error(code: LdapResultCode, message: String) -> LdapOp {
     LdapOp::SearchResultDone(LdapResultOp {
+        code,
+        matcheddn: "".to_string(),
+        message,
+        referral: vec![],
+    })
+}
+
+fn make_add_error(code: LdapResultCode, message: String) -> LdapOp {
+    LdapOp::AddResponse(LdapResultOp {
         code,
         matcheddn: "".to_string(),
         message,
@@ -432,6 +445,90 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         Ok(results)
     }
 
+    async fn do_create_user(&self, request: LdapAddRequest) -> LdapResult<Vec<LdapOp>> {
+        if !self
+            .user_info
+            .as_ref()
+            .map(|u| u.is_admin())
+            .unwrap_or(false)
+        {
+            return Err(LdapError {
+                code: LdapResultCode::InsufficentAccessRights,
+                message: "Unauthorized write".to_string(),
+            });
+        }
+        let user_id = get_user_id_from_distinguished_name(
+            &request.dn,
+            &self.ldap_info.base_dn,
+            &self.ldap_info.base_dn_str,
+        )?;
+        fn parse_attribute(mut attr: LdapPartialAttribute) -> LdapResult<(String, Vec<u8>)> {
+            if attr.vals.len() > 1 {
+                Err(LdapError {
+                    code: LdapResultCode::ConstraintViolation,
+                    message: format!("Expected a single value for attribute {}", attr.atype),
+                })
+            } else {
+                attr.atype.make_ascii_lowercase();
+                match attr.vals.pop() {
+                    Some(val) => Ok((attr.atype, val)),
+                    None => Err(LdapError {
+                        code: LdapResultCode::ConstraintViolation,
+                        message: format!("Missing value for attribute {}", attr.atype),
+                    }),
+                }
+            }
+        }
+        let attributes: HashMap<String, Vec<u8>> = request
+            .attributes
+            .into_iter()
+            .map(parse_attribute)
+            .collect::<LdapResult<_>>()?;
+        fn decode_attribute_value(val: &[u8]) -> LdapResult<String> {
+            std::str::from_utf8(val)
+                .map_err(|e| LdapError {
+                    code: LdapResultCode::ConstraintViolation,
+                    message: format!(
+                        "Attribute value is invalid UTF-8: {:#?} (value {:?})",
+                        e, val
+                    ),
+                })
+                .map(str::to_owned)
+        }
+        let get_attribute = |name| {
+            attributes
+                .get(name)
+                .map(Vec::as_slice)
+                .map(decode_attribute_value)
+        };
+        self.backend_handler
+            .create_user(CreateUserRequest {
+                user_id,
+                email: get_attribute("mail")
+                    .or_else(|| get_attribute("email"))
+                    .transpose()?
+                    .unwrap_or_default(),
+                display_name: get_attribute("cn").transpose()?,
+                first_name: get_attribute("givenname").transpose()?,
+                last_name: get_attribute("sn").transpose()?,
+                avatar: attributes
+                    .get("avatar")
+                    .map(Vec::as_slice)
+                    .map(JpegPhoto::try_from)
+                    .transpose()
+                    .map_err(|e| LdapError {
+                        code: LdapResultCode::ConstraintViolation,
+                        message: format!("Invalid JPEG photo: {:#?}", e),
+                    })?,
+            })
+            .await
+            .map_err(|e| LdapError {
+                code: LdapResultCode::OperationsError,
+                message: format!("Could not create user: {:#?}", e),
+            })?;
+        Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
+    }
+
     pub async fn handle_ldap_message(&mut self, ldap_op: LdapOp) -> Option<Vec<LdapOp>> {
         Some(match ldap_op {
             LdapOp::BindRequest(request) => {
@@ -456,6 +553,10 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 return None;
             }
             LdapOp::ExtendedRequest(request) => self.do_extended_request(&request).await,
+            LdapOp::AddRequest(request) => self
+                .do_create_user(request)
+                .await
+                .unwrap_or_else(|e: LdapError| vec![make_add_error(e.code, e.message)]),
             op => vec![make_extended_response(
                 LdapResultCode::UnwillingToPerform,
                 format!("Unsupported operation: {:#?}", op),
@@ -1928,6 +2029,48 @@ mod tests {
                 root_dse_response("dc=example,dc=com"),
                 make_search_success()
             ])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_create_user()
+            .with(eq(CreateUserRequest {
+                user_id: UserId::new("bob"),
+                email: "".to_owned(),
+                display_name: Some("Bob".to_string()),
+                ..Default::default()
+            }))
+            .times(1)
+            .return_once(|_| Ok(()));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = LdapAddRequest {
+            dn: "uid=bob,ou=people,dc=example,dc=com".to_owned(),
+            attributes: vec![LdapPartialAttribute {
+                atype: "cn".to_owned(),
+                vals: vec![b"Bob".to_vec()],
+            }],
+        };
+        assert_eq!(
+            ldap_handler.do_create_user(request).await,
+            Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_wrong_ou() {
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let request = LdapAddRequest {
+            dn: "uid=bob,ou=groups,dc=example,dc=com".to_owned(),
+            attributes: vec![LdapPartialAttribute {
+                atype: "cn".to_owned(),
+                vals: vec![b"Bob".to_vec()],
+            }],
+        };
+        assert_eq!(
+            ldap_handler.do_create_user(request).await,
+            Err(LdapError{ code: LdapResultCode::InvalidDNSyntax, message: r#"Unexpected DN format. Got "uid=bob,ou=groups,dc=example,dc=com", expected: "uid=id,ou=people,dc=example,dc=com""#.to_string() })
         );
     }
 }
