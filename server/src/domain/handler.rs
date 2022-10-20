@@ -98,6 +98,16 @@ impl From<&JpegPhoto> for sea_query::Value {
     }
 }
 
+impl TryFrom<&[u8]> for JpegPhoto {
+    type Error = anyhow::Error;
+    fn try_from(bytes: &[u8]) -> anyhow::Result<Self> {
+        // Confirm that it's a valid Jpeg, then store only the bytes.
+        image::io::Reader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Jpeg)
+            .decode()?;
+        Ok(JpegPhoto(bytes.to_vec()))
+    }
+}
+
 impl TryFrom<Vec<u8>> for JpegPhoto {
     type Error = anyhow::Error;
     fn try_from(bytes: Vec<u8>) -> anyhow::Result<Self> {
