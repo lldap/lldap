@@ -2073,4 +2073,22 @@ mod tests {
             Err(LdapError{ code: LdapResultCode::InvalidDNSyntax, message: r#"Unexpected DN format. Got "uid=bob,ou=groups,dc=example,dc=com", expected: "uid=id,ou=people,dc=example,dc=com""#.to_string() })
         );
     }
+
+    #[tokio::test]
+    async fn test_search_filter_non_attribute() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::And(vec![]))), eq(false))
+            .times(1)
+            .return_once(|_, _| Ok(vec![]));
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_user_search_request(
+            LdapFilter::Present("displayname".to_owned()),
+            vec!["objectClass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()])
+        );
+    }
 }

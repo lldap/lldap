@@ -163,7 +163,7 @@ fn convert_group_filter(
             if field == "objectclass"
                 || field == "dn"
                 || field == "distinguishedname"
-                || ALL_GROUP_ATTRIBUTE_KEYS.contains(&field.as_str())
+                || map_group_field(field).is_some()
             {
                 Ok(GroupRequestFilter::And(vec![]))
             } else {
