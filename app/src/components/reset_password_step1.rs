@@ -97,7 +97,7 @@ impl Component for ResetPasswordStep1Form {
                     class_valid="has-success"
                     form=&self.form
                     field_name="username"
-                    placeholder="Username"
+                    placeholder="Username or email"
                     autocomplete="username"
                     oninput=self.common.callback(|_| Msg::Update) />
                 </div>

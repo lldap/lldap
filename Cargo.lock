@@ -2163,7 +2163,7 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber",
  "uuid",
- "webpki-roots 0.21.1",
+ "webpki-roots 0.22.4",
 ]
 
 [[package]]
@@ -2182,6 +2182,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
+ "url-escape",
  "validator",
  "validator_derive",
  "wasm-bindgen",
@@ -4202,6 +4203,15 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "matches",
+ "percent-encoding",
+]
+
+[[package]]
+name = "url-escape"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44e0ce4d1246d075ca5abec4b41d33e87a6054d08e2366b63205665e950db218"
+dependencies = [
  "percent-encoding",
 ]
 
