@@ -167,7 +167,7 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
             if field == "objectclass"
                 || field == "dn"
                 || field == "distinguishedname"
-                || ALL_USER_ATTRIBUTE_KEYS.contains(&field.as_str())
+                || map_user_field(field).is_some()
             {
                 Ok(UserRequestFilter::And(vec![]))
             } else {
