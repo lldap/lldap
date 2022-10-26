@@ -22,6 +22,7 @@ use tracing::{debug, instrument, warn};
 
 use lldap_auth::{login, password_reset, registration, JWTClaims};
 
+use crate::domain::handler::UserRequestFilter;
 use crate::{
     domain::{
         error::DomainError,
@@ -139,20 +140,38 @@ async fn get_password_reset_step1<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    let user_id = match request.match_info().get("user_id") {
-        None => return Err(TcpError::BadRequest("Missing user ID".to_string())),
-        Some(id) => UserId::new(id),
-    };
-    let token = match data.backend_handler.start_password_reset(&user_id).await? {
+    let user_string = request
+        .match_info()
+        .get("user_id")
+        .ok_or_else(|| TcpError::BadRequest("Missing user ID".to_string()))?;
+    let user_results = data
+        .backend_handler
+        .list_users(
+            Some(UserRequestFilter::Or(vec![
+                UserRequestFilter::UserId(UserId::new(user_string)),
+                UserRequestFilter::Equality(
+                    crate::domain::sql_tables::UserColumn::Email,
+                    user_string.to_owned(),
+                ),
+            ])),
+            false,
+        )
+        .await?;
+    if user_results.is_empty() {
+        return Ok(());
+    } else if user_results.len() > 1 {
+        return Err(TcpError::InternalServerError(
+            "Ambiguous user id or email".to_owned(),
+        ));
+    }
+    let user = &user_results[0].user;
+    let token = match data
+        .backend_handler
+        .start_password_reset(&user.user_id)
+        .await?
+    {
         None => return Ok(()),
         Some(token) => token,
-    };
-    let user = match data.backend_handler.get_user_details(&user_id).await {
-        Err(e) => {
-            warn!("Error getting used details: {:#?}", e);
-            return Ok(());
-        }
-        Ok(u) => u,
     };
     if let Err(e) = super::mail::send_password_reset_email(
         &user.display_name,
