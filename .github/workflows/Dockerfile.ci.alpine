@@ -86,7 +86,7 @@ RUN set -eux; \
 # verify that the binary works
 	gosu --version; \
 	gosu nobody true
-RUN apk add --no-cache tini ca-certificates bash && \
+RUN apk add --no-cache tini ca-certificates bash tzdata && \
     addgroup -g $GID $USER && \
     adduser \
     --disabled-password \
