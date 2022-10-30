@@ -100,7 +100,7 @@ impl UserTable {
         let make_table = |users: &Vec<User>| {
             html! {
                 <div class="table-responsive">
-                  <table class="table table-striped">
+                  <table class="table table-hover">
                     <thead>
                       <tr>
                         <th>{"User ID"}</th>

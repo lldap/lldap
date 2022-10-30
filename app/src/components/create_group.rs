@@ -100,15 +100,17 @@ impl Component for CreateGroupForm {
         type Field = yew_form::Field<CreateGroupModel>;
         html! {
           <div class="row justify-content-center">
-            <form class="form shadow-sm py-3" style="max-width: 636px">
+            <form class="form py-3" style="max-width: 636px">
               <div class="row mb-3">
                 <h5 class="fw-bold">{"Create a group"}</h5>
               </div>
               <div class="form-group row mb-3">
                 <label for="groupname"
                   class="form-label col-4 col-form-label">
-                  {"Group name*:"}
-                </label>
+            {"Group name"}
+            <span class="text-danger">{"*"}</span>
+            {":"}
+            </label>
                 <div class="col-8">
                   <Field
                     form=&self.form
@@ -129,7 +131,8 @@ impl Component for CreateGroupForm {
                   type="submit"
                   disabled=self.common.is_task_running()
                   onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
-                  {"Submit"}
+                    <i class="bi-save me-2"></i>
+                  {"Save changes"}
                 </button>
               </div>
             </form>

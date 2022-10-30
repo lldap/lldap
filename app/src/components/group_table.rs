@@ -94,7 +94,7 @@ impl GroupTable {
         let make_table = |groups: &Vec<Group>| {
             html! {
                 <div class="table-responsive">
-                  <table class="table table-striped">
+                  <table class="table table-hover">
                     <thead>
                       <tr>
                         <th>{"Group name"}</th>

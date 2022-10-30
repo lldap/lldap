@@ -52,11 +52,11 @@ pub struct UserModel {
 /// The GraphQL query sent to the server to update the user details.
 #[derive(GraphQLQuery)]
 #[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "queries/update_user.graphql",
-    response_derives = "Debug",
-    variables_derives = "Clone,PartialEq,Eq",
-    custom_scalars_module = "crate::infra::graphql"
+schema_path = "../schema.graphql",
+query_path = "queries/update_user.graphql",
+response_derives = "Debug",
+variables_derives = "Clone,PartialEq,Eq",
+custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct UpdateUser;
 
@@ -180,36 +180,39 @@ impl Component for UserDetailsForm {
         html! {
           <div class="py-3">
             <form class="form">
-              <div class="form-group row mb-3">
+            <div class="form-group row mb-3">
                 <label for="userId"
                   class="form-label col-4 col-form-label">
                   {"User ID: "}
                 </label>
                 <div class="col-8">
-                  <span id="userId" class="form-constrol-static"><b>{&self.common.user.id}</b></span>
+                  <span id="userId" class="form-control-static"><i>{&self.common.user.id}</i></span>
+                </div>
+              </div>
+            <div class="form-group row mb-3">
+                <label for="creationDate"
+                class="form-label col-4 col-form-label">
+                {"Creation date: "}
+                </label>
+                <div class="col-8">
+                  <span id="creationDate" class="form-control-static">{&self.common.user.creation_date.date().naive_local()}</span>
                 </div>
               </div>
               <div class="form-group row mb-3">
-                <div class="col-4 col-form-label">
-                  <img
-                    id="avatarDisplay"
-                    src={format!("data:image/jpeg;base64, {}", avatar_string)}
-                    style="max-height:128px;max-width:128px;height:auto;width:auto;"
-                    alt="Avatar" />
-                </div>
+                <label for="uuid"
+                class="form-label col-4 col-form-label">
+                {"UUID: "}
+                </label>
                 <div class="col-8">
-                  <input
-                    class="form-control"
-                    id="avatarInput"
-                    type="file"
-                    accept="image/jpeg"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                  <span id="creationDate" class="form-control-static">{&self.common.user.uuid}</span>
                 </div>
               </div>
               <div class="form-group row mb-3">
                 <label for="email"
                   class="form-label col-4 col-form-label">
-                  {"Email*: "}
+            {"Email"}
+            <span class="text-danger">{"*"}</span>
+            {":"}
                 </label>
                 <div class="col-8">
                   <Field
@@ -228,7 +231,9 @@ impl Component for UserDetailsForm {
               <div class="form-group row mb-3">
                 <label for="display_name"
                   class="form-label col-4 col-form-label">
-                  {"Display Name*: "}
+                  {"Display Name"}
+             <span class="text-danger">{"*"}</span>
+            {":"}
                 </label>
                 <div class="col-8">
                   <Field
@@ -278,31 +283,39 @@ impl Component for UserDetailsForm {
                   </div>
                 </div>
               </div>
-              <div class="form-group row mb-3">
-                <label for="creationDate"
-                class="form-label col-4 col-form-label">
-                {"Creation date: "}
+            <div class="form-group row align-items-center mb-3">
+                <label for="avatar"
+                  class="form-label col-4 col-form-label">
+                  {"Avatar: "}
                 </label>
                 <div class="col-8">
-                  <span id="creationDate" class="form-constrol-static">{&self.common.user.creation_date.date().naive_local()}</span>
-                </div>
+            <div class="row align-items-center">
+            <div class="col-8">
+                   <input
+                    class="form-control"
+                    id="avatarInput"
+                    type="file"
+                    accept="image/jpeg"
+                    oninput=self.common.callback(|_| Msg::Update) />
+            </div>
+            <div class="col-4">
+                        <img
+                    id="avatarDisplay"
+                    src={format!("data:image/jpeg;base64, {}", avatar_string)}
+                    style="max-height:128px;max-width:128px;height:auto;width:auto;"
+                    alt="Avatar" />
+            </div>
+            </div>
+            </div>
               </div>
-              <div class="form-group row mb-3">
-                <label for="uuid"
-                class="form-label col-4 col-form-label">
-                {"UUID: "}
-                </label>
-                <div class="col-8">
-                  <span id="creationDate" class="form-constrol-static">{&self.common.user.uuid}</span>
-                </div>
-              </div>
-              <div class="form-group row justify-content-center">
+              <div class="form-group row justify-content-center mt-3">
                 <button
                   type="submit"
                   class="btn btn-primary col-auto col-form-label"
                   disabled=self.common.is_task_running()
                   onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})>
-                  {"Update"}
+              <i class="bi-save me-2"></i>
+                  {"Save changes"}
                 </button>
               </div>
             </form>
@@ -315,7 +328,7 @@ impl Component for UserDetailsForm {
               } else { html! {} }
             }
             <div hidden=!self.just_updated>
-              <span>{"User successfully updated!"}</span>
+              <div class="alert alert-success mt-4">{"User successfully updated!"}</div>
             </div>
           </div>
         }

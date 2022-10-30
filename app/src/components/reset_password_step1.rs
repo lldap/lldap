@@ -113,6 +113,7 @@ impl Component for ResetPasswordStep1Form {
                             class="btn btn-primary"
                             disabled=self.common.is_task_running()
                             onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                        <i class="bi-check-circle me-2"/>
                             {"Reset password"}
                           </button>
                           <NavButton
@@ -127,7 +128,7 @@ impl Component for ResetPasswordStep1Form {
                 <div class="form-group">
                 { if let Some(e) = &self.common.error {
                     html! {
-                      <div class="alert alert-danger">
+                      <div class="alert alert-danger mb-2">
                         {e.to_string() }
                       </div>
                     }

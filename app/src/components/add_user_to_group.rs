@@ -182,12 +182,13 @@ impl Component for AddUserToGroupComponent {
                   }
                 </Select>
               </div>
-              <div class="col-sm-1">
+              <div class="col-sm-3">
                 <button
-                  class="btn btn-success"
+                  class="btn btn-secondary"
                   disabled=self.selected_group.is_none() || self.common.is_task_running()
                   onclick=self.common.callback(|_| Msg::SubmitAddGroup)>
-                  {"Add"}
+                  <i class="bi-person-plus me-2"></i>
+                  {"Add to group"}
                 </button>
               </div>
             </div>

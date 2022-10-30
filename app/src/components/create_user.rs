@@ -19,10 +19,10 @@ use yew_router::{
 
 #[derive(GraphQLQuery)]
 #[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "queries/create_user.graphql",
-    response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
+schema_path = "../schema.graphql",
+query_path = "queries/create_user.graphql",
+response_derives = "Debug",
+custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct CreateUser;
 
@@ -43,8 +43,8 @@ pub struct CreateUserModel {
     first_name: String,
     last_name: String,
     #[validate(custom(
-        function = "empty_or_long",
-        message = "Password should be longer than 8 characters (or left empty)"
+    function = "empty_or_long",
+    message = "Password should be longer than 8 characters (or left empty)"
     ))]
     password: String,
     #[validate(must_match(other = "password", message = "Passwords must match"))]
@@ -194,14 +194,16 @@ impl Component for CreateUserForm {
         type Field = yew_form::Field<CreateUserModel>;
         html! {
           <div class="row justify-content-center">
-            <form class="form shadow-sm py-3" style="max-width: 636px">
+            <form class="form py-3" style="max-width: 636px">
               <div class="row mb-3">
                 <h5 class="fw-bold">{"Create a user"}</h5>
               </div>
               <div class="form-group row mb-3">
                 <label for="username"
                   class="form-label col-4 col-form-label">
-                  {"User name*:"}
+            {"User name"}
+            <span class="text-danger">{"*"}</span>
+            {":"}
                 </label>
                 <div class="col-8">
                   <Field
@@ -220,7 +222,9 @@ impl Component for CreateUserForm {
               <div class="form-group row mb-3">
                 <label for="email"
                   class="form-label col-4 col-form-label">
-                  {"Email*:"}
+                  {"Email"}
+                <span class="text-danger">{"*"}</span>
+                    {":"}
                 </label>
                 <div class="col-8">
                   <Field
@@ -240,7 +244,9 @@ impl Component for CreateUserForm {
               <div class="form-group row mb-3">
                 <label for="display-name"
                   class="form-label col-4 col-form-label">
-                  {"Display name*:"}
+                {"Display name"}
+                <span class="text-danger">{"*"}</span>
+                {":"}
                 </label>
                 <div class="col-8">
                   <Field
@@ -340,7 +346,8 @@ impl Component for CreateUserForm {
                   disabled=self.common.is_task_running()
                   type="submit"
                   onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
-                  {"Submit"}
+                    <i class="bi-save me-2"></i>
+                  {"Save changes"}
                 </button>
               </div>
             </form>

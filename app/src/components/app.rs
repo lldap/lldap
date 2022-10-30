@@ -98,16 +98,18 @@ impl Component for App {
         let link = self.link.clone();
         let is_admin = self.is_admin();
         html! {
-            <div class="container shadow-sm py-3">
+            <div>
               {self.view_banner()}
+            <div class="container py-3 bg-kug">
               <div class="row justify-content-center" style="padding-bottom: 80px;">
-                <div class="shadow-sm py-3" style="max-width: 1000px">
+                <div class="py-3" style="max-width: 1000px">
                   <Router<AppRoute>
                     render = Router::render(move |s| Self::dispatch_route(s, &link, is_admin))
                   />
                 </div>
               </div>
               {self.view_footer()}
+             </div>
             </div>
         }
     }
@@ -171,7 +173,10 @@ impl App {
             AppRoute::Index | AppRoute::ListUsers => html! {
                 <div>
                   <UserTable />
-                  <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>{"Create a user"}</NavButton>
+                  <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>
+                  <i class="bi-person-plus me-2"></i>
+                {"Create a user"}
+                </NavButton>
                 </div>
             },
             AppRoute::CreateGroup => html! {
@@ -180,7 +185,10 @@ impl App {
             AppRoute::ListGroups => html! {
                 <div>
                   <GroupTable />
-                  <NavButton classes="btn btn-primary" route=AppRoute::CreateGroup>{"Create a group"}</NavButton>
+                  <NavButton classes="btn btn-primary" route=AppRoute::CreateGroup>
+                 <i class="bi-plus-circle me-2"></i>
+                {"Create a group"}
+                </NavButton>
                 </div>
             },
             AppRoute::GroupDetails(group_id) => html! {
@@ -203,11 +211,11 @@ impl App {
 
     fn view_banner(&self) -> Html {
         html! {
-          <header class="p-3 mb-4 border-bottom shadow-sm">
+          <header class="p-2 mb-3 border-bottom">
             <div class="container">
               <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
-                <a href="/" class="d-flex align-items-center mb-2 mb-lg-0 me-md-5 text-dark text-decoration-none">
-                  <h1>{"LLDAP"}</h1>
+                <a href="/" class="d-flex align-items-center mt-2 mb-lg-0 me-md-5 text-dark text-decoration-none">
+                  <h2>{"LLDAP"}</h2>
                 </a>
 
                 <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0">
@@ -215,15 +223,17 @@ impl App {
                     <>
                       <li>
                         <Link
-                          classes="nav-link px-2 link-dark h4"
+                          classes="nav-link px-2 link-dark h6"
                           route=AppRoute::ListUsers>
+                         <i class="bi-people me-2"></i>
                           {"Users"}
                         </Link>
                       </li>
                       <li>
                         <Link
-                          classes="nav-link px-2 link-dark h4"
+                          classes="nav-link px-2 link-dark h6"
                           route=AppRoute::ListGroups>
+                       <i class="bi-collection me-2"></i>
                           {"Groups"}
                         </Link>
                       </li>
@@ -246,6 +256,15 @@ impl App {
                       <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
                       <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
                     </svg>
+              // show user id
+            {if let Some((user_id, _)) = &self.user_info { html! {
+                <span class="ms-2">
+                    {user_id}
+                 </span>
+             }
+                 } else { html!{} }
+             }
+            // end show user id
                   </a>
                   {if let Some((user_id, _)) = &self.user_info { html! {
                     <ul
@@ -256,7 +275,7 @@ impl App {
                         <Link
                           classes="dropdown-item"
                           route=AppRoute::UserDetails(user_id.clone())>
-                          {"Profile"}
+                          {"View details"}
                         </Link>
                       </li>
                       <li><hr class="dropdown-divider" /></li>
@@ -274,7 +293,7 @@ impl App {
 
     fn view_footer(&self) -> Html {
         html! {
-          <footer class="text-center text-muted fixed-bottom bg-light">
+          <footer class="text-center text-muted fixed-bottom bg-light py-2">
             <div>
               <span>{format!("LLDAP version {}", env!("CARGO_PKG_VERSION"))}</span>
             </div>

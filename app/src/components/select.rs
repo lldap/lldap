@@ -67,7 +67,7 @@ impl Component for Select {
 
     fn view(&self) -> Html {
         html! {
-            <select
+            <select class="form-select"
               ref=self.node_ref.clone()
               disabled=self.props.children.is_empty()
               onchange=self.link.callback(SelectMsg::OnSelectChange)>
