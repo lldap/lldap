@@ -268,7 +268,7 @@ impl HostService {
         callback: Callback<Result<()>>,
     ) -> Result<FetchTask> {
         call_server_empty_response_with_error_message(
-            &format!("/auth/reset/step1/{}", username),
+            &format!("/auth/reset/step1/{}", url_escape::encode_query(username)),
             yew::format::Nothing,
             callback,
             "Could not initiate password reset",

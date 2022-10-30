@@ -22,6 +22,7 @@ yew-router = "0.15"
 
 # Needed because of https://github.com/tkaitchuck/aHash/issues/95
 indexmap = "=1.6.2"
+url-escape = "0.1.1"
 
 [dependencies.web-sys]
 version = "0.3"
