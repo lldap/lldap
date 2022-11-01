@@ -82,7 +82,7 @@ COPY --from=builder /app/target/release/lldap /app/target/release/migration-tool
 COPY docker-entrypoint.sh lldap_config.docker_template.toml ./
 
 RUN set -x \
-    && apk add --no-cache bash \
+    && apk add --no-cache bash tzdata \
     && for file in $(cat app/static/libraries.txt); do wget -P app/static "$file"; done \
     && for file in $(cat app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
     && chmod a+r -R .
