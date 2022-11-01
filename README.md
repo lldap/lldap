@@ -100,7 +100,8 @@ contents are loaded into the respective configuration parameters. Note that
 Example for docker compose:
 * You can use either the `:latest` tag image or `:stable` as used in this example.
 * `:latest` tag image contains recently pushed code or feature tests, in which some instability can be expected.
-* If `UID` and `GID` no defined LLDAP will use default `UID` and `GID` number `1000`
+* If `UID` and `GID` no defined LLDAP will use default `UID` and `GID` number `1000`.
+* If no `TZ` is set, default `UTC` timezone will be used.
 
 
 ```yaml
@@ -125,6 +126,7 @@ services:
     environment:
       - UID=####
       - GID=####
+      - TZ=####/####
       - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
       - LLDAP_LDAP_USER_PASS=REPLACE_WITH_PASSWORD
       - LLDAP_LDAP_BASE_DN=dc=example,dc=com
