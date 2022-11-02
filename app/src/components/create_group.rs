@@ -107,10 +107,10 @@ impl Component for CreateGroupForm {
               <div class="form-group row mb-3">
                 <label for="groupname"
                   class="form-label col-4 col-form-label">
-            {"Group name"}
-            <span class="text-danger">{"*"}</span>
-            {":"}
-            </label>
+                  {"Group name"}
+                  <span class="text-danger">{"*"}</span>
+                  {":"}
+                </label>
                 <div class="col-8">
                   <Field
                     form=&self.form
@@ -131,8 +131,8 @@ impl Component for CreateGroupForm {
                   type="submit"
                   disabled=self.common.is_task_running()
                   onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
-                    <i class="bi-save me-2"></i>
-                  {"Save changes"}
+                  <i class="bi-save me-2"></i>
+                  {"Submit"}
                 </button>
               </div>
             </form>

@@ -220,8 +220,13 @@ impl Component for ChangePasswordForm {
         type Field = yew_form::Field<FormModel>;
         html! {
           <>
-               <div class="mb-2 mt-2"><h5 class="fw-bold">{"Change password"}</h5></div>
-            { if let Some(e) = &self.common.error {
+            <div class="mb-2 mt-2">
+              <h5 class="fw-bold">
+                {"Change password"}
+              </h5>
+            </div>
+            {
+              if let Some(e) = &self.common.error {
                 html! {
                   <div class="alert alert-danger mt-3 mb-3">
                     {e.to_string() }
@@ -256,8 +261,8 @@ impl Component for ChangePasswordForm {
                 <label for="new_password"
                   class="form-label col-sm-2 col-form-label">
                    {"New Password"}
-             <span class="text-danger">{"*"}</span>
-            {":"}
+                   <span class="text-danger">{"*"}</span>
+                   {":"}
                 </label>
                 <div class="col-sm-10">
                   <Field
@@ -277,9 +282,9 @@ impl Component for ChangePasswordForm {
               <div class="form-group row mb-3">
                 <label for="confirm_password"
                   class="form-label col-sm-2 col-form-label">
-                {"Confirm Password"}
-            <span class="text-danger">{"*"}</span>
-                {":"}
+                  {"Confirm Password"}
+                  <span class="text-danger">{"*"}</span>
+                  {":"}
                 </label>
                 <div class="col-sm-10">
                   <Field
@@ -296,21 +301,21 @@ impl Component for ChangePasswordForm {
                   </div>
                 </div>
               </div>
-               <div class="form-group row justify-content-center">
+              <div class="form-group row justify-content-center">
                 <button
                   class="btn btn-primary col-auto col-form-label"
                   type="submit"
                   disabled=self.common.is_task_running()
                   onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
-               <i class="bi-save me-2"></i>
+                  <i class="bi-save me-2"></i>
                   {"Save changes"}
                 </button>
-              <NavButton
-                classes="btn btn-secondary ms-2 col-auto col-form-label"
-                route=AppRoute::UserDetails(self.common.username.clone())>
-              <i class="bi-arrow-return-left me-2"></i>
-                {"Back"}
-              </NavButton>
+                <NavButton
+                  classes="btn btn-secondary ms-2 col-auto col-form-label"
+                  route=AppRoute::UserDetails(self.common.username.clone())>
+                  <i class="bi-arrow-return-left me-2"></i>
+                  {"Back"}
+                </NavButton>
               </div>
             </form>
           </>

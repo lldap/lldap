@@ -113,7 +113,7 @@ impl Component for ResetPasswordStep1Form {
                             class="btn btn-primary"
                             disabled=self.common.is_task_running()
                             onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
-                        <i class="bi-check-circle me-2"/>
+                            <i class="bi-check-circle me-2"/>
                             {"Reset password"}
                           </button>
                           <NavButton

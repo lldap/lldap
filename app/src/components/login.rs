@@ -195,7 +195,7 @@ impl Component for LoginForm {
                       class="btn btn-primary"
                       disabled=self.common.is_task_running()
                       onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
-                <i class="bi-box-arrow-in-right me-2"/>
+                      <i class="bi-box-arrow-in-right me-2"/>
                       {"Login"}
                     </button>
                     <NavButton

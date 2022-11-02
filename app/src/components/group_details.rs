@@ -145,7 +145,7 @@ impl GroupDetails {
                   {if g.users.is_empty() {
                     html! {
                       <tr key="EmptyRow">
-                        <td>{"There are currently no users in this group."}</td>
+                        <td>{"There are no users in this group."}</td>
                         <td/>
                       </tr>
                     }

@@ -19,10 +19,10 @@ use yew_router::{
 
 #[derive(GraphQLQuery)]
 #[graphql(
-schema_path = "../schema.graphql",
-query_path = "queries/create_user.graphql",
-response_derives = "Debug",
-custom_scalars_module = "crate::infra::graphql"
+    schema_path = "../schema.graphql",
+    query_path = "queries/create_user.graphql",
+    response_derives = "Debug",
+    custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct CreateUser;
 
@@ -43,8 +43,8 @@ pub struct CreateUserModel {
     first_name: String,
     last_name: String,
     #[validate(custom(
-    function = "empty_or_long",
-    message = "Password should be longer than 8 characters (or left empty)"
+        function = "empty_or_long",
+        message = "Password should be longer than 8 characters (or left empty)"
     ))]
     password: String,
     #[validate(must_match(other = "password", message = "Passwords must match"))]
@@ -201,9 +201,9 @@ impl Component for CreateUserForm {
               <div class="form-group row mb-3">
                 <label for="username"
                   class="form-label col-4 col-form-label">
-            {"User name"}
-            <span class="text-danger">{"*"}</span>
-            {":"}
+                  {"User name"}
+                  <span class="text-danger">{"*"}</span>
+                  {":"}
                 </label>
                 <div class="col-8">
                   <Field
@@ -223,8 +223,8 @@ impl Component for CreateUserForm {
                 <label for="email"
                   class="form-label col-4 col-form-label">
                   {"Email"}
-                <span class="text-danger">{"*"}</span>
-                    {":"}
+                  <span class="text-danger">{"*"}</span>
+                  {":"}
                 </label>
                 <div class="col-8">
                   <Field
@@ -244,9 +244,9 @@ impl Component for CreateUserForm {
               <div class="form-group row mb-3">
                 <label for="display-name"
                   class="form-label col-4 col-form-label">
-                {"Display name"}
-                <span class="text-danger">{"*"}</span>
-                {":"}
+                  {"Display name"}
+                  <span class="text-danger">{"*"}</span>
+                  {":"}
                 </label>
                 <div class="col-8">
                   <Field
@@ -346,12 +346,13 @@ impl Component for CreateUserForm {
                   disabled=self.common.is_task_running()
                   type="submit"
                   onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
-                    <i class="bi-save me-2"></i>
-                  {"Save changes"}
+                  <i class="bi-save me-2"></i>
+                  {"Submit"}
                 </button>
               </div>
             </form>
-            { if let Some(e) = &self.common.error {
+            {
+              if let Some(e) = &self.common.error {
                 html! {
                   <div class="alert alert-danger">
                     {e.to_string() }

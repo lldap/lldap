@@ -201,12 +201,12 @@ impl Component for UserDetails {
                       <NavButton
                         route=AppRoute::ChangePassword(u.id.clone())
                         classes="btn btn-secondary">
-                      <i class="bi-key me-2"></i>
-                          {"Modify password"}
+                        <i class="bi-key me-2"></i>
+                        {"Modify password"}
                       </NavButton>
                     </div>
                     <div>
-                       <h5 class="row m-3 fw-bold">{"User details"}</h5>
+                      <h5 class="row m-3 fw-bold">{"User details"}</h5>
                     </div>
                     <UserDetailsForm
                       user=u.clone() />
