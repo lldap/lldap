@@ -139,7 +139,8 @@ front-end.
 
 To compile the project, you'll need:
 
-* npm, curl: `sudo apt install curl npm`
+* nodejs 16: [nodesource nodejs installation guide](https://github.com/nodesource/distributions)
+* curl: `sudo apt install curl`
 * Rust/Cargo: [rustup.rs](https://rustup.rs/)
 
 Then you can compile the server (and the migration tool if you want):
