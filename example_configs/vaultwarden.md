@@ -1,4 +1,4 @@
-# Configuration for vaultwarden
+# Configuration for Vaultwarden
 
 https://github.com/ViViDboarder/vaultwarden_ldap will send an invitation to any member of the group ```vaultwarden```.
 
