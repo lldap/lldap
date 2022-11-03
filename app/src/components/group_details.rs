@@ -133,7 +133,7 @@ impl GroupDetails {
           <>
             <h5 class="fw-bold">{"Members"}</h5>
             <div class="table-responsive">
-              <table class="table table-striped">
+              <table class="table table-hover">
                 <thead>
                   <tr key="headerRow">
                     <th>{"User Id"}</th>
@@ -145,7 +145,7 @@ impl GroupDetails {
                   {if g.users.is_empty() {
                     html! {
                       <tr key="EmptyRow">
-                        <td>{"No members"}</td>
+                        <td>{"There are no users in this group."}</td>
                         <td/>
                       </tr>
                     }

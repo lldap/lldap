@@ -152,12 +152,16 @@ impl DeleteUser {
                     type="button"
                     class="btn btn-secondary"
                     onclick=self.common.callback(|_| Msg::DismissModal)>
-                      {"Cancel"}
+                    <i class="bi-x-circle me-2"></i>
+                    {"Cancel"}
                   </button>
                   <button
                     type="button"
                     onclick=self.common.callback(|_| Msg::ConfirmDeleteUser)
-                    class="btn btn-danger">{"Yes, I'm sure"}</button>
+                    class="btn btn-danger">
+                    <i class="bi-check-circle me-2"></i>
+                    {"Yes, I'm sure"}
+                  </button>
                 </div>
               </div>
             </div>

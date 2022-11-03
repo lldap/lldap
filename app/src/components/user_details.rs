@@ -129,7 +129,7 @@ impl UserDetails {
           <>
             <h5 class="row m-3 fw-bold">{"Group memberships"}</h5>
             <div class="table-responsive">
-              <table class="table table-striped">
+              <table class="table table-hover">
                 <thead>
                   <tr key="headerRow">
                     <th>{"Group"}</th>
@@ -140,7 +140,7 @@ impl UserDetails {
                   {if u.groups.is_empty() {
                     html! {
                       <tr key="EmptyRow">
-                        <td>{"Not member of any group"}</td>
+                        <td>{"This user is not a member of any groups."}</td>
                       </tr>
                     }
                   } else {
@@ -197,15 +197,19 @@ impl Component for UserDetails {
                 html! {
                   <>
                     <h3>{u.id.to_string()}</h3>
-                    <UserDetailsForm
-                      user=u.clone() />
-                    <div class="row justify-content-center">
+                    <div class="d-flex flex-row-reverse">
                       <NavButton
                         route=AppRoute::ChangePassword(u.id.clone())
-                        classes="btn btn-primary col-auto">
-                          {"Change password"}
+                        classes="btn btn-secondary">
+                        <i class="bi-key me-2"></i>
+                        {"Modify password"}
                       </NavButton>
                     </div>
+                    <div>
+                      <h5 class="row m-3 fw-bold">{"User details"}</h5>
+                    </div>
+                    <UserDetailsForm
+                      user=u.clone() />
                     {self.view_group_memberships(u)}
                     {self.view_add_group_button(u)}
                     {self.view_messages(error)}
