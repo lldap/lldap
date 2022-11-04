@@ -247,6 +247,7 @@ folder for help with:
   - [Portainer](example_configs/portainer.md)
   - [Seafile](example_configs/seafile.md)
   - [Syncthing](example_configs/syncthing.md)
+  - [Vaultwarden](example_configs/vaultwarden.md)
   - [WeKan](example_configs/wekan.md)
   - [WG Portal](example_configs/wg_portal.env.example)
   - [XBackBone](example_configs/xbackbone_config.php)
