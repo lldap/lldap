@@ -1,15 +1,15 @@
 # Configuration for Vaultwarden
 
-https://github.com/ViViDboarder/vaultwarden_ldap will send an invitation to any member of the group ```vaultwarden```.
+https://github.com/ViViDboarder/vaultwarden_ldap will send an invitation to any member of the group `vaultwarden`.
 
-Replace ```dc=example,dc=com``` with your LLDAP configured domain.
+Replace `dc=example,dc=com` with your LLDAP configured domain.
 
-```docker-compose.yml``` to run ```vaultwarden_ldap```
+`docker-compose.yml` to run `vaultwarden_ldap`
 ```
 version: '3'
 services:
   ldap_sync:
-    image: vividboarder/vaultwarden_ldap:master
+    image: vividboarder/vaultwarden_ldap:0.6-alpine
     volumes:
       - ./config.toml:/config.toml:ro
     environment:
@@ -17,8 +17,8 @@ services:
       RUST_BACKTRACE: 1
     restart: always
 ```
-Configuration to use LDAP in ```config.toml```
-```
+Configuration to use LDAP in `config.toml`
+```toml
 vaultwarden_url = "http://your_bitwarden_url:port"
 vaultwarden_admin_token = "insert_admin_token_vaultwarden"
 ldap_host = "insert_ldap_host"
