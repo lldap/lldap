@@ -251,6 +251,7 @@ folder for help with:
   - [WeKan](example_configs/wekan.md)
   - [WG Portal](example_configs/wg_portal.env.example)
   - [XBackBone](example_configs/xbackbone_config.php)
+  - [Zendto](example_configs/zendto.md)
 
 ## Comparisons with other services
 
