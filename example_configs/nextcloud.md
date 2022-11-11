@@ -32,7 +32,7 @@ occ app:install user_ldap
 occ app:enable user_ldap
 occ ldap:create-empty-config
 
-# EDIT: domaino
+# EDIT: domain
 occ ldap:set-config s01 ldapHost "ldap://lldap.example.net."
 occ ldap:set-config s01 ldapPort 3890
 # EDIT: admin user
@@ -101,7 +101,6 @@ _Note:_ The `cn=users` section of the LDAP query is the group you setup at the b
 
 You can check with `Verify settings and count users` that your filter is working properly (here your accounts `admin` and `ro_admin` will not be counted as users).
 
-
 ### Login attributes
 Select `Edit LDAP Query` and enter :
 ```
@@ -112,7 +111,6 @@ Select `Edit LDAP Query` and enter :
 
 Enter a valid username in lldap and check if your filter is working.
 
-
 ### Groups
 
 You can use the menus for this part : select `groupOfUniqueNames` in the first menu and check every group you want members to be allowed to view their group member / share files with.
@@ -120,7 +118,6 @@ You can use the menus for this part : select `groupOfUniqueNames` in the first m
 ![groups configuration page](images/nextcloud_groups.png)
 
 The resulting LDAP filter could be simplified removing the first 'OR' condition (I think).
-o
 ## Sharing restrictions
 
 Go to Settings > Administration > Sharing and check following boxes :
@@ -129,4 +126,3 @@ Go to Settings > Administration > Sharing and check following boxes :
 *  "Restrict users to only share with users in their groups"
 
 ![sharing options](images/nextcloud_sharing_options.png)
-
