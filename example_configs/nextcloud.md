@@ -5,9 +5,10 @@
 This example is using following users & groups in lldap :
 
 * A technical user (ex: `ro_admin`), member of `lldap_strict_readonly` or `lldap_password_manager`
-* A group called `users`. Note: This is _not_ the same as the `Users` designation in the LLDAP Web UI. This must be a whole new group that you've created and called `users`. 
-* Members of `users` group will be authorized to log in Nextcloud (eg neither `admin` nor `ro_admin`, who are part of the `lldap_strict_readonly` or `lldap_password_manager` group.)
-* Some "application" groups, let's say `friends` and `family`: users in Nextcloud will be able to share files and view people in dynamic lists only to members of their own group(s).  
+* A catch-all group called `nextcloud_users`. Note: This is _not_ the same as the `Users` designation in the LLDAP Web UI. This must be a whole new group that you've created and called `nextcloud_users`. 
+* Members of `nextcloud_users` group will be authorized to log in Nextcloud.
+* Some "application" groups, let's say `friends` and `family`: users in Nextcloud will be able to share files and view people in dynamic lists only to members of their own group(s).
+* Users in 'family' and 'friends' should also be users in 'nextcloud_users' group!  
 
 If you plan on following this tutorial line-by-line, you will now have the following:
 * 6 groups:
@@ -16,11 +17,13 @@ If you plan on following this tutorial line-by-line, you will now have the follo
     3. `friends`
     4. `lldap_strict_readonly`
     5. `lldap_password_manager`
-    6. `admin`
+    6. 'lldap_admin'
+    7. `admin`
 * 1 admin user in one or both of the following groups:
     1. `lldap_password_manager`
     2. `lldap_strict_readonly`
-* (Atleast) 1 user in the `users` group 
+    3. `lldap_admin`
+* (Atleast) 1 user in the `nextcloud_users` group 
 * (Optional) Any number of users in the `friends` or `family` group.
 
 ## Nextcloud config : the cli way
@@ -45,8 +48,8 @@ occ ldap:set-config s01 ldapBaseUsers "dc=example,dc=com"
 occ ldap:set-config s01 ldapBaseGroups "dc=example,dc=com"
 occ ldap:set-config s01 ldapConfigurationActive 1
 occ ldap:set-config s01 ldapLoginFilter "(&(objectclass=person)(uid=%uid))"
-# EDIT: users group, contains the users who can login to Nextcloud
-occ ldap:set-config s01 ldapUserFilter "(&(objectclass=person)(memberOf=cn=users,ou=groups,dc=example,dc=com))"
+# EDIT: nextcloud_users group, contains the users who can login to Nextcloud
+occ ldap:set-config s01 ldapUserFilter "(&(objectclass=person)(memberOf=cn=nextcloud_users,ou=groups,dc=example,dc=com))"
 occ ldap:set-config s01 ldapUserFilterMode 0
 occ ldap:set-config s01 ldapUserFilterObjectclass person
 occ ldap:set-config s01 turnOnPasswordChange 0
@@ -95,10 +98,7 @@ We want only users from the `users` group to be allowed to log in Nextcloud :
 (&(objectclass=person)(memberOf=cn=users,ou=groups,dc=example,dc=com))
 ```
 
-_Note:_ The `cn=users` section of the LDAP query is the group you setup at the begining of this tutorial! It is _not_ the users section as seen in the LLDAP web ui. If you're using different group names in LLDAP, be sure to update the `cn=` to the appropriate group name. 
-
 ![login configuration page](images/nextcloud_loginfilter.png)
-
 You can check with `Verify settings and count users` that your filter is working properly (here your accounts `admin` and `ro_admin` will not be counted as users).
 
 ### Login attributes

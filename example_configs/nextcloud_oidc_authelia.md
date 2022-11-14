@@ -4,9 +4,9 @@ Set up Authelia according to it's [documentation](https://www.authelia.com/overv
 
 ## LLDAP
 
-Set up [LLDAP (Light Lightweight Directory Access Protocol](https://github.com/nitnelave/lldap) according to its standard documentation. 
+Set up [LLDAP](https://github.com/nitnelave/lldap) according to its standard documentation. 
 
-Add a group and note the name you use. For this tutorial, we're using the group `users`. Create a new user and add it to the `users` group. 
+Add a group and note the name you use. For this tutorial, we're using the group `users`. Create a new user and add it to the `nextcloud_users` group. 
 
 #### Optional:
 Once setup, add an admin or config user and add to the `lldap_strict_readonly` group. This will be the config account used for Nextcloud to read your groups and users from the server. 
@@ -19,11 +19,11 @@ Once setup, add an admin or config user and add to the `lldap_strict_readonly` g
 * **Client ID:** nextcloud
 * **Client Secret:** nextcloud_client_secret
 
-Login to your Nextcloud instance as an admin. Setup an LDAP server connection according to [LLDAP's Documentation](https://github.com/nitnelave/lldap/blob/main/example_configs/nextcloud.md).Once your configuration is setup and Nextcloud doesn't show any errors, you can move onto the next step. It's also a good idea to test this by logging into your Nextcloud instance with your LLDAP credentials. OpenID Connect won't work if you don't first have this working. 
+Login to your Nextcloud instance as an admin. Setup an LDAP server connection according to [LLDAP's Documentation](https://github.com/nitnelave/lldap/blob/main/example_configs/nextcloud.md). Once your configuration is setup and Nextcloud doesn't show any errors, you can move onto the next step. It's also a good idea to test this by logging into your Nextcloud instance with your LLDAP credentials. OpenID Connect won't work if you don't first have this working. 
 
 Next, navigate to the `Apps` section. 
 
-[![nextcloud_apps.png](images/nextcloud_apps.png)
+![nextcloud_apps.png](images/nextcloud_apps.png)
 
 Search for the Nextcloud app [Social Login](https://apps.nextcloud.com/apps/sociallogin). Enable the app. 
 
