@@ -5,24 +5,22 @@
 This example is using following users & groups in lldap :
 
 * A technical user (ex: `ro_admin`), member of `lldap_strict_readonly` or `lldap_password_manager`
-* A catch-all group called `nextcloud_users`. Note: This is _not_ the same as the `Users` designation in the LLDAP Web UI. This must be a whole new group that you've created and called `nextcloud_users`. 
+* A catch-all group called `nextcloud_users`.
 * Members of `nextcloud_users` group will be authorized to log in Nextcloud.
 * Some "application" groups, let's say `friends` and `family`: users in Nextcloud will be able to share files and view people in dynamic lists only to members of their own group(s).
-* Users in 'family' and 'friends' should also be users in 'nextcloud_users' group!  
+* Users in `family` and `friends` should also be users in `nextcloud_users` group!  
 
 If you plan on following this tutorial line-by-line, you will now have the following:
 * 6 groups:
-    1. `users`
+    1. `nextcloud_users`
     2. `family`
     3. `friends`
     4. `lldap_strict_readonly`
     5. `lldap_password_manager`
-    6. 'lldap_admin'
-    7. `admin`
-* 1 admin user in one or both of the following groups:
+    6. `admin`
+* 1 admin user in any of the following groups:
     1. `lldap_password_manager`
     2. `lldap_strict_readonly`
-    3. `lldap_admin`
 * (Atleast) 1 user in the `nextcloud_users` group 
 * (Optional) Any number of users in the `friends` or `family` group.
 
@@ -76,7 +74,7 @@ occ ldap:set-config s01 ldapUserFilterMode 1
 occ ldap:set-config s01 ldapUuidGroupAttribute auto
 occ ldap:set-config s01 ldapUuidUserAttribute auto
 ```
-With small amount of luck, you should be able to log in your nextcloud instance with LLDAP accounts in the `users` group.
+With a bit of of luck, you should be able to log in your nextcloud instance with LLDAP accounts in the `nextcloud_users` group.
 
 ## Nextcloud config : the GUI way
 
@@ -93,9 +91,9 @@ Fill the LLDAP domain and port, DN + password of your technical account and base
 ### Users tab
 
 Select `person` as object class and then choose `Edit LDAP Query` : the `only from these groups` option is not functional.
-We want only users from the `users` group to be allowed to log in Nextcloud :
+We want only users from the `nextcloud_users` group to be allowed to log in Nextcloud :
 ```
-(&(objectclass=person)(memberOf=cn=users,ou=groups,dc=example,dc=com))
+(&(objectclass=person)(memberOf=cn=nextcloud_users,ou=groups,dc=example,dc=com))
 ```
 
 ![login configuration page](images/nextcloud_loginfilter.png)
@@ -117,12 +115,10 @@ You can use the menus for this part : select `groupOfUniqueNames` in the first m
 
 ![groups configuration page](images/nextcloud_groups.png)
 
-The resulting LDAP filter could be simplified removing the first 'OR' condition (I think).
 ## Sharing restrictions
 
 Go to Settings > Administration > Sharing and check following boxes :
 
 *  "Allow username autocompletion to users within the same groups"
-*  "Restrict users to only share with users in their groups"
 
 ![sharing options](images/nextcloud_sharing_options.png)
