@@ -17,7 +17,7 @@ If you plan on following this tutorial line-by-line, you will now have the follo
     3. `friends`
     4. `lldap_strict_readonly`
     5. `lldap_password_manager`
-    6. `admin`
+    6. `ldap_admin`
 * 1 admin user in any of the following groups:
     1. `lldap_password_manager`
     2. `lldap_strict_readonly`
