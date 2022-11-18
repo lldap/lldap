@@ -35,7 +35,7 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3.1.0
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --verbose --workspace
       - name: Run tests
@@ -55,7 +55,7 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v3.1.0
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
@@ -72,7 +72,7 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v3.1.0
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - name: Run cargo fmt
         uses: actions-rs/cargo@v1
@@ -94,7 +94,7 @@ jobs:
 
       - uses: taiki-e/install-action@cargo-llvm-cov
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - name: Generate code coverage for unit test
         run: cargo llvm-cov  --workspace --no-report
