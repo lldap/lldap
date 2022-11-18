@@ -3,7 +3,7 @@
 If you're here, there are some assumptions being made about access and capabilities you have on your system:
 1. You have Authelia up and running, understand its functionality, and have read through the documentation. 
 2. You have [LLDAP](https://github.com/nitnelave/lldap) up and running. 
-3. You have Nextcloud and LLDAP communicating and without any config errors. See the [example config for Nextcloud](example_configs/nextcloud.md)
+3. You have Nextcloud and LLDAP communicating and without any config errors. See the [example config for Nextcloud](nextcloud.md)
 
 ## Authelia
 
@@ -38,6 +38,7 @@ You'll see many different options for various auth methods, including major 3rd 
 * Allow Users to Connect Social Logins with their Account
 * Prevent creating an account if the email address exists in another account
 * Update user profile every login
+
 ![nextcloud_sociallogin_checkboxes](images/nextcloud_sociallogin_checkboxes.png)
 
 _You can test out the other options such as preventing users without a group, but I haven't tested all the options. These are just the ones I know that worked so far._
@@ -64,7 +65,9 @@ _The first two can be any string you'd like to identify the connection with. The
 
 #### Some Notes
 * The *scope* should be the same as the scope that was setup in [Authelia's OpenID Integration](https://www.authelia.com/integration/openid-connect/nextcloud/#authelia). Here's an example from Authelia:
+
 ![Authelia OpenID Config](images/authelia_openid_config.png)
+
 * *_Do not_* use commas in the Nextcloud Social Login app scope! This caused many issues for me.
 * Be sure you update your Authelia `configuration.yml`. Specifically, the line: `redirect_uris`. The new URL should be 
 `https://auth.example.com/index.php/apps/sociallogin/custom_oidc/Authelia`. 

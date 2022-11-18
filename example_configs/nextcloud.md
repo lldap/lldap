@@ -97,6 +97,7 @@ We want only users from the `nextcloud_users` group to be allowed to log in Next
 ```
 
 ![login configuration page](images/nextcloud_loginfilter.png)
+
 You can check with `Verify settings and count users` that your filter is working properly (here your accounts `admin` and `ro_admin` will not be counted as users).
 
 ### Login attributes
