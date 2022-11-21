@@ -4,9 +4,8 @@ use ldap3_proto::{
 use tracing::{debug, info, instrument, warn};
 
 use crate::domain::{
-    handler::{BackendHandler, GroupDetails, User, UserId, UserRequestFilter},
+    handler::{BackendHandler, GroupDetails, User, UserColumn, UserId, UserRequestFilter},
     ldap::{error::LdapError, utils::expand_attribute_wildcards},
-    sql_tables::UserColumn,
 };
 
 use super::{
@@ -34,9 +33,9 @@ fn get_user_attribute(
         "uid" => vec![user.user_id.to_string().into_bytes()],
         "entryuuid" => vec![user.uuid.to_string().into_bytes()],
         "mail" => vec![user.email.clone().into_bytes()],
-        "givenname" => vec![user.first_name.clone().into_bytes()],
-        "sn" => vec![user.last_name.clone().into_bytes()],
-        "jpegphoto" => vec![user.avatar.clone().into_bytes()],
+        "givenname" => vec![user.first_name.clone()?.into_bytes()],
+        "sn" => vec![user.last_name.clone()?.into_bytes()],
+        "jpegphoto" => vec![user.avatar.clone()?.into_bytes()],
         "memberof" => groups
             .into_iter()
             .flatten()
@@ -48,7 +47,7 @@ fn get_user_attribute(
                 .into_bytes()
             })
             .collect(),
-        "cn" | "displayname" => vec![user.display_name.clone().into_bytes()],
+        "cn" | "displayname" => vec![user.display_name.clone()?.into_bytes()],
         "createtimestamp" | "modifytimestamp" => vec![user.creation_date.to_rfc3339().into_bytes()],
         "1.1" => return None,
         // We ignore the operational attribute wildcard.

@@ -89,7 +89,7 @@ impl GroupDetails {
                     {"Creation date: "}
                   </label>
                   <div class="col-8">
-                    <span id="creationDate" class="form-constrol-static">{g.creation_date.date().naive_local()}</span>
+                    <span id="creationDate" class="form-constrol-static">{g.creation_date.naive_local().date()}</span>
                   </div>
                 </div>
                 <div class="form-group row mb-3">

@@ -1,13 +1,12 @@
-use super::{error::*, sql_tables::UserColumn};
+use super::error::*;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-#[derive(
-    PartialEq, Hash, Eq, Clone, Debug, Default, Serialize, Deserialize, sqlx::FromRow, sqlx::Type,
-)]
+pub use super::model::{GroupColumn, UserColumn};
+
+#[derive(PartialEq, Hash, Eq, Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(try_from = "&str")]
-#[sqlx(transparent)]
 pub struct Uuid(String);
 
 impl Uuid {
@@ -43,17 +42,26 @@ impl std::string::ToString for Uuid {
     }
 }
 
+impl sea_orm::TryGetable for Uuid {
+    fn try_get(
+        res: &sea_orm::QueryResult,
+        pre: &str,
+        col: &str,
+    ) -> std::result::Result<Self, sea_orm::TryGetError> {
+        Ok(Uuid(String::try_get(res, pre, col)?))
+    }
+}
+
 #[cfg(test)]
 #[macro_export]
 macro_rules! uuid {
     ($s:literal) => {
-        $crate::domain::handler::Uuid::try_from($s).unwrap()
+        <$crate::domain::handler::Uuid as std::convert::TryFrom<_>>::try_from($s).unwrap()
     };
 }
 
-#[derive(PartialEq, Eq, Clone, Debug, Default, Serialize, Deserialize, sqlx::Type)]
+#[derive(PartialEq, Eq, Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(from = "String")]
-#[sqlx(transparent)]
 pub struct UserId(String);
 
 impl UserId {
@@ -82,17 +90,22 @@ impl From<String> for UserId {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Debug, Default, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(transparent)]
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct JpegPhoto(#[serde(with = "serde_bytes")] Vec<u8>);
 
-impl From<JpegPhoto> for sea_query::Value {
+impl JpegPhoto {
+    pub fn null() -> Self {
+        Self(vec![])
+    }
+}
+
+impl From<JpegPhoto> for sea_orm::Value {
     fn from(photo: JpegPhoto) -> Self {
         photo.0.into()
     }
 }
 
-impl From<&JpegPhoto> for sea_query::Value {
+impl From<&JpegPhoto> for sea_orm::Value {
     fn from(photo: &JpegPhoto) -> Self {
         photo.0.as_slice().into()
     }
@@ -101,6 +114,9 @@ impl From<&JpegPhoto> for sea_query::Value {
 impl TryFrom<&[u8]> for JpegPhoto {
     type Error = anyhow::Error;
     fn try_from(bytes: &[u8]) -> anyhow::Result<Self> {
+        if bytes.is_empty() {
+            return Ok(JpegPhoto::null());
+        }
         // Confirm that it's a valid Jpeg, then store only the bytes.
         image::io::Reader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Jpeg)
             .decode()?;
@@ -111,6 +127,9 @@ impl TryFrom<&[u8]> for JpegPhoto {
 impl TryFrom<Vec<u8>> for JpegPhoto {
     type Error = anyhow::Error;
     fn try_from(bytes: Vec<u8>) -> anyhow::Result<Self> {
+        if bytes.is_empty() {
+            return Ok(JpegPhoto::null());
+        }
         // Confirm that it's a valid Jpeg, then store only the bytes.
         image::io::Reader::with_format(
             std::io::Cursor::new(bytes.as_slice()),
@@ -160,14 +179,14 @@ impl JpegPhoto {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, sea_orm::FromQueryResult)]
 pub struct User {
     pub user_id: UserId,
     pub email: String,
-    pub display_name: String,
-    pub first_name: String,
-    pub last_name: String,
-    pub avatar: JpegPhoto,
+    pub display_name: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub avatar: Option<JpegPhoto>,
     pub creation_date: chrono::DateTime<chrono::Utc>,
     pub uuid: Uuid,
 }
@@ -176,14 +195,14 @@ pub struct User {
 impl Default for User {
     fn default() -> Self {
         use chrono::TimeZone;
-        let epoch = chrono::Utc.timestamp(0, 0);
+        let epoch = chrono::Utc.timestamp_opt(0, 0).unwrap();
         User {
             user_id: UserId::default(),
             email: String::new(),
-            display_name: String::new(),
-            first_name: String::new(),
-            last_name: String::new(),
-            avatar: JpegPhoto::default(),
+            display_name: None,
+            first_name: None,
+            last_name: None,
+            avatar: None,
             creation_date: epoch,
             uuid: Uuid::from_name_and_date("", &epoch),
         }
@@ -263,11 +282,10 @@ pub trait LoginHandler: Clone + Send {
     async fn bind(&self, request: BindRequest) -> Result<()>;
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GroupId(pub i32);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sea_orm::FromQueryResult)]
 pub struct GroupDetails {
     pub group_id: GroupId,
     pub display_name: String,
@@ -349,8 +367,8 @@ mod tests {
     fn test_uuid_time() {
         use chrono::prelude::*;
         let user_id = "bob";
-        let date1 = Utc.ymd(2014, 7, 8).and_hms(9, 10, 11);
-        let date2 = Utc.ymd(2014, 7, 8).and_hms(9, 10, 12);
+        let date1 = Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap();
+        let date2 = Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 12).unwrap();
         assert_ne!(
             Uuid::from_name_and_date(user_id, &date1),
             Uuid::from_name_and_date(user_id, &date2)

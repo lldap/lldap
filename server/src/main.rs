@@ -9,7 +9,6 @@ use crate::{
         handler::{CreateUserRequest, GroupBackendHandler, GroupRequestFilter, UserBackendHandler},
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
-        sql_tables::PoolOptions,
     },
     infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler, healthcheck, mail},
 };
@@ -17,6 +16,7 @@ use actix::Actor;
 use actix_server::ServerBuilder;
 use anyhow::{anyhow, Context, Result};
 use futures_util::TryFutureExt;
+use sea_orm::Database;
 use tracing::*;
 
 mod domain;
@@ -39,52 +39,58 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
         .and_then(|_| register_password(handler, &config.ldap_user_dn, &config.ldap_user_pass))
         .await
         .context("Error creating admin user")?;
-    let admin_group_id = handler
-        .create_group("lldap_admin")
-        .await
-        .context("Error creating admin group")?;
+    let groups = handler
+        .list_groups(Some(GroupRequestFilter::DisplayName(
+            "lldap_admin".to_owned(),
+        )))
+        .await?;
+    assert_eq!(groups.len(), 1);
     handler
-        .add_user_to_group(&config.ldap_user_dn, admin_group_id)
+        .add_user_to_group(&config.ldap_user_dn, groups[0].id)
         .await
         .context("Error adding admin user to group")
+}
+
+async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> Result<()> {
+    if handler
+        .list_groups(Some(GroupRequestFilter::DisplayName(group_name.to_owned())))
+        .await?
+        .is_empty()
+    {
+        warn!("Could not find {} group, trying to create it", group_name);
+        handler
+            .create_group(group_name)
+            .await
+            .context(format!("while creating {} group", group_name))?;
+    }
+    Ok(())
 }
 
 #[instrument(skip_all)]
 async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     info!("Starting LLDAP version {}", env!("CARGO_PKG_VERSION"));
 
-    let sql_pool = PoolOptions::new()
-        .max_connections(5)
-        .connect(&config.database_url)
-        .await
-        .context("while connecting to the DB")?;
+    let sql_pool = {
+        let mut sql_opt = sea_orm::ConnectOptions::new(config.database_url.clone());
+        sql_opt
+            .max_connections(5)
+            .sqlx_logging(true)
+            .sqlx_logging_level(log::LevelFilter::Debug);
+        Database::connect(sql_opt).await?
+    };
     domain::sql_tables::init_table(&sql_pool)
         .await
         .context("while creating the tables")?;
     let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
+    ensure_group_exists(&backend_handler, "lldap_admin").await?;
+    ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
+    ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;
     if let Err(e) = backend_handler.get_user_details(&config.ldap_user_dn).await {
         warn!("Could not get admin user, trying to create it: {:#}", e);
         create_admin_user(&backend_handler, &config)
             .await
             .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))
             .context("while creating the admin user")?;
-    }
-    if backend_handler
-        .list_groups(Some(GroupRequestFilter::DisplayName(
-            "lldap_password_manager".to_string(),
-        )))
-        .await?
-        .is_empty()
-    {
-        warn!("Could not find password_manager group, trying to create it");
-        backend_handler
-            .create_group("lldap_password_manager")
-            .await
-            .context("while creating password_manager group")?;
-        backend_handler
-            .create_group("lldap_strict_readonly")
-            .await
-            .context("while creating readonly group")?;
     }
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,

@@ -1,16 +1,14 @@
 use super::{
     error::{DomainError, Result},
     handler::{BindRequest, LoginHandler, UserId},
+    model::{self, UserColumn},
     opaque_handler::{login, registration, OpaqueHandler},
     sql_backend_handler::SqlBackendHandler,
-    sql_tables::{DbQueryBuilder, Users},
 };
 use async_trait::async_trait;
 use lldap_auth::opaque;
-use sea_query::{Expr, Iden, Query};
-use sea_query_binder::SqlxBinder;
+use sea_orm::{ActiveValue, EntityTrait, FromQueryResult, QuerySelect};
 use secstr::SecUtf8;
-use sqlx::Row;
 use tracing::{debug, instrument};
 
 type SqlOpaqueHandler = SqlBackendHandler;
@@ -50,39 +48,19 @@ impl SqlBackendHandler {
     }
 
     #[instrument(skip_all, level = "debug", err)]
-    async fn get_password_file_for_user(
-        &self,
-        username: &str,
-    ) -> Result<Option<opaque::server::ServerRegistration>> {
+    async fn get_password_file_for_user(&self, user_id: UserId) -> Result<Option<Vec<u8>>> {
+        #[derive(FromQueryResult)]
+        struct OnlyPasswordHash {
+            password_hash: Option<Vec<u8>>,
+        }
         // Fetch the previously registered password file from the DB.
-        let password_file_bytes = {
-            let (query, values) = Query::select()
-                .column(Users::PasswordHash)
-                .from(Users::Table)
-                .cond_where(Expr::col(Users::UserId).eq(username))
-                .build_sqlx(DbQueryBuilder {});
-            if let Some(row) = sqlx::query_with(query.as_str(), values)
-                .fetch_optional(&self.sql_pool)
-                .await?
-            {
-                if let Some(bytes) =
-                    row.get::<Option<Vec<u8>>, _>(&*Users::PasswordHash.to_string())
-                {
-                    bytes
-                } else {
-                    // No password set.
-                    return Ok(None);
-                }
-            } else {
-                // No such user.
-                return Ok(None);
-            }
-        };
-        opaque::server::ServerRegistration::deserialize(&password_file_bytes)
-            .map(Option::Some)
-            .map_err(|_| {
-                DomainError::InternalError(format!("Corrupted password file for {}", username))
-            })
+        Ok(model::User::find_by_id(user_id)
+            .select_only()
+            .column(UserColumn::PasswordHash)
+            .into_model::<OnlyPasswordHash>()
+            .one(&self.sql_pool)
+            .await?
+            .and_then(|u| u.password_hash))
     }
 }
 
@@ -90,33 +68,25 @@ impl SqlBackendHandler {
 impl LoginHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn bind(&self, request: BindRequest) -> Result<()> {
-        let (query, values) = Query::select()
-            .column(Users::PasswordHash)
-            .from(Users::Table)
-            .cond_where(Expr::col(Users::UserId).eq(&request.name))
-            .build_sqlx(DbQueryBuilder {});
-        if let Ok(row) = sqlx::query_with(&query, values)
-            .fetch_one(&self.sql_pool)
-            .await
+        if let Some(password_hash) = self
+            .get_password_file_for_user(request.name.clone())
+            .await?
         {
-            if let Some(password_hash) =
-                row.get::<Option<Vec<u8>>, _>(&*Users::PasswordHash.to_string())
-            {
-                if let Err(e) = passwords_match(
-                    &password_hash,
-                    &request.password,
-                    self.config.get_server_setup(),
-                    &request.name,
-                ) {
-                    debug!(r#"Invalid password for "{}": {}"#, &request.name, e);
-                } else {
-                    return Ok(());
-                }
+            if let Err(e) = passwords_match(
+                &password_hash,
+                &request.password,
+                self.config.get_server_setup(),
+                &request.name,
+            ) {
+                debug!(r#"Invalid password for "{}": {}"#, &request.name, e);
             } else {
-                debug!(r#"User "{}" has no password"#, &request.name);
+                return Ok(());
             }
         } else {
-            debug!(r#"No user found for "{}""#, &request.name);
+            debug!(
+                r#"User "{}" doesn't exist or has no password"#,
+                &request.name
+            );
         }
         Err(DomainError::AuthenticationError(format!(
             " for user '{}'",
@@ -132,7 +102,18 @@ impl OpaqueHandler for SqlOpaqueHandler {
         &self,
         request: login::ClientLoginStartRequest,
     ) -> Result<login::ServerLoginStartResponse> {
-        let maybe_password_file = self.get_password_file_for_user(&request.username).await?;
+        let maybe_password_file = self
+            .get_password_file_for_user(UserId::new(&request.username))
+            .await?
+            .map(|bytes| {
+                opaque::server::ServerRegistration::deserialize(&bytes).map_err(|_| {
+                    DomainError::InternalError(format!(
+                        "Corrupted password file for {}",
+                        &request.username
+                    ))
+                })
+            })
+            .transpose()?;
 
         let mut rng = rand::rngs::OsRng;
         // Get the CredentialResponse for the user, or a dummy one if no user/no password.
@@ -210,17 +191,16 @@ impl OpaqueHandler for SqlOpaqueHandler {
 
         let password_file =
             opaque::server::registration::get_password_file(request.registration_upload);
-        {
-            // Set the user password to the new password.
-            let (update_query, values) = Query::update()
-                .table(Users::Table)
-                .value(Users::PasswordHash, password_file.serialize().into())
-                .cond_where(Expr::col(Users::UserId).eq(username))
-                .build_sqlx(DbQueryBuilder {});
-            sqlx::query_with(update_query.as_str(), values)
-                .execute(&self.sql_pool)
-                .await?;
-        }
+        // Set the user password to the new password.
+        let user_update = model::users::ActiveModel {
+            user_id: ActiveValue::Set(UserId::new(&username)),
+            password_hash: ActiveValue::Set(Some(password_file.serialize())),
+            ..Default::default()
+        };
+        model::User::update_many()
+            .set(user_update)
+            .exec(&self.sql_pool)
+            .await?;
         Ok(())
     }
 }

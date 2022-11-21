@@ -38,7 +38,6 @@ pub struct CreateUserModel {
     username: String,
     #[validate(email(message = "A valid email is required"))]
     email: String,
-    #[validate(length(min = 1, message = "Display name is required"))]
     display_name: String,
     first_name: String,
     last_name: String,
@@ -244,9 +243,7 @@ impl Component for CreateUserForm {
               <div class="form-group row mb-3">
                 <label for="display-name"
                   class="form-label col-4 col-form-label">
-                  {"Display name"}
-                  <span class="text-danger">{"*"}</span>
-                  {":"}
+                  {"Display name:"}
                 </label>
                 <div class="col-8">
                   <Field

@@ -69,7 +69,7 @@ type User {
   displayName: String!
   firstName: String!
   lastName: String!
-  avatar: String!
+  avatar: String
   creationDate: DateTimeUtc!
   uuid: String!
   "The groups to which this user belongs."

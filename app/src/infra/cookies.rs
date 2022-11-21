@@ -53,7 +53,11 @@ pub fn get_cookie(cookie_name: &str) -> Result<Option<String>> {
 
 pub fn delete_cookie(cookie_name: &str) -> Result<()> {
     if get_cookie(cookie_name)?.is_some() {
-        set_cookie(cookie_name, "", &Utc.ymd(1970, 1, 1).and_hms(0, 0, 0))
+        set_cookie(
+            cookie_name,
+            "",
+            &Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
+        )
     } else {
         Ok(())
     }

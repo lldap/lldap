@@ -6,7 +6,7 @@ pub enum DomainError {
     #[error("Authentication error: `{0}`")]
     AuthenticationError(String),
     #[error("Database error: `{0}`")]
-    DatabaseError(#[from] sqlx::Error),
+    DatabaseError(#[from] sea_orm::DbErr),
     #[error("Authentication protocol error for `{0}`")]
     AuthenticationProtocolError(#[from] lldap_auth::opaque::AuthenticationError),
     #[error("Unknown crypto error: `{0}`")]
@@ -15,6 +15,8 @@ pub enum DomainError {
     BinarySerializationError(#[from] bincode::Error),
     #[error("Invalid base64: `{0}`")]
     Base64DecodeError(#[from] base64::DecodeError),
+    #[error("Entity not found: `{0}`")]
+    EntityNotFound(String),
     #[error("Internal error: `{0}`")]
     InternalError(String),
 }

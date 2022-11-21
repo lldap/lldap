@@ -1,136 +1,68 @@
 use super::{
-    error::Result,
+    error::{DomainError, Result},
     handler::{
         CreateUserRequest, GroupDetails, GroupId, UpdateUserRequest, User, UserAndGroups,
         UserBackendHandler, UserId, UserRequestFilter, Uuid,
     },
+    model::{self, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
-    sql_tables::{DbQueryBuilder, Groups, Memberships, Users},
 };
 use async_trait::async_trait;
-use sea_query::{Alias, Cond, Expr, Iden, Order, Query, SimpleExpr};
-use sea_query_binder::{SqlxBinder, SqlxValues};
-use sqlx::{query_as_with, query_with, FromRow, Row};
+use sea_orm::{
+    entity::IntoActiveValue,
+    sea_query::{Cond, Expr, IntoCondition, SimpleExpr},
+    ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder,
+    QuerySelect, QueryTrait, Set,
+};
+use sea_query::{Alias, IntoColumnRef};
 use std::collections::HashSet;
 use tracing::{debug, instrument};
 
-struct RequiresGroup(bool);
-
-// Returns the condition for the SQL query, and whether it requires joining with the groups table.
-fn get_user_filter_expr(filter: UserRequestFilter) -> (RequiresGroup, Cond) {
-    use sea_query::IntoCondition;
+fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
     use UserRequestFilter::*;
+    let group_table = Alias::new("r1");
     fn get_repeated_filter(
         fs: Vec<UserRequestFilter>,
         condition: Cond,
         default_value: bool,
-    ) -> (RequiresGroup, Cond) {
+    ) -> Cond {
         if fs.is_empty() {
-            return (
-                RequiresGroup(false),
-                SimpleExpr::Value(default_value.into()).into_condition(),
-            );
+            SimpleExpr::Value(default_value.into()).into_condition()
+        } else {
+            fs.into_iter()
+                .map(get_user_filter_expr)
+                .fold(condition, Cond::add)
         }
-        let mut requires_group = false;
-        let filter = fs.into_iter().fold(condition, |c, f| {
-            let (group, filters) = get_user_filter_expr(f);
-            requires_group |= group.0;
-            c.add(filters)
-        });
-        (RequiresGroup(requires_group), filter)
     }
     match filter {
         And(fs) => get_repeated_filter(fs, Cond::all(), true),
         Or(fs) => get_repeated_filter(fs, Cond::any(), false),
-        Not(f) => {
-            let (requires_group, filters) = get_user_filter_expr(*f);
-            (requires_group, filters.not())
-        }
-        UserId(user_id) => (
-            RequiresGroup(false),
-            Expr::col((Users::Table, Users::UserId))
-                .eq(user_id)
-                .into_condition(),
-        ),
-        Equality(s1, s2) => (
-            RequiresGroup(false),
-            if s1 == Users::UserId {
+        Not(f) => get_user_filter_expr(*f).not(),
+        UserId(user_id) => ColumnTrait::eq(&UserColumn::UserId, user_id).into_condition(),
+        Equality(s1, s2) => {
+            if s1 == UserColumn::UserId {
                 panic!("User id should be wrapped")
             } else {
-                Expr::col((Users::Table, s1)).eq(s2).into_condition()
-            },
-        ),
-        MemberOf(group) => (
-            RequiresGroup(true),
-            Expr::col((Groups::Table, Groups::DisplayName))
-                .eq(group)
-                .into_condition(),
-        ),
-        MemberOfId(group_id) => (
-            RequiresGroup(true),
-            Expr::col((Groups::Table, Groups::GroupId))
-                .eq(group_id)
-                .into_condition(),
-        ),
+                ColumnTrait::eq(&s1, s2).into_condition()
+            }
+        }
+        MemberOf(group) => Expr::col((group_table, GroupColumn::DisplayName))
+            .eq(group)
+            .into_condition(),
+        MemberOfId(group_id) => Expr::col((group_table, GroupColumn::GroupId))
+            .eq(group_id)
+            .into_condition(),
     }
 }
-
-fn get_list_users_query(
-    filters: Option<UserRequestFilter>,
-    get_groups: bool,
-) -> (String, SqlxValues) {
-    let mut query_builder = Query::select()
-        .column((Users::Table, Users::UserId))
-        .column(Users::Email)
-        .column((Users::Table, Users::DisplayName))
-        .column(Users::FirstName)
-        .column(Users::LastName)
-        .column(Users::Avatar)
-        .column((Users::Table, Users::CreationDate))
-        .column((Users::Table, Users::Uuid))
-        .from(Users::Table)
-        .order_by((Users::Table, Users::UserId), Order::Asc)
-        .to_owned();
-    let add_join_group_tables = |builder: &mut sea_query::SelectStatement| {
-        builder
-            .left_join(
-                Memberships::Table,
-                Expr::tbl(Users::Table, Users::UserId)
-                    .equals(Memberships::Table, Memberships::UserId),
-            )
-            .left_join(
-                Groups::Table,
-                Expr::tbl(Memberships::Table, Memberships::GroupId)
-                    .equals(Groups::Table, Groups::GroupId),
-            );
-    };
-    if get_groups {
-        add_join_group_tables(&mut query_builder);
-        query_builder
-            .column((Groups::Table, Groups::GroupId))
-            .expr_as(
-                Expr::col((Groups::Table, Groups::DisplayName)),
-                Alias::new("group_display_name"),
-            )
-            .expr_as(
-                Expr::col((Groups::Table, Groups::CreationDate)),
-                sea_query::Alias::new("group_creation_date"),
-            )
-            .expr_as(
-                Expr::col((Groups::Table, Groups::Uuid)),
-                sea_query::Alias::new("group_uuid"),
-            )
-            .order_by(Alias::new("group_display_name"), Order::Asc);
+fn to_value(opt_name: &Option<String>) -> ActiveValue<Option<String>> {
+    match opt_name {
+        None => ActiveValue::NotSet,
+        Some(name) => ActiveValue::Set(if name.is_empty() {
+            None
+        } else {
+            Some(name.to_owned())
+        }),
     }
-    if let Some(filter) = filters {
-        let (RequiresGroup(requires_group), condition) = get_user_filter_expr(filter);
-        query_builder.cond_where(condition);
-        if requires_group && !get_groups {
-            add_join_group_tables(&mut query_builder);
-        }
-    }
-
-    query_builder.build_sqlx(DbQueryBuilder {})
 }
 
 #[async_trait]
@@ -141,95 +73,86 @@ impl UserBackendHandler for SqlBackendHandler {
         filters: Option<UserRequestFilter>,
         get_groups: bool,
     ) -> Result<Vec<UserAndGroups>> {
-        debug!(?filters, get_groups);
-        let (query, values) = get_list_users_query(filters, get_groups);
-
-        debug!(%query);
-
-        // For group_by.
-        use itertools::Itertools;
-        let mut users = Vec::new();
-        // The rows are returned sorted by user_id. We group them by
-        // this key which gives us one element (`rows`) per group.
-        for (_, rows) in &query_with(&query, values)
-            .fetch_all(&self.sql_pool)
-            .await?
-            .into_iter()
-            .group_by(|row| row.get::<UserId, _>(&*Users::UserId.to_string()))
-        {
-            let mut rows = rows.peekable();
-            users.push(UserAndGroups {
-                user: User::from_row(rows.peek().unwrap()).unwrap(),
-                groups: if get_groups {
-                    Some(
-                        rows.filter_map(|row| {
-                            let display_name = row.get::<String, _>("group_display_name");
-                            if display_name.is_empty() {
-                                None
-                            } else {
-                                Some(GroupDetails {
-                                    group_id: row.get::<GroupId, _>(&*Groups::GroupId.to_string()),
-                                    display_name,
-                                    creation_date: row.get::<chrono::DateTime<chrono::Utc>, _>(
-                                        "group_creation_date",
-                                    ),
-                                    uuid: row.get::<Uuid, _>("group_uuid"),
-                                })
-                            }
-                        })
-                        .collect(),
-                    )
-                } else {
-                    None
-                },
-            });
+        debug!(?filters);
+        let query = model::User::find()
+            .filter(
+                filters
+                    .map(|f| {
+                        UserColumn::UserId
+                            .in_subquery(
+                                model::User::find()
+                                    .find_also_linked(model::memberships::UserToGroup)
+                                    .select_only()
+                                    .column(UserColumn::UserId)
+                                    .filter(get_user_filter_expr(f))
+                                    .into_query(),
+                            )
+                            .into_condition()
+                    })
+                    .unwrap_or_else(|| SimpleExpr::Value(true.into()).into_condition()),
+            )
+            .order_by_asc(UserColumn::UserId);
+        if !get_groups {
+            Ok(query
+                .into_model::<User>()
+                .all(&self.sql_pool)
+                .await?
+                .into_iter()
+                .map(|u| UserAndGroups {
+                    user: u,
+                    groups: None,
+                })
+                .collect())
+        } else {
+            let results = query
+                //find_with_linked?
+                .find_also_linked(model::memberships::UserToGroup)
+                .order_by_asc(SimpleExpr::Column(
+                    (Alias::new("r1"), GroupColumn::GroupId).into_column_ref(),
+                ))
+                .all(&self.sql_pool)
+                .await?;
+            use itertools::Itertools;
+            Ok(results
+                .iter()
+                .group_by(|(u, _)| u)
+                .into_iter()
+                .map(|(user, groups)| {
+                    let groups: Vec<_> = groups
+                        .into_iter()
+                        .flat_map(|(_, g)| g)
+                        .map(|g| GroupDetails::from(g.clone()))
+                        .collect();
+                    UserAndGroups {
+                        user: user.clone().into(),
+                        groups: Some(groups),
+                    }
+                })
+                .collect())
         }
-        Ok(users)
     }
 
     #[instrument(skip_all, level = "debug", ret)]
     async fn get_user_details(&self, user_id: &UserId) -> Result<User> {
         debug!(?user_id);
-        let (query, values) = Query::select()
-            .column(Users::UserId)
-            .column(Users::Email)
-            .column(Users::DisplayName)
-            .column(Users::FirstName)
-            .column(Users::LastName)
-            .column(Users::Avatar)
-            .column(Users::CreationDate)
-            .column(Users::Uuid)
-            .from(Users::Table)
-            .cond_where(Expr::col(Users::UserId).eq(user_id))
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-
-        Ok(query_as_with::<_, User, _>(query.as_str(), values)
-            .fetch_one(&self.sql_pool)
-            .await?)
+        model::User::find_by_id(user_id.to_owned())
+            .into_model::<User>()
+            .one(&self.sql_pool)
+            .await?
+            .ok_or_else(|| DomainError::EntityNotFound(user_id.to_string()))
     }
 
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>> {
         debug!(?user_id);
-        let (query, values) = Query::select()
-            .column((Groups::Table, Groups::GroupId))
-            .column(Groups::DisplayName)
-            .column(Groups::CreationDate)
-            .column(Groups::Uuid)
-            .from(Groups::Table)
-            .inner_join(
-                Memberships::Table,
-                Expr::tbl(Groups::Table, Groups::GroupId)
-                    .equals(Memberships::Table, Memberships::GroupId),
-            )
-            .cond_where(Expr::col(Memberships::UserId).eq(user_id))
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-
+        let user = model::User::find_by_id(user_id.to_owned())
+            .one(&self.sql_pool)
+            .await?
+            .ok_or_else(|| DomainError::EntityNotFound(user_id.to_string()))?;
         Ok(HashSet::from_iter(
-            query_as_with::<_, GroupDetails, _>(&query, values)
-                .fetch_all(&self.sql_pool)
+            user.find_linked(model::memberships::UserToGroup)
+                .into_model::<GroupDetails>()
+                .all(&self.sql_pool)
                 .await?,
         ))
     }
@@ -237,70 +160,41 @@ impl UserBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
         debug!(user_id = ?request.user_id);
-        let columns = vec![
-            Users::UserId,
-            Users::Email,
-            Users::DisplayName,
-            Users::FirstName,
-            Users::LastName,
-            Users::Avatar,
-            Users::CreationDate,
-            Users::Uuid,
-        ];
         let now = chrono::Utc::now();
         let uuid = Uuid::from_name_and_date(request.user_id.as_str(), &now);
-        let values = vec![
-            request.user_id.into(),
-            request.email.into(),
-            request.display_name.unwrap_or_default().into(),
-            request.first_name.unwrap_or_default().into(),
-            request.last_name.unwrap_or_default().into(),
-            request.avatar.unwrap_or_default().into(),
-            now.naive_utc().into(),
-            uuid.into(),
-        ];
-        let (query, values) = Query::insert()
-            .into_table(Users::Table)
-            .columns(columns)
-            .values_panic(values)
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-        query_with(query.as_str(), values)
-            .execute(&self.sql_pool)
-            .await?;
+        let new_user = model::users::ActiveModel {
+            user_id: Set(request.user_id),
+            email: Set(request.email),
+            display_name: to_value(&request.display_name),
+            first_name: to_value(&request.first_name),
+            last_name: to_value(&request.last_name),
+            avatar: request.avatar.into_active_value(),
+            creation_date: ActiveValue::Set(now),
+            uuid: ActiveValue::Set(uuid),
+            ..Default::default()
+        };
+        new_user.insert(&self.sql_pool).await?;
         Ok(())
     }
 
     #[instrument(skip_all, level = "debug", err)]
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
         debug!(user_id = ?request.user_id);
-        let mut values = Vec::new();
-        if let Some(email) = request.email {
-            values.push((Users::Email, email.into()));
-        }
-        if let Some(display_name) = request.display_name {
-            values.push((Users::DisplayName, display_name.into()));
-        }
-        if let Some(first_name) = request.first_name {
-            values.push((Users::FirstName, first_name.into()));
-        }
-        if let Some(last_name) = request.last_name {
-            values.push((Users::LastName, last_name.into()));
-        }
-        if let Some(avatar) = request.avatar {
-            values.push((Users::Avatar, avatar.into()));
-        }
-        if values.is_empty() {
-            return Ok(());
-        }
-        let (query, values) = Query::update()
-            .table(Users::Table)
-            .values(values)
-            .cond_where(Expr::col(Users::UserId).eq(request.user_id))
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-        query_with(query.as_str(), values)
-            .execute(&self.sql_pool)
+        let update_user = model::users::ActiveModel {
+            email: request.email.map(ActiveValue::Set).unwrap_or_default(),
+            display_name: to_value(&request.display_name),
+            first_name: to_value(&request.first_name),
+            last_name: to_value(&request.last_name),
+            avatar: request.avatar.into_active_value(),
+            ..Default::default()
+        };
+        model::User::update_many()
+            .set(update_user)
+            .filter(sea_orm::ColumnTrait::eq(
+                &UserColumn::UserId,
+                request.user_id,
+            ))
+            .exec(&self.sql_pool)
             .await?;
         Ok(())
     }
@@ -308,47 +202,41 @@ impl UserBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn delete_user(&self, user_id: &UserId) -> Result<()> {
         debug!(?user_id);
-        let (query, values) = Query::delete()
-            .from_table(Users::Table)
-            .cond_where(Expr::col(Users::UserId).eq(user_id))
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-        query_with(query.as_str(), values)
-            .execute(&self.sql_pool)
+        let res = model::User::delete_by_id(user_id.clone())
+            .exec(&self.sql_pool)
             .await?;
+        if res.rows_affected == 0 {
+            return Err(DomainError::EntityNotFound(format!(
+                "No such user: '{}'",
+                user_id
+            )));
+        }
         Ok(())
     }
 
     #[instrument(skip_all, level = "debug", err)]
     async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
         debug!(?user_id, ?group_id);
-        let (query, values) = Query::insert()
-            .into_table(Memberships::Table)
-            .columns(vec![Memberships::UserId, Memberships::GroupId])
-            .values_panic(vec![user_id.into(), group_id.into()])
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-        query_with(query.as_str(), values)
-            .execute(&self.sql_pool)
-            .await?;
+        let new_membership = model::memberships::ActiveModel {
+            user_id: ActiveValue::Set(user_id.clone()),
+            group_id: ActiveValue::Set(group_id),
+        };
+        new_membership.insert(&self.sql_pool).await?;
         Ok(())
     }
 
     #[instrument(skip_all, level = "debug", err)]
     async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
         debug!(?user_id, ?group_id);
-        let (query, values) = Query::delete()
-            .from_table(Memberships::Table)
-            .cond_where(
-                Cond::all()
-                    .add(Expr::col(Memberships::GroupId).eq(group_id))
-                    .add(Expr::col(Memberships::UserId).eq(user_id)),
-            )
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-        query_with(query.as_str(), values)
-            .execute(&self.sql_pool)
+        let res = model::Membership::delete_by_id((user_id.clone(), group_id))
+            .exec(&self.sql_pool)
             .await?;
+        if res.rows_affected == 0 {
+            return Err(DomainError::EntityNotFound(format!(
+                "No such membership: '{}' -> {:?}",
+                user_id, group_id
+            )));
+        }
         Ok(())
     }
 }
@@ -357,7 +245,8 @@ impl UserBackendHandler for SqlBackendHandler {
 mod tests {
     use super::*;
     use crate::domain::{
-        handler::JpegPhoto, sql_backend_handler::tests::*, sql_tables::UserColumn,
+        handler::{JpegPhoto, UserColumn},
+        sql_backend_handler::tests::*,
     };
 
     #[tokio::test]
@@ -526,9 +415,13 @@ mod tests {
             .map(|u| {
                 (
                     u.user.user_id.to_string(),
-                    u.user.display_name.to_string(),
+                    u.user
+                        .display_name
+                        .as_deref()
+                        .unwrap_or("<unknown>")
+                        .to_owned(),
                     u.groups
-                        .unwrap()
+                        .unwrap_or_default()
                         .into_iter()
                         .map(|g| g.group_id)
                         .collect::<Vec<_>>(),
@@ -571,7 +464,7 @@ mod tests {
                 (
                     u.user.creation_date,
                     u.groups
-                        .unwrap()
+                        .unwrap_or_default()
                         .into_iter()
                         .map(|g| g.creation_date)
                         .collect::<Vec<_>>(),
@@ -685,7 +578,7 @@ mod tests {
                 display_name: Some("display_name".to_string()),
                 first_name: Some("first_name".to_string()),
                 last_name: Some("last_name".to_string()),
-                avatar: Some(JpegPhoto::default()),
+                avatar: Some(JpegPhoto::for_tests()),
             })
             .await
             .unwrap();
@@ -696,10 +589,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(user.email, "email");
-        assert_eq!(user.display_name, "display_name");
-        assert_eq!(user.first_name, "first_name");
-        assert_eq!(user.last_name, "last_name");
-        assert_eq!(user.avatar, JpegPhoto::default());
+        assert_eq!(user.display_name.unwrap(), "display_name");
+        assert_eq!(user.first_name.unwrap(), "first_name");
+        assert_eq!(user.last_name.unwrap(), "last_name");
+        assert_eq!(user.avatar, Some(JpegPhoto::for_tests()));
     }
 
     #[tokio::test]
@@ -722,9 +615,10 @@ mod tests {
             .get_user_details(&UserId::new("bob"))
             .await
             .unwrap();
-        assert_eq!(user.display_name, "display bob");
-        assert_eq!(user.first_name, "first_name");
-        assert_eq!(user.last_name, "");
+        assert_eq!(user.display_name.unwrap(), "display bob");
+        assert_eq!(user.first_name.unwrap(), "first_name");
+        assert_eq!(user.last_name, None);
+        assert_eq!(user.avatar, None);
     }
 
     #[tokio::test]

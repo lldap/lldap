@@ -26,7 +26,7 @@ use crate::domain::handler::UserRequestFilter;
 use crate::{
     domain::{
         error::DomainError,
-        handler::{BackendHandler, BindRequest, GroupDetails, LoginHandler, UserId},
+        handler::{BackendHandler, BindRequest, GroupDetails, LoginHandler, UserColumn, UserId},
         opaque_handler::OpaqueHandler,
     },
     infra::{
@@ -149,10 +149,7 @@ where
         .list_users(
             Some(UserRequestFilter::Or(vec![
                 UserRequestFilter::UserId(UserId::new(user_string)),
-                UserRequestFilter::Equality(
-                    crate::domain::sql_tables::UserColumn::Email,
-                    user_string.to_owned(),
-                ),
+                UserRequestFilter::Equality(UserColumn::Email, user_string.to_owned()),
             ])),
             false,
         )
@@ -174,7 +171,9 @@ where
         Some(token) => token,
     };
     if let Err(e) = super::mail::send_password_reset_email(
-        &user.display_name,
+        user.display_name
+            .as_deref()
+            .unwrap_or_else(|| user.user_id.as_str()),
         &user.email,
         &token,
         &data.server_url,

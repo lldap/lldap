@@ -1,6 +1,7 @@
-use sea_query::*;
+use sea_orm::ConnectionTrait;
+use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Table};
 
-pub use crate::domain::sql_tables::*;
+pub use crate::domain::{sql_migrations::Users, sql_tables::DbConnection};
 
 /// Contains the refresh tokens for a given user.
 #[derive(Iden)]
@@ -31,110 +32,112 @@ pub enum PasswordResetTokens {
 }
 
 /// This needs to be initialized after the domain tables are.
-pub async fn init_table(pool: &Pool) -> sqlx::Result<()> {
-    sqlx::query(
-        &Table::create()
-            .table(JwtRefreshStorage::Table)
-            .if_not_exists()
-            .col(
-                ColumnDef::new(JwtRefreshStorage::RefreshTokenHash)
-                    .big_integer()
-                    .not_null()
-                    .primary_key(),
-            )
-            .col(
-                ColumnDef::new(JwtRefreshStorage::UserId)
-                    .string_len(255)
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(JwtRefreshStorage::ExpiryDate)
-                    .date_time()
-                    .not_null(),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("JwtRefreshStorageUserForeignKey")
-                    .from(JwtRefreshStorage::Table, JwtRefreshStorage::UserId)
-                    .to(Users::Table, Users::UserId)
-                    .on_delete(ForeignKeyAction::Cascade)
-                    .on_update(ForeignKeyAction::Cascade),
-            )
-            .to_string(DbQueryBuilder {}),
+pub async fn init_table(pool: &DbConnection) -> std::result::Result<(), sea_orm::DbErr> {
+    let builder = pool.get_database_backend();
+
+    pool.execute(
+        builder.build(
+            Table::create()
+                .table(JwtRefreshStorage::Table)
+                .if_not_exists()
+                .col(
+                    ColumnDef::new(JwtRefreshStorage::RefreshTokenHash)
+                        .big_integer()
+                        .not_null()
+                        .primary_key(),
+                )
+                .col(
+                    ColumnDef::new(JwtRefreshStorage::UserId)
+                        .string_len(255)
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(JwtRefreshStorage::ExpiryDate)
+                        .date_time()
+                        .not_null(),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .name("JwtRefreshStorageUserForeignKey")
+                        .from(JwtRefreshStorage::Table, JwtRefreshStorage::UserId)
+                        .to(Users::Table, Users::UserId)
+                        .on_delete(ForeignKeyAction::Cascade)
+                        .on_update(ForeignKeyAction::Cascade),
+                ),
+        ),
     )
-    .execute(pool)
     .await?;
 
-    sqlx::query(
-        &Table::create()
-            .table(JwtStorage::Table)
-            .if_not_exists()
-            .col(
-                ColumnDef::new(JwtStorage::JwtHash)
-                    .big_integer()
-                    .not_null()
-                    .primary_key(),
-            )
-            .col(
-                ColumnDef::new(JwtStorage::UserId)
-                    .string_len(255)
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(JwtStorage::ExpiryDate)
-                    .date_time()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(JwtStorage::Blacklisted)
-                    .boolean()
-                    .default(false)
-                    .not_null(),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("JwtStorageUserForeignKey")
-                    .from(JwtStorage::Table, JwtStorage::UserId)
-                    .to(Users::Table, Users::UserId)
-                    .on_delete(ForeignKeyAction::Cascade)
-                    .on_update(ForeignKeyAction::Cascade),
-            )
-            .to_string(DbQueryBuilder {}),
+    pool.execute(
+        builder.build(
+            Table::create()
+                .table(JwtStorage::Table)
+                .if_not_exists()
+                .col(
+                    ColumnDef::new(JwtStorage::JwtHash)
+                        .big_integer()
+                        .not_null()
+                        .primary_key(),
+                )
+                .col(
+                    ColumnDef::new(JwtStorage::UserId)
+                        .string_len(255)
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(JwtStorage::ExpiryDate)
+                        .date_time()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(JwtStorage::Blacklisted)
+                        .boolean()
+                        .default(false)
+                        .not_null(),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .name("JwtStorageUserForeignKey")
+                        .from(JwtStorage::Table, JwtStorage::UserId)
+                        .to(Users::Table, Users::UserId)
+                        .on_delete(ForeignKeyAction::Cascade)
+                        .on_update(ForeignKeyAction::Cascade),
+                ),
+        ),
     )
-    .execute(pool)
     .await?;
 
-    sqlx::query(
-        &Table::create()
-            .table(PasswordResetTokens::Table)
-            .if_not_exists()
-            .col(
-                ColumnDef::new(PasswordResetTokens::Token)
-                    .string_len(255)
-                    .not_null()
-                    .primary_key(),
-            )
-            .col(
-                ColumnDef::new(PasswordResetTokens::UserId)
-                    .string_len(255)
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(PasswordResetTokens::ExpiryDate)
-                    .date_time()
-                    .not_null(),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("PasswordResetTokensUserForeignKey")
-                    .from(PasswordResetTokens::Table, PasswordResetTokens::UserId)
-                    .to(Users::Table, Users::UserId)
-                    .on_delete(ForeignKeyAction::Cascade)
-                    .on_update(ForeignKeyAction::Cascade),
-            )
-            .to_string(DbQueryBuilder {}),
+    pool.execute(
+        builder.build(
+            Table::create()
+                .table(PasswordResetTokens::Table)
+                .if_not_exists()
+                .col(
+                    ColumnDef::new(PasswordResetTokens::Token)
+                        .string_len(255)
+                        .not_null()
+                        .primary_key(),
+                )
+                .col(
+                    ColumnDef::new(PasswordResetTokens::UserId)
+                        .string_len(255)
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(PasswordResetTokens::ExpiryDate)
+                        .date_time()
+                        .not_null(),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .name("PasswordResetTokensUserForeignKey")
+                        .from(PasswordResetTokens::Table, PasswordResetTokens::UserId)
+                        .to(Users::Table, Users::UserId)
+                        .on_delete(ForeignKeyAction::Cascade)
+                        .on_update(ForeignKeyAction::Cascade),
+                ),
+        ),
     )
-    .execute(pool)
     .await?;
 
     Ok(())
