@@ -124,7 +124,7 @@ impl GroupTable {
                 </Link>
               </td>
               <td>
-                {&group.creation_date.date().naive_local()}
+                {&group.creation_date.naive_local().date()}
               </td>
               <td>
                 <DeleteGroup

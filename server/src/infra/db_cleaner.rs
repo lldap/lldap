@@ -1,18 +1,17 @@
-use crate::{
-    domain::sql_tables::{DbQueryBuilder, Pool},
-    infra::jwt_sql_tables::{JwtRefreshStorage, JwtStorage},
+use crate::domain::{
+    model::{self, JwtRefreshStorageColumn, JwtStorageColumn, PasswordResetTokensColumn},
+    sql_tables::DbConnection,
 };
-use actix::prelude::*;
-use chrono::Local;
+use actix::prelude::{Actor, AsyncContext, Context};
 use cron::Schedule;
-use sea_query::{Expr, Query};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use std::{str::FromStr, time::Duration};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument};
 
 // Define actor
 pub struct Scheduler {
     schedule: Schedule,
-    sql_pool: Pool,
+    sql_pool: DbConnection,
 }
 
 // Provide Actor implementation for our actor
@@ -33,7 +32,7 @@ impl Actor for Scheduler {
 }
 
 impl Scheduler {
-    pub fn new(cron_expression: &str, sql_pool: Pool) -> Self {
+    pub fn new(cron_expression: &str, sql_pool: DbConnection) -> Self {
         let schedule = Schedule::from_str(cron_expression).unwrap();
         Self { schedule, sql_pool }
     }
@@ -48,33 +47,35 @@ impl Scheduler {
     }
 
     #[instrument(skip_all)]
-    async fn cleanup_db(sql_pool: Pool) {
+    async fn cleanup_db(sql_pool: DbConnection) {
         info!("Cleaning DB");
-        let query = Query::delete()
-            .from_table(JwtRefreshStorage::Table)
-            .and_where(Expr::col(JwtRefreshStorage::ExpiryDate).lt(Local::now().naive_utc()))
-            .to_string(DbQueryBuilder {});
-        debug!(%query);
-        if let Err(e) = sqlx::query(&query).execute(&sql_pool).await {
+        if let Err(e) = model::JwtRefreshStorage::delete_many()
+            .filter(JwtRefreshStorageColumn::ExpiryDate.lt(chrono::Utc::now().naive_utc()))
+            .exec(&sql_pool)
+            .await
+        {
             error!("DB error while cleaning up JWT refresh tokens: {}", e);
-        };
-        if let Err(e) = sqlx::query(
-            &Query::delete()
-                .from_table(JwtStorage::Table)
-                .and_where(Expr::col(JwtStorage::ExpiryDate).lt(Local::now().naive_utc()))
-                .to_string(DbQueryBuilder {}),
-        )
-        .execute(&sql_pool)
-        .await
+        }
+        if let Err(e) = model::JwtStorage::delete_many()
+            .filter(JwtStorageColumn::ExpiryDate.lt(chrono::Utc::now().naive_utc()))
+            .exec(&sql_pool)
+            .await
         {
             error!("DB error while cleaning up JWT storage: {}", e);
+        };
+        if let Err(e) = model::PasswordResetTokens::delete_many()
+            .filter(PasswordResetTokensColumn::ExpiryDate.lt(chrono::Utc::now().naive_utc()))
+            .exec(&sql_pool)
+            .await
+        {
+            error!("DB error while cleaning up password reset tokens: {}", e);
         };
         info!("DB cleaned!");
     }
 
     fn duration_until_next(&self) -> Duration {
-        let now = Local::now();
-        let next = self.schedule.upcoming(Local).next().unwrap();
+        let now = chrono::Utc::now();
+        let next = self.schedule.upcoming(chrono::Utc).next().unwrap();
         let duration_until = next.signed_duration_since(now);
         duration_until.to_std().unwrap()
     }

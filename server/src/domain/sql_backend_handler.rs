@@ -5,11 +5,11 @@ use async_trait::async_trait;
 #[derive(Clone)]
 pub struct SqlBackendHandler {
     pub(crate) config: Configuration,
-    pub(crate) sql_pool: Pool,
+    pub(crate) sql_pool: DbConnection,
 }
 
 impl SqlBackendHandler {
-    pub fn new(config: Configuration, sql_pool: Pool) -> Self {
+    pub fn new(config: Configuration, sql_pool: DbConnection) -> Self {
         SqlBackendHandler { config, sql_pool }
     }
 }
@@ -23,16 +23,23 @@ pub mod tests {
     use crate::domain::sql_tables::init_table;
     use crate::infra::configuration::ConfigurationBuilder;
     use lldap_auth::{opaque, registration};
+    use sea_orm::Database;
 
     pub fn get_default_config() -> Configuration {
         ConfigurationBuilder::for_tests()
     }
 
-    pub async fn get_in_memory_db() -> Pool {
-        PoolOptions::new().connect("sqlite::memory:").await.unwrap()
+    pub async fn get_in_memory_db() -> DbConnection {
+        crate::infra::logging::init_for_tests();
+        let mut sql_opt = sea_orm::ConnectOptions::new("sqlite::memory:".to_owned());
+        sql_opt
+            .max_connections(1)
+            .sqlx_logging(true)
+            .sqlx_logging_level(log::LevelFilter::Debug);
+        Database::connect(sql_opt).await.unwrap()
     }
 
-    pub async fn get_initialized_db() -> Pool {
+    pub async fn get_initialized_db() -> DbConnection {
         let sql_pool = get_in_memory_db().await;
         init_table(&sql_pool).await.unwrap();
         sql_pool

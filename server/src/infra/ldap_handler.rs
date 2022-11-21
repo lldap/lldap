@@ -569,7 +569,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 mod tests {
     use super::*;
     use crate::{
-        domain::{error::Result, handler::*, opaque_handler::*, sql_tables::UserColumn},
+        domain::{error::Result, handler::*, opaque_handler::*},
         uuid,
     };
     use async_trait::async_trait;
@@ -669,7 +669,7 @@ mod tests {
                 set.insert(GroupDetails {
                     group_id: GroupId(42),
                     display_name: group,
-                    creation_date: chrono::Utc.timestamp(42, 42),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
                     uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                 });
                 Ok(set)
@@ -756,7 +756,7 @@ mod tests {
                 set.insert(GroupDetails {
                     group_id: GroupId(42),
                     display_name: "lldap_admin".to_string(),
-                    creation_date: chrono::Utc.timestamp(42, 42),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
                     uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                 });
                 Ok(set)
@@ -843,7 +843,7 @@ mod tests {
                     groups: Some(vec![GroupDetails {
                         group_id: GroupId(42),
                         display_name: "rockstars".to_string(),
-                        creation_date: chrono::Utc.timestamp(42, 42),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
                         uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     }]),
                 }])
@@ -991,9 +991,9 @@ mod tests {
                     user: User {
                         user_id: UserId::new("bob_1"),
                         email: "bob@bobmail.bob".to_string(),
-                        display_name: "Bôb Böbberson".to_string(),
-                        first_name: "Bôb".to_string(),
-                        last_name: "Böbberson".to_string(),
+                        display_name: Some("Bôb Böbberson".to_string()),
+                        first_name: Some("Bôb".to_string()),
+                        last_name: Some("Böbberson".to_string()),
                         uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
                         ..Default::default()
                     },
@@ -1003,12 +1003,12 @@ mod tests {
                     user: User {
                         user_id: UserId::new("jim"),
                         email: "jim@cricket.jim".to_string(),
-                        display_name: "Jimminy Cricket".to_string(),
-                        first_name: "Jim".to_string(),
-                        last_name: "Cricket".to_string(),
-                        avatar: JpegPhoto::for_tests(),
+                        display_name: Some("Jimminy Cricket".to_string()),
+                        first_name: Some("Jim".to_string()),
+                        last_name: Some("Cricket".to_string()),
+                        avatar: Some(JpegPhoto::for_tests()),
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                        creation_date: Utc.ymd(2014, 7, 8).and_hms(9, 10, 11),
+                        creation_date: Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap(),
                     },
                     groups: None,
                 },
@@ -1137,14 +1137,14 @@ mod tests {
                     Group {
                         id: GroupId(1),
                         display_name: "group_1".to_string(),
-                        creation_date: chrono::Utc.timestamp(42, 42),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
                         users: vec![UserId::new("bob"), UserId::new("john")],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                     },
                     Group {
                         id: GroupId(3),
                         display_name: "BestGroup".to_string(),
-                        creation_date: chrono::Utc.timestamp(42, 42),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
                         users: vec![UserId::new("john")],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                     },
@@ -1230,7 +1230,7 @@ mod tests {
                 Ok(vec![Group {
                     display_name: "group_1".to_string(),
                     id: GroupId(1),
-                    creation_date: chrono::Utc.timestamp(42, 42),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
                     users: vec![],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 }])
@@ -1281,7 +1281,7 @@ mod tests {
                 Ok(vec![Group {
                     display_name: "group_1".to_string(),
                     id: GroupId(1),
-                    creation_date: chrono::Utc.timestamp(42, 42),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
                     users: vec![],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 }])
@@ -1542,9 +1542,9 @@ mod tests {
                 user: User {
                     user_id: UserId::new("bob_1"),
                     email: "bob@bobmail.bob".to_string(),
-                    display_name: "Bôb Böbberson".to_string(),
-                    first_name: "Bôb".to_string(),
-                    last_name: "Böbberson".to_string(),
+                    display_name: Some("Bôb Böbberson".to_string()),
+                    first_name: Some("Bôb".to_string()),
+                    last_name: Some("Böbberson".to_string()),
                     ..Default::default()
                 },
                 groups: None,
@@ -1557,7 +1557,7 @@ mod tests {
                 Ok(vec![Group {
                     id: GroupId(1),
                     display_name: "group_1".to_string(),
-                    creation_date: chrono::Utc.timestamp(42, 42),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
                     users: vec![UserId::new("bob"), UserId::new("john")],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 }])
@@ -1616,9 +1616,9 @@ mod tests {
                 user: User {
                     user_id: UserId::new("bob_1"),
                     email: "bob@bobmail.bob".to_string(),
-                    display_name: "Bôb Böbberson".to_string(),
-                    last_name: "Böbberson".to_string(),
-                    avatar: JpegPhoto::for_tests(),
+                    display_name: Some("Bôb Böbberson".to_string()),
+                    last_name: Some("Böbberson".to_string()),
+                    avatar: Some(JpegPhoto::for_tests()),
                     uuid: uuid!("b4ac75e0-2900-3e21-926c-2f732c26b3fc"),
                     ..Default::default()
                 },
@@ -1631,7 +1631,7 @@ mod tests {
                 Ok(vec![Group {
                     id: GroupId(1),
                     display_name: "group_1".to_string(),
-                    creation_date: chrono::Utc.timestamp(42, 42),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
                     users: vec![UserId::new("bob"), UserId::new("john")],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 }])
@@ -1680,7 +1680,11 @@ mod tests {
                     },
                     LdapPartialAttribute {
                         atype: "createtimestamp".to_string(),
-                        vals: vec![chrono::Utc.timestamp(0, 0).to_rfc3339().into_bytes()],
+                        vals: vec![chrono::Utc
+                            .timestamp_opt(0, 0)
+                            .unwrap()
+                            .to_rfc3339()
+                            .into_bytes()],
                     },
                     LdapPartialAttribute {
                         atype: "entryuuid".to_string(),
@@ -1960,7 +1964,7 @@ mod tests {
         groups.insert(GroupDetails {
             group_id: GroupId(0),
             display_name: "lldap_admin".to_string(),
-            creation_date: chrono::Utc.timestamp(42, 42),
+            creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
             uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
         });
         mock.expect_get_user_groups()

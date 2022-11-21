@@ -43,7 +43,6 @@ impl FromStr for JsFile {
 pub struct UserModel {
     #[validate(email)]
     email: String,
-    #[validate(length(min = 1, message = "Display name is required"))]
     display_name: String,
     first_name: String,
     last_name: String,
@@ -176,7 +175,10 @@ impl Component for UserDetailsForm {
         type Field = yew_form::Field<UserModel>;
 
         let avatar_base64 = maybe_to_base64(&self.avatar).unwrap_or_default();
-        let avatar_string = avatar_base64.as_ref().unwrap_or(&self.common.user.avatar);
+        let avatar_string = avatar_base64
+            .as_deref()
+            .or(self.common.user.avatar.as_deref())
+            .unwrap_or("");
         html! {
           <div class="py-3">
             <form class="form">
@@ -195,7 +197,7 @@ impl Component for UserDetailsForm {
                   {"Creation date: "}
                 </label>
                 <div class="col-8">
-                  <span id="creationDate" class="form-control-static">{&self.common.user.creation_date.date().naive_local()}</span>
+                  <span id="creationDate" class="form-control-static">{&self.common.user.creation_date.naive_local().date()}</span>
                 </div>
               </div>
               <div class="form-group row mb-3">
@@ -231,9 +233,7 @@ impl Component for UserDetailsForm {
               <div class="form-group row mb-3">
                 <label for="display_name"
                   class="form-label col-4 col-form-label">
-                  {"Display Name"}
-                  <span class="text-danger">{"*"}</span>
-                  {":"}
+                  {"Display Name: "}
                 </label>
                 <div class="col-8">
                   <Field
@@ -402,7 +402,7 @@ impl UserDetailsForm {
                 self.common.user.first_name = model.first_name;
                 self.common.user.last_name = model.last_name;
                 if let Some(avatar) = maybe_to_base64(&self.avatar)? {
-                    self.common.user.avatar = avatar;
+                    self.common.user.avatar = Some(avatar);
                 }
                 self.just_updated = true;
             }

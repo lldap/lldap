@@ -1,21 +1,22 @@
+use crate::domain::handler::Uuid;
+
 use super::{
-    error::Result,
+    error::{DomainError, Result},
     handler::{
         Group, GroupBackendHandler, GroupDetails, GroupId, GroupRequestFilter, UpdateGroupRequest,
-        UserId,
     },
+    model::{self, GroupColumn, MembershipColumn},
     sql_backend_handler::SqlBackendHandler,
-    sql_tables::{DbQueryBuilder, Groups, Memberships},
 };
 use async_trait::async_trait;
-use sea_query::{Cond, Expr, Iden, Order, Query, SimpleExpr};
-use sea_query_binder::SqlxBinder;
-use sqlx::{query_as_with, query_with, FromRow, Row};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+    QueryTrait,
+};
+use sea_query::{Cond, IntoCondition, SimpleExpr};
 use tracing::{debug, instrument};
 
-// Returns the condition for the SQL query, and whether it requires joining with the groups table.
 fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
-    use sea_query::IntoCondition;
     use GroupRequestFilter::*;
     match filter {
         And(fs) => {
@@ -35,23 +36,17 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
             }
         }
         Not(f) => get_group_filter_expr(*f).not(),
-        DisplayName(name) => Expr::col((Groups::Table, Groups::DisplayName))
-            .eq(name)
-            .into_condition(),
-        GroupId(id) => Expr::col((Groups::Table, Groups::GroupId))
-            .eq(id.0)
-            .into_condition(),
-        Uuid(uuid) => Expr::col((Groups::Table, Groups::Uuid))
-            .eq(uuid.to_string())
-            .into_condition(),
+        DisplayName(name) => GroupColumn::DisplayName.eq(name).into_condition(),
+        GroupId(id) => GroupColumn::GroupId.eq(id.0).into_condition(),
+        Uuid(uuid) => GroupColumn::Uuid.eq(uuid.to_string()).into_condition(),
         // WHERE (group_id in (SELECT group_id FROM memberships WHERE user_id = user))
-        Member(user) => Expr::col((Memberships::Table, Memberships::GroupId))
+        Member(user) => GroupColumn::GroupId
             .in_subquery(
-                Query::select()
-                    .column(Memberships::GroupId)
-                    .from(Memberships::Table)
-                    .cond_where(Expr::col(Memberships::UserId).eq(user))
-                    .take(),
+                model::Membership::find()
+                    .select_only()
+                    .column(MembershipColumn::GroupId)
+                    .filter(MembershipColumn::UserId.eq(user))
+                    .into_query(),
             )
             .into_condition(),
     }
@@ -62,94 +57,67 @@ impl GroupBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
         debug!(?filters);
-        let (query, values) = {
-            let mut query_builder = Query::select()
-                .column((Groups::Table, Groups::GroupId))
-                .column(Groups::DisplayName)
-                .column(Groups::CreationDate)
-                .column(Groups::Uuid)
-                .column(Memberships::UserId)
-                .from(Groups::Table)
-                .left_join(
-                    Memberships::Table,
-                    Expr::tbl(Groups::Table, Groups::GroupId)
-                        .equals(Memberships::Table, Memberships::GroupId),
-                )
-                .order_by(Groups::DisplayName, Order::Asc)
-                .order_by(Memberships::UserId, Order::Asc)
-                .to_owned();
-
-            if let Some(filter) = filters {
-                query_builder.cond_where(get_group_filter_expr(filter));
-            }
-
-            query_builder.build_sqlx(DbQueryBuilder {})
-        };
-        debug!(%query);
-
-        // For group_by.
-        use itertools::Itertools;
-        let mut groups = Vec::new();
-        // The rows are returned sorted by display_name, equivalent to group_id. We group them by
-        // this key which gives us one element (`rows`) per group.
-        for (group_details, rows) in &query_with(&query, values)
-            .fetch_all(&self.sql_pool)
-            .await?
+        let results = model::Group::find()
+            // The order_by must be before find_with_related otherwise the primary order is by group_id.
+            .order_by_asc(GroupColumn::DisplayName)
+            .find_with_related(model::Membership)
+            .filter(
+                filters
+                    .map(|f| {
+                        GroupColumn::GroupId
+                            .in_subquery(
+                                model::Group::find()
+                                    .find_also_linked(model::memberships::GroupToUser)
+                                    .select_only()
+                                    .column(GroupColumn::GroupId)
+                                    .filter(get_group_filter_expr(f))
+                                    .into_query(),
+                            )
+                            .into_condition()
+                    })
+                    .unwrap_or_else(|| SimpleExpr::Value(true.into()).into_condition()),
+            )
+            .all(&self.sql_pool)
+            .await?;
+        Ok(results
             .into_iter()
-            .group_by(|row| GroupDetails::from_row(row).unwrap())
-        {
-            groups.push(Group {
-                id: group_details.group_id,
-                display_name: group_details.display_name,
-                creation_date: group_details.creation_date,
-                uuid: group_details.uuid,
-                users: rows
-                    .map(|row| row.get::<UserId, _>(&*Memberships::UserId.to_string()))
-                    // If a group has no users, an empty string is returned because of the left
-                    // join.
-                    .filter(|s| !s.as_str().is_empty())
-                    .collect(),
-            });
-        }
-        Ok(groups)
+            .map(|(group, users)| {
+                let users: Vec<_> = users.into_iter().map(|u| u.user_id).collect();
+                Group {
+                    users,
+                    ..group.into()
+                }
+            })
+            .collect())
     }
 
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails> {
         debug!(?group_id);
-        let (query, values) = Query::select()
-            .column(Groups::GroupId)
-            .column(Groups::DisplayName)
-            .column(Groups::CreationDate)
-            .column(Groups::Uuid)
-            .from(Groups::Table)
-            .cond_where(Expr::col(Groups::GroupId).eq(group_id))
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-
-        Ok(query_as_with::<_, GroupDetails, _>(&query, values)
-            .fetch_one(&self.sql_pool)
-            .await?)
+        model::Group::find_by_id(group_id)
+            .into_model::<GroupDetails>()
+            .one(&self.sql_pool)
+            .await?
+            .ok_or_else(|| DomainError::EntityNotFound(format!("{:?}", group_id)))
     }
 
     #[instrument(skip_all, level = "debug", err)]
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()> {
         debug!(?request.group_id);
-        let mut values = Vec::new();
-        if let Some(display_name) = request.display_name {
-            values.push((Groups::DisplayName, display_name.into()));
-        }
-        if values.is_empty() {
-            return Ok(());
-        }
-        let (query, values) = Query::update()
-            .table(Groups::Table)
-            .values(values)
-            .cond_where(Expr::col(Groups::GroupId).eq(request.group_id))
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-        query_with(query.as_str(), values)
-            .execute(&self.sql_pool)
+        let update_group = model::groups::ActiveModel {
+            display_name: request
+                .display_name
+                .map(ActiveValue::Set)
+                .unwrap_or_default(),
+            ..Default::default()
+        };
+        model::Group::update_many()
+            .set(update_group)
+            .filter(sea_orm::ColumnTrait::eq(
+                &GroupColumn::GroupId,
+                request.group_id,
+            ))
+            .exec(&self.sql_pool)
             .await?;
         Ok(())
     }
@@ -157,30 +125,29 @@ impl GroupBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn create_group(&self, group_name: &str) -> Result<GroupId> {
         debug!(?group_name);
-        crate::domain::sql_tables::create_group(group_name, &self.sql_pool).await?;
-        let (query, values) = Query::select()
-            .column(Groups::GroupId)
-            .from(Groups::Table)
-            .cond_where(Expr::col(Groups::DisplayName).eq(group_name))
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-        let row = query_with(query.as_str(), values)
-            .fetch_one(&self.sql_pool)
-            .await?;
-        Ok(GroupId(row.get::<i32, _>(&*Groups::GroupId.to_string())))
+        let now = chrono::Utc::now();
+        let uuid = Uuid::from_name_and_date(group_name, &now);
+        let new_group = model::groups::ActiveModel {
+            display_name: ActiveValue::Set(group_name.to_owned()),
+            creation_date: ActiveValue::Set(now),
+            uuid: ActiveValue::Set(uuid),
+            ..Default::default()
+        };
+        Ok(new_group.insert(&self.sql_pool).await?.group_id)
     }
 
     #[instrument(skip_all, level = "debug", err)]
     async fn delete_group(&self, group_id: GroupId) -> Result<()> {
         debug!(?group_id);
-        let (query, values) = Query::delete()
-            .from_table(Groups::Table)
-            .cond_where(Expr::col(Groups::GroupId).eq(group_id))
-            .build_sqlx(DbQueryBuilder {});
-        debug!(%query);
-        query_with(query.as_str(), values)
-            .execute(&self.sql_pool)
+        let res = model::Group::delete_by_id(group_id)
+            .exec(&self.sql_pool)
             .await?;
+        if res.rows_affected == 0 {
+            return Err(DomainError::EntityNotFound(format!(
+                "No such group: '{:?}'",
+                group_id
+            )));
+        }
         Ok(())
     }
 }
@@ -188,7 +155,7 @@ impl GroupBackendHandler for SqlBackendHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::sql_backend_handler::tests::*;
+    use crate::domain::{handler::UserId, sql_backend_handler::tests::*};
 
     async fn get_group_ids(
         handler: &SqlBackendHandler,
@@ -203,12 +170,29 @@ mod tests {
             .collect::<Vec<_>>()
     }
 
+    async fn get_group_names(
+        handler: &SqlBackendHandler,
+        filters: Option<GroupRequestFilter>,
+    ) -> Vec<String> {
+        handler
+            .list_groups(filters)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|g| g.display_name)
+            .collect::<Vec<_>>()
+    }
+
     #[tokio::test]
     async fn test_list_groups_no_filter() {
         let fixture = TestFixture::new().await;
         assert_eq!(
-            get_group_ids(&fixture.handler, None).await,
-            vec![fixture.groups[0], fixture.groups[2], fixture.groups[1]]
+            get_group_names(&fixture.handler, None).await,
+            vec![
+                "Best Group".to_owned(),
+                "Empty Group".to_owned(),
+                "Worst Group".to_owned()
+            ]
         );
     }
 
@@ -216,15 +200,15 @@ mod tests {
     async fn test_list_groups_simple_filter() {
         let fixture = TestFixture::new().await;
         assert_eq!(
-            get_group_ids(
+            get_group_names(
                 &fixture.handler,
                 Some(GroupRequestFilter::Or(vec![
-                    GroupRequestFilter::DisplayName("Empty Group".to_string()),
+                    GroupRequestFilter::DisplayName("Empty Group".to_owned()),
                     GroupRequestFilter::Member(UserId::new("bob")),
                 ]))
             )
             .await,
-            vec![fixture.groups[0], fixture.groups[2]]
+            vec!["Best Group".to_owned(), "Empty Group".to_owned()]
         );
     }
 
@@ -236,7 +220,7 @@ mod tests {
                 &fixture.handler,
                 Some(GroupRequestFilter::And(vec![
                     GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
-                        "value".to_string()
+                        "value".to_owned()
                     ))),
                     GroupRequestFilter::GroupId(fixture.groups[0]),
                 ]))
@@ -273,7 +257,7 @@ mod tests {
             .handler
             .update_group(UpdateGroupRequest {
                 group_id: fixture.groups[0],
-                display_name: Some("Awesomest Group".to_string()),
+                display_name: Some("Awesomest Group".to_owned()),
             })
             .await
             .unwrap();
@@ -288,6 +272,10 @@ mod tests {
     #[tokio::test]
     async fn test_delete_group() {
         let fixture = TestFixture::new().await;
+        assert_eq!(
+            get_group_ids(&fixture.handler, None).await,
+            vec![fixture.groups[0], fixture.groups[2], fixture.groups[1]]
+        );
         fixture
             .handler
             .delete_group(fixture.groups[0])

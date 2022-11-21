@@ -1,7 +1,6 @@
 use crate::domain::{
-    handler::{BackendHandler, GroupDetails, GroupId, UserId},
+    handler::{BackendHandler, GroupDetails, GroupId, UserColumn, UserId},
     ldap::utils::map_user_field,
-    sql_tables::UserColumn,
 };
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
@@ -214,19 +213,19 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
     }
 
     fn display_name(&self) -> &str {
-        &self.user.display_name
+        self.user.display_name.as_deref().unwrap_or("")
     }
 
     fn first_name(&self) -> &str {
-        &self.user.first_name
+        self.user.first_name.as_deref().unwrap_or("")
     }
 
     fn last_name(&self) -> &str {
-        &self.user.last_name
+        self.user.last_name.as_deref().unwrap_or("")
     }
 
-    fn avatar(&self) -> String {
-        (&self.user.avatar).into()
+    fn avatar(&self) -> Option<String> {
+        self.user.avatar.as_ref().map(String::from)
     }
 
     fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
@@ -392,7 +391,7 @@ mod tests {
                 Ok(DomainUser {
                     user_id: UserId::new("bob"),
                     email: "bob@bobbers.on".to_string(),
-                    creation_date: chrono::Utc.timestamp_millis(42),
+                    creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap(),
                     uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     ..Default::default()
                 })

@@ -2,10 +2,7 @@ use itertools::Itertools;
 use ldap3_proto::LdapResultCode;
 use tracing::{debug, instrument, warn};
 
-use crate::domain::{
-    handler::UserId,
-    sql_tables::{GroupColumn, UserColumn},
-};
+use crate::domain::handler::{GroupColumn, UserColumn, UserId};
 
 use super::error::{LdapError, LdapResult};
 
