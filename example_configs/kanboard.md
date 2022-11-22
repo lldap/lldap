@@ -2,6 +2,10 @@
 
 add these to the kanboard `config.php`
 
+Make sure you adapt `LDAP_SERVER` to the correct LDAP endpoint.
+
+You also might have to change `dc=example,dc=com` to whatever your LLDAP is handling, and maybe change the `lldap_kanboard` group name used in `LDAP_USER_FILTER` to identify users of a valid group of yours.
+
 ```
 define('LDAP_AUTH', true);
 define('LDAP_SERVER', 'ldap://YOUR_LDAP_SERVER:3890');
