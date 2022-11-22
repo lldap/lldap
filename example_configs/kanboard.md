@@ -1,7 +1,8 @@
 # configuration for Kanboard
-## add these to the kanboard `config.php`
----
 
+add these to the kanboard `config.php`
+
+```
 define('LDAP_AUTH', true);
 define('LDAP_SERVER', 'ldap://YOUR_LDAP_SERVER:3890');
 define('LDAP_SSL_VERIFY', true);
@@ -25,3 +26,4 @@ define('LDAP_USER_ATTRIBUTE_EMAIL', 'mail');
 define('LDAP_USER_ATTRIBUTE_GROUPS', 'memberof');
 define('LDAP_USER_ATTRIBUTE_PHOTO', '');
 define('LDAP_USER_ATTRIBUTE_LANGUAGE', '');
+```
