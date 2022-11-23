@@ -16,10 +16,12 @@ VERSION=$(git describe --tags)
 
 mkdir -p /tmp/release/x86_64
 cp target/release/lldap /tmp/release/x86_64
-cp -R app/index.html app/main.js app/pkg lldap_config.docker_template.toml README.md LICENSE /tmp/release/x86_64
+cp -R app/index.html app/main.js app/pkg app/static /tmp/release/x86_64/app
+cp -R lldap_config.docker_template.toml README.md LICENSE /tmp/release/x86_64
 tar -czvf lldap-x86_64-${VERSION}.tar.gz /tmp/release/x86_64
 
 mkdir -p /tmp/release/armv7
 cp target/armv7-unknown-linux-musleabihf/release/lldap /tmp/release/armv7
-cp -R app/index.html app/main.js app/pkg lldap_config.docker_template.toml README.md LICENSE /tmp/release/armv7
+cp -R app/index.html app/main.js app/pkg app/static /tmp/release/armv7/app
+cp -R lldap_config.docker_template.toml README.md LICENSE /tmp/release/armv7
 tar -czvf lldap-armv7-${VERSION}.tar.gz /tmp/release/armv7
