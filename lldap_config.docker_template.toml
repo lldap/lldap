@@ -8,11 +8,15 @@
 # verbose=false
 
 ## The host address that the LDAP server will be bound to.
-## To enable IPv6 support, simply switch "host" to "::1":
-#host = "0.0.0.0"
+## To enable IPv6 support, simply switch "ldap_host" to "::1":
+#ldap_host = "0.0.0.0"
 
 ## The port on which to have the LDAP server.
 #ldap_port = 3890
+
+## The host address that the HTTP server will be bound to.
+## To enable IPv6 support, simply switch "api_host" to "::1":
+#api_host = "0.0.0.0"
 
 ## The port on which to have the HTTP server, for user login and
 ## administration.

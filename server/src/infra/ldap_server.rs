@@ -177,7 +177,7 @@ where
 
     info!("Starting the LDAP server on port {}", config.ldap_port);
     let server_builder = server_builder
-        .bind("ldap", (config.host.clone(), config.ldap_port), binder)
+        .bind("ldap", (config.ldap_host.clone(), config.ldap_port), binder)
         .with_context(|| format!("while binding to the port {}", config.ldap_port));
     if config.ldaps_options.enabled {
         let tls_context = (
@@ -214,7 +214,7 @@ where
         server_builder.and_then(|s| {
             s.bind(
                 "ldaps",
-                (config.host.clone(), config.ldaps_options.port),
+                (config.ldap_host.clone(), config.ldaps_options.port),
                 tls_binder,
             )
             .with_context(|| format!("while binding to the port {}", config.ldaps_options.port))

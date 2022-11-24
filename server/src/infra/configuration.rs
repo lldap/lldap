@@ -64,10 +64,12 @@ impl std::default::Default for LdapsOptions {
 #[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
 #[builder(pattern = "owned", build_fn(name = "private_build"))]
 pub struct Configuration {
+    #[builder(default = r#"String::from("0.0.0.0")"#)]
+    pub ldap_host: String,
     #[builder(default = "3890")]
     pub ldap_port: u16,
     #[builder(default = r#"String::from("0.0.0.0")"#)]
-    pub host: String,
+    pub api_host: String,
     #[builder(default = "17170")]
     pub http_port: u16,
     #[builder(default = r#"SecUtf8::from("secretjwtsecret")"#)]
