@@ -127,30 +127,34 @@ where
     let mail_options = config.smtp_options.clone();
     info!("Starting the API/web server on port {}", config.http_port);
     server_builder
-        .bind("http", ("0.0.0.0", config.http_port), move || {
-            let backend_handler = backend_handler.clone();
-            let jwt_secret = jwt_secret.clone();
-            let jwt_blacklist = jwt_blacklist.clone();
-            let server_url = server_url.clone();
-            let mail_options = mail_options.clone();
-            HttpServiceBuilder::new()
-                .finish(map_config(
-                    App::new()
-                        .wrap(tracing_actix_web::TracingLogger::<CustomRootSpanBuilder>::new())
-                        .configure(move |cfg| {
-                            http_config(
-                                cfg,
-                                backend_handler,
-                                jwt_secret,
-                                jwt_blacklist,
-                                server_url,
-                                mail_options,
-                            )
-                        }),
-                    |_| AppConfig::default(),
-                ))
-                .tcp()
-        })
+        .bind(
+            "http",
+            (config.http_host.clone(), config.http_port),
+            move || {
+                let backend_handler = backend_handler.clone();
+                let jwt_secret = jwt_secret.clone();
+                let jwt_blacklist = jwt_blacklist.clone();
+                let server_url = server_url.clone();
+                let mail_options = mail_options.clone();
+                HttpServiceBuilder::new()
+                    .finish(map_config(
+                        App::new()
+                            .wrap(tracing_actix_web::TracingLogger::<CustomRootSpanBuilder>::new())
+                            .configure(move |cfg| {
+                                http_config(
+                                    cfg,
+                                    backend_handler,
+                                    jwt_secret,
+                                    jwt_blacklist,
+                                    server_url,
+                                    mail_options,
+                                )
+                            }),
+                        |_| AppConfig::default(),
+                    ))
+                    .tcp()
+            },
+        )
         .with_context(|| {
             format!(
                 "While bringing up the TCP server with port {}",

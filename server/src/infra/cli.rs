@@ -54,9 +54,17 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_SERVER_KEY_FILE")]
     pub server_key_file: Option<String>,
 
+    /// Change ldap host. Default: "0.0.0.0"
+    #[clap(long, env = "LLDAP_LDAP_HOST")]
+    pub ldap_host: Option<String>,
+
     /// Change ldap port. Default: 3890
     #[clap(long, env = "LLDAP_LDAP_PORT")]
     pub ldap_port: Option<u16>,
+
+    /// Change HTTP API host. Default: "0.0.0.0"
+    #[clap(long, env = "LLDAP_HTTP_HOST")]
+    pub http_host: Option<String>,
 
     /// Change HTTP API port. Default: 17170
     #[clap(long, env = "LLDAP_HTTP_PORT")]
