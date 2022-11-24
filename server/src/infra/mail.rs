@@ -54,15 +54,15 @@ To reset your password please visit the following URL: {}/reset-password/step2/{
 Please contact an administrator if you did not initiate the process.",
         username, domain, token
     );
-    return send_email(to, "[LLDAP] Password reset requested", body, options).await;
+    send_email(to, "[LLDAP] Password reset requested", body, options).await
 }
 
 pub async fn send_test_email(to: Mailbox, options: &MailOptions) -> Result<()> {
-    return send_email(
+    send_email(
         to,
         "LLDAP test email",
         "The test is successful! You can send emails from LLDAP".to_string(),
         options,
     )
-    .await;
+    .await
 }
