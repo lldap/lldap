@@ -25,9 +25,7 @@ use std::sync::RwLock;
 use tracing::info;
 
 async fn index() -> actix_web::Result<NamedFile> {
-    let mut path = PathBuf::new();
-    path.push("app");
-    path.push("index.html");
+    let path = PathBuf::from(r"app/index.html");
     Ok(NamedFile::open(path)?)
 }
 
