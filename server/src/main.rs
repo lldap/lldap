@@ -131,7 +131,16 @@ fn send_test_email_command(opts: TestEmailOpts) -> Result<()> {
     let to = opts.to.parse()?;
     let config = infra::configuration::init(opts)?;
     infra::logging::init(&config)?;
-    mail::send_test_email(to, &config.smtp_options)
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+
+    runtime.block_on(
+        mail::send_test_email(to, &config.smtp_options)
+            .unwrap_or_else(|e| error!("Could not send email: {:#}", e)),
+    );
+    Ok(())
 }
 
 fn run_healthcheck(opts: RunOpts) -> Result<()> {
