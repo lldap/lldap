@@ -129,7 +129,7 @@ where
     let mail_options = config.smtp_options.clone();
     info!("Starting the API/web server on port {}", config.http_port);
     server_builder
-        .bind("http", ("0.0.0.0", config.http_port), move || {
+        .bind("http", (config.host.clone(), config.http_port), move || {
             let backend_handler = backend_handler.clone();
             let jwt_secret = jwt_secret.clone();
             let jwt_blacklist = jwt_blacklist.clone();

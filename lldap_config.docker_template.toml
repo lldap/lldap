@@ -7,6 +7,10 @@
 ## You can set it with the LLDAP_VERBOSE environment variable.
 # verbose=false
 
+## The host address that the LDAP server will be bound to.
+## To enable IPv6 support, simply switch "host" to "::1":
+#host = "0.0.0.0"
+
 ## The port on which to have the LDAP server.
 #ldap_port = 3890
 
