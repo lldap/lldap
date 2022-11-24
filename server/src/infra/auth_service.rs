@@ -179,7 +179,9 @@ where
         &token,
         &data.server_url,
         &data.mail_options,
-    ) {
+    )
+    .await
+    {
         warn!("Error sending email: {:#?}", e);
         return Err(TcpError::InternalServerError(format!(
             "Could not send email: {}",
