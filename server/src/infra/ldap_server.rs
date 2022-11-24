@@ -212,8 +212,12 @@ where
             config.ldaps_options.port
         );
         server_builder.and_then(|s| {
-            s.bind("ldaps", (config.host.clone(), config.ldaps_options.port), tls_binder)
-                .with_context(|| format!("while binding to the port {}", config.ldaps_options.port))
+            s.bind(
+                "ldaps",
+                (config.host.clone(), config.ldaps_options.port),
+                tls_binder,
+            )
+            .with_context(|| format!("while binding to the port {}", config.ldaps_options.port))
         })
     } else {
         server_builder
