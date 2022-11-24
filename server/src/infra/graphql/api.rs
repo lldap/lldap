@@ -43,7 +43,7 @@ pub fn export_schema(opts: ExportGraphQLSchemaOpts) -> anyhow::Result<()> {
             use std::path::Path;
             let path = Path::new(&path);
             let mut file =
-                File::create(&path).context(format!("unable to open '{}'", path.display()))?;
+                File::create(path).context(format!("unable to open '{}'", path.display()))?;
             file.write_all(output.as_bytes())
                 .context(format!("unable to write in '{}'", path.display()))?;
         }

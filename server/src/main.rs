@@ -170,7 +170,7 @@ fn run_healthcheck(opts: RunOpts) -> Result<()> {
             failure = true;
             error!("{:#}", e)
         });
-    std::process::exit(if failure { 1 } else { 0 })
+    std::process::exit(i32::from(failure))
 }
 
 fn main() -> Result<()> {
