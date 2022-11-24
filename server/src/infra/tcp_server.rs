@@ -131,7 +131,7 @@ where
     server_builder
         .bind(
             "http",
-            (config.api_host.clone(), config.http_port),
+            (config.http_host.clone(), config.http_port),
             move || {
                 let backend_handler = backend_handler.clone();
                 let jwt_secret = jwt_secret.clone();
