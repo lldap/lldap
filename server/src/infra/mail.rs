@@ -1,12 +1,12 @@
 use crate::infra::{cli::SmtpEncryption, configuration::MailOptions};
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use lettre::{
-    message::Mailbox, transport::smtp::authentication::Credentials, Message, SmtpTransport,
-    Transport,
+    message::Mailbox, transport::smtp::authentication::Credentials, AsyncSmtpTransport,
+    AsyncTransport, Message, Tokio1Executor,
 };
 use tracing::debug;
 
-fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOptions) -> Result<()> {
+async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOptions) -> Result<()> {
     let from = options
         .from
         .clone()
@@ -27,15 +27,15 @@ fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOptions) -
         options.password.unsecure().to_string(),
     );
     let relay_factory = match options.smtp_encryption {
-        SmtpEncryption::TLS => SmtpTransport::relay,
-        SmtpEncryption::STARTTLS => SmtpTransport::starttls_relay,
+        SmtpEncryption::TLS => AsyncSmtpTransport::<Tokio1Executor>::relay,
+        SmtpEncryption::STARTTLS => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay,
     };
     let mailer = relay_factory(&options.server)?.credentials(creds).build();
-    mailer.send(&email)?;
+    mailer.send(email).await?;
     Ok(())
 }
 
-pub fn send_password_reset_email(
+pub async fn send_password_reset_email(
     username: &str,
     to: &str,
     token: &str,
@@ -54,14 +54,15 @@ To reset your password please visit the following URL: {}/reset-password/step2/{
 Please contact an administrator if you did not initiate the process.",
         username, domain, token
     );
-    send_email(to, "[LLDAP] Password reset requested", body, options)
+    send_email(to, "[LLDAP] Password reset requested", body, options).await
 }
 
-pub fn send_test_email(to: Mailbox, options: &MailOptions) -> Result<()> {
+pub async fn send_test_email(to: Mailbox, options: &MailOptions) -> Result<()> {
     send_email(
         to,
         "LLDAP test email",
         "The test is successful! You can send emails from LLDAP".to_string(),
         options,
     )
+    .await
 }
