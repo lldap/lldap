@@ -1,11 +1,9 @@
 use super::{
     error::{DomainError, Result},
-    handler::{
-        CreateUserRequest, GroupDetails, GroupId, UpdateUserRequest, User, UserAndGroups,
-        UserBackendHandler, UserId, UserRequestFilter, Uuid,
-    },
+    handler::{CreateUserRequest, UpdateUserRequest, UserBackendHandler, UserRequestFilter},
     model::{self, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
+    types::{GroupDetails, GroupId, User, UserAndGroups, UserId, Uuid},
 };
 use async_trait::async_trait;
 use sea_orm::{
@@ -245,8 +243,8 @@ impl UserBackendHandler for SqlBackendHandler {
 mod tests {
     use super::*;
     use crate::domain::{
-        handler::{JpegPhoto, UserColumn},
         sql_backend_handler::tests::*,
+        types::{JpegPhoto, UserColumn},
     };
 
     #[tokio::test]

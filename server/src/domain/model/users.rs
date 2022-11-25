@@ -3,7 +3,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::handler::{JpegPhoto, UserId, Uuid};
+use crate::domain::types::{JpegPhoto, UserId, Uuid};
 
 #[derive(Copy, Clone, Default, Debug, DeriveEntity)]
 pub struct Entity;
@@ -118,7 +118,7 @@ impl Related<super::password_reset_tokens::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-impl From<Model> for crate::domain::handler::User {
+impl From<Model> for crate::domain::types::User {
     fn from(user: Model) -> Self {
         Self {
             user_id: user.user_id,

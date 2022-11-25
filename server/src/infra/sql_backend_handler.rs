@@ -1,9 +1,9 @@
 use super::tcp_backend_handler::TcpBackendHandler;
 use crate::domain::{
     error::*,
-    handler::UserId,
     model::{self, JwtRefreshStorageColumn, JwtStorageColumn, PasswordResetTokensColumn},
     sql_backend_handler::SqlBackendHandler,
+    types::UserId,
 };
 use async_trait::async_trait;
 use sea_orm::{

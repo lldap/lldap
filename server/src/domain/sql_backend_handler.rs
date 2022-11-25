@@ -1,4 +1,4 @@
-use super::{handler::*, sql_tables::*};
+use super::{handler::BackendHandler, sql_tables::DbConnection};
 use crate::infra::configuration::Configuration;
 use async_trait::async_trait;
 
@@ -20,8 +20,16 @@ impl BackendHandler for SqlBackendHandler {}
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::domain::sql_tables::init_table;
-    use crate::infra::configuration::ConfigurationBuilder;
+    use crate::{
+        domain::{
+            handler::{
+                CreateUserRequest, GroupBackendHandler, UserBackendHandler, UserRequestFilter,
+            },
+            sql_tables::init_table,
+            types::{GroupId, UserId},
+        },
+        infra::configuration::ConfigurationBuilder,
+    };
     use lldap_auth::{opaque, registration};
     use sea_orm::Database;
 

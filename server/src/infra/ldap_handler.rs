@@ -1,10 +1,6 @@
-use std::collections::HashMap;
-
 use crate::{
     domain::{
-        handler::{
-            BackendHandler, BindRequest, CreateUserRequest, JpegPhoto, LoginHandler, UserId,
-        },
+        handler::{BackendHandler, BindRequest, CreateUserRequest, LoginHandler},
         ldap::{
             error::{LdapError, LdapResult},
             group::get_groups_list,
@@ -14,6 +10,7 @@ use crate::{
             },
         },
         opaque_handler::OpaqueHandler,
+        types::{JpegPhoto, UserId},
     },
     infra::auth_service::{Permission, ValidationResults},
 };
@@ -24,6 +21,7 @@ use ldap3_proto::proto::{
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
     LdapSearchScope,
 };
+use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -569,7 +567,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 mod tests {
     use super::*;
     use crate::{
-        domain::{error::Result, handler::*, opaque_handler::*},
+        domain::{error::Result, handler::*, opaque_handler::*, types::*},
         uuid,
     };
     use async_trait::async_trait;

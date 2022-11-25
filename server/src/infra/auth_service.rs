@@ -22,12 +22,12 @@ use tracing::{debug, instrument, warn};
 
 use lldap_auth::{login, password_reset, registration, JWTClaims};
 
-use crate::domain::handler::UserRequestFilter;
 use crate::{
     domain::{
         error::DomainError,
-        handler::{BackendHandler, BindRequest, GroupDetails, LoginHandler, UserColumn, UserId},
+        handler::{BackendHandler, BindRequest, LoginHandler, UserRequestFilter},
         opaque_handler::OpaqueHandler,
+        types::{GroupDetails, UserColumn, UserId},
     },
     infra::{
         tcp_backend_handler::*,

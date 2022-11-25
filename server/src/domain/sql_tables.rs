@@ -1,8 +1,5 @@
-use super::{
-    handler::{GroupId, JpegPhoto, UserId, Uuid},
-    sql_migrations::{get_schema_version, migrate_from_version, upgrade_to_v1},
-};
-use sea_orm::{DbErr, Value};
+use super::sql_migrations::{get_schema_version, migrate_from_version, upgrade_to_v1};
+use sea_orm::Value;
 
 pub type DbConnection = sea_orm::DatabaseConnection;
 
@@ -16,181 +13,6 @@ impl sea_orm::TryGetable for SchemaVersion {
         col: &str,
     ) -> Result<Self, sea_orm::TryGetError> {
         Ok(SchemaVersion(u8::try_get(res, pre, col)?))
-    }
-}
-
-impl From<GroupId> for sea_orm::Value {
-    fn from(group_id: GroupId) -> Self {
-        group_id.0.into()
-    }
-}
-
-impl sea_orm::TryGetable for GroupId {
-    fn try_get(
-        res: &sea_orm::QueryResult,
-        pre: &str,
-        col: &str,
-    ) -> Result<Self, sea_orm::TryGetError> {
-        Ok(GroupId(i32::try_get(res, pre, col)?))
-    }
-}
-
-impl sea_orm::sea_query::value::ValueType for GroupId {
-    fn try_from(v: sea_orm::Value) -> Result<Self, sea_orm::sea_query::ValueTypeErr> {
-        Ok(GroupId(<i32 as sea_orm::sea_query::ValueType>::try_from(
-            v,
-        )?))
-    }
-
-    fn type_name() -> String {
-        "GroupId".to_owned()
-    }
-
-    fn array_type() -> sea_orm::sea_query::ArrayType {
-        sea_orm::sea_query::ArrayType::Int
-    }
-
-    fn column_type() -> sea_orm::sea_query::ColumnType {
-        sea_orm::sea_query::ColumnType::Integer(None)
-    }
-}
-
-impl sea_orm::TryFromU64 for GroupId {
-    fn try_from_u64(n: u64) -> Result<Self, sea_orm::DbErr> {
-        Ok(GroupId(i32::try_from_u64(n)?))
-    }
-}
-
-impl From<UserId> for sea_orm::Value {
-    fn from(user_id: UserId) -> Self {
-        user_id.into_string().into()
-    }
-}
-
-impl From<&UserId> for sea_orm::Value {
-    fn from(user_id: &UserId) -> Self {
-        user_id.as_str().into()
-    }
-}
-
-impl sea_orm::TryGetable for UserId {
-    fn try_get(
-        res: &sea_orm::QueryResult,
-        pre: &str,
-        col: &str,
-    ) -> Result<Self, sea_orm::TryGetError> {
-        Ok(UserId::new(&String::try_get(res, pre, col)?))
-    }
-}
-
-impl sea_orm::TryFromU64 for UserId {
-    fn try_from_u64(_n: u64) -> Result<Self, sea_orm::DbErr> {
-        Err(sea_orm::DbErr::ConvertFromU64(
-            "UserId cannot be constructed from u64",
-        ))
-    }
-}
-
-impl sea_orm::sea_query::value::ValueType for UserId {
-    fn try_from(v: sea_orm::Value) -> Result<Self, sea_orm::sea_query::ValueTypeErr> {
-        Ok(UserId::new(
-            <String as sea_orm::sea_query::ValueType>::try_from(v)?.as_str(),
-        ))
-    }
-
-    fn type_name() -> String {
-        "UserId".to_owned()
-    }
-
-    fn array_type() -> sea_orm::sea_query::ArrayType {
-        sea_orm::sea_query::ArrayType::String
-    }
-
-    fn column_type() -> sea_orm::sea_query::ColumnType {
-        sea_orm::sea_query::ColumnType::String(Some(255))
-    }
-}
-
-impl From<Uuid> for sea_query::Value {
-    fn from(uuid: Uuid) -> Self {
-        uuid.as_str().into()
-    }
-}
-
-impl From<&Uuid> for sea_query::Value {
-    fn from(uuid: &Uuid) -> Self {
-        uuid.as_str().into()
-    }
-}
-
-impl sea_orm::TryGetable for JpegPhoto {
-    fn try_get(
-        res: &sea_orm::QueryResult,
-        pre: &str,
-        col: &str,
-    ) -> Result<Self, sea_orm::TryGetError> {
-        <JpegPhoto as std::convert::TryFrom<Vec<_>>>::try_from(Vec::<u8>::try_get(res, pre, col)?)
-            .map_err(|e| {
-                sea_orm::TryGetError::DbErr(DbErr::TryIntoErr {
-                    from: "[u8]",
-                    into: "JpegPhoto",
-                    source: e.into(),
-                })
-            })
-    }
-}
-
-impl sea_orm::sea_query::value::ValueType for JpegPhoto {
-    fn try_from(v: sea_orm::Value) -> Result<Self, sea_orm::sea_query::ValueTypeErr> {
-        <JpegPhoto as std::convert::TryFrom<_>>::try_from(
-            <Vec<u8> as sea_orm::sea_query::ValueType>::try_from(v)?.as_slice(),
-        )
-        .map_err(|_| sea_orm::sea_query::ValueTypeErr {})
-    }
-
-    fn type_name() -> String {
-        "JpegPhoto".to_owned()
-    }
-
-    fn array_type() -> sea_orm::sea_query::ArrayType {
-        sea_orm::sea_query::ArrayType::Bytes
-    }
-
-    fn column_type() -> sea_orm::sea_query::ColumnType {
-        sea_orm::sea_query::ColumnType::Binary(sea_orm::sea_query::BlobSize::Long)
-    }
-}
-
-impl sea_orm::sea_query::Nullable for JpegPhoto {
-    fn null() -> sea_orm::Value {
-        JpegPhoto::null().into()
-    }
-}
-
-impl sea_orm::entity::IntoActiveValue<JpegPhoto> for JpegPhoto {
-    fn into_active_value(self) -> sea_orm::ActiveValue<JpegPhoto> {
-        sea_orm::ActiveValue::Set(self)
-    }
-}
-
-impl sea_orm::sea_query::value::ValueType for Uuid {
-    fn try_from(v: sea_orm::Value) -> Result<Self, sea_orm::sea_query::ValueTypeErr> {
-        <super::handler::Uuid as std::convert::TryFrom<_>>::try_from(
-            <std::string::String as sea_orm::sea_query::ValueType>::try_from(v)?.as_str(),
-        )
-        .map_err(|_| sea_orm::sea_query::ValueTypeErr {})
-    }
-
-    fn type_name() -> String {
-        "Uuid".to_owned()
-    }
-
-    fn array_type() -> sea_orm::sea_query::ArrayType {
-        sea_orm::sea_query::ArrayType::String
-    }
-
-    fn column_type() -> sea_orm::sea_query::ColumnType {
-        sea_orm::sea_query::ColumnType::String(Some(36))
     }
 }
 
@@ -215,7 +37,10 @@ pub async fn init_table(pool: &DbConnection) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::sql_migrations;
+    use crate::domain::{
+        sql_migrations,
+        types::{GroupId, Uuid},
+    };
 
     use super::*;
     use chrono::prelude::*;

@@ -4,8 +4,9 @@ use ldap3_proto::{
 use tracing::{debug, info, instrument, warn};
 
 use crate::domain::{
-    handler::{BackendHandler, Group, GroupColumn, GroupRequestFilter, UserId, Uuid},
+    handler::{BackendHandler, GroupRequestFilter},
     ldap::error::LdapError,
+    types::{Group, GroupColumn, UserId, Uuid},
 };
 
 use super::{

@@ -2,9 +2,10 @@ use itertools::Itertools;
 use ldap3_proto::LdapResultCode;
 use tracing::{debug, instrument, warn};
 
-use crate::domain::handler::{GroupColumn, UserColumn, UserId};
-
-use super::error::{LdapError, LdapResult};
+use crate::domain::{
+    ldap::error::{LdapError, LdapResult},
+    types::{GroupColumn, UserColumn, UserId},
+};
 
 fn make_dn_pair<I>(mut iter: I) -> LdapResult<(String, String)>
 where

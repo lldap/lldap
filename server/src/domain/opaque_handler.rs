@@ -1,4 +1,4 @@
-use crate::domain::{error::*, handler::UserId};
+use crate::domain::{error::Result, types::UserId};
 use async_trait::async_trait;
 
 pub use lldap_auth::{login, registration};

@@ -1,6 +1,6 @@
-use super::{
-    handler::{GroupId, UserId, Uuid},
+use crate::domain::{
     sql_tables::{DbConnection, SchemaVersion},
+    types::{GroupId, UserId, Uuid},
 };
 use sea_orm::{ConnectionTrait, FromQueryResult, Statement};
 use sea_query::{ColumnDef, Expr, ForeignKey, ForeignKeyAction, Iden, Query, Table, Value};
