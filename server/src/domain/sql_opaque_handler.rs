@@ -1,9 +1,10 @@
 use super::{
     error::{DomainError, Result},
-    handler::{BindRequest, LoginHandler, UserId},
+    handler::{BindRequest, LoginHandler},
     model::{self, UserColumn},
     opaque_handler::{login, registration, OpaqueHandler},
     sql_backend_handler::SqlBackendHandler,
+    types::UserId,
 };
 use async_trait::async_trait;
 use lldap_auth::opaque;

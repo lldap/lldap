@@ -1,5 +1,5 @@
 use crate::{
-    domain::handler::UserId,
+    domain::types::UserId,
     infra::cli::{GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts},
 };
 use anyhow::{Context, Result};

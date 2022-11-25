@@ -1,6 +1,6 @@
-use crate::domain::handler::{
-    BackendHandler, CreateUserRequest, GroupId, JpegPhoto, UpdateGroupRequest, UpdateUserRequest,
-    UserId,
+use crate::domain::{
+    handler::{BackendHandler, CreateUserRequest, UpdateGroupRequest, UpdateUserRequest},
+    types::{GroupId, JpegPhoto, UserId},
 };
 use anyhow::Context as AnyhowContext;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};

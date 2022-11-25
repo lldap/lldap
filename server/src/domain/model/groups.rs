@@ -3,7 +3,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::handler::{GroupId, Uuid};
+use crate::domain::types::{GroupId, Uuid};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "groups")]
@@ -13,29 +13,6 @@ pub struct Model {
     pub display_name: String,
     pub creation_date: chrono::DateTime<chrono::Utc>,
     pub uuid: Uuid,
-}
-
-impl From<Model> for crate::domain::handler::Group {
-    fn from(group: Model) -> Self {
-        Self {
-            id: group.group_id,
-            display_name: group.display_name,
-            creation_date: group.creation_date,
-            uuid: group.uuid,
-            users: vec![],
-        }
-    }
-}
-
-impl From<Model> for crate::domain::handler::GroupDetails {
-    fn from(group: Model) -> Self {
-        Self {
-            group_id: group.group_id,
-            display_name: group.display_name,
-            creation_date: group.creation_date,
-            uuid: group.uuid,
-        }
-    }
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -51,3 +28,26 @@ impl Related<super::memberships::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl From<Model> for crate::domain::types::Group {
+    fn from(group: Model) -> Self {
+        Self {
+            id: group.group_id,
+            display_name: group.display_name,
+            creation_date: group.creation_date,
+            uuid: group.uuid,
+            users: vec![],
+        }
+    }
+}
+
+impl From<Model> for crate::domain::types::GroupDetails {
+    fn from(group: Model) -> Self {
+        Self {
+            group_id: group.group_id,
+            display_name: group.display_name,
+            creation_date: group.creation_date,
+            uuid: group.uuid,
+        }
+    }
+}

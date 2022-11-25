@@ -1,15 +1,16 @@
 use crate::domain::{
-    handler::{BackendHandler, GroupDetails, GroupId, UserColumn, UserId},
+    handler::BackendHandler,
     ldap::utils::map_user_field,
+    types::{GroupDetails, GroupId, UserColumn, UserId},
 };
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument};
 
 type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
-type DomainUser = crate::domain::handler::User;
-type DomainGroup = crate::domain::handler::Group;
-type DomainUserAndGroups = crate::domain::handler::UserAndGroups;
+type DomainUser = crate::domain::types::User;
+type DomainGroup = crate::domain::types::Group;
+type DomainUserAndGroups = crate::domain::types::UserAndGroups;
 use super::api::Context;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
@@ -345,10 +346,7 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        domain::handler::{MockTestBackendHandler, UserRequestFilter},
-        infra::auth_service::ValidationResults,
-    };
+    use crate::{domain::handler::MockTestBackendHandler, infra::auth_service::ValidationResults};
     use chrono::TimeZone;
     use juniper::{
         execute, graphql_value, DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType,
@@ -457,9 +455,12 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
             .with(
-                eq(Some(UserRequestFilter::Or(vec![
-                    UserRequestFilter::UserId(UserId::new("bob")),
-                    UserRequestFilter::Equality(UserColumn::Email, "robert@bobbers.on".to_string()),
+                eq(Some(DomainRequestFilter::Or(vec![
+                    DomainRequestFilter::UserId(UserId::new("bob")),
+                    DomainRequestFilter::Equality(
+                        UserColumn::Email,
+                        "robert@bobbers.on".to_string(),
+                    ),
                 ]))),
                 eq(false),
             )

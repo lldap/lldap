@@ -1,12 +1,9 @@
-use crate::domain::handler::Uuid;
-
-use super::{
+use crate::domain::{
     error::{DomainError, Result},
-    handler::{
-        Group, GroupBackendHandler, GroupDetails, GroupId, GroupRequestFilter, UpdateGroupRequest,
-    },
+    handler::{GroupBackendHandler, GroupRequestFilter, UpdateGroupRequest},
     model::{self, GroupColumn, MembershipColumn},
     sql_backend_handler::SqlBackendHandler,
+    types::{Group, GroupDetails, GroupId, Uuid},
 };
 use async_trait::async_trait;
 use sea_orm::{
@@ -155,7 +152,7 @@ impl GroupBackendHandler for SqlBackendHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{handler::UserId, sql_backend_handler::tests::*};
+    use crate::domain::{sql_backend_handler::tests::*, types::UserId};
 
     async fn get_group_ids(
         handler: &SqlBackendHandler,

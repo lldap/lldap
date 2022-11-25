@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::collections::HashSet;
 
-use crate::domain::{error::Result, handler::UserId};
+use crate::domain::{error::Result, types::UserId};
 
 #[async_trait]
 pub trait TcpBackendHandler {
@@ -22,7 +22,7 @@ pub trait TcpBackendHandler {
 }
 
 #[cfg(test)]
-use crate::domain::handler::*;
+use crate::domain::{handler::*, types::*};
 #[cfg(test)]
 mockall::mock! {
     pub TestTcpBackendHandler{}
