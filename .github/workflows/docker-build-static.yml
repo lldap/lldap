@@ -19,7 +19,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
-# In total 5 jobs, all of the jobs are containerized
+# In total 5 jobs, all the jobs are containerized
 # ---
 
 # build-ui , create/compile the web
@@ -32,8 +32,8 @@ env:
 
 # builds-armhf, build-aarch64, build-amd64 create binary for respective arch
 ## Use rustlang/rust:nightly image
-### Add non native architecture dpkg --add-architecture XXX
-### Install dev tool gcc g++, etc per respective arch
+### Add non-native architecture dpkg --add-architecture XXX
+### Install dev tool gcc g++, etc. per respective arch
 ### Cargo build
 ### Upload artifacts
 
@@ -55,7 +55,7 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     container:
-      image: rust:1.62
+      image: rust:1.65
       env:
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
@@ -100,7 +100,7 @@ jobs:
   build-armhf:
     runs-on: ubuntu-latest
     container:
-      image: rust:1.62
+      image: rust:1.65
       env:
         CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
         CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER: arm-linux-gnueabihf-ld
@@ -151,11 +151,11 @@ jobs:
     runs-on: ubuntu-latest
     container:
 ##################################################################################
-# Github actions currently timeout when downloading musl-gcc                     #
-# Using lldap dev image based on rust:1.62-slim-bullseye and musl-gcc bundled    #
+# GitHub actions currently timeout when downloading musl-gcc                     #
+# Using lldap dev image based on rust:1.65-slim-bullseye and musl-gcc bundled    #
 # Only for Job build aarch64 and amd64                                           #
 ###################################################################################
-      #image: rust:1.62
+      #image: rust:1.65
       image: nitnelave/rust-dev:latest
       env:
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
@@ -205,7 +205,7 @@ jobs:
   build-amd64:
     runs-on: ubuntu-latest
     container:
-#      image: rust:1.62
+#      image: rust:1.65
       image: nitnelave/rust-dev:latest
       env:
         CARGO_TERM_COLOR: always
