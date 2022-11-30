@@ -8,7 +8,7 @@ use super::{
 };
 use async_trait::async_trait;
 use lldap_auth::opaque;
-use sea_orm::{ActiveValue, EntityTrait, FromQueryResult, QuerySelect};
+use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, FromQueryResult, QuerySelect};
 use secstr::SecUtf8;
 use tracing::{debug, instrument};
 
@@ -198,10 +198,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
             password_hash: ActiveValue::Set(Some(password_file.serialize())),
             ..Default::default()
         };
-        model::User::update_many()
-            .set(user_update)
-            .exec(&self.sql_pool)
-            .await?;
+        user_update.update(&self.sql_pool).await?;
         Ok(())
     }
 }
@@ -271,10 +268,12 @@ mod tests {
     #[tokio::test]
     async fn test_opaque_flow() -> Result<()> {
         let sql_pool = get_initialized_db().await;
+        crate::infra::logging::init_for_tests();
         let config = get_default_config();
         let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
         let opaque_handler = SqlOpaqueHandler::new(config, sql_pool);
         insert_user_no_password(&backend_handler, "bob").await;
+        insert_user_no_password(&backend_handler, "john").await;
         attempt_login(&opaque_handler, "bob", "bob00")
             .await
             .unwrap_err();

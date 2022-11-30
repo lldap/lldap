@@ -179,6 +179,7 @@ impl UserBackendHandler for SqlBackendHandler {
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
         debug!(user_id = ?request.user_id);
         let update_user = model::users::ActiveModel {
+            user_id: ActiveValue::Set(request.user_id),
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
             display_name: to_value(&request.display_name),
             first_name: to_value(&request.first_name),
@@ -186,14 +187,7 @@ impl UserBackendHandler for SqlBackendHandler {
             avatar: request.avatar.into_active_value(),
             ..Default::default()
         };
-        model::User::update_many()
-            .set(update_user)
-            .filter(sea_orm::ColumnTrait::eq(
-                &UserColumn::UserId,
-                request.user_id,
-            ))
-            .exec(&self.sql_pool)
-            .await?;
+        update_user.update(&self.sql_pool).await?;
         Ok(())
     }
 

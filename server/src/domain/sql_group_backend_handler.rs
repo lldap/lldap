@@ -102,20 +102,14 @@ impl GroupBackendHandler for SqlBackendHandler {
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()> {
         debug!(?request.group_id);
         let update_group = model::groups::ActiveModel {
+            group_id: ActiveValue::Set(request.group_id),
             display_name: request
                 .display_name
                 .map(ActiveValue::Set)
                 .unwrap_or_default(),
             ..Default::default()
         };
-        model::Group::update_many()
-            .set(update_group)
-            .filter(sea_orm::ColumnTrait::eq(
-                &GroupColumn::GroupId,
-                request.group_id,
-            ))
-            .exec(&self.sql_pool)
-            .await?;
+        update_group.update(&self.sql_pool).await?;
         Ok(())
     }
 
