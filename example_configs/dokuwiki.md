@@ -11,7 +11,7 @@ $conf['plugin']['authldap']['usertree']    = 'ou=people,dc=example,dc=com';
 $conf['plugin']['authldap']['grouptree']   = 'ou=groups, dc=example, dc=com';
 $conf['plugin']['authldap']['userfilter']  = '(&(uid=%{user})(objectClass=person))';
 $conf['plugin']['authldap']['groupfilter'] = '(objectClass=group)';
-$conf['plugin']['authldap']['attributes']  = array('cn', 'displayname', 'mail', 'givenname', 'objectclass', 'sn', 'uid', 'memberof');
+$conf['plugin']['authldap']['attributes']  = array('cn', 'displayname', 'mail', 'givenname', 'objectclass', 'sn', 'uid', 'memberOf');
 $conf['plugin']['authldap']['version']    = 3;
 $conf['plugin']['authldap']['binddn']     = 'cn=admin,ou=people,dc=example,dc=com';
 $conf['plugin']['authldap']['bindpw']     = 'ENTER_YOUR_LLDAP_PASSWORD';
