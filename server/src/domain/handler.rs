@@ -1,7 +1,8 @@
 use super::{
     error::Result,
     types::{
-        Group, GroupDetails, GroupId, JpegPhoto, User, UserAndGroups, UserColumn, UserId, Uuid,
+        DisplayName, Group, GroupDetails, GroupId, JpegPhoto, User, UserAndGroups, UserColumn,
+        UserId, Uuid,
     },
 };
 use async_trait::async_trait;
@@ -44,7 +45,7 @@ pub struct CreateUserRequest {
     // Same fields as User, but no creation_date, and with password.
     pub user_id: UserId,
     pub email: String,
-    pub display_name: Option<String>,
+    pub display_name: DisplayName,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,
@@ -55,7 +56,7 @@ pub struct UpdateUserRequest {
     // Same fields as CreateUserRequest, but no with an extra layer of Option.
     pub user_id: UserId,
     pub email: Option<String>,
-    pub display_name: Option<String>,
+    pub display_name: DisplayName,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,

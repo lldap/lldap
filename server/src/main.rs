@@ -9,6 +9,7 @@ use crate::{
         handler::{CreateUserRequest, GroupBackendHandler, GroupRequestFilter, UserBackendHandler},
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
+        types::DisplayName,
     },
     infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler, healthcheck, mail},
 };
@@ -33,7 +34,7 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
         .create_user(CreateUserRequest {
             user_id: config.ldap_user_dn.clone(),
             email: config.ldap_user_email.clone(),
-            display_name: Some("Administrator".to_string()),
+            display_name: DisplayName::new("Administrator"),
             ..Default::default()
         })
         .and_then(|_| register_password(handler, &config.ldap_user_dn, &config.ldap_user_pass))

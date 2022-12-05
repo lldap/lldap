@@ -26,7 +26,7 @@ pub mod tests {
                 CreateUserRequest, GroupBackendHandler, UserBackendHandler, UserRequestFilter,
             },
             sql_tables::init_table,
-            types::{GroupId, UserId},
+            types::{DisplayName, GroupId, UserId},
         },
         infra::configuration::ConfigurationBuilder,
     };
@@ -86,7 +86,7 @@ pub mod tests {
             .create_user(CreateUserRequest {
                 user_id: UserId::new(name),
                 email: "bob@bob.bob".to_string(),
-                display_name: Some("display ".to_string() + name),
+                display_name: DisplayName::new(("display ".to_owned() + name).as_str()),
                 first_name: Some("first ".to_string() + name),
                 last_name: Some("last ".to_string() + name),
                 ..Default::default()

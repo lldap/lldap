@@ -10,7 +10,7 @@ use crate::{
             },
         },
         opaque_handler::OpaqueHandler,
-        types::{JpegPhoto, UserId},
+        types::{DisplayName, JpegPhoto, UserId},
     },
     infra::auth_service::{Permission, ValidationResults},
 };
@@ -460,6 +460,8 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             &self.ldap_info.base_dn,
             &self.ldap_info.base_dn_str,
         )?;
+
+        //
         fn parse_attribute(mut attr: LdapPartialAttribute) -> LdapResult<(String, Vec<u8>)> {
             if attr.vals.len() > 1 {
                 Err(LdapError {
@@ -506,7 +508,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     .or_else(|| get_attribute("email"))
                     .transpose()?
                     .unwrap_or_default(),
-                display_name: get_attribute("cn").transpose()?,
+                display_name: DisplayName::new(
+                    get_attribute("cn")
+                        .transpose()?
+                        .unwrap_or_default()
+                        .as_str(),
+                ),
                 first_name: get_attribute("givenname").transpose()?,
                 last_name: get_attribute("sn").transpose()?,
                 avatar: attributes
@@ -989,7 +996,7 @@ mod tests {
                     user: User {
                         user_id: UserId::new("bob_1"),
                         email: "bob@bobmail.bob".to_string(),
-                        display_name: Some("Bôb Böbberson".to_string()),
+                        display_name: DisplayName::new("Bôb Böbberson"),
                         first_name: Some("Bôb".to_string()),
                         last_name: Some("Böbberson".to_string()),
                         uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
@@ -1001,7 +1008,7 @@ mod tests {
                     user: User {
                         user_id: UserId::new("jim"),
                         email: "jim@cricket.jim".to_string(),
-                        display_name: Some("Jimminy Cricket".to_string()),
+                        display_name: DisplayName::new("Jimminy Cricket"),
                         first_name: Some("Jim".to_string()),
                         last_name: Some("Cricket".to_string()),
                         avatar: Some(JpegPhoto::for_tests()),
@@ -1540,7 +1547,7 @@ mod tests {
                 user: User {
                     user_id: UserId::new("bob_1"),
                     email: "bob@bobmail.bob".to_string(),
-                    display_name: Some("Bôb Böbberson".to_string()),
+                    display_name: DisplayName::new("Bôb Böbberson"),
                     first_name: Some("Bôb".to_string()),
                     last_name: Some("Böbberson".to_string()),
                     ..Default::default()
@@ -1614,7 +1621,7 @@ mod tests {
                 user: User {
                     user_id: UserId::new("bob_1"),
                     email: "bob@bobmail.bob".to_string(),
-                    display_name: Some("Bôb Böbberson".to_string()),
+                    display_name: DisplayName::new("Bôb Böbberson"),
                     last_name: Some("Böbberson".to_string()),
                     avatar: Some(JpegPhoto::for_tests()),
                     uuid: uuid!("b4ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -2041,7 +2048,7 @@ mod tests {
             .with(eq(CreateUserRequest {
                 user_id: UserId::new("bob"),
                 email: "".to_owned(),
-                display_name: Some("Bob".to_string()),
+                display_name: DisplayName::new("Bob"),
                 ..Default::default()
             }))
             .times(1)

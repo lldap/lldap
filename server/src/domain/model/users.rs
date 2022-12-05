@@ -3,7 +3,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::types::{JpegPhoto, UserId, Uuid};
+use crate::domain::types::{DisplayName, JpegPhoto, UserId, Uuid};
 
 #[derive(Copy, Clone, Default, Debug, DeriveEntity)]
 pub struct Entity;
@@ -14,7 +14,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: UserId,
     pub email: String,
-    pub display_name: Option<String>,
+    pub display_name: DisplayName,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,

@@ -167,6 +167,82 @@ impl ValueType for UserId {
     }
 }
 
+#[derive(PartialEq, Eq, Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(from = "String")]
+pub struct DisplayName(String);
+
+impl DisplayName {
+    pub fn new(display_name: &str) -> Self {
+        Self(display_name.to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Display for DisplayName {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for DisplayName {
+    fn from(s: String) -> Self {
+        Self::new(&s)
+    }
+}
+
+impl From<DisplayName> for Value {
+    fn from(display_name: DisplayName) -> Self {
+        display_name.into_string().into()
+    }
+}
+
+impl From<&DisplayName> for Value {
+    fn from(display_name: &DisplayName) -> Self {
+        display_name.as_str().into()
+    }
+}
+
+impl TryGetable for DisplayName {
+    fn try_get(res: &QueryResult, pre: &str, col: &str) -> Result<Self, TryGetError> {
+        Ok(DisplayName::new(&String::try_get(res, pre, col)?))
+    }
+}
+
+impl TryFromU64 for DisplayName {
+    fn try_from_u64(_n: u64) -> Result<Self, DbErr> {
+        Err(DbErr::ConvertFromU64(
+            "DisplayName cannot be constructed from u64",
+        ))
+    }
+}
+
+impl ValueType for DisplayName {
+    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
+        Ok(DisplayName::new(
+            <String as ValueType>::try_from(v)?.as_str(),
+        ))
+    }
+
+    fn type_name() -> String {
+        "DisplayName".to_owned()
+    }
+
+    fn array_type() -> ArrayType {
+        ArrayType::String
+    }
+
+    fn column_type() -> ColumnType {
+        ColumnType::String(Some(255))
+    }
+}
+
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct JpegPhoto(#[serde(with = "serde_bytes")] Vec<u8>);
 
@@ -304,7 +380,7 @@ impl IntoActiveValue<JpegPhoto> for JpegPhoto {
 pub struct User {
     pub user_id: UserId,
     pub email: String,
-    pub display_name: Option<String>,
+    pub display_name: DisplayName,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,
@@ -320,7 +396,7 @@ impl Default for User {
         User {
             user_id: UserId::default(),
             email: String::new(),
-            display_name: None,
+            display_name: DisplayName::default(),
             first_name: None,
             last_name: None,
             avatar: None,

@@ -214,7 +214,7 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
     }
 
     fn display_name(&self) -> &str {
-        self.user.display_name.as_deref().unwrap_or("")
+        self.user.display_name.as_str()
     }
 
     fn first_name(&self) -> &str {

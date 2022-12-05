@@ -1,6 +1,6 @@
 use crate::domain::{
     handler::{BackendHandler, CreateUserRequest, UpdateGroupRequest, UpdateUserRequest},
-    types::{GroupId, JpegPhoto, UserId},
+    types::{DisplayName, GroupId, JpegPhoto, UserId},
 };
 use anyhow::Context as AnyhowContext;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
@@ -27,7 +27,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
 pub struct CreateUserInput {
     id: String,
     email: String,
-    display_name: Option<String>,
+    display_name: String,
     first_name: Option<String>,
     last_name: Option<String>,
     // Base64 encoded JpegPhoto.
@@ -39,7 +39,7 @@ pub struct CreateUserInput {
 pub struct UpdateUserInput {
     id: String,
     email: Option<String>,
-    display_name: Option<String>,
+    display_name: String,
     first_name: Option<String>,
     last_name: Option<String>,
     // Base64 encoded JpegPhoto.
@@ -79,6 +79,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             return Err("Unauthorized user creation".into());
         }
         let user_id = UserId::new(&user.id);
+        let display_name = DisplayName::new(&user.display_name);
         let avatar = user
             .avatar
             .map(base64::decode)
@@ -92,7 +93,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             .create_user(CreateUserRequest {
                 user_id: user_id.clone(),
                 email: user.email,
-                display_name: user.display_name,
+                display_name: display_name.clone(),
                 first_name: user.first_name,
                 last_name: user.last_name,
                 avatar,
@@ -137,6 +138,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             debug!(?user.id);
         });
         let user_id = UserId::new(&user.id);
+        let display_name = DisplayName::new(&user.display_name);
         if !context.validation_result.can_write(&user_id) {
             span.in_scope(|| debug!("Unauthorized"));
             return Err("Unauthorized user update".into());
@@ -154,7 +156,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             .update_user(UpdateUserRequest {
                 user_id,
                 email: user.email,
-                display_name: user.display_name,
+                display_name: display_name.clone(),
                 first_name: user.first_name,
                 last_name: user.last_name,
                 avatar,

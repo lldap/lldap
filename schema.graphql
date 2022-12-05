@@ -57,7 +57,7 @@ type Query {
 input CreateUserInput {
   id: String!
   email: String!
-  displayName: String
+  displayName: String!
   firstName: String
   lastName: String
   avatar: String
@@ -84,7 +84,7 @@ type Success {
 input UpdateUserInput {
   id: String!
   email: String
-  displayName: String
+  displayName: String!
   firstName: String
   lastName: String
   avatar: String

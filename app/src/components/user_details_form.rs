@@ -355,7 +355,7 @@ impl UserDetailsForm {
         let mut user_input = update_user::UpdateUserInput {
             id: self.common.user.id.clone(),
             email: None,
-            displayName: None,
+            displayName: self.common.user.id.clone(),
             firstName: None,
             lastName: None,
             avatar: None,
@@ -367,7 +367,7 @@ impl UserDetailsForm {
             user_input.email = Some(email);
         }
         if base_user.display_name != model.display_name {
-            user_input.displayName = Some(model.display_name);
+            user_input.displayName = model.display_name;
         }
         if base_user.first_name != model.first_name {
             user_input.firstName = Some(model.first_name);

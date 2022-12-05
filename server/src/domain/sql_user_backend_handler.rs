@@ -163,7 +163,7 @@ impl UserBackendHandler for SqlBackendHandler {
         let new_user = model::users::ActiveModel {
             user_id: Set(request.user_id),
             email: Set(request.email),
-            display_name: to_value(&request.display_name),
+            display_name: ActiveValue::Set(request.display_name),
             first_name: to_value(&request.first_name),
             last_name: to_value(&request.last_name),
             avatar: request.avatar.into_active_value(),
@@ -181,7 +181,7 @@ impl UserBackendHandler for SqlBackendHandler {
         let update_user = model::users::ActiveModel {
             user_id: ActiveValue::Set(request.user_id),
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
-            display_name: to_value(&request.display_name),
+            display_name: ActiveValue::Set(request.display_name),
             first_name: to_value(&request.first_name),
             last_name: to_value(&request.last_name),
             avatar: request.avatar.into_active_value(),
@@ -238,7 +238,7 @@ mod tests {
     use super::*;
     use crate::domain::{
         sql_backend_handler::tests::*,
-        types::{JpegPhoto, UserColumn},
+        types::{DisplayName, JpegPhoto, UserColumn},
     };
 
     #[tokio::test]
@@ -407,11 +407,7 @@ mod tests {
             .map(|u| {
                 (
                     u.user.user_id.to_string(),
-                    u.user
-                        .display_name
-                        .as_deref()
-                        .unwrap_or("<unknown>")
-                        .to_owned(),
+                    u.user.display_name.to_string(),
                     u.groups
                         .unwrap_or_default()
                         .into_iter()
@@ -567,7 +563,7 @@ mod tests {
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
                 email: Some("email".to_string()),
-                display_name: Some("display_name".to_string()),
+                display_name: DisplayName::new("display_name"),
                 first_name: Some("first_name".to_string()),
                 last_name: Some("last_name".to_string()),
                 avatar: Some(JpegPhoto::for_tests()),
@@ -581,7 +577,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(user.email, "email");
-        assert_eq!(user.display_name.unwrap(), "display_name");
+        assert_eq!(user.display_name.as_str(), "display_name");
         assert_eq!(user.first_name.unwrap(), "first_name");
         assert_eq!(user.last_name.unwrap(), "last_name");
         assert_eq!(user.avatar, Some(JpegPhoto::for_tests()));
@@ -607,7 +603,7 @@ mod tests {
             .get_user_details(&UserId::new("bob"))
             .await
             .unwrap();
-        assert_eq!(user.display_name.unwrap(), "display bob");
+        assert_eq!(user.display_name.as_str(), "display bob");
         assert_eq!(user.first_name.unwrap(), "first_name");
         assert_eq!(user.last_name, None);
         assert_eq!(user.avatar, None);
