@@ -26,7 +26,7 @@ ldap_port = 3890
 ldap_bind_dn = "uid=admin,ou=people,dc=example,dc=com"
 ldap_bind_password = "insert_admin_pw_ldap"
 ldap_search_base_dn = "dc=example,dc=com"
-ldap_search_filter = "(&(objectClass=person)(memberOf=uid=vaultwarden,ou=groups,dc=example,dc=com))"
+ldap_search_filter = "(&(objectClass=person)(memberOf=cn=vaultwarden,ou=groups,dc=example,dc=com))"
 ldap_sync_interval_seconds = 300
 ```
 Will check every 300 seconds your ldap group ```vaultwarden``` and send an invitation by email to any new member of this group.
