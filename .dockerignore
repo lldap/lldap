@@ -28,6 +28,9 @@ package.json
 # Pre-build binaries
 *.tar.gz
 
+# VSCode dirs
+.devcontainer
+
 # Various config files that shouldn't be tracked
 .env
 lldap_config.toml
