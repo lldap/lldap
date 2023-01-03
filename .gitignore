@@ -23,6 +23,7 @@ server_key
 *.tar.gz
 
 # Misc
+.vscode
 .env
 recipe.json
 lldap_config.toml
