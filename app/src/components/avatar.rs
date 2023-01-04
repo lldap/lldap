@@ -6,14 +6,13 @@ use yew::prelude::*;
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
-    query_path = "queries/get_user_details.graphql",
+    query_path = "queries/get_user_avatar.graphql",
     response_derives = "Debug, Hash, PartialEq, Eq, Clone",
     custom_scalars_module = "crate::infra::graphql"
 )]
-pub struct GetUserDetails;
+pub struct GetUserAvatar;
 
-pub type User = get_user_details::GetUserDetailsUser;
-pub type Group = get_user_details::GetUserDetailsUserGroups;
+pub type User = get_user_avatar::GetUserAvatarUser;
 
 pub struct Avatar {
     common: CommonComponentParts<Self>,
@@ -26,7 +25,7 @@ pub struct Avatar {
 /// It starts out by fetching the user's details from the backend when loading.
 pub enum Msg {
     /// Received the user details response, either the user data or an error.
-    UserDetailsResponse(Result<get_user_details::ResponseData>),
+    UserAvatarResponse(Result<get_user_avatar::ResponseData>),
     Update
 }
 
@@ -40,14 +39,14 @@ pub struct Props {
 impl CommonComponent<Avatar> for Avatar {
     fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
-            Msg::UserDetailsResponse(response) => match response {
+            Msg::UserAvatarResponse(response) => match response {
                 Ok(user) => self.avatar = user.user.avatar,
                 Err(e) => {
                     self.avatar = None;
                     bail!("Error getting user details: {}", e);
                 }
             },
-            Msg::Update => self.get_user_details(),
+            Msg::Update => self.get_user_avatar(),
         }
         Ok(true)
     }
@@ -58,14 +57,14 @@ impl CommonComponent<Avatar> for Avatar {
 }
 
 impl Avatar {
-    fn get_user_details(&mut self) {
+    fn get_user_avatar(&mut self) {
         if self.common.username.len() > 0 {
-            self.common.call_graphql::<GetUserDetails, _>(
-                get_user_details::Variables {
+            self.common.call_graphql::<GetUserAvatar, _>(
+                get_user_avatar::Variables {
                     id: self.common.username.clone(),
                 },
-                Msg::UserDetailsResponse,
-                "Error trying to fetch user details",
+                Msg::UserAvatarResponse,
+                "Error trying to fetch user avatar",
             )
         }
     }
@@ -80,7 +79,7 @@ impl Component for Avatar {
             common: CommonComponentParts::<Self>::create(props, link),
             avatar: None,
         };
-        avatar.get_user_details();
+        avatar.get_user_avatar();
         avatar
     }
 

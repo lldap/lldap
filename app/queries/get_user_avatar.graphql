@@ -1,0 +1,5 @@
+query GetUserAvatar($id: String!) {
+  user(userId: $id) {
+    avatar
+  }
+}
