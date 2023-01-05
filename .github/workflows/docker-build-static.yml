@@ -465,6 +465,13 @@ jobs:
           path: web
       - name: Web Cleanup
         run: mkdir app && mv web/index.html app/index.html && mv web/static app/static && mv web/pkg app/pkg
+      - name: Fetch web components
+        run: |
+             sudo apt update
+             sudo apt install wget
+             for file in $(cat app/static/libraries.txt); do wget -P app/static "$file"; done
+             for file in $(cat app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done
+             chmod a+r -R .
       - name: compress web
         run: sudo apt update && sudo apt install -y zip && zip -r web.zip app/
 
@@ -474,12 +481,12 @@ jobs:
         id: create_release
         with:
           allowUpdates: true
-          artifacts: "bin/armhf-bin/lldap-armhf,
+          artifacts:  bin/armhf-bin/lldap-armhf,
                       bin/aarch64-bin/lldap-aarch64,
                       bin/amd64-bin/lldap-amd64,
                       bin/armhf-bin/migration-tool-armhf,
                       bin/aarch64-bin/migration-tool-aarch64,
                       bin/amd64-bin/migration-tool-amd64,
-                      web.zip"
+                      web.zip
         env:
          GITHUB_TOKEN: ${{ github.token }}
