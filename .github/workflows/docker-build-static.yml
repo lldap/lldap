@@ -392,8 +392,32 @@ jobs:
              for file in $(cat app/static/libraries.txt); do wget -P app/static "$file"; done
              for file in $(cat app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done
              chmod a+r -R .
-      - name: compress web
-        run: sudo apt update && sudo apt install -y zip && zip -r web.zip app/
+
+      - name: Setup LLDAP dir for packing
+        run: |
+             mkdir aarch64-lldap
+             mkdir amd64-lldap
+             mkdir armhf-lldap
+             mv bin/aarch64-lldap aarch64-lldap/lldap
+             mv bin/amd64-lldap amd64-lldap/lldap
+             mv bin/armhf-lldap armhf-lldap/lldap
+             mv bin/aarch64-migration-tool aarch64-lldap/migration-tool
+             mv bin/amd64-migration-tool amd64-lldap/migration-tool
+             mv bin/armhf-migration-tool armhf-lldap/migration-tool
+             cp -r app aarch64-lldap/
+             cp -r app amd64-lldap/
+             cp -r app armhf-lldap/
+             ls -alR aarch64-lldap/
+             ls -alR amd64-lldap/
+             ls -alR armhf-lldap/
+
+      - name: Compress
+        run: |
+             sudo apt update
+             sudo apt install -y zip
+             zip -r aarch64-lldap.zip aarch64-lldap/
+             zip -r amd64-lldap.zip amd64-lldap/
+             zip -r armhf-lldap.zip armhf-lldap/
 
 
       - name: Upload artifacts release
@@ -401,12 +425,8 @@ jobs:
         id: create_release
         with:
           allowUpdates: true
-          artifacts:  bin/aarch64-lldap,
-                      bin/amd64-lldap,
-                      bin/armhf-lldap,
-                      bin/aarch64-migration-tool,
-                      bin/amd64-migration-tool,
-                      bin/armhf-migration-tool,
-                      web.zip
+          artifacts:  aarch64-lldap.zip,
+                      amd64-lldap.zip,
+                      armhf-lldap.zip
         env:
          GITHUB_TOKEN: ${{ github.token }}
