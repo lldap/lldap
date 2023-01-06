@@ -414,7 +414,7 @@ jobs:
 
       - name: Compress
         run: |
-             tar -czvf -r aarch64-lldap.tar.gz aarch64-lldap/
+             tar -czvf aarch64-lldap.tar.gz aarch64-lldap/
              tar -czvf amd64-lldap.tar.gz amd64-lldap/
              tar -czvf armhf-lldap.tar.gz armhf-lldap/
 
