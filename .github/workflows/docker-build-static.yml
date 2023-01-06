@@ -89,7 +89,6 @@ jobs:
   build-armhf:
     runs-on: ubuntu-latest
     container:
-#      image: rust:1.65
       image: nitnelave/rust-dev:latest
       env:
         CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
@@ -377,6 +376,8 @@ jobs:
              mv bin/aarch64-migration-tool-bin/migration-tool bin/aarch64-migration-tool
              mv bin/amd64-migration-tool-bin/migration-tool bin/amd64-migration-tool
              mv bin/armhf-migration-tool-bin/migration-tool bin/armhf-migration-tool
+             chmod +x bin/*-lldap
+             chmod +x bin/*-migration-tool
 
       - name: Download llap ui artifacts
         uses: actions/download-artifact@v3
@@ -413,11 +414,9 @@ jobs:
 
       - name: Compress
         run: |
-             sudo apt update
-             sudo apt install -y zip
-             zip -r aarch64-lldap.zip aarch64-lldap/
-             zip -r amd64-lldap.zip amd64-lldap/
-             zip -r armhf-lldap.zip armhf-lldap/
+             tar -czvf -r aarch64-lldap.tar.gz aarch64-lldap/
+             tar -czvf amd64-lldap.tar.gz amd64-lldap/
+             tar -czvf armhf-lldap.tar.gz armhf-lldap/
 
 
       - name: Upload artifacts release
@@ -425,8 +424,8 @@ jobs:
         id: create_release
         with:
           allowUpdates: true
-          artifacts:  aarch64-lldap.zip,
-                      amd64-lldap.zip,
-                      armhf-lldap.zip
+          artifacts:  aarch64-lldap.tar.gz,
+                      amd64-lldap.tar.gz,
+                      armhf-lldap.tar.gz
         env:
          GITHUB_TOKEN: ${{ github.token }}
