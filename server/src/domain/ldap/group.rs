@@ -12,7 +12,8 @@ use crate::domain::{
 use super::{
     error::LdapResult,
     utils::{
-        expand_attribute_wildcards, get_user_id_from_distinguished_name, map_group_field, LdapInfo,
+        expand_attribute_wildcards, get_group_id_from_distinguished_name,
+        get_user_id_from_distinguished_name, map_group_field, LdapInfo,
     },
 };
 
@@ -126,6 +127,19 @@ fn convert_group_filter(
                         vec![],
                     )))),
                 },
+                "dn" => Ok(
+                    match get_group_id_from_distinguished_name(
+                        value.to_ascii_lowercase().as_str(),
+                        &ldap_info.base_dn,
+                        &ldap_info.base_dn_str,
+                    ) {
+                        Ok(value) => GroupRequestFilter::DisplayName(value),
+                        Err(_) => {
+                            warn!("Invalid dn filter on user: {}", value);
+                            GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(vec![])))
+                        }
+                    },
+                ),
                 _ => match map_group_field(field) {
                     Some(GroupColumn::DisplayName) => {
                         Ok(GroupRequestFilter::DisplayName(value.to_string()))
