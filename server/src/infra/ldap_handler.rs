@@ -1040,6 +1040,7 @@ mod tests {
                         uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
                         ..Default::default()
                     },
+                    groups: None,
                 },
                 UserAndGroups {
                     user: User {
@@ -2206,27 +2207,70 @@ mod tests {
     #[tokio::test]
     async fn test_compare() {
         let mut mock = MockTestBackendHandler::new();
-        mock.expect_create_user()
-            .with(eq(CreateUserRequest {
-                user_id: UserId::new("bob"),
-                email: "".to_owned(),
-                display_name: Some("Bob".to_string()),
-                ..Default::default()
-            }))
-            .times(1)
-            .return_once(|_| Ok(()));
-        let ldap_handler = setup_bound_admin_handler(mock).await;
-        let dn = "uid=bob,ou=people,dc=example,dc=com".to_owned();
+        mock.expect_list_users().returning(|_, _| {
+            Ok(vec![UserAndGroups {
+                user: User {
+                    user_id: UserId::new("bob"),
+                    email: "bob@bobmail.bob".to_string(),
+                    display_name: Some("bôb böbberson".to_string()),
+                    first_name: Some("bôb".to_string()),
+                    last_name: Some("böbberson".to_string()),
+                    uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
+                    ..Default::default()
+                },
+                groups: None,
+            }])
+        });
+        mock.expect_list_groups().returning(|_| {
+            Ok(vec![Group {
+                id: GroupId(1),
+                display_name: "group".to_string(),
+                creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+                users: vec![UserId::new("bob")],
+                uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+            }])
+        });
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let mut dn = "uid=bob,ou=people,dc=example,dc=com";
         let request = LdapCompareRequest {
-            dn,
-            atype: "cn".to_owned(),
-            val: b"Bob".to_vec(),
+            dn: dn.to_string(),
+            atype: "uid".to_owned(),
+            val: b"bob".to_vec(),
         };
         assert_eq!(
             ldap_handler.do_compare(request).await,
             Ok(vec![LdapOp::CompareResult(LdapResultOp {
                 code: LdapResultCode::CompareTrue,
-                matcheddn: dn,
+                matcheddn: dn.to_string(),
+                message: "".to_string(),
+                referral: vec![],
+            })])
+        );
+        let request = LdapCompareRequest {
+            dn: dn.to_string(),
+            atype: "mail".to_owned(),
+            val: b"bob@bobmail.bob".to_vec(),
+        };
+        assert_eq!(
+            ldap_handler.do_compare(request).await,
+            Ok(vec![LdapOp::CompareResult(LdapResultOp {
+                code: LdapResultCode::CompareTrue,
+                matcheddn: dn.to_string(),
+                message: "".to_string(),
+                referral: vec![],
+            })])
+        );
+        dn = "uid=group,ou=groups,dc=example,dc=com";
+        let request = LdapCompareRequest {
+            dn: dn.to_string(),
+            atype: "uid".to_owned(),
+            val: b"group".to_vec(),
+        };
+        assert_eq!(
+            ldap_handler.do_compare(request).await,
+            Ok(vec![LdapOp::CompareResult(LdapResultOp {
+                code: LdapResultCode::CompareTrue,
+                matcheddn: dn.to_string(),
                 message: "".to_string(),
                 referral: vec![],
             })])
