@@ -28,7 +28,7 @@ itertools = "0.10.1"
 juniper = "0.15.10"
 juniper_actix = "0.4.0"
 jwt = "0.13"
-ldap3_proto = "*"
+ldap3_proto = { git = "https://github.com/kanidm/ldap3", package = "ldap3_proto" }
 log = "*"
 orion = "0.16"
 rustls = "0.20"

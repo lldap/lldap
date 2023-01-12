@@ -16,10 +16,10 @@ use crate::{
 };
 use anyhow::Result;
 use ldap3_proto::proto::{
-    LdapAddRequest, LdapBindCred, LdapBindRequest, LdapBindResponse, LdapExtendedRequest,
-    LdapExtendedResponse, LdapFilter, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
-    LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
-    LdapSearchScope,
+    LdapAddRequest, LdapBindCred, LdapBindRequest, LdapBindResponse, LdapCompareRequest,
+    LdapDerefAliases, LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapOp,
+    LdapPartialAttribute, LdapPasswordModifyRequest, LdapResult as LdapResultOp, LdapResultCode,
+    LdapSearchRequest, LdapSearchResultEntry, LdapSearchScope,
 };
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
@@ -36,6 +36,23 @@ enum SearchScope {
     Group(LdapFilter),
     Unknown,
     Invalid,
+}
+
+fn make_search_request<S: Into<String>>(
+    base: &str,
+    filter: LdapFilter,
+    attrs: Vec<S>,
+) -> LdapSearchRequest {
+    LdapSearchRequest {
+        base: base.to_string(),
+        scope: LdapSearchScope::Base,
+        aliases: LdapDerefAliases::Never,
+        sizelimit: 0,
+        timelimit: 0,
+        typesonly: false,
+        filter,
+        attrs: attrs.into_iter().map(Into::into).collect(),
+    }
 }
 
 fn get_search_scope(base_dn: &[(String, String)], dn_parts: &[(String, String)]) -> SearchScope {
@@ -527,6 +544,29 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
     }
 
+    async fn do_compare(&mut self, request: LdapCompareRequest) -> LdapResult<Vec<LdapOp>> {
+        let req = make_search_request::<String>(
+            &self.ldap_info.base_dn_str,
+            LdapFilter::And(vec![LdapFilter::Equality("dn".to_string(), request.dn)]),
+            vec![],
+        );
+        let res = self.do_search_or_dse(&req).await?;
+        let entry = res.first().ok_or(LdapError {
+            code: LdapResultCode::OperationsError,
+            message: "Search request returned nothing".to_string(),
+        })?;
+        match entry {
+            LdapOp::SearchResultEntry(entry) => {
+                println!("res:{:?}", entry);
+                Ok(vec![])
+            }
+            _ => Err(LdapError {
+                code: LdapResultCode::NoSuchObject,
+                message: "".to_string(),
+            }),
+        }
+    }
+
     pub async fn handle_ldap_message(&mut self, ldap_op: LdapOp) -> Option<Vec<LdapOp>> {
         Some(match ldap_op {
             LdapOp::BindRequest(request) => {
@@ -555,6 +595,10 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 .do_create_user(request)
                 .await
                 .unwrap_or_else(|e: LdapError| vec![make_add_error(e.code, e.message)]),
+            LdapOp::CompareRequest(request) => self
+                .do_compare(request)
+                .await
+                .unwrap_or_else(|e: LdapError| vec![make_search_error(e.code, e.message)]),
             op => vec![make_extended_response(
                 LdapResultCode::UnwillingToPerform,
                 format!("Unsupported operation: {:#?}", op),
@@ -572,7 +616,7 @@ mod tests {
     };
     use async_trait::async_trait;
     use chrono::TimeZone;
-    use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope};
+    use ldap3_proto::proto::LdapSearchScope;
     use mockall::predicate::eq;
     use std::collections::HashSet;
     use tokio;
@@ -622,23 +666,6 @@ mod tests {
                 &self,
                 request: registration::ClientRegistrationFinishRequest
             ) -> Result<()>;
-        }
-    }
-
-    fn make_search_request<S: Into<String>>(
-        base: &str,
-        filter: LdapFilter,
-        attrs: Vec<S>,
-    ) -> LdapSearchRequest {
-        LdapSearchRequest {
-            base: base.to_string(),
-            scope: LdapSearchScope::Base,
-            aliases: LdapDerefAliases::Never,
-            sizelimit: 0,
-            timelimit: 0,
-            typesonly: false,
-            filter,
-            attrs: attrs.into_iter().map(Into::into).collect(),
         }
     }
 
@@ -995,7 +1022,6 @@ mod tests {
                         uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
                         ..Default::default()
                     },
-                    groups: None,
                 },
                 UserAndGroups {
                     user: User {
