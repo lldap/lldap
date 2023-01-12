@@ -547,7 +547,10 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     async fn do_compare(&mut self, request: LdapCompareRequest) -> LdapResult<Vec<LdapOp>> {
         let req = make_search_request::<String>(
             &self.ldap_info.base_dn_str,
-            LdapFilter::And(vec![LdapFilter::Equality("dn".to_string(), request.dn)]),
+            LdapFilter::And(vec![LdapFilter::Equality(
+                "dn".to_string(),
+                request.dn.to_string(),
+            )]),
             vec![],
         );
         let res = self.do_search_or_dse(&req).await?;
@@ -557,8 +560,23 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         })?;
         match entry {
             LdapOp::SearchResultEntry(entry) => {
-                println!("res:{:?}", entry);
-                Ok(vec![])
+                let mut available = false;
+                for attr in entry.attributes.iter() {
+                    if attr.atype == request.atype && attr.vals.contains(&request.val) {
+                        available = true;
+                        break;
+                    }
+                }
+                Ok(vec![LdapOp::CompareResult(LdapResultOp {
+                    code: if available {
+                        LdapResultCode::CompareTrue
+                    } else {
+                        LdapResultCode::CompareFalse
+                    },
+                    matcheddn: request.dn,
+                    message: "".to_string(),
+                    referral: vec![],
+                })])
             }
             _ => Err(LdapError {
                 code: LdapResultCode::NoSuchObject,
