@@ -2204,6 +2204,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_compare() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_create_user()
+            .with(eq(CreateUserRequest {
+                user_id: UserId::new("bob"),
+                email: "".to_owned(),
+                display_name: Some("Bob".to_string()),
+                ..Default::default()
+            }))
+            .times(1)
+            .return_once(|_| Ok(()));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let dn = "uid=bob,ou=people,dc=example,dc=com".to_owned();
+        let request = LdapCompareRequest {
+            dn,
+            atype: "cn".to_owned(),
+            val: b"Bob".to_vec(),
+        };
+        assert_eq!(
+            ldap_handler.do_compare(request).await,
+            Ok(vec![LdapOp::CompareResult(LdapResultOp {
+                code: LdapResultCode::CompareTrue,
+                matcheddn: dn,
+                message: "".to_string(),
+                referral: vec![],
+            })])
+        );
+    }
+
+    #[tokio::test]
     async fn test_create_user_wrong_ou() {
         let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
         let request = LdapAddRequest {
