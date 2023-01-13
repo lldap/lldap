@@ -3,6 +3,7 @@ use crate::domain::{
     ldap::utils::map_user_field,
     types::{GroupDetails, GroupId, UserColumn, UserId},
 };
+use chrono::TimeZone;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument};
@@ -230,7 +231,7 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
     }
 
     fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
-        self.user.creation_date
+        chrono::Utc.from_utc_datetime(&self.user.creation_date)
     }
 
     fn uuid(&self) -> &str {
@@ -275,7 +276,7 @@ impl<Handler: BackendHandler> From<DomainUserAndGroups> for User<Handler> {
 pub struct Group<Handler: BackendHandler> {
     group_id: i32,
     display_name: String,
-    creation_date: chrono::DateTime<chrono::Utc>,
+    creation_date: chrono::NaiveDateTime,
     uuid: String,
     members: Option<Vec<String>>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
@@ -290,7 +291,7 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
         self.display_name.clone()
     }
     fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
-        self.creation_date
+        chrono::Utc.from_utc_datetime(&self.creation_date)
     }
     fn uuid(&self) -> String {
         self.uuid.clone()
@@ -389,7 +390,7 @@ mod tests {
                 Ok(DomainUser {
                     user_id: UserId::new("bob"),
                     email: "bob@bobbers.on".to_string(),
-                    creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap(),
+                    creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
                     uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     ..Default::default()
                 })
@@ -398,7 +399,7 @@ mod tests {
         groups.insert(GroupDetails {
             group_id: GroupId(3),
             display_name: "Bobbersons".to_string(),
-            creation_date: chrono::Utc.timestamp_nanos(42),
+            creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
             uuid: crate::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
         });
         mock.expect_get_user_groups()

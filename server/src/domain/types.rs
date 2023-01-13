@@ -1,3 +1,4 @@
+use chrono::{NaiveDateTime, TimeZone};
 use sea_orm::{
     entity::IntoActiveValue,
     sea_query::{value::ValueType, ArrayType, ColumnType, Nullable, ValueTypeErr},
@@ -7,18 +8,23 @@ use serde::{Deserialize, Serialize};
 
 pub use super::model::{GroupColumn, UserColumn};
 
-pub type DateTime = chrono::DateTime<chrono::Utc>;
-
 #[derive(PartialEq, Hash, Eq, Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(try_from = "&str")]
 pub struct Uuid(String);
 
 impl Uuid {
-    pub fn from_name_and_date(name: &str, creation_date: &DateTime) -> Self {
+    pub fn from_name_and_date(name: &str, creation_date: &NaiveDateTime) -> Self {
         Uuid(
             uuid::Uuid::new_v3(
                 &uuid::Uuid::NAMESPACE_X500,
-                &[name.as_bytes(), creation_date.to_rfc3339().as_bytes()].concat(),
+                &[
+                    name.as_bytes(),
+                    chrono::Utc
+                        .from_utc_datetime(creation_date)
+                        .to_rfc3339()
+                        .as_bytes(),
+                ]
+                .concat(),
             )
             .to_string(),
         )
@@ -308,15 +314,14 @@ pub struct User {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,
-    pub creation_date: DateTime,
+    pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
 }
 
 #[cfg(test)]
 impl Default for User {
     fn default() -> Self {
-        use chrono::TimeZone;
-        let epoch = chrono::Utc.timestamp_opt(0, 0).unwrap();
+        let epoch = chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc();
         User {
             user_id: UserId::default(),
             email: String::new(),
@@ -373,7 +378,7 @@ impl TryFromU64 for GroupId {
 pub struct Group {
     pub id: GroupId,
     pub display_name: String,
-    pub creation_date: DateTime,
+    pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
     pub users: Vec<UserId>,
 }
@@ -382,7 +387,7 @@ pub struct Group {
 pub struct GroupDetails {
     pub group_id: GroupId,
     pub display_name: String,
-    pub creation_date: DateTime,
+    pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
 }
 

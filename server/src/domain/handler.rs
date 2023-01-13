@@ -140,8 +140,14 @@ mod tests {
     fn test_uuid_time() {
         use chrono::prelude::*;
         let user_id = "bob";
-        let date1 = Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap();
-        let date2 = Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 12).unwrap();
+        let date1 = Utc
+            .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
+            .unwrap()
+            .naive_utc();
+        let date2 = Utc
+            .with_ymd_and_hms(2014, 7, 8, 9, 10, 12)
+            .unwrap()
+            .naive_utc();
         assert_ne!(
             Uuid::from_name_and_date(user_id, &date1),
             Uuid::from_name_and_date(user_id, &date2)

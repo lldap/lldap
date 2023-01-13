@@ -18,7 +18,7 @@ pub struct Model {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,
-    pub creation_date: chrono::DateTime<chrono::Utc>,
+    pub creation_date: chrono::NaiveDateTime,
     pub password_hash: Option<Vec<u8>>,
     pub totp_secret: Option<String>,
     pub mfa_type: Option<String>,

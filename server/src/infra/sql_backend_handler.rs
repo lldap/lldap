@@ -61,7 +61,7 @@ impl TcpBackendHandler for SqlBackendHandler {
         let new_token = model::jwt_refresh_storage::Model {
             refresh_token_hash: refresh_token_hash as i64,
             user_id: user.clone(),
-            expiry_date: chrono::Utc::now() + duration,
+            expiry_date: chrono::Utc::now().naive_utc() + duration,
         }
         .into_active_model();
         new_token.insert(&self.sql_pool).await?;
@@ -131,7 +131,7 @@ impl TcpBackendHandler for SqlBackendHandler {
         let new_token = model::password_reset_tokens::Model {
             token: token.clone(),
             user_id: user.clone(),
-            expiry_date: chrono::Utc::now() + duration,
+            expiry_date: chrono::Utc::now().naive_utc() + duration,
         }
         .into_active_model();
         new_token.insert(&self.sql_pool).await?;

@@ -1,3 +1,4 @@
+use chrono::TimeZone;
 use ldap3_proto::{
     proto::LdapOp, LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry,
 };
@@ -49,7 +50,10 @@ fn get_user_attribute(
             })
             .collect(),
         "cn" | "displayname" => vec![user.display_name.clone()?.into_bytes()],
-        "createtimestamp" | "modifytimestamp" => vec![user.creation_date.to_rfc3339().into_bytes()],
+        "createtimestamp" | "modifytimestamp" => vec![chrono::Utc
+            .from_utc_datetime(&user.creation_date)
+            .to_rfc3339()
+            .into_bytes()],
         "1.1" => return None,
         // We ignore the operational attribute wildcard.
         "+" => return None,
