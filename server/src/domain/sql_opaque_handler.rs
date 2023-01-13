@@ -133,7 +133,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         let encrypted_state = orion::aead::seal(&secret_key, &bincode::serialize(&server_data)?)?;
 
         Ok(login::ServerLoginStartResponse {
-            server_data: base64::encode(&encrypted_state),
+            server_data: base64::encode(encrypted_state),
             credential_response: start_response.message,
         })
     }
