@@ -116,6 +116,7 @@ pub async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<(), sea_o
                 .col(
                     ColumnDef::new(Groups::GroupId)
                         .integer()
+                        .auto_increment()
                         .not_null()
                         .primary_key(),
                 )
@@ -309,7 +310,7 @@ pub async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<(), sea_o
             Table::create()
                 .table(Metadata::Table)
                 .if_not_exists()
-                .col(ColumnDef::new(Metadata::Version).tiny_integer()),
+                .col(ColumnDef::new(Metadata::Version).small_integer()),
         ),
     )
     .await?;
