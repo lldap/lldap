@@ -4,7 +4,7 @@ use sea_orm::Value;
 pub type DbConnection = sea_orm::DatabaseConnection;
 
 #[derive(Copy, PartialEq, Eq, Debug, Clone)]
-pub struct SchemaVersion(pub u8);
+pub struct SchemaVersion(pub i16);
 
 impl sea_orm::TryGetable for SchemaVersion {
     fn try_get(
@@ -12,7 +12,7 @@ impl sea_orm::TryGetable for SchemaVersion {
         pre: &str,
         col: &str,
     ) -> Result<Self, sea_orm::TryGetError> {
-        Ok(SchemaVersion(u8::try_get(res, pre, col)?))
+        Ok(SchemaVersion(i16::try_get(res, pre, col)?))
     }
 }
 
