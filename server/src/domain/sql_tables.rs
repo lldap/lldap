@@ -67,7 +67,7 @@ mod tests {
         #[derive(FromQueryResult, PartialEq, Eq, Debug)]
         struct ShortUserDetails {
             display_name: String,
-            creation_date: chrono::DateTime<chrono::Utc>,
+            creation_date: chrono::NaiveDateTime,
         }
         let result = ShortUserDetails::find_by_statement(raw_statement(
             r#"SELECT display_name, creation_date FROM users WHERE user_id = "bôb""#,
@@ -80,7 +80,7 @@ mod tests {
             result,
             ShortUserDetails {
                 display_name: "Bob Bobbersön".to_owned(),
-                creation_date: Utc.timestamp_opt(0, 0).unwrap()
+                creation_date: Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
             }
         );
     }

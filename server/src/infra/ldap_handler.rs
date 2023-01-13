@@ -667,7 +667,7 @@ mod tests {
                 set.insert(GroupDetails {
                     group_id: GroupId(42),
                     display_name: group,
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                 });
                 Ok(set)
@@ -754,7 +754,7 @@ mod tests {
                 set.insert(GroupDetails {
                     group_id: GroupId(42),
                     display_name: "lldap_admin".to_string(),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                 });
                 Ok(set)
@@ -841,7 +841,7 @@ mod tests {
                     groups: Some(vec![GroupDetails {
                         group_id: GroupId(42),
                         display_name: "rockstars".to_string(),
-                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                         uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     }]),
                 }])
@@ -1006,7 +1006,10 @@ mod tests {
                         last_name: Some("Cricket".to_string()),
                         avatar: Some(JpegPhoto::for_tests()),
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                        creation_date: Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap(),
+                        creation_date: Utc
+                            .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
+                            .unwrap()
+                            .naive_utc(),
                     },
                     groups: None,
                 },
@@ -1135,14 +1138,14 @@ mod tests {
                     Group {
                         id: GroupId(1),
                         display_name: "group_1".to_string(),
-                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                         users: vec![UserId::new("bob"), UserId::new("john")],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                     },
                     Group {
                         id: GroupId(3),
                         display_name: "BestGroup".to_string(),
-                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                         users: vec![UserId::new("john")],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                     },
@@ -1228,7 +1231,7 @@ mod tests {
                 Ok(vec![Group {
                     display_name: "group_1".to_string(),
                     id: GroupId(1),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 }])
@@ -1279,7 +1282,7 @@ mod tests {
                 Ok(vec![Group {
                     display_name: "group_1".to_string(),
                     id: GroupId(1),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 }])
@@ -1555,7 +1558,7 @@ mod tests {
                 Ok(vec![Group {
                     id: GroupId(1),
                     display_name: "group_1".to_string(),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![UserId::new("bob"), UserId::new("john")],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 }])
@@ -1629,7 +1632,7 @@ mod tests {
                 Ok(vec![Group {
                     id: GroupId(1),
                     display_name: "group_1".to_string(),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![UserId::new("bob"), UserId::new("john")],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 }])
@@ -1962,7 +1965,7 @@ mod tests {
         groups.insert(GroupDetails {
             group_id: GroupId(0),
             display_name: "lldap_admin".to_string(),
-            creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap(),
+            creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
             uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
         });
         mock.expect_get_user_groups()

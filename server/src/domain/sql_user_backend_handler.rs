@@ -158,7 +158,7 @@ impl UserBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
         debug!(user_id = ?request.user_id);
-        let now = chrono::Utc::now();
+        let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(request.user_id.as_str(), &now);
         let new_user = model::users::ActiveModel {
             user_id: Set(request.user_id),

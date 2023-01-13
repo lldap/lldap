@@ -116,7 +116,7 @@ impl GroupBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn create_group(&self, group_name: &str) -> Result<GroupId> {
         debug!(?group_name);
-        let now = chrono::Utc::now();
+        let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(group_name, &now);
         let new_group = model::groups::ActiveModel {
             display_name: ActiveValue::Set(group_name.to_owned()),
