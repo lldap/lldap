@@ -2201,7 +2201,7 @@ dependencies = [
 [[package]]
 name = "ldap3_proto"
 version = "0.3.0"
-source = "git+https://github.com/kanidm/ldap3#b3c7653471916e803dc8f24d2163fd2710dfb161"
+source = "git+https://github.com/kanidm/ldap3/?rev=b3c7653471916e803dc8f24d2163fd2710dfb161#b3c7653471916e803dc8f24d2163fd2710dfb161"
 dependencies = [
  "bytes",
  "lber",
@@ -5035,8 +5035,3 @@ dependencies = [
  "cc",
  "libc",
 ]
-
-[[patch.unused]]
-name = "ldap3_proto"
-version = "0.2.3"
-source = "git+https://github.com/nitnelave/ldap3_server/?rev=7b50b2b82c383f5f70e02e11072bb916629ed2bc#7b50b2b82c383f5f70e02e11072bb916629ed2bc"

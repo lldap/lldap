@@ -558,6 +558,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             code: LdapResultCode::OperationsError,
             message: "Search request returned nothing".to_string(),
         })?;
+        if res.len() > 1 {
+            return Err(LdapError {
+                code: LdapResultCode::OperationsError,
+                message: "Search request returned nothing".to_string(),
+            });
+        }
+
         match entry {
             LdapOp::SearchResultEntry(entry) => {
                 let mut available = false;
@@ -2212,10 +2219,6 @@ mod tests {
                 user: User {
                     user_id: UserId::new("bob"),
                     email: "bob@bobmail.bob".to_string(),
-                    display_name: Some("bôb böbberson".to_string()),
-                    first_name: Some("bôb".to_string()),
-                    last_name: Some("böbberson".to_string()),
-                    uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
                     ..Default::default()
                 },
                 groups: None,
