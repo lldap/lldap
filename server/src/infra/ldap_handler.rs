@@ -778,7 +778,7 @@ mod tests {
         mock.expect_list_users()
             .with(
                 eq(Some(UserRequestFilter::And(vec![
-                    UserRequestFilter::And(vec![]),
+                    UserRequestFilter::from(true),
                     UserRequestFilter::UserId(UserId::new("test")),
                 ]))),
                 eq(false),
@@ -813,7 +813,7 @@ mod tests {
     async fn test_search_readonly_user() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::And(vec![]))), eq(false))
+            .with(eq(Some(UserRequestFilter::from(true))), eq(false))
             .times(1)
             .return_once(|_, _| Ok(vec![]));
         let mut ldap_handler = setup_bound_readonly_handler(mock).await;
@@ -830,7 +830,7 @@ mod tests {
     async fn test_search_member_of() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::And(vec![]))), eq(true))
+            .with(eq(Some(UserRequestFilter::from(true))), eq(true))
             .times(1)
             .return_once(|_, _| {
                 Ok(vec![UserAndGroups {
@@ -873,7 +873,7 @@ mod tests {
         mock.expect_list_users()
             .with(
                 eq(Some(UserRequestFilter::And(vec![
-                    UserRequestFilter::And(vec![]),
+                    UserRequestFilter::from(true),
                     UserRequestFilter::UserId(UserId::new("bob")),
                 ]))),
                 eq(false),
@@ -1131,7 +1131,7 @@ mod tests {
     async fn test_search_groups() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::And(vec![]))))
+            .with(eq(Some(GroupRequestFilter::from(true))))
             .times(1)
             .return_once(|_| {
                 Ok(vec![
@@ -1218,14 +1218,12 @@ mod tests {
                 GroupRequestFilter::DisplayName("group_1".to_string()),
                 GroupRequestFilter::Member(UserId::new("bob")),
                 GroupRequestFilter::DisplayName("rockstars".to_string()),
-                GroupRequestFilter::And(vec![]),
-                GroupRequestFilter::And(vec![]),
-                GroupRequestFilter::And(vec![]),
-                GroupRequestFilter::And(vec![]),
-                GroupRequestFilter::Not(Box::new(GroupRequestFilter::Not(Box::new(
-                    GroupRequestFilter::And(vec![]),
-                )))),
-                GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(vec![]))),
+                GroupRequestFilter::from(true),
+                GroupRequestFilter::from(true),
+                GroupRequestFilter::from(true),
+                GroupRequestFilter::from(true),
+                GroupRequestFilter::Not(Box::new(GroupRequestFilter::from(false))),
+                GroupRequestFilter::from(false),
             ]))))
             .times(1)
             .return_once(|_| {
@@ -1321,7 +1319,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
             .with(eq(Some(GroupRequestFilter::And(vec![
-                GroupRequestFilter::And(vec![]),
+                GroupRequestFilter::from(true),
                 GroupRequestFilter::DisplayName("rockstars".to_string()),
             ]))))
             .times(1)
@@ -1409,12 +1407,12 @@ mod tests {
                             "bob",
                         )))),
                         UserRequestFilter::UserId("bob_1".to_string().into()),
-                        UserRequestFilter::And(vec![]),
-                        UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
-                        UserRequestFilter::And(vec![]),
-                        UserRequestFilter::And(vec![]),
-                        UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
-                        UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
+                        UserRequestFilter::from(true),
+                        UserRequestFilter::from(false),
+                        UserRequestFilter::from(true),
+                        UserRequestFilter::from(true),
+                        UserRequestFilter::from(false),
+                        UserRequestFilter::from(false),
                     ],
                 )]))),
                 eq(false),
@@ -1562,7 +1560,7 @@ mod tests {
             }])
         });
         mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::And(vec![]))))
+            .with(eq(Some(GroupRequestFilter::from(true))))
             .times(1)
             .return_once(|_| {
                 Ok(vec![Group {
@@ -1637,7 +1635,7 @@ mod tests {
             }])
         });
         mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::And(vec![]))))
+            .with(eq(Some(GroupRequestFilter::from(true))))
             .returning(|_| {
                 Ok(vec![Group {
                     id: GroupId(1),
@@ -2093,7 +2091,7 @@ mod tests {
     async fn test_search_filter_non_attribute() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::And(vec![]))), eq(false))
+            .with(eq(Some(UserRequestFilter::from(true))), eq(false))
             .times(1)
             .return_once(|_, _| Ok(vec![]));
         let mut ldap_handler = setup_bound_admin_handler(mock).await;

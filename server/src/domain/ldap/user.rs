@@ -134,35 +134,27 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
         LdapFilter::Equality(field, value) => {
             let field = &field.to_ascii_lowercase();
             match field.as_str() {
-                "memberof" => {
-                    let group_name = get_group_id_from_distinguished_name(
+                "memberof" => Ok(UserRequestFilter::MemberOf(
+                    get_group_id_from_distinguished_name(
                         &value.to_ascii_lowercase(),
                         &ldap_info.base_dn,
                         &ldap_info.base_dn_str,
-                    )?;
-                    Ok(UserRequestFilter::MemberOf(group_name))
-                }
-                "objectclass" => match value.to_ascii_lowercase().as_str() {
-                    "person" | "inetorgperson" | "posixaccount" | "mailaccount" => {
-                        Ok(UserRequestFilter::And(vec![]))
-                    }
-                    _ => Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
-                        vec![],
-                    )))),
-                },
-                "dn" => Ok(
-                    match get_user_id_from_distinguished_name(
-                        value.to_ascii_lowercase().as_str(),
-                        &ldap_info.base_dn,
-                        &ldap_info.base_dn_str,
-                    ) {
-                        Ok(value) => UserRequestFilter::UserId(value),
-                        Err(_) => {
-                            warn!("Invalid dn filter on user: {}", value);
-                            UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![])))
-                        }
-                    },
-                ),
+                    )?,
+                )),
+                "objectclass" => Ok(UserRequestFilter::from(matches!(
+                    value.to_ascii_lowercase().as_str(),
+                    "person" | "inetorgperson" | "posixaccount" | "mailaccount"
+                ))),
+                "dn" => Ok(get_user_id_from_distinguished_name(
+                    value.to_ascii_lowercase().as_str(),
+                    &ldap_info.base_dn,
+                    &ldap_info.base_dn_str,
+                )
+                .map(UserRequestFilter::UserId)
+                .unwrap_or_else(|_| {
+                    warn!("Invalid dn filter on user: {}", value);
+                    UserRequestFilter::from(false)
+                })),
                 _ => match map_user_field(field) {
                     Some(UserColumn::UserId) => Ok(UserRequestFilter::UserId(UserId::new(value))),
                     Some(field) => Ok(UserRequestFilter::Equality(field, value.clone())),
@@ -174,9 +166,7 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                                 field
                             );
                         }
-                        Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
-                            vec![],
-                        ))))
+                        Ok(UserRequestFilter::from(false))
                     }
                 },
             }
@@ -184,17 +174,12 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
         LdapFilter::Present(field) => {
             let field = &field.to_ascii_lowercase();
             // Check that it's a field we support.
-            if field == "objectclass"
-                || field == "dn"
-                || field == "distinguishedname"
-                || map_user_field(field).is_some()
-            {
-                Ok(UserRequestFilter::And(vec![]))
-            } else {
-                Ok(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
-                    vec![],
-                ))))
-            }
+            Ok(UserRequestFilter::from(
+                field == "objectclass"
+                    || field == "dn"
+                    || field == "distinguishedname"
+                    || map_user_field(field).is_some(),
+            ))
         }
         _ => Err(LdapError {
             code: LdapResultCode::UnwillingToPerform,

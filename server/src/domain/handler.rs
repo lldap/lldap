@@ -27,6 +27,16 @@ pub enum UserRequestFilter {
     MemberOfId(GroupId),
 }
 
+impl From<bool> for UserRequestFilter {
+    fn from(val: bool) -> Self {
+        if val {
+            Self::And(vec![])
+        } else {
+            Self::Not(Box::new(Self::And(vec![])))
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum GroupRequestFilter {
     And(Vec<GroupRequestFilter>),
@@ -37,6 +47,16 @@ pub enum GroupRequestFilter {
     GroupId(GroupId),
     // Check if the group contains a user identified by uid.
     Member(UserId),
+}
+
+impl From<bool> for GroupRequestFilter {
+    fn from(val: bool) -> Self {
+        if val {
+            Self::And(vec![])
+        } else {
+            Self::Not(Box::new(Self::And(vec![])))
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
