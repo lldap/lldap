@@ -121,25 +121,20 @@ fn convert_group_filter(
                     )?;
                     Ok(GroupRequestFilter::Member(user_name))
                 }
-                "objectclass" => match value.as_str() {
-                    "groupofuniquenames" | "groupofnames" => Ok(GroupRequestFilter::And(vec![])),
-                    _ => Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
-                        vec![],
-                    )))),
-                },
-                "dn" => Ok(
-                    match get_group_id_from_distinguished_name(
-                        value.to_ascii_lowercase().as_str(),
-                        &ldap_info.base_dn,
-                        &ldap_info.base_dn_str,
-                    ) {
-                        Ok(value) => GroupRequestFilter::DisplayName(value),
-                        Err(_) => {
-                            warn!("Invalid dn filter on group: {}", value);
-                            GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(vec![])))
-                        }
-                    },
-                ),
+                "objectclass" => Ok(GroupRequestFilter::from(matches!(
+                    value.as_str(),
+                    "groupofuniquenames" | "groupofnames"
+                ))),
+                "dn" => Ok(get_group_id_from_distinguished_name(
+                    value.to_ascii_lowercase().as_str(),
+                    &ldap_info.base_dn,
+                    &ldap_info.base_dn_str,
+                )
+                .map(GroupRequestFilter::DisplayName)
+                .unwrap_or_else(|_| {
+                    warn!("Invalid dn filter on group: {}", value);
+                    GroupRequestFilter::from(false)
+                })),
                 _ => match map_group_field(field) {
                     Some(GroupColumn::DisplayName) => {
                         Ok(GroupRequestFilter::DisplayName(value.to_string()))
@@ -158,9 +153,7 @@ fn convert_group_filter(
                                 field
                             );
                         }
-                        Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
-                            vec![],
-                        ))))
+                        Ok(GroupRequestFilter::from(false))
                     }
                 },
             }
@@ -174,17 +167,12 @@ fn convert_group_filter(
         LdapFilter::Not(filter) => Ok(GroupRequestFilter::Not(Box::new(rec(filter)?))),
         LdapFilter::Present(field) => {
             let field = &field.to_ascii_lowercase();
-            if field == "objectclass"
-                || field == "dn"
-                || field == "distinguishedname"
-                || map_group_field(field).is_some()
-            {
-                Ok(GroupRequestFilter::And(vec![]))
-            } else {
-                Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
-                    vec![],
-                ))))
-            }
+            Ok(GroupRequestFilter::from(
+                field == "objectclass"
+                    || field == "dn"
+                    || field == "distinguishedname"
+                    || map_group_field(field).is_some(),
+            ))
         }
         _ => Err(LdapError {
             code: LdapResultCode::UnwillingToPerform,
