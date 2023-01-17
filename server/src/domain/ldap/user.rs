@@ -6,7 +6,10 @@ use tracing::{debug, info, instrument, warn};
 
 use crate::domain::{
     handler::{BackendHandler, UserRequestFilter},
-    ldap::{error::LdapError, utils::expand_attribute_wildcards},
+    ldap::{
+        error::LdapError,
+        utils::{expand_attribute_wildcards, get_user_id_from_distinguished_name},
+    },
     types::{GroupDetails, User, UserColumn, UserId},
 };
 
@@ -147,6 +150,19 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                         vec![],
                     )))),
                 },
+                "dn" => Ok(
+                    match get_user_id_from_distinguished_name(
+                        value.to_ascii_lowercase().as_str(),
+                        &ldap_info.base_dn,
+                        &ldap_info.base_dn_str,
+                    ) {
+                        Ok(value) => UserRequestFilter::UserId(value),
+                        Err(_) => {
+                            warn!("Invalid dn filter on user: {}", value);
+                            UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![])))
+                        }
+                    },
+                ),
                 _ => match map_user_field(field) {
                     Some(UserColumn::UserId) => Ok(UserRequestFilter::UserId(UserId::new(value))),
                     Some(field) => Ok(UserRequestFilter::Equality(field, value.clone())),

@@ -1217,6 +1217,7 @@ mod tests {
             .with(eq(Some(GroupRequestFilter::And(vec![
                 GroupRequestFilter::DisplayName("group_1".to_string()),
                 GroupRequestFilter::Member(UserId::new("bob")),
+                GroupRequestFilter::DisplayName("rockstars".to_string()),
                 GroupRequestFilter::And(vec![]),
                 GroupRequestFilter::And(vec![]),
                 GroupRequestFilter::And(vec![]),
@@ -1244,6 +1245,10 @@ mod tests {
                 LdapFilter::Equality(
                     "uniqueMember".to_string(),
                     "uid=bob,ou=peopLe,Dc=eXample,dc=com".to_string(),
+                ),
+                LdapFilter::Equality(
+                    "dn".to_string(),
+                    "uid=rockstars,ou=groups,dc=example,dc=com".to_string(),
                 ),
                 LdapFilter::Equality("obJEctclass".to_string(), "groupofUniqueNames".to_string()),
                 LdapFilter::Equality("objectclass".to_string(), "groupOfNames".to_string()),
@@ -1403,6 +1408,7 @@ mod tests {
                         UserRequestFilter::Not(Box::new(UserRequestFilter::UserId(UserId::new(
                             "bob",
                         )))),
+                        UserRequestFilter::UserId("bob_1".to_string().into()),
                         UserRequestFilter::And(vec![]),
                         UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![]))),
                         UserRequestFilter::And(vec![]),
@@ -1422,6 +1428,10 @@ mod tests {
                     "uid".to_string(),
                     "bob".to_string(),
                 ))),
+                LdapFilter::Equality(
+                    "dn".to_string(),
+                    "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
+                ),
                 LdapFilter::Equality("objectclass".to_string(), "persOn".to_string()),
                 LdapFilter::Equality("objectclass".to_string(), "other".to_string()),
                 LdapFilter::Present("objectClass".to_string()),
