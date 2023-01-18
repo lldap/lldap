@@ -26,12 +26,21 @@ async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOpti
         options.user.clone(),
         options.password.unsecure().to_string(),
     );
-    let relay_factory = match options.smtp_encryption {
-        SmtpEncryption::TLS => AsyncSmtpTransport::<Tokio1Executor>::relay,
-        SmtpEncryption::STARTTLS => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay,
+    let mailer = match options.smtp_encryption {
+        SmtpEncryption::NONE => {
+            AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&options.server)
+        }
+        SmtpEncryption::TLS => AsyncSmtpTransport::<Tokio1Executor>::relay(&options.server)?,
+        SmtpEncryption::STARTTLS => {
+            AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&options.server)?
+        }
     };
-    let mailer = relay_factory(&options.server)?.credentials(creds).build();
-    mailer.send(email).await?;
+    mailer
+        .credentials(creds)
+        .port(options.port)
+        .build()
+        .send(email)
+        .await?;
     Ok(())
 }
 
