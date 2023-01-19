@@ -266,6 +266,9 @@ impl ConfigOverrider for SmtpOpts {
         if let Some(password) = &self.smtp_password {
             config.smtp_options.password = SecUtf8::from(password.clone());
         }
+        if let Some(smtp_encryption) = &self.smtp_encryption {
+            config.smtp_options.smtp_encryption = smtp_encryption.clone();
+        }
         if let Some(tls_required) = self.smtp_tls_required {
             config.smtp_options.tls_required = Some(tls_required);
         }

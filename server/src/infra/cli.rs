@@ -117,6 +117,7 @@ pub struct LdapsOpts {
 clap::arg_enum! {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SmtpEncryption {
+    NONE,
     TLS,
     STARTTLS,
 }
