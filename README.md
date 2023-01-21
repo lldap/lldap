@@ -250,6 +250,7 @@ folder for help with:
   - [Vaultwarden](example_configs/vaultwarden.md)
   - [WeKan](example_configs/wekan.md)
   - [WG Portal](example_configs/wg_portal.env.example)
+  - [WikiJS](example_configs/wikijs.md)
   - [XBackBone](example_configs/xbackbone_config.php)
   - [Zendto](example_configs/zendto.md)
 
