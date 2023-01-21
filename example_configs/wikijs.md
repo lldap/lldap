@@ -6,11 +6,11 @@ ldap://lldap:3890
 ```
 ### Admin Bind DN
 ```
-cn=admin,ou=people,dc=example,dc=com
+uid=admin,ou=people,dc=example,dc=com
 ```
 or 
 ```
-cn=readonlyuser,ou=people,dc=example,dc=com
+uid=readonlyuser,ou=people,dc=example,dc=com
 ```
 ### Admin Bind Credentials
 ```
