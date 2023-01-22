@@ -10,8 +10,8 @@ RUN mkdir -p target/
 RUN mkdir -p /lldap/app
 
 RUN if [ "${TARGETPLATFORM}" = "linux/amd64" ]; then \
-    mv bin/amd64-lldap-bin/lldap target/lldap && \
-    mv bin/amd64-migration-tool-bin/migration-tool target/migration-tool && \
+    mv bin/x86_64-unknown-linux-musl-lldap-bin/lldap target/lldap && \
+    mv bin/x86_64-unknown-linux-musl-migration-tool-bin/migration-tool target/migration-tool && \
     chmod +x target/lldap && \
     chmod +x target/migration-tool && \
     ls -la target/ . && \
@@ -19,8 +19,8 @@ RUN if [ "${TARGETPLATFORM}" = "linux/amd64" ]; then \
     ; fi
 
 RUN if [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
-    mv bin/aarch64-lldap-bin/lldap target/lldap && \
-    mv bin/aarch64-migration-tool-bin/migration-tool target/migration-tool && \
+    mv bin/aarch64-unknown-linux-musl-lldap-bin/lldap target/lldap && \
+    mv bin/aarch64-unknown-linux-musl-migration-tool-bin/migration-tool target/migration-tool && \
     chmod +x target/lldap && \
     chmod +x target/migration-tool && \
     ls -la target/ . && \
@@ -28,8 +28,8 @@ RUN if [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
     ; fi
 
 RUN if [ "${TARGETPLATFORM}" = "linux/arm/v7" ]; then \
-    mv bin/armhf-lldap-bin/lldap target/lldap && \
-    mv bin/armhf-migration-tool-bin/migration-tool target/migration-tool && \
+    mv bin/armv7-unknown-linux-gnueabihf-lldap-bin/lldap target/lldap && \
+    mv bin/armv7-unknown-linux-gnueabihf-migration-tool-bin/migration-tool target/migration-tool && \
     chmod +x target/lldap && \
     chmod +x target/migration-tool && \
     ls -la target/ . && \

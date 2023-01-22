@@ -19,14 +19,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
-# In total 5 jobs, all the jobs are containerized
-# ---
 
-#######################################################################################
-# GitHub actions randomly timeout when downloading musl-gcc                           #
-# Using lldap dev image based on https://hub.docker.com/_/rust and musl-gcc bundled   #
-# Look into .github/workflows/Dockerfile.dev for development image details            #
-#######################################################################################
+### CI Docs
 
 # build-ui , create/compile the web
 ### install wasm
@@ -34,20 +28,36 @@ env:
 ### run app/build.sh
 ### upload artifacts
 
-# builds-armhf, build-aarch64, build-amd64 create binary for respective arch
-### Add non-native architecture dpkg --add-architecture XXX
-### Install dev tool gcc g++, etc. per respective arch
+# build-bin
+## build-armhf, build-aarch64, build-amd64 , create binary for respective arch
+#######################################################################################
+# GitHub actions randomly timeout when downloading musl-gcc, using custom dev image   #
+# Look into .github/workflows/Dockerfile.dev for development image details            #
+# Using lldap dev image based on https://hub.docker.com/_/rust and musl-gcc bundled   #
+#######################################################################################
 ### Cargo build
-### Upload artifacts
-
-## the CARGO_ env
-#CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-# This will determine which architecture lib will be used.
+### aarch64 and amd64 is musl based
+### armv7 is glibc based, musl had issue with time_t when cross compile https://github.com/rust-lang/libc/issues/1848
 
 # build-ui,builds-armhf, build-aarch64, build-amd64 will upload artifacts will be used next job
-# build-docker-image job will fetch artifacts and run Dockerfile.ci then push the image.
 
-# cache based on Cargo.lock
+# lldap-test
+### will run lldap with postgres, mariadb and sqlite backend, do selfcheck command.
+
+# Build docker image
+### Triplet docker image arch with debian base
+### amd64 & aarch64 with alpine base
+# build-docker-image job will fetch artifacts and run Dockerfile.ci then push the image.
+### Look into .github/workflows/Dockerfile.ci.debian or .github/workflowds/Dockerfile.ci.alpine
+
+# create release artifacts
+### Fetch artifacts
+### Clean up web artifact
+### Setup folder structure
+### Compress
+### Upload
+
+# cache based on Cargo.lock per cargo target
 
 jobs:
   build-ui:
@@ -68,124 +78,39 @@ jobs:
           key: lldap-ui-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-ui-
-      - name: install rollup nodejs
+      - name: Install rollup (nodejs)
         run: npm install -g rollup
-      - name: add wasm target
+      - name: Add wasm target (rust)
         run: rustup target add wasm32-unknown-unknown
-      - name: install wasm-pack with cargo
+      - name: Install wasm-pack with cargo
         run: cargo install wasm-pack || true
         env:
           RUSTFLAGS: ""
-      - name: build frontend
+      - name: Build frontend
         run: ./app/build.sh
-      - name: check path
+      - name: Check build path
         run: ls -al app/
-      - name: upload ui artifacts
+      - name: Upload ui artifacts
         uses: actions/upload-artifact@v3
         with:
           name: ui
           path: app/
 
-  build-armhf:
+
+  build-bin:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [armv7-unknown-linux-gnueabihf, aarch64-unknown-linux-musl, x86_64-unknown-linux-musl]
     container:
       image: nitnelave/rust-dev:latest
       env:
         CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER: arm-linux-gnueabihf-ld
-        CARGO_TERM_COLOR: always
-        RUSTFLAGS: -Ctarget-feature=-crt-static
-        CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
-    steps:
-      - name: add armhf architecture
-        run: dpkg --add-architecture armhf
-      - name: install runtime
-        run: apt update && apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross tar ca-certificates
-      - name: add armhf target
-        run: rustup target add armv7-unknown-linux-gnueabihf
-      - name: Checkout repository
-        uses: actions/checkout@v3.3.0
-      - uses: actions/cache@v3
-        with:
-          path: |
-            .cargo/bin
-            .cargo/registry/index
-            .cargo/registry/cache
-            .cargo/git/db
-            target
-          key: lldap-bin-armhf-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            lldap-bin-armhf-
-      - name: compile armhf
-        run: cargo build --target=armv7-unknown-linux-gnueabihf --release -p lldap -p migration-tool
-      - name: check path
-        run: ls -al target/release
-      - name: upload armhf lldap artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: armhf-lldap-bin
-          path: target/armv7-unknown-linux-gnueabihf/release/lldap
-      - name: upload armhfmigration-tool artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: armhf-migration-tool-bin
-          path: target/armv7-unknown-linux-gnueabihf/release/migration-tool
-
-
-  build-aarch64:
-    runs-on: ubuntu-latest
-    container:
-      image: nitnelave/rust-dev:latest
-      env:
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
-        CARGO_TERM_COLOR: always
-        RUSTFLAGS: -Ctarget-feature=+crt-static
-        CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3.3.0
-      - uses: actions/cache@v3
-        with:
-          path: |
-            .cargo/bin
-            .cargo/registry/index
-            .cargo/registry/cache
-            .cargo/git/db
-            target
-          key: lldap-bin-aarch64-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-           lldap-bin-aarch64-
-#      - name: fetch musl-gcc
-#        run: |
-#             wget -c https://musl.cc/aarch64-linux-musl-cross.tgz
-#             tar zxf ./x86_64-linux-musl-cross.tgz -C /opt
-#             echo "/opt/aarch64-linux-musl-cross:/opt/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH
-      - name: add musl aarch64 target
-        run: rustup target add aarch64-unknown-linux-musl
-      - name: build lldap aarch4
-        run: cargo build --target=aarch64-unknown-linux-musl --release -p lldap -p migration-tool
-      - name: check path
-        run: ls -al target/aarch64-unknown-linux-musl/release/
-      - name: upload aarch64 lldap artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: aarch64-lldap-bin
-          path: target/aarch64-unknown-linux-musl/release/lldap
-      - name: upload aarch64 migration-tool artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: aarch64-migration-tool-bin
-          path: target/aarch64-unknown-linux-musl/release/migration-tool
-
-  build-amd64:
-    runs-on: ubuntu-latest
-    container:
-      image: nitnelave/rust-dev:latest
-      env:
-        CARGO_TERM_COLOR: always
-        RUSTFLAGS: -Ctarget-feature=+crt-static
-        CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
         CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: x86_64-linux-musl-gcc
+        CARGO_TERM_COLOR: always
+        RUSTFLAGS: -Ctarget-feature=+crt-static
+        CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3.3.0
@@ -197,47 +122,103 @@ jobs:
             .cargo/registry/cache
             .cargo/git/db
             target
-          key: lldap-bin-amd64-${{ hashFiles('**/Cargo.lock') }}
+          key: lldap-bin-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            lldap-bin-amd64-
-      - name: install musl
-        run: apt update && apt install -y musl-tools tar wget
-#      - name: fetch musl-gcc
-#        run: |
-#             wget -c https://musl.cc/x86_64-linux-musl-cross.tgz
-#             tar zxf ./x86_64-linux-musl-cross.tgz -C /opt
-#             echo "/opt/x86_64-linux-musl-cross:/opt/x86_64-linux-musl-cross/bin" >> $GITHUB_PATH
-      - name: add x86_64 target
-        run: rustup target add x86_64-unknown-linux-musl
-      - name: build x86_64 lldap
-        run: cargo build --target=x86_64-unknown-linux-musl --release -p lldap -p migration-tool
-      - name: check path
-        run: ls -al target/x86_64-unknown-linux-musl/release/
-      - name: upload amd64 lldap artifacts
+            lldap-bin-${{ matrix.target }}-
+      - name: Compile ${{ matrix.target }} lldap and migration tool
+        run: cargo build --target=${{ matrix.target }} --release -p lldap -p migration-tool
+      - name: Check path
+        run: ls -al target/release
+      - name: Upload ${{ matrix.target}} lldap artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: amd64-lldap-bin
-          path: target/x86_64-unknown-linux-musl/release/lldap
-      - name: upload amd64 migration-tool artifacts
+          name: ${{ matrix.target}}-lldap-bin
+          path: target/${{ matrix.target }}/release/lldap
+      - name: Upload ${{ matrix.target }} migration tool artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: amd64-migration-tool-bin
-          path: target/x86_64-unknown-linux-musl/release/migration-tool
+          name: ${{ matrix.target }}-migration-tool-bin
+          path: target/${{ matrix.target }}/release/migration-tool
+
+  lldap-database-integration-test:
+    needs: [build-ui,build-bin]
+    name: LLDAP test
+    runs-on: ubuntu-latest
+    services:
+        mariadb:
+          image: mariadb:latest
+          ports:
+            - 3306:3306
+          env:
+            MYSQL_USER: lldapuser
+            MYSQL_PASSWORD: lldappass
+            MYSQL_DATABASE: lldap
+            MYSQL_ROOT_PASSWORD: rootpass
+
+        postgresql:
+           image: postgres:latest
+           ports:
+             - 5432:5432
+           env:
+             POSTGRES_USER: lldapuser
+             POSTGRES_PASSWORD: lldappass
+             POSTGRES_DB: lldap
+
+    steps:
+       - name: Download artifacts
+         uses: actions/download-artifact@v3
+         with:
+           name: x86_64-unknown-linux-musl-lldap-bin
+           path: bin/
+       - name: Where is the bin?
+         run: ls -alR bin
+       - name: Set executables to LLDAP
+         run: chmod +x bin/lldap
+
+       - name: Run lldap with postgres DB and healthcheck
+         run: |
+              bin/lldap run &
+              sleep 10s
+              bin/lldap healthcheck
+         env:
+           LLDAP_database_url: postgres://lldapuser:lldappass@localhost/lldap
+           LLDAP_ldap_port: 3890
+           LLDAP_http_port: 17170
+
+
+       - name: Run lldap with mariadb DB (MySQL Compatible) and healthcheck
+         run: |
+              bin/lldap run &
+              sleep 10s
+              bin/lldap healthcheck
+         env:
+           LLDAP_database_url: mysql://lldapuser:lldappass@localhost/lldap
+           LLDAP_ldap_port: 3891
+           LLDAP_http_port: 17171
+
+
+       - name: Run lldap with sqlite DB and healthcheck
+         run: |
+              bin/lldap run &
+              sleep 10s
+              bin/lldap healthcheck
+         env:
+           LLDAP_database_url: sqlite://users.db?mode=rwc
+           LLDAP_ldap_port: 3892
+           LLDAP_http_port: 17172
 
 
   build-docker-image:
-    needs: [build-ui,build-armhf,build-aarch64,build-amd64]
+    needs: [build-ui, build-bin]
     name: Build Docker image
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - name: install rsync
-        run: sudo apt update && sudo apt install -y rsync
-      - name: fetch repo
+      - name: Checkout repository
         uses: actions/checkout@v3.3.0
-      - name: Download All Artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v3
         with:
           path: bin
@@ -248,7 +229,7 @@ jobs:
           name: ui
           path: web
 
-      - name: setup qemu
+      - name: Setup QEMU
         uses: docker/setup-qemu-action@v2
       - uses: docker/setup-buildx-action@v2
 
@@ -267,13 +248,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
-      - name: Cache Docker layers
-        uses: actions/cache@v3
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
 
       - name: parse tag
         uses: gacts/github-slug@v1
@@ -298,8 +272,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           file: ./.github/workflows/Dockerfile.ci.alpine
           tags: nitnelave/lldap:latest, nitnelave/lldap:latest-alpine
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          cache-from: type=gha,mode=max
+          cache-to: type=gha,mode=max
 
       - name: Build and push latest debian
         if: github.event_name != 'release'
@@ -310,8 +284,8 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           file: ./.github/workflows/Dockerfile.ci.debian
           tags: nitnelave/lldap:latest-debian
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          cache-from: type=gha,mode=max
+          cache-to: type=gha,mode=max
 
 ########################################
 #### docker image :semver tag build ####
@@ -326,8 +300,8 @@ jobs:
           # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
           file: ./.github/workflows/Dockerfile.ci.alpine
           tags: nitnelave/lldap:stable, nitnelave/lldap:stable-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          cache-from: type=gha,mode=max
+          cache-to: type=gha,mode=max
 
       - name: Build and push release debian
         if: github.event_name == 'release'
@@ -339,11 +313,8 @@ jobs:
           # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
           file: ./.github/workflows/Dockerfile.ci.debian
           tags: nitnelave/lldap:stable-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
-
-      - name: Move cache
-        run: rsync -r /tmp/.buildx-cache-new /tmp/.buildx-cache --delete
+          cache-from: type=gha,mode=max
+          cache-to: type=gha,mode=max
 
       - name: Update repo description
         if: github.event_name != 'pull_request'
@@ -357,12 +328,12 @@ jobs:
 ### Download artifacts, clean up ui, upload to release page ###
 ###############################################################
   create-release-artifacts:
-     needs: [build-ui,build-armhf,build-aarch64,build-amd64]
+     needs: [build-ui, build-bin]
      name: Create release artifacts
      if: github.event_name == 'release'
      runs-on: ubuntu-latest
      steps:
-      - name: Download All Artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v3
         with:
           path: bin/
@@ -370,12 +341,12 @@ jobs:
         run: ls -alR bin/
       - name: Fixing Filename
         run: |
-             mv bin/aarch64-lldap-bin/lldap bin/aarch64-lldap
-             mv bin/amd64-lldap-bin/lldap bin/amd64-lldap
-             mv bin/armhf-lldap-bin/lldap bin/armhf-lldap
-             mv bin/aarch64-migration-tool-bin/migration-tool bin/aarch64-migration-tool
-             mv bin/amd64-migration-tool-bin/migration-tool bin/amd64-migration-tool
-             mv bin/armhf-migration-tool-bin/migration-tool bin/armhf-migration-tool
+             mv bin/aarch64-unknown-linux-musl-lldap-bin/lldap bin/aarch64-lldap
+             mv bin/x86_64-unknown-linux-musl-lldap-bin/lldap bin/amd64-lldap
+             mv bin/armv7-unknown-linux-gnueabihf-lldap-bin/lldap bin/armhf-lldap
+             mv bin/aarch64-unknown-linux-musl-migration-tool-bin/migration-tool bin/aarch64-migration-tool
+             mv bin/x86_64-unknown-linux-musl-migration-tool-bin/migration-tool bin/amd64-migration-tool
+             mv bin/armv7-unknown-linux-gnueabihf-migration-tool-bin/migration-tool bin/armhf-migration-tool
              chmod +x bin/*-lldap
              chmod +x bin/*-migration-tool
 
@@ -384,7 +355,7 @@ jobs:
         with:
           name: ui
           path: web
-      - name: Web Cleanup
+      - name: UI (web) artifacts cleanup
         run: mkdir app && mv web/index.html app/index.html && mv web/static app/static && mv web/pkg app/pkg
       - name: Fetch web components
         run: |
@@ -412,14 +383,14 @@ jobs:
              ls -alR amd64-lldap/
              ls -alR armhf-lldap/
 
-      - name: Compress
+      - name: Packing LLDAP and Web UI
         run: |
              tar -czvf aarch64-lldap.tar.gz aarch64-lldap/
              tar -czvf amd64-lldap.tar.gz amd64-lldap/
              tar -czvf armhf-lldap.tar.gz armhf-lldap/
 
 
-      - name: Upload artifacts release
+      - name: Upload compressed release
         uses: ncipollo/release-action@v1
         id: create_release
         with:
