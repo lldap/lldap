@@ -67,7 +67,7 @@ features = ["env-filter", "tracing-log"]
 [dependencies.lettre]
 features = ["builder", "serde", "smtp-transport", "tokio1-rustls-tls"]
 default-features = false
-version = "0.10.0-rc.3"
+version = "0.10.1"
 
 [dependencies.lldap_auth]
 path = "../auth"
