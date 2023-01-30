@@ -265,7 +265,7 @@ jobs:
 ########################################
       - name: Build and push latest alpine
         if: github.event_name != 'release'
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -277,7 +277,7 @@ jobs:
 
       - name: Build and push latest debian
         if: github.event_name != 'release'
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -292,7 +292,7 @@ jobs:
 ########################################
       - name: Build and push release alpine
         if: github.event_name == 'release'
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -305,7 +305,7 @@ jobs:
 
       - name: Build and push release debian
         if: github.event_name == 'release'
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: .
           platforms: linux/amd64,linux/arm64,linux/arm/v7
