@@ -40,7 +40,7 @@
 - [Comparisons with other services](#comparisons-with-other-services)
   - [vs OpenLDAP](#vs-openldap)
   - [vs FreeIPA](#vs-freeipa)
-- [I can't log in](#i-cant-log-in)
+- [I can't log in!](#i-cant-log-in)
 - [Contributions](#contributions)
 
 ## About
@@ -290,7 +290,7 @@ LLDAP is much lighter to run (<10 MB RAM including the DB), easier to
 configure (no messing around with DNS or security policies) and simpler to
 use. It also comes conveniently packed in a docker container.
 
-## I can't log in
+## I can't log in!
 
 If you just set up the server, can get to the login page but the password you
 set isn't working, try the following:
