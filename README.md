@@ -28,20 +28,20 @@
   </a>
 </p>
 
- - [About](#About)
- - [Installation](#Installation)
-   - [With Docker](#With-Docker)
-   - [From source](#From-source)
-   - [Cross-compilation](#Cross-compilation)
- - [Client configuration](#Client-configuration)
-   - [Compatible services](#compatible-services)
-   - [General configuration guide](#general-configuration-guide)
-   - [Sample client configurations](#Sample-client-configurations)
- - [Comparisons with other services](#Comparisons-with-other-services)
-   - [vs OpenLDAP](#vs-openldap)
-   - [vs FreeIPA](#vs-freeipa)
- - [I can't log in!](#i-cant-log-in)
- - [Contributions](#Contributions)
+- [About](#about)
+- [Installation](#installation)
+  - [With Docker](#with-docker)
+  - [From source](#from-source)
+  - [Cross-compilation](#cross-compilation)
+- [Client configuration](#client-configuration)
+  - [Compatible services](#compatible-services)
+  - [General configuration guide](#general-configuration-guide)
+  - [Sample client configurations](#sample-client-configurations)
+- [Comparisons with other services](#comparisons-with-other-services)
+  - [vs OpenLDAP](#vs-openldap)
+  - [vs FreeIPA](#vs-freeipa)
+- [I can't log in](#i-cant-log-in)
+- [Contributions](#contributions)
 
 ## About
 
@@ -62,10 +62,11 @@ edit their own details or reset their password by email.
 
 The goal is _not_ to provide a full LDAP server; if you're interested in that,
 check out OpenLDAP. This server is a user management system that is:
-* simple to setup (no messing around with `slapd`),
-* simple to manage (friendly web UI),
-* low resources,
-* opinionated with basic defaults so you don't have to understand the
+
+- simple to setup (no messing around with `slapd`),
+- simple to manage (friendly web UI),
+- low resources,
+- opinionated with basic defaults so you don't have to understand the
   subtleties of LDAP.
 
 It mostly targets self-hosting servers, with open-source components like
@@ -98,14 +99,14 @@ contents are loaded into the respective configuration parameters. Note that
 `_FILE` variables take precedence.
 
 Example for docker compose:
-* You can use either the `:latest` tag image or `:stable` as used in this example.
-* `:latest` tag image contains recently pushed code or feature tests, in which some instability can be expected.
-* If `UID` and `GID` no defined LLDAP will use default `UID` and `GID` number `1000`.
-* If no `TZ` is set, default `UTC` timezone will be used.
 
+- You can use either the `:latest` tag image or `:stable` as used in this example.
+- `:latest` tag image contains recently pushed code or feature tests, in which some instability can be expected.
+- If `UID` and `GID` no defined LLDAP will use default `UID` and `GID` number `1000`.
+- If no `TZ` is set, default `UTC` timezone will be used.
 
 ```yaml
-version: '3'
+version: "3"
 
 volumes:
   lldap_data:
@@ -139,9 +140,9 @@ front-end.
 
 To compile the project, you'll need:
 
-* nodejs 16: [nodesource nodejs installation guide](https://github.com/nodesource/distributions)
-* curl: `sudo apt install curl`
-* Rust/Cargo: [rustup.rs](https://rustup.rs/)
+- nodejs 16: [nodesource nodejs installation guide](https://github.com/nodesource/distributions)
+- curl: `sudo apt install curl`
+- Rust/Cargo: [rustup.rs](https://rustup.rs/)
 
 Then you can compile the server (and the migration tool if you want):
 
@@ -155,8 +156,8 @@ just run `cargo run -- run` to run the server.
 To bring up the server, you'll need to compile the frontend. In addition to
 cargo, you'll need:
 
-* WASM-pack: `cargo install wasm-pack`
-* rollup.js: `npm install rollup`
+- WASM-pack: `cargo install wasm-pack`
+- rollup.js: `npm install rollup`
 
 Then you can build the frontend files with `./app/build.sh` (you'll need to run
 this after every front-end change to update the WASM package served).
@@ -204,14 +205,15 @@ the config).
 ### General configuration guide
 
 To configure the services that will talk to LLDAP, here are the values:
-  - The LDAP user DN is from the configuration. By default,
-    `cn=admin,ou=people,dc=example,dc=com`.
-  - The LDAP password is from the configuration (same as to log in to the web
-    UI).
-  - The users are all located in `ou=people,` + the base DN, so by default user
-    `bob` is at `cn=bob,ou=people,dc=example,dc=com`.
-  - Similarly, the groups are located in `ou=groups`, so the group `family`
-    will be at `cn=family,ou=groups,dc=example,dc=com`.
+
+- The LDAP user DN is from the configuration. By default,
+  `cn=admin,ou=people,dc=example,dc=com`.
+- The LDAP password is from the configuration (same as to log in to the web
+  UI).
+- The users are all located in `ou=people,` + the base DN, so by default user
+  `bob` is at `cn=bob,ou=people,dc=example,dc=com`.
+- Similarly, the groups are located in `ou=groups`, so the group `family`
+  will be at `cn=family,ou=groups,dc=example,dc=com`.
 
 Testing group membership through `memberOf` is supported, so you can have a
 filter like: `(memberOf=cn=admins,ou=groups,dc=example,dc=com)`.
@@ -226,33 +228,35 @@ administration access to many services.
 Some specific clients have been tested to work and come with sample
 configuration files, or guides. See the [`example_configs`](example_configs)
 folder for help with:
-  - [Airsonic Advanced](example_configs/airsonic-advanced.md)
-  - [Apache Guacamole](example_configs/apacheguacamole.md)
-  - [Authelia](example_configs/authelia_config.yml)
-  - [Bookstack](example_configs/bookstack.env.example)
-  - [Calibre-Web](example_configs/calibre_web.md)
-  - [Dell iDRAC](example_configs/dell_idrac.md)
-  - [Dokuwiki](example_configs/dokuwiki.md)
-  - [Dolibarr](example_configs/dolibarr.md)
-  - [Emby](example_configs/emby.md)
-  - [Gitea](example_configs/gitea.md)
-  - [Grafana](example_configs/grafana_ldap_config.toml)
-  - [Hedgedoc](example_configs/hedgedoc.md)
-  - [Jellyfin](example_configs/jellyfin.md)
-  - [Jitsi Meet](example_configs/jitsi_meet.conf)
-  - [KeyCloak](example_configs/keycloak.md)
-  - [Matrix](example_configs/matrix_synapse.yml)
-  - [Nextcloud](example_configs/nextcloud.md)
-  - [Organizr](example_configs/Organizr.md)
-  - [Portainer](example_configs/portainer.md)
-  - [Seafile](example_configs/seafile.md)
-  - [Syncthing](example_configs/syncthing.md)
-  - [Vaultwarden](example_configs/vaultwarden.md)
-  - [WeKan](example_configs/wekan.md)
-  - [WG Portal](example_configs/wg_portal.env.example)
-  - [WikiJS](example_configs/wikijs.md)
-  - [XBackBone](example_configs/xbackbone_config.php)
-  - [Zendto](example_configs/zendto.md)
+
+- [Airsonic Advanced](example_configs/airsonic-advanced.md)
+- [Apache Guacamole](example_configs/apacheguacamole.md)
+- [Authelia](example_configs/authelia_config.yml)
+- [Bookstack](example_configs/bookstack.env.example)
+- [Calibre-Web](example_configs/calibre_web.md)
+- [Dell iDRAC](example_configs/dell_idrac.md)
+- [Dex](example_configs/dex_config.yml)
+- [Dokuwiki](example_configs/dokuwiki.md)
+- [Dolibarr](example_configs/dolibarr.md)
+- [Emby](example_configs/emby.md)
+- [Gitea](example_configs/gitea.md)
+- [Grafana](example_configs/grafana_ldap_config.toml)
+- [Hedgedoc](example_configs/hedgedoc.md)
+- [Jellyfin](example_configs/jellyfin.md)
+- [Jitsi Meet](example_configs/jitsi_meet.conf)
+- [KeyCloak](example_configs/keycloak.md)
+- [Matrix](example_configs/matrix_synapse.yml)
+- [Nextcloud](example_configs/nextcloud.md)
+- [Organizr](example_configs/Organizr.md)
+- [Portainer](example_configs/portainer.md)
+- [Seafile](example_configs/seafile.md)
+- [Syncthing](example_configs/syncthing.md)
+- [Vaultwarden](example_configs/vaultwarden.md)
+- [WeKan](example_configs/wekan.md)
+- [WG Portal](example_configs/wg_portal.env.example)
+- [WikiJS](example_configs/wikijs.md)
+- [XBackBone](example_configs/xbackbone_config.php)
+- [Zendto](example_configs/zendto.md)
 
 ## Comparisons with other services
 
@@ -286,25 +290,25 @@ LLDAP is much lighter to run (<10 MB RAM including the DB), easier to
 configure (no messing around with DNS or security policies) and simpler to
 use. It also comes conveniently packed in a docker container.
 
-## I can't log in!
+## I can't log in
 
 If you just set up the server, can get to the login page but the password you
 set isn't working, try the following:
 
-  - (For docker): Make sure that the `/data` folder is persistent, either to a
-   docker volume or mounted from the host filesystem.
-  - Check if there is a `lldap_config.toml` file (either in `/data` for docker
-    or in the current directory). If there isn't, copy
-    `lldap_config.docker_template.toml` there, and fill in the various values
-    (passwords, secrets, ...).
-  - Check if there is a `users.db` file (either in `/data` for docker or where
-    you specified the DB URL, which defaults to the current directory). If
-    there isn't, check that the user running the command (user with ID 10001
-    for docker) has the rights to write to the `/data` folder. If in doubt, you
-    can `chmod 777 /data` (or whatever the folder) to make it world-writeable.
-  - Make sure you restart the server.
-  - If it's still not working, join the
-    [Discord server](https://discord.gg/h5PEdRMNyP) to ask for help.
+- (For docker): Make sure that the `/data` folder is persistent, either to a
+  docker volume or mounted from the host filesystem.
+- Check if there is a `lldap_config.toml` file (either in `/data` for docker
+  or in the current directory). If there isn't, copy
+  `lldap_config.docker_template.toml` there, and fill in the various values
+  (passwords, secrets, ...).
+- Check if there is a `users.db` file (either in `/data` for docker or where
+  you specified the DB URL, which defaults to the current directory). If
+  there isn't, check that the user running the command (user with ID 10001
+  for docker) has the rights to write to the `/data` folder. If in doubt, you
+  can `chmod 777 /data` (or whatever the folder) to make it world-writeable.
+- Make sure you restart the server.
+- If it's still not working, join the
+  [Discord server](https://discord.gg/h5PEdRMNyP) to ask for help.
 
 ## Contributions
 
