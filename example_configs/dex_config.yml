@@ -23,3 +23,10 @@ connectors:
         emailAttr: mail
         nameAttr: displayName
         preferredUsernameAttr: uid
+      groupSearch:
+        baseDN: ou=groups,dc=example,dc=com
+        filter: "(objectClass=groupOfUniqueNames)"
+        userMatchers:
+          - userAttr: uid
+            groupAttr: member
+        nameAttr: displayName
