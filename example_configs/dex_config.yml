@@ -1,0 +1,32 @@
+# lldap configuration:
+# LLDAP_LDAP_BASE_DN:    dc=example,dc=com
+
+# ##############################
+# rest of the Dex options
+# ##############################
+
+connectors:
+  - type: ldap
+    id: ldap
+    name: LDAP
+    config:
+      host: lldap-host # make sure it does not start with `ldap://`
+      port: 3890 # or 6360 if you have ldaps enabled
+      insecureNoSSL: true # or false if you have ldaps enabled
+      insecureSkipVerify: true # or false if you have ldaps enabled
+      bindDN: uid=admin,ou=people,dc=example,dc=com # replace admin with your admin user
+      bindPW: very-secure-password # replace with your admin password
+      userSearch:
+        baseDN: ou=people,dc=example,dc=com
+        username: uid
+        idAttr: uid
+        emailAttr: mail
+        nameAttr: displayName
+        preferredUsernameAttr: uid
+      groupSearch:
+        baseDN: ou=groups,dc=example,dc=com
+        filter: "(objectClass=groupOfUniqueNames)"
+        userMatchers:
+          - userAttr: uid
+            groupAttr: member
+        nameAttr: displayName
