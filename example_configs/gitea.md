@@ -41,3 +41,25 @@ Check `Remove Users from syncronised teams...`
 The `Map LDAP groups to Organization teams` config is JSON formatted and can be extended to as many groups as needed.
 
 Replace every instance of `dc=example,dc=com` with your configured domain.
+
+# Configuration for Gitea in `simple auth` mode
+
+* Host: Your lldap server's ip/hostname
+* Port: Your lldap server's port (389 by default)
+* User Search Base: `ou=people,dc=example,dc=com`
+* User DN: `uid=%s,ou=people,dc=example,dc=com`
+* User Filter: 
+    * If you want all users to be able to log in, use `(&(objectClass=person)(|(uid=%[1]s)(mail=%[1]s)))`. To log in they can either use their email address or user name. 
+    * If you only want members a specific group to be able to log in, in this case the group git_user, use `(&(memberof=cn=gitea_user,ou=groups,dc=example,dc=com)(|(uid=%[1]s)(mail=%[1]s)))`
+* Admin Filter: Use `(memberof=cn=gitea_admin,ou=groups,dc=example,dc=com)` if you want lldap admins to become Gitea admins. Leave empty otherwise.
+* Username Attribute: `uid`
+* First Name Attribute: `givenName`
+* Surname Attribute: `sn`
+* Email Attribute: `mail`
+* Avatar Attribute: `jpegPhoto`
+
+notes:
+
+* `dc=example,dc=com` is your domain
+* `gitea_user` is group name of the gitea user in the lldap
+* `gitea_admin` is group name of the gitea admin in the lldap
