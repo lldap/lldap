@@ -41,3 +41,9 @@ Check `Remove Users from syncronised teams...`
 The `Map LDAP groups to Organization teams` config is JSON formatted and can be extended to as many groups as needed.
 
 Replace every instance of `dc=example,dc=com` with your configured domain.
+
+# Configuration for Gitea in `simple auth` mode
+
+* The configuration method is the same as `BindDN` mode.
+* `BindDN` and `password` are not required
+* Gitea will not be able to pre-sync users, user account will be created at login time.
