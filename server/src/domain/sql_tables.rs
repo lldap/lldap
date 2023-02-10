@@ -3,7 +3,7 @@ use sea_orm::Value;
 
 pub type DbConnection = sea_orm::DatabaseConnection;
 
-#[derive(Copy, PartialEq, Eq, Debug, Clone)]
+#[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord)]
 pub struct SchemaVersion(pub i16);
 
 impl sea_orm::TryGetable for SchemaVersion {
@@ -21,6 +21,8 @@ impl From<SchemaVersion> for Value {
         version.0.into()
     }
 }
+
+pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(2);
 
 pub async fn init_table(pool: &DbConnection) -> anyhow::Result<()> {
     let version = {
@@ -99,14 +101,21 @@ mod tests {
         let sql_pool = get_in_memory_db().await;
         sql_pool
             .execute(raw_statement(
-                r#"CREATE TABLE users ( user_id TEXT , creation_date TEXT);"#,
+                r#"CREATE TABLE users ( user_id TEXT, display_name TEXT, creation_date TEXT);"#,
             ))
             .await
             .unwrap();
         sql_pool
             .execute(raw_statement(
-                r#"INSERT INTO users (user_id, creation_date)
-                       VALUES ("bôb", "1970-01-01 00:00:00")"#,
+                r#"INSERT INTO users (user_id, display_name, creation_date)
+                       VALUES ("bôb", "", "1970-01-01 00:00:00")"#,
+            ))
+            .await
+            .unwrap();
+        sql_pool
+            .execute(raw_statement(
+                r#"INSERT INTO users (user_id, display_name, creation_date)
+                       VALUES ("john", "John Doe", "1971-01-01 00:00:00")"#,
             ))
             .await
             .unwrap();
@@ -132,17 +141,27 @@ mod tests {
             .await
             .unwrap();
         #[derive(FromQueryResult, PartialEq, Eq, Debug)]
-        struct JustUuid {
+        struct SimpleUser {
+            display_name: Option<String>,
             uuid: Uuid,
         }
         assert_eq!(
-            JustUuid::find_by_statement(raw_statement(r#"SELECT uuid FROM users"#))
-                .all(&sql_pool)
-                .await
-                .unwrap(),
-            vec![JustUuid {
-                uuid: crate::uuid!("a02eaf13-48a7-30f6-a3d4-040ff7c52b04")
-            }]
+            SimpleUser::find_by_statement(raw_statement(
+                r#"SELECT display_name, uuid FROM users ORDER BY display_name"#
+            ))
+            .all(&sql_pool)
+            .await
+            .unwrap(),
+            vec![
+                SimpleUser {
+                    display_name: None,
+                    uuid: crate::uuid!("a02eaf13-48a7-30f6-a3d4-040ff7c52b04")
+                },
+                SimpleUser {
+                    display_name: Some("John Doe".to_owned()),
+                    uuid: crate::uuid!("986765a5-3f03-389e-b47b-536b2d6e1bec")
+                }
+            ]
         );
         #[derive(FromQueryResult, PartialEq, Eq, Debug)]
         struct ShortGroupDetails {
@@ -180,7 +199,7 @@ mod tests {
             .unwrap()
             .unwrap(),
             sql_migrations::JustSchemaVersion {
-                version: SchemaVersion(1)
+                version: LAST_SCHEMA_VERSION
             }
         );
     }

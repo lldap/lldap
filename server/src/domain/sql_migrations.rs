@@ -2,10 +2,12 @@ use crate::domain::{
     sql_tables::{DbConnection, SchemaVersion},
     types::{GroupId, UserId, Uuid},
 };
-use sea_orm::{ConnectionTrait, FromQueryResult, Statement};
+use sea_orm::{ConnectionTrait, FromQueryResult, Statement, TransactionTrait};
 use sea_query::{ColumnDef, Expr, ForeignKey, ForeignKeyAction, Iden, Query, Table, Value};
 use serde::{Deserialize, Serialize};
-use tracing::{instrument, warn};
+use tracing::{info, instrument, warn};
+
+use super::sql_tables::LAST_SCHEMA_VERSION;
 
 #[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum Users {
@@ -331,11 +333,87 @@ pub async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<(), sea_o
 }
 
 pub async fn migrate_from_version(
-    _pool: &DbConnection,
+    pool: &DbConnection,
     version: SchemaVersion,
 ) -> anyhow::Result<()> {
-    if version.0 > 1 {
+    if version > LAST_SCHEMA_VERSION {
         anyhow::bail!("DB version downgrading is not supported");
+    } else if version == LAST_SCHEMA_VERSION {
+        return Ok(());
     }
+    info!(
+        "Upgrading DB schema from {} to {}",
+        version.0, LAST_SCHEMA_VERSION.0
+    );
+    let builder = pool.get_database_backend();
+    if version < SchemaVersion(2) {
+        // Drop the not_null constraint on display_name. Due to Sqlite, this is more complicated:
+        //  - rename the display_name column to a temporary name
+        //  - create the display_name column without the constraint
+        //  - copy the data from the temp column to the new one
+        //  - update the new one to replace empty strings with null
+        //  - drop the old one
+        pool.transaction::<_, (), sea_orm::DbErr>(|transaction| {
+            Box::pin(async move {
+                #[derive(Iden)]
+                enum TempUsers {
+                    TempDisplayName,
+                }
+                transaction
+                    .execute(
+                        builder.build(
+                            Table::alter()
+                                .table(Users::Table)
+                                .rename_column(Users::DisplayName, TempUsers::TempDisplayName),
+                        ),
+                    )
+                    .await?;
+                transaction
+                    .execute(
+                        builder.build(
+                            Table::alter()
+                                .table(Users::Table)
+                                .add_column(ColumnDef::new(Users::DisplayName).string_len(255)),
+                        ),
+                    )
+                    .await?;
+                transaction
+                    .execute(builder.build(Query::update().table(Users::Table).value(
+                        Users::DisplayName,
+                        Expr::col((Users::Table, TempUsers::TempDisplayName)),
+                    )))
+                    .await?;
+                transaction
+                    .execute(
+                        builder.build(
+                            Query::update()
+                                .table(Users::Table)
+                                .value(Users::DisplayName, Option::<String>::None)
+                                .cond_where(Expr::col(Users::DisplayName).eq("")),
+                        ),
+                    )
+                    .await?;
+                transaction
+                    .execute(
+                        builder.build(
+                            Table::alter()
+                                .table(Users::Table)
+                                .drop_column(TempUsers::TempDisplayName),
+                        ),
+                    )
+                    .await?;
+                Ok(())
+            })
+        })
+        .await?;
+    }
+    pool.execute(
+        builder.build(
+            Query::update()
+                .table(Metadata::Table)
+                .value(Metadata::Version, Value::from(LAST_SCHEMA_VERSION)),
+        ),
+    )
+    .await?;
     Ok(())
 }
