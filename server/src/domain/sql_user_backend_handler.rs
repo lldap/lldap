@@ -8,11 +8,10 @@ use super::{
 use async_trait::async_trait;
 use sea_orm::{
     entity::IntoActiveValue,
-    sea_query::{Cond, Expr, IntoCondition, SimpleExpr},
+    sea_query::{Alias, Cond, Expr, IntoColumnRef, IntoCondition, SimpleExpr},
     ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder,
     QuerySelect, QueryTrait, Set,
 };
-use sea_query::{Alias, IntoColumnRef};
 use std::collections::HashSet;
 use tracing::{debug, instrument};
 

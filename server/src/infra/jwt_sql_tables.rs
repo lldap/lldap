@@ -1,5 +1,7 @@
-use sea_orm::ConnectionTrait;
-use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Table};
+use sea_orm::{
+    sea_query::{self, ColumnDef, ForeignKey, ForeignKeyAction, Iden, Table},
+    ConnectionTrait,
+};
 
 pub use crate::domain::{sql_migrations::Users, sql_tables::DbConnection};
 

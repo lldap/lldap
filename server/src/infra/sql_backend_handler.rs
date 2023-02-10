@@ -7,10 +7,10 @@ use crate::domain::{
 };
 use async_trait::async_trait;
 use sea_orm::{
-    sea_query::Cond, ActiveModelTrait, ColumnTrait, EntityTrait, FromQueryResult, IntoActiveModel,
-    QueryFilter, QuerySelect,
+    sea_query::{Cond, Expr},
+    ActiveModelTrait, ColumnTrait, EntityTrait, FromQueryResult, IntoActiveModel, QueryFilter,
+    QuerySelect,
 };
-use sea_query::Expr;
 use std::collections::HashSet;
 use tracing::{debug, instrument};
 

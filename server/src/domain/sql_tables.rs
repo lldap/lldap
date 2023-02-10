@@ -7,12 +7,11 @@ pub type DbConnection = sea_orm::DatabaseConnection;
 pub struct SchemaVersion(pub i16);
 
 impl sea_orm::TryGetable for SchemaVersion {
-    fn try_get(
+    fn try_get_by<I: sea_orm::ColIdx>(
         res: &sea_orm::QueryResult,
-        pre: &str,
-        col: &str,
+        index: I,
     ) -> Result<Self, sea_orm::TryGetError> {
-        Ok(SchemaVersion(i16::try_get(res, pre, col)?))
+        Ok(SchemaVersion(i16::try_get_by(res, index)?))
     }
 }
 
