@@ -53,8 +53,11 @@ impl std::string::ToString for Uuid {
 }
 
 impl TryGetable for Uuid {
-    fn try_get(res: &QueryResult, pre: &str, col: &str) -> std::result::Result<Self, TryGetError> {
-        Ok(Uuid(String::try_get(res, pre, col)?))
+    fn try_get_by<I: sea_orm::ColIdx>(
+        res: &QueryResult,
+        index: I,
+    ) -> std::result::Result<Self, TryGetError> {
+        Ok(Uuid(String::try_get_by(res, index)?))
     }
 }
 
@@ -142,8 +145,8 @@ impl From<&UserId> for Value {
 }
 
 impl TryGetable for UserId {
-    fn try_get(res: &QueryResult, pre: &str, col: &str) -> Result<Self, TryGetError> {
-        Ok(UserId::new(&String::try_get(res, pre, col)?))
+    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
+        Ok(UserId::new(&String::try_get_by(res, index)?))
     }
 }
 
@@ -261,8 +264,8 @@ impl JpegPhoto {
 }
 
 impl TryGetable for JpegPhoto {
-    fn try_get(res: &QueryResult, pre: &str, col: &str) -> Result<Self, TryGetError> {
-        <Self as std::convert::TryFrom<Vec<_>>>::try_from(Vec::<u8>::try_get(res, pre, col)?)
+    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
+        <Self as std::convert::TryFrom<Vec<_>>>::try_from(Vec::<u8>::try_get_by(res, index)?)
             .map_err(|e| {
                 TryGetError::DbErr(DbErr::TryIntoErr {
                     from: "[u8]",
@@ -345,8 +348,8 @@ impl From<GroupId> for Value {
 }
 
 impl TryGetable for GroupId {
-    fn try_get(res: &QueryResult, pre: &str, col: &str) -> Result<Self, TryGetError> {
-        Ok(GroupId(i32::try_get(res, pre, col)?))
+    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
+        Ok(GroupId(i32::try_get_by(res, index)?))
     }
 }
 
@@ -364,7 +367,7 @@ impl ValueType for GroupId {
     }
 
     fn column_type() -> ColumnType {
-        ColumnType::Integer(None)
+        ColumnType::Integer
     }
 }
 

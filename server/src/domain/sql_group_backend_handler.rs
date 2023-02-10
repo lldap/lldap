@@ -7,10 +7,10 @@ use crate::domain::{
 };
 use async_trait::async_trait;
 use sea_orm::{
+    sea_query::{Cond, IntoCondition, SimpleExpr},
     ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
     QueryTrait,
 };
-use sea_query::{Cond, IntoCondition, SimpleExpr};
 use tracing::{debug, instrument};
 
 fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
