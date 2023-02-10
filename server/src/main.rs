@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![forbid(non_ascii_idents)]
-#![allow(clippy::nonstandard_macro_braces)]
+// TODO: Remove next line once ubuntu upgrades rustc to >=1.67.1
+#![allow(clippy::uninlined_format_args)]
 
 use std::time::Duration;
 

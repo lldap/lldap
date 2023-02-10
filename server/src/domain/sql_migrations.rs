@@ -336,15 +336,14 @@ pub async fn migrate_from_version(
     pool: &DbConnection,
     version: SchemaVersion,
 ) -> anyhow::Result<()> {
-    if version > LAST_SCHEMA_VERSION {
-        anyhow::bail!("DB version downgrading is not supported");
-    } else if version == LAST_SCHEMA_VERSION {
-        return Ok(());
+    match version.cmp(&LAST_SCHEMA_VERSION) {
+        std::cmp::Ordering::Less => info!(
+            "Upgrading DB schema from {} to {}",
+            version.0, LAST_SCHEMA_VERSION.0
+        ),
+        std::cmp::Ordering::Equal => return Ok(()),
+        std::cmp::Ordering::Greater => anyhow::bail!("DB version downgrading is not supported"),
     }
-    info!(
-        "Upgrading DB schema from {} to {}",
-        version.0, LAST_SCHEMA_VERSION.0
-    );
     let builder = pool.get_database_backend();
     if version < SchemaVersion(2) {
         // Drop the not_null constraint on display_name. Due to Sqlite, this is more complicated:

@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 #![forbid(non_ascii_idents)]
-#![allow(clippy::nonstandard_macro_braces)]
+#![allow(clippy::uninlined_format_args)]
+
 pub mod components;
 pub mod infra;
 
