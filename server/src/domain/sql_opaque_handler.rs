@@ -8,7 +8,7 @@ use super::{
 };
 use async_trait::async_trait;
 use lldap_auth::opaque;
-use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, FromQueryResult, QuerySelect};
+use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, QuerySelect};
 use secstr::SecUtf8;
 use tracing::{debug, instrument};
 
@@ -50,18 +50,14 @@ impl SqlBackendHandler {
 
     #[instrument(skip_all, level = "debug", err)]
     async fn get_password_file_for_user(&self, user_id: UserId) -> Result<Option<Vec<u8>>> {
-        #[derive(FromQueryResult)]
-        struct OnlyPasswordHash {
-            password_hash: Option<Vec<u8>>,
-        }
         // Fetch the previously registered password file from the DB.
         Ok(model::User::find_by_id(user_id)
             .select_only()
             .column(UserColumn::PasswordHash)
-            .into_model::<OnlyPasswordHash>()
+            .into_tuple::<(Option<Vec<u8>>,)>()
             .one(&self.sql_pool)
             .await?
-            .and_then(|u| u.password_hash))
+            .and_then(|u| u.0))
     }
 }
 

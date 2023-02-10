@@ -8,8 +8,7 @@ use crate::domain::{
 use async_trait::async_trait;
 use sea_orm::{
     sea_query::{Cond, Expr},
-    ActiveModelTrait, ColumnTrait, EntityTrait, FromQueryResult, IntoActiveModel, QueryFilter,
-    QuerySelect,
+    ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QuerySelect,
 };
 use std::collections::HashSet;
 use tracing::{debug, instrument};
@@ -24,11 +23,6 @@ fn gen_random_string(len: usize) -> String {
         .collect()
 }
 
-#[derive(FromQueryResult)]
-struct OnlyJwtHash {
-    jwt_hash: i64,
-}
-
 #[async_trait]
 impl TcpBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug")]
@@ -37,11 +31,11 @@ impl TcpBackendHandler for SqlBackendHandler {
             .select_only()
             .column(JwtStorageColumn::JwtHash)
             .filter(JwtStorageColumn::Blacklisted.eq(true))
-            .into_model::<OnlyJwtHash>()
+            .into_tuple::<(i64,)>()
             .all(&self.sql_pool)
             .await?
             .into_iter()
-            .map(|m| m.jwt_hash as u64)
+            .map(|m| m.0 as u64)
             .collect::<HashSet<u64>>())
     }
 
@@ -91,11 +85,11 @@ impl TcpBackendHandler for SqlBackendHandler {
                     .add(JwtStorageColumn::UserId.eq(user))
                     .add(JwtStorageColumn::Blacklisted.eq(false)),
             )
-            .into_model::<OnlyJwtHash>()
+            .into_tuple::<(i64,)>()
             .all(&self.sql_pool)
             .await?
             .into_iter()
-            .map(|t| t.jwt_hash as u64)
+            .map(|t| t.0 as u64)
             .collect::<HashSet<u64>>();
         model::JwtStorage::update_many()
             .col_expr(JwtStorageColumn::Blacklisted, Expr::value(true))
