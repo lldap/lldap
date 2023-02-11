@@ -35,11 +35,11 @@ Otherwise, just use:
 ```
 (uid=*)
 ```
-### Admins Base DN
+### Admin Base DN
 
 The DN of your admin group. If you have `media_admin` as your group you would use:
 ```
-cn=admins,ou=groups,dc=example,dc=com
+cn=media_admin,ou=groups,dc=example,dc=com
 ```
 
 ### Admin Filter
