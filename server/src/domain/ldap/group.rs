@@ -178,6 +178,21 @@ fn convert_group_filter(
                     || map_group_field(field).is_some(),
             ))
         }
+        LdapFilter::Substring(field, substring_filter) => {
+            let field = &field.to_ascii_lowercase();
+            match map_group_field(field.as_str()) {
+                Some(GroupColumn::DisplayName) => Ok(GroupRequestFilter::DisplayNameSubString(
+                    substring_filter.clone().into(),
+                )),
+                _ => Err(LdapError {
+                    code: LdapResultCode::UnwillingToPerform,
+                    message: format!(
+                        "Unsupported group attribute for substring filter: {:?}",
+                        field
+                    ),
+                }),
+            }
+        }
         _ => Err(LdapError {
             code: LdapResultCode::UnwillingToPerform,
             message: format!("Unsupported group filter: {:?}", filter),

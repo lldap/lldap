@@ -680,7 +680,7 @@ mod tests {
     };
     use async_trait::async_trait;
     use chrono::TimeZone;
-    use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope};
+    use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope, LdapSubstringFilter};
     use mockall::predicate::eq;
     use std::collections::HashSet;
     use tokio;
@@ -1322,6 +1322,11 @@ mod tests {
                 true.into(),
                 GroupRequestFilter::Not(Box::new(false.into())),
                 false.into(),
+                GroupRequestFilter::DisplayNameSubString(SubStringFilter {
+                    initial: Some("iNIt".to_owned()),
+                    any: vec!["1".to_owned(), "2aA".to_owned()],
+                    final_: Some("finAl".to_owned()),
+                }),
             ]))))
             .times(1)
             .return_once(|_| {
@@ -1357,6 +1362,14 @@ mod tests {
                     "random_attribUte".to_string(),
                 ))),
                 LdapFilter::Equality("unknown_attribute".to_string(), "randomValue".to_string()),
+                LdapFilter::Substring(
+                    "cn".to_owned(),
+                    LdapSubstringFilter {
+                        initial: Some("iNIt".to_owned()),
+                        any: vec!["1".to_owned(), "2aA".to_owned()],
+                        final_: Some("finAl".to_owned()),
+                    },
+                ),
             ]),
             vec!["1.1"],
         );
@@ -1443,6 +1456,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_search_groups_unsupported_substring() {
+        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let request = make_group_search_request(
+            LdapFilter::Substring("member".to_owned(), LdapSubstringFilter::default()),
+            vec!["cn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Err(LdapError {
+                code: LdapResultCode::UnwillingToPerform,
+                message: r#"Unsupported group attribute for substring filter: "member""#.to_owned()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn test_search_groups_error() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
@@ -1478,18 +1507,17 @@ mod tests {
     async fn test_search_groups_filter_error() {
         let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
         let request = make_group_search_request(
-            LdapFilter::And(vec![LdapFilter::Substring(
-                "whatever".to_string(),
-                ldap3_proto::proto::LdapSubstringFilter::default(),
+            LdapFilter::And(vec![LdapFilter::Approx(
+                "whatever".to_owned(),
+                "value".to_owned(),
             )]),
             vec!["cn"],
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            Err(LdapError{
+            Err(LdapError {
                 code: LdapResultCode::UnwillingToPerform,
-                message: r#"Unsupported group filter: Substring("whatever", LdapSubstringFilter { initial: None, any: [], final_: None })"#
-                    .to_string()
+                message: r#"Unsupported group filter: Approx("whatever", "value")"#.to_string()
             })
         );
     }
@@ -1512,6 +1540,19 @@ mod tests {
                         true.into(),
                         false.into(),
                         false.into(),
+                        UserRequestFilter::UserIdSubString(SubStringFilter {
+                            initial: Some("iNIt".to_owned()),
+                            any: vec!["1".to_owned(), "2aA".to_owned()],
+                            final_: Some("finAl".to_owned()),
+                        }),
+                        UserRequestFilter::SubString(
+                            UserColumn::FirstName,
+                            SubStringFilter {
+                                initial: Some("iNIt".to_owned()),
+                                any: vec!["1".to_owned(), "2aA".to_owned()],
+                                final_: Some("finAl".to_owned()),
+                            },
+                        ),
                     ],
                 )]))),
                 eq(false),
@@ -1539,6 +1580,22 @@ mod tests {
                 LdapFilter::Present("uid".to_string()),
                 LdapFilter::Present("unknown".to_string()),
                 LdapFilter::Equality("unknown_attribute".to_string(), "randomValue".to_string()),
+                LdapFilter::Substring(
+                    "uid".to_owned(),
+                    LdapSubstringFilter {
+                        initial: Some("iNIt".to_owned()),
+                        any: vec!["1".to_owned(), "2aA".to_owned()],
+                        final_: Some("finAl".to_owned()),
+                    },
+                ),
+                LdapFilter::Substring(
+                    "firstName".to_owned(),
+                    LdapSubstringFilter {
+                        initial: Some("iNIt".to_owned()),
+                        any: vec!["1".to_owned(), "2aA".to_owned()],
+                        final_: Some("finAl".to_owned()),
+                    },
+                ),
             ])]),
             vec!["objectClass"],
         );
@@ -1910,17 +1967,14 @@ mod tests {
     async fn test_search_unsupported_filters() {
         let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
         let request = make_user_search_request(
-            LdapFilter::Substring(
-                "uid".to_string(),
-                ldap3_proto::proto::LdapSubstringFilter::default(),
-            ),
+            LdapFilter::Approx("uid".to_owned(), "value".to_owned()),
             vec!["objectClass"],
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            Err(LdapError{
+            Err(LdapError {
                 code: LdapResultCode::UnwillingToPerform,
-                message: r#"Unsupported user filter: Substring("uid", LdapSubstringFilter { initial: None, any: [], final_: None })"#.to_string()
+                message: r#"Unsupported user filter: Approx("uid", "value")"#.to_string()
             })
         );
     }
