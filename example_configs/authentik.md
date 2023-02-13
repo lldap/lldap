@@ -19,7 +19,7 @@ lldap
 ldap://lldap:3890
 ```
 
-- [ ] Enable StartTLD
+- [ ] Enable StartTLS
 
 ## TLS Verification Certificate
 ```
@@ -45,22 +45,22 @@ dc=example,dc=com
 ## User Property Mappings 
 - [x] authentik default LDAP Mapping: mail
 - [x] authentik default LDAP Mapping: Name
+- [x] authentik default Active Directory Mapping: givenName
+- [ ] authentik default Active Directory Mapping: sAMAccountName
+- [x] authentik default Active Directory Mapping: sn
+- [ ] authentik default Active Directory Mapping: userPrincipalName
+- [x] authentik default OpenLDAP Mapping: cn
+- [x] authentik default OpenLDAP Mapping: uid
+
+## Group Property Mappings
+- [x] authentik default LDAP Mapping: mail
+- [x] authentik default LDAP Mapping: Name
 - [ ] authentik default Active Directory Mapping: givenName
 - [ ] authentik default Active Directory Mapping: sAMAccountName
 - [ ] authentik default Active Directory Mapping: sn
 - [ ] authentik default Active Directory Mapping: userPrincipalName
 - [x] authentik default OpenLDAP Mapping: cn
 - [x] authentik default OpenLDAP Mapping: uid
-
-## Group Property Mappings
-- [x] authentik default LDAP Mapping:
-- [x] authentik default LDAP Mapping:
-- [ ] authentik default Active Directory Mapping:
-- [ ] authentik default Active Directory Mapping:
-- [ ] authentik default Active Directory Mapping:
-- [ ] authentik default Active Directory Mapping:
-- [x] authentik default OpenLDAP Mapping:
-- [x] authentik default OpenLDAP Mapping:
 
 # Additional settings
 
@@ -101,5 +101,5 @@ member
 
 ## Object uniqueness field
 ```
-cn
+uid
 ```
