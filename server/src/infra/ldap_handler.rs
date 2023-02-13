@@ -581,7 +581,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     pub async fn do_compare(&mut self, request: LdapCompareRequest) -> LdapResult<Vec<LdapOp>> {
-        dbg!(&request);
         let req = make_search_request::<String>(
             &self.ldap_info.base_dn_str,
             LdapFilter::Equality("dn".to_string(), request.dn.to_string()),
@@ -598,7 +597,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
         match entries.first() {
             Some(LdapOp::SearchResultEntry(entry)) => {
-                dbg!(&entry.attributes);
                 let available = entry
                     .attributes
                     .iter()

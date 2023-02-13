@@ -107,8 +107,6 @@ fn make_ldap_search_user_result_entry(
 ) -> LdapSearchResultEntry {
     let expanded_attributes = expand_user_attribute_wildcards(attributes);
     let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
-    dbg!(&attributes, &expanded_attributes, &user);
-
     LdapSearchResultEntry {
         dn,
         attributes: expanded_attributes
