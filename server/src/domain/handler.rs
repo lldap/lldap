@@ -15,12 +15,45 @@ pub struct BindRequest {
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub struct SubStringFilter {
+    pub initial: Option<String>,
+    pub any: Vec<String>,
+    pub final_: Option<String>,
+}
+
+impl SubStringFilter {
+    pub fn to_sql_filter(&self) -> String {
+        let mut filter = String::with_capacity(
+            self.initial.as_ref().map(String::len).unwrap_or_default()
+                + 1
+                + self.any.iter().map(String::len).sum::<usize>()
+                + self.any.len()
+                + self.final_.as_ref().map(String::len).unwrap_or_default(),
+        );
+        if let Some(f) = &self.initial {
+            filter.push_str(&f.to_ascii_lowercase());
+        }
+        filter.push('%');
+        for part in self.any.iter() {
+            filter.push_str(&part.to_ascii_lowercase());
+            filter.push('%');
+        }
+        if let Some(f) = &self.final_ {
+            filter.push_str(&f.to_ascii_lowercase());
+        }
+        filter
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum UserRequestFilter {
     And(Vec<UserRequestFilter>),
     Or(Vec<UserRequestFilter>),
     Not(Box<UserRequestFilter>),
     UserId(UserId),
+    UserIdSubString(SubStringFilter),
     Equality(UserColumn, String),
+    SubString(UserColumn, SubStringFilter),
     // Check if a user belongs to a group identified by name.
     MemberOf(String),
     // Same, by id.
@@ -43,6 +76,7 @@ pub enum GroupRequestFilter {
     Or(Vec<GroupRequestFilter>),
     Not(Box<GroupRequestFilter>),
     DisplayName(String),
+    DisplayNameSubString(SubStringFilter),
     Uuid(Uuid),
     GroupId(GroupId),
     // Check if the group contains a user identified by uid.

@@ -10,7 +10,7 @@ use crate::domain::{
         error::LdapError,
         utils::{expand_attribute_wildcards, get_user_id_from_distinguished_name},
     },
-    types::{GroupDetails, User, UserColumn, UserId},
+    types::{GroupDetails, User, UserAndGroups, UserColumn, UserId},
 };
 
 use super::{
@@ -18,7 +18,7 @@ use super::{
     utils::{get_group_id_from_distinguished_name, map_user_field, LdapInfo},
 };
 
-fn get_user_attribute(
+pub fn get_user_attribute(
     user: &User,
     attribute: &str,
     base_dn_str: &str,
@@ -35,12 +35,12 @@ fn get_user_attribute(
         ],
         // dn is always returned as part of the base response.
         "dn" | "distinguishedname" => return None,
-        "uid" => vec![user.user_id.to_string().into_bytes()],
-        "entryuuid" => vec![user.uuid.to_string().into_bytes()],
-        "mail" => vec![user.email.clone().into_bytes()],
-        "givenname" => vec![user.first_name.clone()?.into_bytes()],
-        "sn" => vec![user.last_name.clone()?.into_bytes()],
-        "jpegphoto" => vec![user.avatar.clone()?.into_bytes()],
+        "uid" | "user_id" | "id" => vec![user.user_id.to_string().into_bytes()],
+        "entryuuid" | "uuid" => vec![user.uuid.to_string().into_bytes()],
+        "mail" | "email" => vec![user.email.clone().into_bytes()],
+        "givenname" | "first_name" | "firstname" => vec![user.first_name.clone()?.into_bytes()],
+        "sn" | "last_name" | "lastname" => vec![user.last_name.clone()?.into_bytes()],
+        "jpegphoto" | "avatar" => vec![user.avatar.clone()?.into_bytes()],
         "memberof" => groups
             .into_iter()
             .flatten()
@@ -53,10 +53,12 @@ fn get_user_attribute(
             })
             .collect(),
         "cn" | "displayname" => vec![user.display_name.clone()?.into_bytes()],
-        "createtimestamp" | "modifytimestamp" => vec![chrono::Utc
-            .from_utc_datetime(&user.creation_date)
-            .to_rfc3339()
-            .into_bytes()],
+        "creationdate" | "creation_date" | "createtimestamp" | "modifytimestamp" => {
+            vec![chrono::Utc
+                .from_utc_datetime(&user.creation_date)
+                .to_rfc3339()
+                .into_bytes()]
+        }
         "1.1" => return None,
         // We ignore the operational attribute wildcard.
         "+" => return None,
@@ -99,15 +101,15 @@ const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
 fn make_ldap_search_user_result_entry(
     user: User,
     base_dn_str: &str,
-    attributes: &[&str],
+    attributes: &[String],
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[String],
 ) -> LdapSearchResultEntry {
+    let expanded_attributes = expand_user_attribute_wildcards(attributes);
     let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
-
     LdapSearchResultEntry {
         dn,
-        attributes: attributes
+        attributes: expanded_attributes
             .iter()
             .filter_map(|a| {
                 let values =
@@ -181,6 +183,28 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                     || map_user_field(field).is_some(),
             ))
         }
+        LdapFilter::Substring(field, substring_filter) => {
+            let field = &field.to_ascii_lowercase();
+            match map_user_field(field.as_str()) {
+                Some(UserColumn::UserId) => Ok(UserRequestFilter::UserIdSubString(
+                    substring_filter.clone().into(),
+                )),
+                None
+                | Some(UserColumn::CreationDate)
+                | Some(UserColumn::Avatar)
+                | Some(UserColumn::Uuid) => Err(LdapError {
+                    code: LdapResultCode::UnwillingToPerform,
+                    message: format!(
+                        "Unsupported user attribute for substring filter: {:?}",
+                        field
+                    ),
+                }),
+                Some(field) => Ok(UserRequestFilter::SubString(
+                    field,
+                    substring_filter.clone().into(),
+                )),
+            }
+        }
         _ => Err(LdapError {
             code: LdapResultCode::UnwillingToPerform,
             message: format!("Unsupported user filter: {:?}", filter),
@@ -188,15 +212,19 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
     }
 }
 
+fn expand_user_attribute_wildcards(attributes: &[String]) -> Vec<&str> {
+    expand_attribute_wildcards(attributes, ALL_USER_ATTRIBUTE_KEYS)
+}
+
 #[instrument(skip_all, level = "debug")]
 pub async fn get_user_list<Backend: BackendHandler>(
     ldap_info: &LdapInfo,
     ldap_filter: &LdapFilter,
-    attributes: &[String],
+    request_groups: bool,
     base: &str,
     user_filter: &Option<&UserId>,
     backend: &mut Backend,
-) -> LdapResult<Vec<LdapOp>> {
+) -> LdapResult<Vec<UserAndGroups>> {
     debug!(?ldap_filter);
     let filters = convert_user_filter(ldap_info, ldap_filter)?;
     let parsed_filters = match user_filter {
@@ -207,28 +235,27 @@ pub async fn get_user_list<Backend: BackendHandler>(
         }
     };
     debug!(?parsed_filters);
-    let expanded_attributes = expand_attribute_wildcards(attributes, ALL_USER_ATTRIBUTE_KEYS);
-    let need_groups = expanded_attributes
-        .iter()
-        .any(|s| s.to_ascii_lowercase() == "memberof");
-    let users = backend
-        .list_users(Some(parsed_filters), need_groups)
+    backend
+        .list_users(Some(parsed_filters), request_groups)
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::Other,
             message: format!(r#"Error while searching user "{}": {:#}"#, base, e),
-        })?;
-
-    Ok(users
-        .into_iter()
-        .map(|u| {
-            LdapOp::SearchResultEntry(make_ldap_search_user_result_entry(
-                u.user,
-                &ldap_info.base_dn_str,
-                &expanded_attributes,
-                u.groups.as_deref(),
-                &ldap_info.ignored_user_attributes,
-            ))
         })
-        .collect::<Vec<_>>())
+}
+
+pub fn convert_users_to_ldap_op<'a>(
+    users: Vec<UserAndGroups>,
+    attributes: &'a [String],
+    ldap_info: &'a LdapInfo,
+) -> impl Iterator<Item = LdapOp> + 'a {
+    users.into_iter().map(move |u| {
+        LdapOp::SearchResultEntry(make_ldap_search_user_result_entry(
+            u.user,
+            &ldap_info.base_dn_str,
+            attributes,
+            u.groups.as_deref(),
+            &ldap_info.ignored_user_attributes,
+        ))
+    })
 }

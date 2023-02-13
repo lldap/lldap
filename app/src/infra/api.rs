@@ -3,9 +3,11 @@ use anyhow::{anyhow, Context, Result};
 use graphql_client::GraphQLQuery;
 use lldap_auth::{login, registration, JWTClaims};
 
-use yew::callback::Callback;
-use yew::format::Json;
-use yew::services::fetch::{Credentials, FetchOptions, FetchService, FetchTask, Request, Response};
+use yew::{
+    callback::Callback,
+    format::Json,
+    services::fetch::{Credentials, FetchOptions, FetchService, FetchTask, Request, Response},
+};
 
 #[derive(Default)]
 pub struct HostService {}
@@ -284,6 +286,19 @@ impl HostService {
             yew::format::Nothing,
             callback,
             "Could not validate token",
+        )
+    }
+
+    pub fn probe_password_reset(callback: Callback<Result<bool>>) -> Result<FetchTask> {
+        let request = Request::get("/auth/reset/step1/lldap_unlikely_very_long_user_name")
+            .header("Content-Type", "application/json")
+            .body(yew::format::Nothing)?;
+        FetchService::fetch_with_options(
+            request,
+            get_default_options(),
+            create_handler(callback, move |status: http::StatusCode, _data: String| {
+                Ok(status != http::StatusCode::NOT_FOUND)
+            }),
         )
     }
 }

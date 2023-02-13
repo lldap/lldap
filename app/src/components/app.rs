@@ -13,10 +13,13 @@ use crate::{
         user_details::UserDetails,
         user_table::UserTable,
     },
-    infra::cookies::get_cookie,
+    infra::{api::HostService, cookies::get_cookie},
 };
-use yew::prelude::*;
-use yew::services::ConsoleService;
+
+use yew::{
+    prelude::*,
+    services::{fetch::FetchTask, ConsoleService},
+};
 use yew_router::{
     agent::{RouteAgentDispatcher, RouteRequest},
     route::Route,
@@ -29,11 +32,14 @@ pub struct App {
     user_info: Option<(String, bool)>,
     redirect_to: Option<AppRoute>,
     route_dispatcher: RouteAgentDispatcher,
+    password_reset_enabled: bool,
+    task: Option<FetchTask>,
 }
 
 pub enum Msg {
     Login((String, bool)),
     Logout,
+    PasswordResetProbeFinished(anyhow::Result<bool>),
 }
 
 impl Component for App {
@@ -58,7 +64,15 @@ impl Component for App {
                 }),
             redirect_to: Self::get_redirect_route(),
             route_dispatcher: RouteAgentDispatcher::new(),
+            password_reset_enabled: false,
+            task: None,
         };
+        app.task = Some(
+            HostService::probe_password_reset(
+                app.link.callback_once(Msg::PasswordResetProbeFinished),
+            )
+            .unwrap(),
+        );
         app.apply_initial_redirections();
         app
     }
@@ -82,6 +96,16 @@ impl Component for App {
                 self.user_info = None;
                 self.redirect_to = None;
             }
+            Msg::PasswordResetProbeFinished(Ok(enabled)) => {
+                self.task = None;
+                self.password_reset_enabled = enabled;
+            }
+            Msg::PasswordResetProbeFinished(Err(err)) => {
+                self.task = None;
+                ConsoleService::error(&format!(
+                    "Could not probe for password reset support: {err:#}"
+                ));
+            }
         }
         if self.user_info.is_none() {
             self.route_dispatcher
@@ -97,6 +121,7 @@ impl Component for App {
     fn view(&self) -> Html {
         let link = self.link.clone();
         let is_admin = self.is_admin();
+        let password_reset_enabled = self.password_reset_enabled;
         html! {
           <div>
             {self.view_banner()}
@@ -104,7 +129,7 @@ impl Component for App {
               <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <div class="py-3" style="max-width: 1000px">
                   <Router<AppRoute>
-                    render = Router::render(move |s| Self::dispatch_route(s, &link, is_admin))
+                    render = Router::render(move |s| Self::dispatch_route(s, &link, is_admin, password_reset_enabled))
                   />
                 </div>
               </div>
@@ -135,6 +160,10 @@ impl App {
         let route_service = RouteService::<()>::new();
         let current_route = route_service.get_path();
         if current_route.contains("reset-password") {
+            if !self.password_reset_enabled {
+                self.route_dispatcher
+                    .send(RouteRequest::ReplaceRoute(Route::from(AppRoute::Login)));
+            }
             return;
         }
         match &self.user_info {
@@ -162,10 +191,15 @@ impl App {
         }
     }
 
-    fn dispatch_route(switch: AppRoute, link: &ComponentLink<Self>, is_admin: bool) -> Html {
+    fn dispatch_route(
+        switch: AppRoute,
+        link: &ComponentLink<Self>,
+        is_admin: bool,
+        password_reset_enabled: bool,
+    ) -> Html {
         match switch {
             AppRoute::Login => html! {
-                <LoginForm on_logged_in=link.callback(Msg::Login)/>
+                <LoginForm on_logged_in=link.callback(Msg::Login) password_reset_enabled=password_reset_enabled/>
             },
             AppRoute::CreateUser => html! {
                 <CreateUserForm/>
@@ -200,11 +234,23 @@ impl App {
             AppRoute::ChangePassword(username) => html! {
                 <ChangePasswordForm username=username is_admin=is_admin />
             },
-            AppRoute::StartResetPassword => html! {
-                <ResetPasswordStep1Form />
-            },
+            AppRoute::StartResetPassword => {
+                if password_reset_enabled {
+                    html! {
+                      <ResetPasswordStep1Form />
+                    }
+                } else {
+                    App::dispatch_route(AppRoute::Login, link, is_admin, password_reset_enabled)
+                }
+            }
             AppRoute::FinishResetPassword(token) => html! {
-                <ResetPasswordStep2Form token=token />
+                if password_reset_enabled {
+                    html! {
+                      <ResetPasswordStep2Form token=token />
+                    }
+                } else {
+                    App::dispatch_route(AppRoute::Login, link, is_admin, password_reset_enabled)
+                }
             },
         }
     }
