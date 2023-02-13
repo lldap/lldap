@@ -2401,4 +2401,36 @@ mod tests {
             })])
         );
     }
+
+    #[tokio::test]
+    async fn test_compare_group_member() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users().returning(|_, _| Ok(vec![]));
+        mock.expect_list_groups().returning(|f| {
+            assert_eq!(f, Some(GroupRequestFilter::DisplayName("group".to_owned())));
+            Ok(vec![Group {
+                id: GroupId(1),
+                display_name: "group".to_string(),
+                creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                users: vec![UserId::new("bob")],
+                uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+            }])
+        });
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let dn = "uid=group,ou=groups,dc=example,dc=com";
+        let request = LdapCompareRequest {
+            dn: dn.to_string(),
+            atype: "uniqueMember".to_owned(),
+            val: b"uid=bob,ou=people,dc=example,dc=com".to_vec(),
+        };
+        assert_eq!(
+            ldap_handler.do_compare(request).await,
+            Ok(vec![LdapOp::CompareResult(LdapResultOp {
+                code: LdapResultCode::CompareTrue,
+                matcheddn: dn.to_owned(),
+                message: "".to_string(),
+                referral: vec![],
+            })])
+        );
+    }
 }
