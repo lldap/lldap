@@ -1,11 +1,28 @@
 use itertools::Itertools;
-use ldap3_proto::LdapResultCode;
+use ldap3_proto::{proto::LdapSubstringFilter, LdapResultCode};
 use tracing::{debug, instrument, warn};
 
 use crate::domain::{
+    handler::SubStringFilter,
     ldap::error::{LdapError, LdapResult},
     types::{GroupColumn, UserColumn, UserId},
 };
+
+impl From<LdapSubstringFilter> for SubStringFilter {
+    fn from(
+        LdapSubstringFilter {
+            initial,
+            any,
+            final_,
+        }: LdapSubstringFilter,
+    ) -> Self {
+        Self {
+            initial,
+            any,
+            final_,
+        }
+    }
+}
 
 fn make_dn_pair<I>(mut iter: I) -> LdapResult<(String, String)>
 where
@@ -141,8 +158,8 @@ pub fn map_user_field(field: &str) -> Option<UserColumn> {
         "uid" | "user_id" | "id" => UserColumn::UserId,
         "mail" | "email" => UserColumn::Email,
         "cn" | "displayname" | "display_name" => UserColumn::DisplayName,
-        "givenname" | "first_name" => UserColumn::FirstName,
-        "sn" | "last_name" => UserColumn::LastName,
+        "givenname" | "first_name" | "firstname" => UserColumn::FirstName,
+        "sn" | "last_name" | "lastname" => UserColumn::LastName,
         "avatar" | "jpegphoto" => UserColumn::Avatar,
         "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => {
             UserColumn::CreationDate

@@ -185,6 +185,28 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                     || map_user_field(field).is_some(),
             ))
         }
+        LdapFilter::Substring(field, substring_filter) => {
+            let field = &field.to_ascii_lowercase();
+            match map_user_field(field.as_str()) {
+                Some(UserColumn::UserId) => Ok(UserRequestFilter::UserIdSubString(
+                    substring_filter.clone().into(),
+                )),
+                None
+                | Some(UserColumn::CreationDate)
+                | Some(UserColumn::Avatar)
+                | Some(UserColumn::Uuid) => Err(LdapError {
+                    code: LdapResultCode::UnwillingToPerform,
+                    message: format!(
+                        "Unsupported user attribute for substring filter: {:?}",
+                        field
+                    ),
+                }),
+                Some(field) => Ok(UserRequestFilter::SubString(
+                    field,
+                    substring_filter.clone().into(),
+                )),
+            }
+        }
         _ => Err(LdapError {
             code: LdapResultCode::UnwillingToPerform,
             message: format!("Unsupported user filter: {:?}", filter),
