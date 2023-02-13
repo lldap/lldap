@@ -232,6 +232,7 @@ folder for help with:
 - [Airsonic Advanced](example_configs/airsonic-advanced.md)
 - [Apache Guacamole](example_configs/apacheguacamole.md)
 - [Authelia](example_configs/authelia_config.yml)
+- [Authentik](example_configs/authentik.md)
 - [Bookstack](example_configs/bookstack.env.example)
 - [Calibre-Web](example_configs/calibre_web.md)
 - [Dell iDRAC](example_configs/dell_idrac.md)
