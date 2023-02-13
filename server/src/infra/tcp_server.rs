@@ -73,6 +73,7 @@ fn http_config<Backend>(
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Sync + 'static,
 {
+    let enable_password_reset = mail_options.enable_password_reset;
     cfg.app_data(web::Data::new(AppState::<Backend> {
         backend_handler,
         jwt_key: Hmac::new_varkey(jwt_secret.unsecure().as_bytes()).unwrap(),
@@ -81,7 +82,10 @@ fn http_config<Backend>(
         mail_options,
     }))
     .route("/health", web::get().to(|| HttpResponse::Ok().finish()))
-    .service(web::scope("/auth").configure(auth_service::configure_server::<Backend>))
+    .service(
+        web::scope("/auth")
+            .configure(|cfg| auth_service::configure_server::<Backend>(cfg, enable_password_reset)),
+    )
     // API endpoint.
     .service(
         web::scope("/api")

@@ -677,7 +677,7 @@ pub(crate) fn check_if_token_is_valid<Backend>(
     })
 }
 
-pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig)
+pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig, enable_password_reset: bool)
 where
     Backend: TcpBackendHandler + LoginHandler + OpaqueHandler + BackendHandler + 'static,
 {
@@ -694,14 +694,6 @@ where
             web::resource("/simple/login").route(web::post().to(simple_login_handler::<Backend>)),
         )
         .service(web::resource("/refresh").route(web::get().to(get_refresh_handler::<Backend>)))
-        .service(
-            web::resource("/reset/step1/{user_id}")
-                .route(web::get().to(get_password_reset_step1_handler::<Backend>)),
-        )
-        .service(
-            web::resource("/reset/step2/{token}")
-                .route(web::get().to(get_password_reset_step2_handler::<Backend>)),
-        )
         .service(web::resource("/logout").route(web::get().to(get_logout_handler::<Backend>)))
         .service(
             web::scope("/opaque/register")
@@ -715,4 +707,14 @@ where
                         .route(web::post().to(opaque_register_finish_handler::<Backend>)),
                 ),
         );
+    if enable_password_reset {
+        cfg.service(
+            web::resource("/reset/step1/{user_id}")
+                .route(web::get().to(get_password_reset_step1_handler::<Backend>)),
+        )
+        .service(
+            web::resource("/reset/step2/{token}")
+                .route(web::get().to(get_password_reset_step2_handler::<Backend>)),
+        );
+    }
 }
