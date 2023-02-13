@@ -17,7 +17,7 @@ use super::{
     },
 };
 
-fn get_group_attribute(
+pub fn get_group_attribute(
     group: &Group,
     base_dn_str: &str,
     attribute: &str,
@@ -29,8 +29,8 @@ fn get_group_attribute(
         "objectclass" => vec![b"groupOfUniqueNames".to_vec()],
         // Always returned as part of the base response.
         "dn" | "distinguishedname" => return None,
-        "cn" | "uid" => vec![group.display_name.clone().into_bytes()],
-        "entryuuid" => vec![group.uuid.to_string().into_bytes()],
+        "cn" | "uid" | "id" => vec![group.display_name.clone().into_bytes()],
+        "entryuuid" | "uuid" => vec![group.uuid.to_string().into_bytes()],
         "member" | "uniquemember" => group
             .users
             .iter()
@@ -73,6 +73,10 @@ const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] = &[
     "entryuuid",
 ];
 
+fn expand_group_attribute_wildcards(attributes: &[String]) -> Vec<&str> {
+    expand_attribute_wildcards(attributes, ALL_GROUP_ATTRIBUTE_KEYS)
+}
+
 fn make_ldap_search_group_result_entry(
     group: Group,
     base_dn_str: &str,
@@ -80,7 +84,7 @@ fn make_ldap_search_group_result_entry(
     user_filter: &Option<&UserId>,
     ignored_group_attributes: &[String],
 ) -> LdapSearchResultEntry {
-    let expanded_attributes = expand_attribute_wildcards(attributes, ALL_GROUP_ATTRIBUTE_KEYS);
+    let expanded_attributes = expand_group_attribute_wildcards(attributes);
 
     LdapSearchResultEntry {
         dn: format!("cn={},ou=groups,{}", group.display_name, base_dn_str),
@@ -185,11 +189,10 @@ fn convert_group_filter(
 pub async fn get_groups_list<Backend: BackendHandler>(
     ldap_info: &LdapInfo,
     ldap_filter: &LdapFilter,
-    attributes: &[String],
     base: &str,
     user_filter: &Option<&UserId>,
     backend: &mut Backend,
-) -> LdapResult<Vec<LdapOp>> {
+) -> LdapResult<Vec<Group>> {
     debug!(?ldap_filter);
     let filter = convert_group_filter(ldap_info, ldap_filter)?;
     let parsed_filters = match user_filter {
@@ -200,24 +203,28 @@ pub async fn get_groups_list<Backend: BackendHandler>(
         }
     };
     debug!(?parsed_filters);
-    let groups = backend
+    backend
         .list_groups(Some(parsed_filters))
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::Other,
             message: format!(r#"Error while listing groups "{}": {:#}"#, base, e),
-        })?;
-
-    Ok(groups
-        .into_iter()
-        .map(|u| {
-            LdapOp::SearchResultEntry(make_ldap_search_group_result_entry(
-                u,
-                &ldap_info.base_dn_str,
-                attributes,
-                user_filter,
-                &ldap_info.ignored_group_attributes,
-            ))
         })
-        .collect::<Vec<_>>())
+}
+
+pub fn convert_groups_to_ldap_op<'a>(
+    groups: Vec<Group>,
+    attributes: &'a [String],
+    ldap_info: &'a LdapInfo,
+    user_filter: &'a Option<&'a UserId>,
+) -> impl Iterator<Item = LdapOp> + 'a {
+    groups.into_iter().map(move |g| {
+        LdapOp::SearchResultEntry(make_ldap_search_group_result_entry(
+            g,
+            &ldap_info.base_dn_str,
+            attributes,
+            user_filter,
+            &ldap_info.ignored_group_attributes,
+        ))
+    })
 }

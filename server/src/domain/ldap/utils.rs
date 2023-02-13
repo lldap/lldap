@@ -143,7 +143,7 @@ pub fn map_user_field(field: &str) -> Option<UserColumn> {
         "cn" | "displayname" | "display_name" => UserColumn::DisplayName,
         "givenname" | "first_name" => UserColumn::FirstName,
         "sn" | "last_name" => UserColumn::LastName,
-        "avatar" => UserColumn::Avatar,
+        "avatar" | "jpegphoto" => UserColumn::Avatar,
         "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => {
             UserColumn::CreationDate
         }
