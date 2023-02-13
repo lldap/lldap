@@ -30,6 +30,7 @@ pub struct FormModel {
 #[derive(Clone, PartialEq, Properties)]
 pub struct Props {
     pub on_logged_in: Callback<(String, bool)>,
+    pub password_reset_enabled: bool,
 }
 
 pub enum Msg {
@@ -147,6 +148,7 @@ impl Component for LoginForm {
 
     fn view(&self) -> Html {
         type Field = yew_form::Field<FormModel>;
+        let password_reset_enabled = self.common.password_reset_enabled;
         if self.refreshing {
             html! {
               <div>
@@ -198,12 +200,18 @@ impl Component for LoginForm {
                       <i class="bi-box-arrow-in-right me-2"/>
                       {"Login"}
                     </button>
-                    <NavButton
-                      classes="btn-link btn"
-                      disabled=self.common.is_task_running()
-                      route=AppRoute::StartResetPassword>
-                      {"Forgot your password?"}
-                    </NavButton>
+                    { if password_reset_enabled {
+                      html! {
+                        <NavButton
+                          classes="btn-link btn"
+                          disabled=self.common.is_task_running()
+                          route=AppRoute::StartResetPassword>
+                          {"Forgot your password?"}
+                        </NavButton>
+                      }
+                    } else {
+                      html!{}
+                    }}
                   </div>
                   <div class="form-group">
                   { if let Some(e) = &self.common.error {
