@@ -21,7 +21,11 @@ async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOpti
         .reply_to(reply_to)
         .to(to)
         .subject(subject)
-        .body(body)?;
+        .singlepart(
+            lettre::message::SinglePart::builder()
+                .header(lettre::message::header::ContentType::TEXT_PLAIN)
+                .body(body),
+        )?;
     let creds = Credentials::new(
         options.user.clone(),
         options.password.unsecure().to_string(),
