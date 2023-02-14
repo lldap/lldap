@@ -53,14 +53,14 @@ dc=example,dc=com
 - [x] authentik default OpenLDAP Mapping: uid
 
 ## Group Property Mappings
-- [x] authentik default LDAP Mapping: mail
-- [x] authentik default LDAP Mapping: Name
+- [ ] authentik default LDAP Mapping: mail
+- [ ] authentik default LDAP Mapping: Name
 - [ ] authentik default Active Directory Mapping: givenName
 - [ ] authentik default Active Directory Mapping: sAMAccountName
 - [ ] authentik default Active Directory Mapping: sn
 - [ ] authentik default Active Directory Mapping: userPrincipalName
 - [x] authentik default OpenLDAP Mapping: cn
-- [x] authentik default OpenLDAP Mapping: uid
+- [ ] authentik default OpenLDAP Mapping: uid
 
 # Additional settings
 
