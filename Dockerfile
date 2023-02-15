@@ -94,4 +94,4 @@ EXPOSE ${LDAP_PORT} ${HTTP_PORT}
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["run", "--config-file", "/data/lldap_config.toml"]
-HEALTHCHECK CMD ["/app/lldap", "run", "--config-file", "/data/lldap_config.toml"]
+HEALTHCHECK CMD ["/app/lldap", "healthcheck", "--config-file", "/data/lldap_config.toml"]
