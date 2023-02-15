@@ -65,7 +65,9 @@ compromised. You should reset your password and contact an administrator.
 To reset your password please visit the following URL: {}/reset-password/step2/{}
 
 Please contact an administrator if you did not initiate the process.",
-        username, domain, token
+        username,
+        domain.trim_end_matches('/'),
+        token
     );
     send_email(to, "[LLDAP] Password reset requested", body, options).await
 }
