@@ -214,11 +214,15 @@ where
     let token = request
         .match_info()
         .get("token")
-        .ok_or_else(|| TcpError::BadRequest("Missing reset token".to_string()))?;
+        .ok_or_else(|| TcpError::BadRequest("Missing reset token".to_owned()))?;
     let user_id = data
         .backend_handler
         .get_user_id_for_password_reset_token(token)
-        .await?;
+        .await
+        .map_err(|e| {
+            debug!("Reset token error: {e:#}");
+            TcpError::NotFoundError("Wrong or expired reset token".to_owned())
+        })?;
     let _ = data
         .backend_handler
         .delete_password_reset_token(token)
