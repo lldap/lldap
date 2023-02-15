@@ -1,5 +1,5 @@
 use crate::{
-    components::router::AppRoute,
+    components::router::{AppRoute, NavButton},
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
@@ -158,9 +158,17 @@ impl Component for ResetPasswordStep2Form {
             }
             (None, Some(e)) => {
                 return html! {
-                  <div class="alert alert-danger">
-                    {e.to_string() }
-                  </div>
+                  <>
+                    <div class="alert alert-danger">
+                      {e.to_string() }
+                    </div>
+                    <NavButton
+                      classes="btn-link btn"
+                      disabled=self.common.is_task_running()
+                      route=AppRoute::Login>
+                      {"Back"}
+                    </NavButton>
+                  </>
                 }
             }
             _ => (),

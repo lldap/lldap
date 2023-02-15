@@ -32,7 +32,7 @@ pub struct App {
     user_info: Option<(String, bool)>,
     redirect_to: Option<AppRoute>,
     route_dispatcher: RouteAgentDispatcher,
-    password_reset_enabled: bool,
+    password_reset_enabled: Option<bool>,
     task: Option<FetchTask>,
 }
 
@@ -64,7 +64,7 @@ impl Component for App {
                 }),
             redirect_to: Self::get_redirect_route(),
             route_dispatcher: RouteAgentDispatcher::new(),
-            password_reset_enabled: false,
+            password_reset_enabled: None,
             task: None,
         };
         app.task = Some(
@@ -95,21 +95,20 @@ impl Component for App {
             Msg::Logout => {
                 self.user_info = None;
                 self.redirect_to = None;
+                self.route_dispatcher
+                    .send(RouteRequest::ReplaceRoute(Route::from(AppRoute::Login)));
             }
             Msg::PasswordResetProbeFinished(Ok(enabled)) => {
                 self.task = None;
-                self.password_reset_enabled = enabled;
+                self.password_reset_enabled = Some(enabled);
             }
             Msg::PasswordResetProbeFinished(Err(err)) => {
                 self.task = None;
+                self.password_reset_enabled = Some(false);
                 ConsoleService::error(&format!(
                     "Could not probe for password reset support: {err:#}"
                 ));
             }
-        }
-        if self.user_info.is_none() {
-            self.route_dispatcher
-                .send(RouteRequest::ReplaceRoute(Route::from(AppRoute::Login)));
         }
         true
     }
@@ -160,7 +159,7 @@ impl App {
         let route_service = RouteService::<()>::new();
         let current_route = route_service.get_path();
         if current_route.contains("reset-password") {
-            if !self.password_reset_enabled {
+            if self.password_reset_enabled == Some(false) {
                 self.route_dispatcher
                     .send(RouteRequest::ReplaceRoute(Route::from(AppRoute::Login)));
             }
@@ -195,11 +194,11 @@ impl App {
         switch: AppRoute,
         link: &ComponentLink<Self>,
         is_admin: bool,
-        password_reset_enabled: bool,
+        password_reset_enabled: Option<bool>,
     ) -> Html {
         match switch {
             AppRoute::Login => html! {
-                <LoginForm on_logged_in=link.callback(Msg::Login) password_reset_enabled=password_reset_enabled/>
+                <LoginForm on_logged_in=link.callback(Msg::Login) password_reset_enabled=password_reset_enabled.unwrap_or(false)/>
             },
             AppRoute::CreateUser => html! {
                 <CreateUserForm/>
@@ -234,23 +233,20 @@ impl App {
             AppRoute::ChangePassword(username) => html! {
                 <ChangePasswordForm username=username is_admin=is_admin />
             },
-            AppRoute::StartResetPassword => {
-                if password_reset_enabled {
-                    html! {
-                      <ResetPasswordStep1Form />
-                    }
-                } else {
+            AppRoute::StartResetPassword => match password_reset_enabled {
+                Some(true) => html! { <ResetPasswordStep1Form /> },
+                Some(false) => {
                     App::dispatch_route(AppRoute::Login, link, is_admin, password_reset_enabled)
                 }
-            }
-            AppRoute::FinishResetPassword(token) => html! {
-                if password_reset_enabled {
-                    html! {
-                      <ResetPasswordStep2Form token=token />
-                    }
-                } else {
+
+                None => html! {},
+            },
+            AppRoute::FinishResetPassword(token) => match password_reset_enabled {
+                Some(true) => html! { <ResetPasswordStep2Form token=token /> },
+                Some(false) => {
                     App::dispatch_route(AppRoute::Login, link, is_admin, password_reset_enabled)
                 }
+                None => html! {},
             },
         }
     }
@@ -287,50 +283,48 @@ impl App {
                   } } else { html!{} } }
                 </ul>
 
-                <div class="dropdown text-end">
-                  <a href="#"
-                    class="d-block link-dark text-decoration-none dropdown-toggle"
-                    id="dropdownUser"
-                    data-bs-toggle="dropdown"
-                    aria-expanded="false">
-                    <svg xmlns="http://www.w3.org/2000/svg"
-                      width="32"
-                      height="32"
-                      fill="currentColor"
-                      class="bi bi-person-circle"
-                      viewBox="0 0 16 16">
-                      <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
-                      <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
-                    </svg>
-                    {
-                      if let Some((user_id, _)) = &self.user_info {
-                        html! {
+                {
+                  if let Some((user_id, _)) = &self.user_info {
+                    html! {
+                      <div class="dropdown text-end">
+                        <a href="#"
+                          class="d-block link-dark text-decoration-none dropdown-toggle"
+                          id="dropdownUser"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false">
+                          <svg xmlns="http://www.w3.org/2000/svg"
+                            width="32"
+                            height="32"
+                            fill="currentColor"
+                            class="bi bi-person-circle"
+                            viewBox="0 0 16 16">
+                            <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+                            <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
+                          </svg>
                           <span class="ms-2">
                             {user_id}
                           </span>
-                        }
-                      } else { html!{} }
+                        </a>
+                        <ul
+                          class="dropdown-menu text-small dropdown-menu-lg-end"
+                          aria-labelledby="dropdownUser1"
+                          style="">
+                          <li>
+                            <Link
+                              classes="dropdown-item"
+                              route=AppRoute::UserDetails(user_id.clone())>
+                              {"View details"}
+                            </Link>
+                          </li>
+                          <li><hr class="dropdown-divider" /></li>
+                          <li>
+                            <LogoutButton on_logged_out=self.link.callback(|_| Msg::Logout) />
+                          </li>
+                        </ul>
+                      </div>
                     }
-                  </a>
-                  {if let Some((user_id, _)) = &self.user_info { html! {
-                    <ul
-                      class="dropdown-menu text-small dropdown-menu-lg-end"
-                      aria-labelledby="dropdownUser1"
-                      style="">
-                      <li>
-                        <Link
-                          classes="dropdown-item"
-                          route=AppRoute::UserDetails(user_id.clone())>
-                          {"View details"}
-                        </Link>
-                      </li>
-                      <li><hr class="dropdown-divider" /></li>
-                      <li>
-                        <LogoutButton on_logged_out=self.link.callback(|_| Msg::Logout) />
-                      </li>
-                    </ul>
-                  } } else { html!{} } }
-                </div>
+                  } else { html!{} }
+                }
               </div>
             </div>
           </header>

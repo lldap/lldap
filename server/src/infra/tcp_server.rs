@@ -37,6 +37,8 @@ pub enum TcpError {
     BadRequest(String),
     #[error("Internal server error: `{0}`")]
     InternalServerError(String),
+    #[error("Not found: `{0}`")]
+    NotFoundError(String),
     #[error("Unauthorized: `{0}`")]
     UnauthorizedError(String),
 }
@@ -57,6 +59,7 @@ pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
             | DomainError::EntityNotFound(_) => HttpResponse::BadRequest(),
         },
         TcpError::BadRequest(_) => HttpResponse::BadRequest(),
+        TcpError::NotFoundError(_) => HttpResponse::NotFound(),
         TcpError::InternalServerError(_) => HttpResponse::InternalServerError(),
         TcpError::UnauthorizedError(_) => HttpResponse::Unauthorized(),
     }
