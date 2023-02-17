@@ -1,6 +1,15 @@
-use crate::domain::{
-    handler::{BackendHandler, CreateUserRequest, UpdateGroupRequest, UpdateUserRequest},
-    types::{GroupId, JpegPhoto, UserId},
+use crate::{
+    domain::{
+        handler::{BackendHandler, CreateUserRequest, UpdateGroupRequest, UpdateUserRequest},
+        types::{GroupId, JpegPhoto, UserId},
+    },
+    infra::{
+        access_control::{
+            AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
+            UserWriteableBackendHandler,
+        },
+        graphql::api::field_error_callback,
+    },
 };
 use anyhow::Context as AnyhowContext;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
@@ -65,19 +74,18 @@ impl Success {
 }
 
 #[graphql_object(context = Context<Handler>)]
-impl<Handler: BackendHandler + Sync> Mutation<Handler> {
+impl<Handler: BackendHandler> Mutation<Handler> {
     async fn create_user(
         context: &Context<Handler>,
         user: CreateUserInput,
     ) -> FieldResult<super::query::User<Handler>> {
         let span = debug_span!("[GraphQL mutation] create_user");
         span.in_scope(|| {
-            debug!(?user.id);
+            debug!("{:?}", &user.id);
         });
-        if !context.validation_result.is_admin() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized user creation".into());
-        }
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(&span, "Unauthorized user creation"))?;
         let user_id = UserId::new(&user.id);
         let avatar = user
             .avatar
@@ -87,8 +95,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             .map(JpegPhoto::try_from)
             .transpose()
             .context("Provided image is not a valid JPEG")?;
-        context
-            .handler
+        handler
             .create_user(CreateUserRequest {
                 user_id: user_id.clone(),
                 email: user.email,
@@ -99,8 +106,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             })
             .instrument(span.clone())
             .await?;
-        Ok(context
-            .handler
+        Ok(handler
             .get_user_details(&user_id)
             .instrument(span)
             .await
@@ -115,13 +121,11 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
-        if !context.validation_result.is_admin() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized group creation".into());
-        }
-        let group_id = context.handler.create_group(&name).await?;
-        Ok(context
-            .handler
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(&span, "Unauthorized group creation"))?;
+        let group_id = handler.create_group(&name).await?;
+        Ok(handler
             .get_group_details(group_id)
             .instrument(span)
             .await
@@ -137,10 +141,9 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             debug!(?user.id);
         });
         let user_id = UserId::new(&user.id);
-        if !context.validation_result.can_write(&user_id) {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized user update".into());
-        }
+        let handler = context
+            .get_writeable_handler(&user_id)
+            .ok_or_else(field_error_callback(&span, "Unauthorized user update"))?;
         let avatar = user
             .avatar
             .map(base64::decode)
@@ -149,8 +152,7 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             .map(JpegPhoto::try_from)
             .transpose()
             .context("Provided image is not a valid JPEG")?;
-        context
-            .handler
+        handler
             .update_user(UpdateUserRequest {
                 user_id,
                 email: user.email,
@@ -172,16 +174,14 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?group.id);
         });
-        if !context.validation_result.is_admin() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized group update".into());
-        }
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(&span, "Unauthorized group update"))?;
         if group.id == 1 {
             span.in_scope(|| debug!("Cannot change admin group details"));
             return Err("Cannot change admin group details".into());
         }
-        context
-            .handler
+        handler
             .update_group(UpdateGroupRequest {
                 group_id: GroupId(group.id),
                 display_name: group.display_name,
@@ -200,12 +200,13 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id, ?group_id);
         });
-        if !context.validation_result.is_admin() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized group membership modification".into());
-        }
-        context
-            .handler
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized group membership modification",
+            ))?;
+        handler
             .add_user_to_group(&UserId::new(&user_id), GroupId(group_id))
             .instrument(span)
             .await?;
@@ -221,17 +222,18 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id, ?group_id);
         });
-        if !context.validation_result.is_admin() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized group membership modification".into());
-        }
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized group membership modification",
+            ))?;
         let user_id = UserId::new(&user_id);
         if context.validation_result.user == user_id && group_id == 1 {
             span.in_scope(|| debug!("Cannot remove admin rights for current user"));
             return Err("Cannot remove admin rights for current user".into());
         }
-        context
-            .handler
+        handler
             .remove_user_from_group(&user_id, GroupId(group_id))
             .instrument(span)
             .await?;
@@ -244,19 +246,14 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
             debug!(?user_id);
         });
         let user_id = UserId::new(&user_id);
-        if !context.validation_result.is_admin() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized user deletion".into());
-        }
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(&span, "Unauthorized user deletion"))?;
         if context.validation_result.user == user_id {
             span.in_scope(|| debug!("Cannot delete current user"));
             return Err("Cannot delete current user".into());
         }
-        context
-            .handler
-            .delete_user(&user_id)
-            .instrument(span)
-            .await?;
+        handler.delete_user(&user_id).instrument(span).await?;
         Ok(Success::new())
     }
 
@@ -265,16 +262,14 @@ impl<Handler: BackendHandler + Sync> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?group_id);
         });
-        if !context.validation_result.is_admin() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized group deletion".into());
-        }
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(&span, "Unauthorized group deletion"))?;
         if group_id == 1 {
             span.in_scope(|| debug!("Cannot delete admin group"));
             return Err("Cannot delete admin group".into());
         }
-        context
-            .handler
+        handler
             .delete_group(GroupId(group_id))
             .instrument(span)
             .await?;

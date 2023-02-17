@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use crate::domain::{error::Result, types::UserId};
 
 #[async_trait]
-pub trait TcpBackendHandler {
+pub trait TcpBackendHandler: Sync {
     async fn get_jwt_blacklist(&self) -> anyhow::Result<HashSet<u64>>;
     async fn create_refresh_token(&self, user: &UserId) -> Result<(String, chrono::Duration)>;
     async fn check_token(&self, refresh_token_hash: u64, user: &UserId) -> Result<bool>;
@@ -34,16 +34,22 @@ mockall::mock! {
         async fn bind(&self, request: BindRequest) -> Result<()>;
     }
     #[async_trait]
-    impl GroupBackendHandler for TestTcpBackendHandler {
+    impl GroupListerBackendHandler for TestTcpBackendHandler {
         async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
+    }
+    #[async_trait]
+    impl GroupBackendHandler for TestTcpBackendHandler {
         async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
         async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
         async fn create_group(&self, group_name: &str) -> Result<GroupId>;
         async fn delete_group(&self, group_id: GroupId) -> Result<()>;
     }
     #[async_trait]
-    impl UserBackendHandler for TestBackendHandler {
+    impl UserListerBackendHandler for TestBackendHandler {
         async fn list_users(&self, filters: Option<UserRequestFilter>, get_groups: bool) -> Result<Vec<UserAndGroups>>;
+    }
+    #[async_trait]
+    impl UserBackendHandler for TestBackendHandler {
         async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
         async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;

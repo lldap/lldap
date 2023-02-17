@@ -1,6 +1,8 @@
 use crate::domain::{
     error::{DomainError, Result},
-    handler::{GroupBackendHandler, GroupRequestFilter, UpdateGroupRequest},
+    handler::{
+        GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter, UpdateGroupRequest,
+    },
     model::{self, GroupColumn, MembershipColumn},
     sql_backend_handler::SqlBackendHandler,
     types::{Group, GroupDetails, GroupId, Uuid},
@@ -57,7 +59,7 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
 }
 
 #[async_trait]
-impl GroupBackendHandler for SqlBackendHandler {
+impl GroupListerBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
         debug!(?filters);
@@ -94,7 +96,10 @@ impl GroupBackendHandler for SqlBackendHandler {
             })
             .collect())
     }
+}
 
+#[async_trait]
+impl GroupBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails> {
         debug!(?group_id);

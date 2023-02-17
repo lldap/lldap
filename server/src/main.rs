@@ -7,7 +7,10 @@ use std::time::Duration;
 
 use crate::{
     domain::{
-        handler::{CreateUserRequest, GroupBackendHandler, GroupRequestFilter, UserBackendHandler},
+        handler::{
+            CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+            UserBackendHandler,
+        },
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
     },

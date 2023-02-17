@@ -1,21 +1,69 @@
 use crate::{
-    domain::handler::BackendHandler,
+    domain::{handler::BackendHandler, types::UserId},
     infra::{
-        auth_service::{check_if_token_is_valid, ValidationResults},
+        access_control::{
+            AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
+            UserReadableBackendHandler, UserWriteableBackendHandler, ValidationResults,
+        },
+        auth_service::check_if_token_is_valid,
         cli::ExportGraphQLSchemaOpts,
+        graphql::{mutation::Mutation, query::Query},
         tcp_server::AppState,
     },
 };
 use actix_web::{web, Error, HttpResponse};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
-use juniper::{EmptySubscription, RootNode};
+use juniper::{EmptySubscription, FieldError, RootNode};
 use juniper_actix::{graphiql_handler, graphql_handler, playground_handler};
-
-use super::{mutation::Mutation, query::Query};
+use tracing::debug;
 
 pub struct Context<Handler: BackendHandler> {
-    pub handler: Box<Handler>,
+    pub handler: AccessControlledBackendHandler<Handler>,
     pub validation_result: ValidationResults,
+}
+
+pub fn field_error_callback<'a>(
+    span: &'a tracing::Span,
+    error_message: &'a str,
+) -> impl 'a + FnOnce() -> FieldError {
+    move || {
+        span.in_scope(|| debug!("Unauthorized"));
+        FieldError::from(error_message)
+    }
+}
+
+impl<Handler: BackendHandler> Context<Handler> {
+    #[cfg(test)]
+    pub fn new_for_tests(handler: Handler, validation_result: ValidationResults) -> Self {
+        Self {
+            handler: AccessControlledBackendHandler::new(handler),
+            validation_result,
+        }
+    }
+
+    pub fn get_admin_handler(&self) -> Option<&impl AdminBackendHandler> {
+        self.handler.get_admin_handler(&self.validation_result)
+    }
+
+    pub fn get_readonly_handler(&self) -> Option<&impl ReadonlyBackendHandler> {
+        self.handler.get_readonly_handler(&self.validation_result)
+    }
+
+    pub fn get_writeable_handler(
+        &self,
+        user_id: &UserId,
+    ) -> Option<&impl UserWriteableBackendHandler> {
+        self.handler
+            .get_writeable_handler(&self.validation_result, user_id)
+    }
+
+    pub fn get_readable_handler(
+        &self,
+        user_id: &UserId,
+    ) -> Option<&impl UserReadableBackendHandler> {
+        self.handler
+            .get_readable_handler(&self.validation_result, user_id)
+    }
 }
 
 impl<Handler: BackendHandler> juniper::Context for Context<Handler> {}
@@ -23,7 +71,7 @@ impl<Handler: BackendHandler> juniper::Context for Context<Handler> {}
 type Schema<Handler> =
     RootNode<'static, Query<Handler>, Mutation<Handler>, EmptySubscription<Context<Handler>>>;
 
-fn schema<Handler: BackendHandler + Sync>() -> Schema<Handler> {
+fn schema<Handler: BackendHandler>() -> Schema<Handler> {
     Schema::new(
         Query::<Handler>::new(),
         Mutation::<Handler>::new(),
@@ -58,7 +106,7 @@ async fn playground_route() -> Result<HttpResponse, Error> {
     playground_handler("/api/graphql", None).await
 }
 
-async fn graphql_route<Handler: BackendHandler + Sync>(
+async fn graphql_route<Handler: BackendHandler + Clone>(
     req: actix_web::HttpRequest,
     mut payload: actix_web::web::Payload,
     data: web::Data<AppState<Handler>>,
@@ -67,7 +115,7 @@ async fn graphql_route<Handler: BackendHandler + Sync>(
     let bearer = BearerAuth::from_request(&req, &mut payload.0).await?;
     let validation_result = check_if_token_is_valid(&data, bearer.token())?;
     let context = Context::<Handler> {
-        handler: Box::new(data.backend_handler.clone()),
+        handler: data.backend_handler.clone(),
         validation_result,
     };
     graphql_handler(&schema(), &context, req, payload).await
@@ -75,7 +123,7 @@ async fn graphql_route<Handler: BackendHandler + Sync>(
 
 pub fn configure_endpoint<Backend>(cfg: &mut web::ServiceConfig)
 where
-    Backend: BackendHandler + Sync + 'static,
+    Backend: BackendHandler + Clone + 'static,
 {
     let json_config = web::JsonConfig::default()
         .limit(4096)
