@@ -2,10 +2,10 @@ use chrono::TimeZone;
 use ldap3_proto::{
     proto::LdapOp, LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry,
 };
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, instrument, warn};
 
 use crate::domain::{
-    handler::{BackendHandler, UserRequestFilter},
+    handler::{UserListerBackendHandler, UserRequestFilter},
     ldap::{
         error::LdapError,
         utils::{expand_attribute_wildcards, get_user_id_from_distinguished_name},
@@ -217,26 +217,18 @@ fn expand_user_attribute_wildcards(attributes: &[String]) -> Vec<&str> {
 }
 
 #[instrument(skip_all, level = "debug")]
-pub async fn get_user_list<Backend: BackendHandler>(
+pub async fn get_user_list<Backend: UserListerBackendHandler>(
     ldap_info: &LdapInfo,
     ldap_filter: &LdapFilter,
     request_groups: bool,
     base: &str,
-    user_filter: &Option<&UserId>,
-    backend: &mut Backend,
+    backend: &Backend,
 ) -> LdapResult<Vec<UserAndGroups>> {
     debug!(?ldap_filter);
     let filters = convert_user_filter(ldap_info, ldap_filter)?;
-    let parsed_filters = match user_filter {
-        None => filters,
-        Some(u) => {
-            info!("Unprivileged search, limiting results");
-            UserRequestFilter::And(vec![filters, UserRequestFilter::UserId((*u).clone())])
-        }
-    };
-    debug!(?parsed_filters);
+    debug!(?filters);
     backend
-        .list_users(Some(parsed_filters), request_groups)
+        .list_users(Some(filters), request_groups)
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::Other,

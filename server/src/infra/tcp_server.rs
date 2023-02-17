@@ -5,6 +5,7 @@ use crate::{
         opaque_handler::OpaqueHandler,
     },
     infra::{
+        access_control::{AccessControlledBackendHandler, ReadonlyBackendHandler},
         auth_service,
         configuration::{Configuration, MailOptions},
         logging::CustomRootSpanBuilder,
@@ -74,11 +75,11 @@ fn http_config<Backend>(
     server_url: String,
     mail_options: MailOptions,
 ) where
-    Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Sync + 'static,
+    Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
     let enable_password_reset = mail_options.enable_password_reset;
     cfg.app_data(web::Data::new(AppState::<Backend> {
-        backend_handler,
+        backend_handler: AccessControlledBackendHandler::new(backend_handler),
         jwt_key: Hmac::new_varkey(jwt_secret.unsecure().as_bytes()).unwrap(),
         jwt_blacklist: RwLock::new(jwt_blacklist),
         server_url,
@@ -110,11 +111,32 @@ fn http_config<Backend>(
 }
 
 pub(crate) struct AppState<Backend> {
-    pub backend_handler: Backend,
+    pub backend_handler: AccessControlledBackendHandler<Backend>,
     pub jwt_key: Hmac<Sha512>,
     pub jwt_blacklist: RwLock<HashSet<u64>>,
     pub server_url: String,
     pub mail_options: MailOptions,
+}
+
+impl<Backend: BackendHandler> AppState<Backend> {
+    pub fn get_readonly_handler(&self) -> &impl ReadonlyBackendHandler {
+        self.backend_handler.unsafe_get_handler()
+    }
+}
+impl<Backend: TcpBackendHandler> AppState<Backend> {
+    pub fn get_tcp_handler(&self) -> &impl TcpBackendHandler {
+        self.backend_handler.unsafe_get_handler()
+    }
+}
+impl<Backend: OpaqueHandler> AppState<Backend> {
+    pub fn get_opaque_handler(&self) -> &impl OpaqueHandler {
+        self.backend_handler.unsafe_get_handler()
+    }
+}
+impl<Backend: LoginHandler> AppState<Backend> {
+    pub fn get_login_handler(&self) -> &impl LoginHandler {
+        self.backend_handler.unsafe_get_handler()
+    }
 }
 
 pub async fn build_tcp_server<Backend>(
@@ -123,7 +145,7 @@ pub async fn build_tcp_server<Backend>(
     server_builder: ServerBuilder,
 ) -> Result<ServerBuilder>
 where
-    Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Sync + 'static,
+    Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
     let jwt_secret = config.jwt_secret.clone();
     let jwt_blacklist = backend_handler

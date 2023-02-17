@@ -1,7 +1,13 @@
-use crate::domain::{
-    handler::BackendHandler,
-    ldap::utils::map_user_field,
-    types::{GroupDetails, GroupId, UserColumn, UserId},
+use crate::{
+    domain::{
+        handler::BackendHandler,
+        ldap::utils::map_user_field,
+        types::{GroupDetails, GroupId, UserColumn, UserId},
+    },
+    infra::{
+        access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
+        graphql::api::field_error_callback,
+    },
 };
 use chrono::TimeZone;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
@@ -112,7 +118,7 @@ impl<Handler: BackendHandler> Query<Handler> {
 }
 
 #[graphql_object(context = Context<Handler>)]
-impl<Handler: BackendHandler + Sync> Query<Handler> {
+impl<Handler: BackendHandler> Query<Handler> {
     fn api_version() -> &'static str {
         "1.0"
     }
@@ -123,12 +129,13 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
             debug!(?user_id);
         });
         let user_id = UserId::new(&user_id);
-        if !context.validation_result.can_read(&user_id) {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized access to user data".into());
-        }
-        Ok(context
-            .handler
+        let handler = context
+            .get_readable_handler(&user_id)
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized access to user data",
+            ))?;
+        Ok(handler
             .get_user_details(&user_id)
             .instrument(span)
             .await
@@ -143,12 +150,13 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         span.in_scope(|| {
             debug!(?filters);
         });
-        if !context.validation_result.is_admin_or_readonly() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized access to user list".into());
-        }
-        Ok(context
-            .handler
+        let handler = context
+            .get_readonly_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized access to user list",
+            ))?;
+        Ok(handler
             .list_users(filters.map(TryInto::try_into).transpose()?, false)
             .instrument(span)
             .await
@@ -157,12 +165,13 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
 
     async fn groups(context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
         let span = debug_span!("[GraphQL query] groups");
-        if !context.validation_result.is_admin_or_readonly() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized access to group list".into());
-        }
-        Ok(context
-            .handler
+        let handler = context
+            .get_readonly_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized access to group list",
+            ))?;
+        Ok(handler
             .list_groups(None)
             .instrument(span)
             .await
@@ -174,12 +183,13 @@ impl<Handler: BackendHandler + Sync> Query<Handler> {
         span.in_scope(|| {
             debug!(?group_id);
         });
-        if !context.validation_result.is_admin_or_readonly() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized access to group data".into());
-        }
-        Ok(context
-            .handler
+        let handler = context
+            .get_readonly_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized access to group data",
+            ))?;
+        Ok(handler
             .get_group_details(GroupId(group_id))
             .instrument(span)
             .await
@@ -205,7 +215,7 @@ impl<Handler: BackendHandler> Default for User<Handler> {
 }
 
 #[graphql_object(context = Context<Handler>)]
-impl<Handler: BackendHandler + Sync> User<Handler> {
+impl<Handler: BackendHandler> User<Handler> {
     fn id(&self) -> &str {
         self.user.user_id.as_str()
     }
@@ -244,8 +254,10 @@ impl<Handler: BackendHandler + Sync> User<Handler> {
         span.in_scope(|| {
             debug!(user_id = ?self.user.user_id);
         });
-        Ok(context
-            .handler
+        let handler = context
+            .get_readable_handler(&self.user.user_id)
+            .expect("We shouldn't be able to get there without readable permission");
+        Ok(handler
             .get_user_groups(&self.user.user_id)
             .instrument(span)
             .await
@@ -283,7 +295,7 @@ pub struct Group<Handler: BackendHandler> {
 }
 
 #[graphql_object(context = Context<Handler>)]
-impl<Handler: BackendHandler + Sync> Group<Handler> {
+impl<Handler: BackendHandler> Group<Handler> {
     fn id(&self) -> i32 {
         self.group_id
     }
@@ -302,12 +314,13 @@ impl<Handler: BackendHandler + Sync> Group<Handler> {
         span.in_scope(|| {
             debug!(name = %self.display_name);
         });
-        if !context.validation_result.is_admin_or_readonly() {
-            span.in_scope(|| debug!("Unauthorized"));
-            return Err("Unauthorized access to group data".into());
-        }
-        Ok(context
-            .handler
+        let handler = context
+            .get_readonly_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized access to group data",
+            ))?;
+        Ok(handler
             .list_users(
                 Some(DomainRequestFilter::MemberOfId(GroupId(self.group_id))),
                 false,
@@ -347,7 +360,9 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{domain::handler::MockTestBackendHandler, infra::auth_service::ValidationResults};
+    use crate::{
+        domain::handler::MockTestBackendHandler, infra::access_control::ValidationResults,
+    };
     use chrono::TimeZone;
     use juniper::{
         execute, graphql_value, DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType,
@@ -406,10 +421,8 @@ mod tests {
             .with(eq(UserId::new("bob")))
             .return_once(|_| Ok(groups));
 
-        let context = Context::<MockTestBackendHandler> {
-            handler: Box::new(mock),
-            validation_result: ValidationResults::admin(),
-        };
+        let context =
+            Context::<MockTestBackendHandler>::new_for_tests(mock, ValidationResults::admin());
 
         let schema = schema(Query::<MockTestBackendHandler>::new());
         assert_eq!(
@@ -486,10 +499,8 @@ mod tests {
                 ])
             });
 
-        let context = Context::<MockTestBackendHandler> {
-            handler: Box::new(mock),
-            validation_result: ValidationResults::admin(),
-        };
+        let context =
+            Context::<MockTestBackendHandler>::new_for_tests(mock, ValidationResults::admin());
 
         let schema = schema(Query::<MockTestBackendHandler>::new());
         assert_eq!(

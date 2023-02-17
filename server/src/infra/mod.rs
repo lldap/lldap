@@ -1,3 +1,4 @@
+pub mod access_control;
 pub mod auth_service;
 pub mod cli;
 pub mod configuration;

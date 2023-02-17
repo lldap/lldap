@@ -1,10 +1,10 @@
 use ldap3_proto::{
     proto::LdapOp, LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry,
 };
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, instrument, warn};
 
 use crate::domain::{
-    handler::{BackendHandler, GroupRequestFilter},
+    handler::{GroupListerBackendHandler, GroupRequestFilter},
     ldap::error::LdapError,
     types::{Group, GroupColumn, UserId, Uuid},
 };
@@ -21,7 +21,7 @@ pub fn get_group_attribute(
     group: &Group,
     base_dn_str: &str,
     attribute: &str,
-    user_filter: &Option<&UserId>,
+    user_filter: &Option<UserId>,
     ignored_group_attributes: &[String],
 ) -> Option<Vec<Vec<u8>>> {
     let attribute = attribute.to_ascii_lowercase();
@@ -34,7 +34,7 @@ pub fn get_group_attribute(
         "member" | "uniquemember" => group
             .users
             .iter()
-            .filter(|u| user_filter.map(|f| *u == f).unwrap_or(true))
+            .filter(|u| user_filter.as_ref().map(|f| *u == f).unwrap_or(true))
             .map(|u| format!("uid={},ou=people,{}", u, base_dn_str).into_bytes())
             .collect(),
         "1.1" => return None,
@@ -81,7 +81,7 @@ fn make_ldap_search_group_result_entry(
     group: Group,
     base_dn_str: &str,
     attributes: &[String],
-    user_filter: &Option<&UserId>,
+    user_filter: &Option<UserId>,
     ignored_group_attributes: &[String],
 ) -> LdapSearchResultEntry {
     let expanded_attributes = expand_group_attribute_wildcards(attributes);
@@ -201,25 +201,17 @@ fn convert_group_filter(
 }
 
 #[instrument(skip_all, level = "debug")]
-pub async fn get_groups_list<Backend: BackendHandler>(
+pub async fn get_groups_list<Backend: GroupListerBackendHandler>(
     ldap_info: &LdapInfo,
     ldap_filter: &LdapFilter,
     base: &str,
-    user_filter: &Option<&UserId>,
-    backend: &mut Backend,
+    backend: &Backend,
 ) -> LdapResult<Vec<Group>> {
     debug!(?ldap_filter);
-    let filter = convert_group_filter(ldap_info, ldap_filter)?;
-    let parsed_filters = match user_filter {
-        None => filter,
-        Some(u) => {
-            info!("Unprivileged search, limiting results");
-            GroupRequestFilter::And(vec![filter, GroupRequestFilter::Member((*u).clone())])
-        }
-    };
-    debug!(?parsed_filters);
+    let filters = convert_group_filter(ldap_info, ldap_filter)?;
+    debug!(?filters);
     backend
-        .list_groups(Some(parsed_filters))
+        .list_groups(Some(filters))
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::Other,
@@ -231,7 +223,7 @@ pub fn convert_groups_to_ldap_op<'a>(
     groups: Vec<Group>,
     attributes: &'a [String],
     ldap_info: &'a LdapInfo,
-    user_filter: &'a Option<&'a UserId>,
+    user_filter: &'a Option<UserId>,
 ) -> impl Iterator<Item = LdapOp> + 'a {
     groups.into_iter().map(move |g| {
         LdapOp::SearchResultEntry(make_ldap_search_group_result_entry(

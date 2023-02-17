@@ -1,4 +1,4 @@
-use super::{handler::BackendHandler, sql_tables::DbConnection};
+use crate::domain::{handler::BackendHandler, sql_tables::DbConnection};
 use crate::infra::configuration::Configuration;
 use async_trait::async_trait;
 
@@ -23,7 +23,8 @@ pub mod tests {
     use crate::{
         domain::{
             handler::{
-                CreateUserRequest, GroupBackendHandler, UserBackendHandler, UserRequestFilter,
+                CreateUserRequest, GroupBackendHandler, UserBackendHandler,
+                UserListerBackendHandler, UserRequestFilter,
             },
             sql_tables::init_table,
             types::{GroupId, UserId},

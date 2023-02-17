@@ -4,7 +4,7 @@ use async_trait::async_trait;
 pub use lldap_auth::{login, registration};
 
 #[async_trait]
-pub trait OpaqueHandler: Clone + Send {
+pub trait OpaqueHandler: Send + Sync {
     async fn login_start(
         &self,
         request: login::ClientLoginStartRequest,

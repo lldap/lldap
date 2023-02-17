@@ -30,6 +30,7 @@ use crate::{
         types::{GroupDetails, UserColumn, UserId},
     },
     infra::{
+        access_control::{ReadonlyBackendHandler, UserReadableBackendHandler, ValidationResults},
         tcp_backend_handler::*,
         tcp_server::{error_to_http_response, AppState, TcpError, TcpResult},
     },
@@ -87,11 +88,10 @@ async fn get_refresh<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    let backend_handler = &data.backend_handler;
     let jwt_key = &data.jwt_key;
     let (refresh_token_hash, user) = get_refresh_token(request)?;
     let found = data
-        .backend_handler
+        .get_tcp_handler()
         .check_token(refresh_token_hash, &user)
         .await?;
     if !found {
@@ -99,7 +99,8 @@ where
             "Invalid refresh token".to_string(),
         )));
     }
-    Ok(backend_handler
+    Ok(data
+        .get_readonly_handler()
         .get_user_groups(&user)
         .await
         .map(|groups| create_jwt(jwt_key, user.to_string(), groups))
@@ -145,7 +146,7 @@ where
         .get("user_id")
         .ok_or_else(|| TcpError::BadRequest("Missing user ID".to_string()))?;
     let user_results = data
-        .backend_handler
+        .get_readonly_handler()
         .list_users(
             Some(UserRequestFilter::Or(vec![
                 UserRequestFilter::UserId(UserId::new(user_string)),
@@ -163,7 +164,7 @@ where
     }
     let user = &user_results[0].user;
     let token = match data
-        .backend_handler
+        .get_tcp_handler()
         .start_password_reset(&user.user_id)
         .await?
     {
@@ -216,7 +217,7 @@ where
         .get("token")
         .ok_or_else(|| TcpError::BadRequest("Missing reset token".to_owned()))?;
     let user_id = data
-        .backend_handler
+        .get_tcp_handler()
         .get_user_id_for_password_reset_token(token)
         .await
         .map_err(|e| {
@@ -224,7 +225,7 @@ where
             TcpError::NotFoundError("Wrong or expired reset token".to_owned())
         })?;
     let _ = data
-        .backend_handler
+        .get_tcp_handler()
         .delete_password_reset_token(token)
         .await;
     let groups = HashSet::new();
@@ -266,10 +267,10 @@ where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
     let (refresh_token_hash, user) = get_refresh_token(request)?;
-    data.backend_handler
+    data.get_tcp_handler()
         .delete_refresh_token(refresh_token_hash)
         .await?;
-    let new_blacklisted_jwts = data.backend_handler.blacklist_jwts(&user).await?;
+    let new_blacklisted_jwts = data.get_tcp_handler().blacklist_jwts(&user).await?;
     let mut jwt_blacklist = data.jwt_blacklist.write().unwrap();
     for jwt in new_blacklisted_jwts {
         jwt_blacklist.insert(jwt);
@@ -320,7 +321,7 @@ async fn opaque_login_start<Backend>(
 where
     Backend: OpaqueHandler + 'static,
 {
-    data.backend_handler
+    data.get_opaque_handler()
         .login_start(request.into_inner())
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
@@ -337,8 +338,8 @@ where
 {
     // The authentication was successful, we need to fetch the groups to create the JWT
     // token.
-    let groups = data.backend_handler.get_user_groups(name).await?;
-    let (refresh_token, max_age) = data.backend_handler.create_refresh_token(name).await?;
+    let groups = data.get_readonly_handler().get_user_groups(name).await?;
+    let (refresh_token, max_age) = data.get_tcp_handler().create_refresh_token(name).await?;
     let token = create_jwt(&data.jwt_key, name.to_string(), groups);
     let refresh_token_plus_name = refresh_token + "+" + name.as_str();
 
@@ -374,7 +375,7 @@ where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
     let name = data
-        .backend_handler
+        .get_opaque_handler()
         .login_finish(request.into_inner())
         .await?;
     get_login_successful_response(&data, &name).await
@@ -405,7 +406,7 @@ where
         name: user_id.clone(),
         password: request.password.clone(),
     };
-    data.backend_handler.bind(bind_request).await?;
+    data.get_login_handler().bind(bind_request).await?;
     get_login_successful_response(&data, &user_id).await
 }
 
@@ -431,7 +432,7 @@ where
 {
     let name = request.name.clone();
     debug!(%name);
-    data.backend_handler.bind(request.into_inner()).await?;
+    data.get_login_handler().bind(request.into_inner()).await?;
     get_login_successful_response(&data, &name).await
 }
 
@@ -474,7 +475,7 @@ where
         .into_inner();
     let user_id = UserId::new(&registration_start_request.username);
     let user_is_admin = data
-        .backend_handler
+        .get_readonly_handler()
         .get_user_groups(&user_id)
         .await?
         .iter()
@@ -485,7 +486,7 @@ where
         ));
     }
     Ok(data
-        .backend_handler
+        .get_opaque_handler()
         .registration_start(registration_start_request)
         .await?)
 }
@@ -512,7 +513,7 @@ async fn opaque_register_finish<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    data.backend_handler
+    data.get_opaque_handler()
         .registration_finish(request.into_inner())
         .await?;
     Ok(HttpResponse::Ok().finish())
@@ -586,64 +587,8 @@ where
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Permission {
-    Admin,
-    PasswordManager,
-    Readonly,
-    Regular,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ValidationResults {
-    pub user: UserId,
-    pub permission: Permission,
-}
-
-impl ValidationResults {
-    #[cfg(test)]
-    pub fn admin() -> Self {
-        Self {
-            user: UserId::new("admin"),
-            permission: Permission::Admin,
-        }
-    }
-
-    #[must_use]
-    pub fn is_admin(&self) -> bool {
-        self.permission == Permission::Admin
-    }
-
-    #[must_use]
-    pub fn is_admin_or_readonly(&self) -> bool {
-        self.permission == Permission::Admin
-            || self.permission == Permission::Readonly
-            || self.permission == Permission::PasswordManager
-    }
-
-    #[must_use]
-    pub fn can_read(&self, user: &UserId) -> bool {
-        self.permission == Permission::Admin
-            || self.permission == Permission::PasswordManager
-            || self.permission == Permission::Readonly
-            || &self.user == user
-    }
-
-    #[must_use]
-    pub fn can_change_password(&self, user: &UserId, user_is_admin: bool) -> bool {
-        self.permission == Permission::Admin
-            || (self.permission == Permission::PasswordManager && !user_is_admin)
-            || &self.user == user
-    }
-
-    #[must_use]
-    pub fn can_write(&self, user: &UserId) -> bool {
-        self.permission == Permission::Admin || &self.user == user
-    }
-}
-
 #[instrument(skip_all, level = "debug", err, ret)]
-pub(crate) fn check_if_token_is_valid<Backend>(
+pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
     state: &AppState<Backend>,
     token_str: &str,
 ) -> Result<ValidationResults, actix_web::Error> {
@@ -666,19 +611,10 @@ pub(crate) fn check_if_token_is_valid<Backend>(
     if state.jwt_blacklist.read().unwrap().contains(&jwt_hash) {
         return Err(ErrorUnauthorized("JWT was logged out"));
     }
-    let is_in_group = |name| token.claims().groups.contains(name);
-    Ok(ValidationResults {
-        user: UserId::new(&token.claims().user),
-        permission: if is_in_group("lldap_admin") {
-            Permission::Admin
-        } else if is_in_group("lldap_password_manager") {
-            Permission::PasswordManager
-        } else if is_in_group("lldap_strict_readonly") {
-            Permission::Readonly
-        } else {
-            Permission::Regular
-        },
-    })
+    Ok(state.backend_handler.get_permissions_from_groups(
+        UserId::new(&token.claims().user),
+        token.claims().groups.iter(),
+    ))
 }
 
 pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig, enable_password_reset: bool)
