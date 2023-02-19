@@ -85,6 +85,6 @@ member
 dn
 ```
 
-#### Choose "Search direct and nested group memberships"
+##### Choose "Search direct and nested group memberships"
 
-#### Fill in the username and password of an admin user at Test and Enable Authentication and hit save
+##### Fill in the username and password of an admin user at Test and Enable Authentication and hit save
