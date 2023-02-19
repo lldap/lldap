@@ -88,3 +88,8 @@ dn
 ##### Choose "Search direct and nested group memberships"
 
 ##### Fill in the username and password of an admin user at Test and Enable Authentication and hit save
+
+Screenshot:
+![SUSE Rancher LLDAP Config](https://user-images.githubusercontent.com/59507751/219951746-b9c8f47a-d5f0-4c11-b0cb-e091debe9f15.png)
+
+See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for Kubernetes
