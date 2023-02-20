@@ -13,6 +13,7 @@ ip-address, DNS name or when running in Kubernetes (see https://github.com/Evant
 3890
 ```
 #### Service Account Distinguished name
+A better option is to use a readonly account for accessing the LLDAP server
 ```
 cn=admin,ou=people,dc=example,dc=com
 ```
@@ -42,7 +43,7 @@ groupOfUniqueNames
 
 #### Username Attribute
 ```
-cn
+uid
 ```
 
 #### Name Attribute
@@ -89,7 +90,6 @@ dn
 
 ##### Fill in the username and password of an admin user at Test and Enable Authentication and hit save
 
-Screenshot:
-![SUSE Rancher LLDAP Config](https://user-images.githubusercontent.com/59507751/219951746-b9c8f47a-d5f0-4c11-b0cb-e091debe9f15.png)
+## Rancher OpenLDAP config page
 
-See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for Kubernetes
+![Rancher OpenLDAP config page](images/rancher_ldap_config.png)
