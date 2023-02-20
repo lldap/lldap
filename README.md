@@ -136,6 +136,10 @@ services:
 Then the service will listen on two ports, one for LDAP and one for the web
 front-end.
 
+### With Kubernetes
+
+See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for Kubernetes
+
 ### From source
 
 To compile the project, you'll need:
@@ -250,6 +254,7 @@ folder for help with:
 - [Nextcloud](example_configs/nextcloud.md)
 - [Organizr](example_configs/Organizr.md)
 - [Portainer](example_configs/portainer.md)
+- [Rancher](example_configs/rancher.md)
 - [Seafile](example_configs/seafile.md)
 - [Syncthing](example_configs/syncthing.md)
 - [Vaultwarden](example_configs/vaultwarden.md)
