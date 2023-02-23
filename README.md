@@ -252,6 +252,7 @@ folder for help with:
 - [KeyCloak](example_configs/keycloak.md)
 - [Matrix](example_configs/matrix_synapse.yml)
 - [Nextcloud](example_configs/nextcloud.md)
+- [Nexus](example_configs/nexus.md)
 - [Organizr](example_configs/Organizr.md)
 - [Portainer](example_configs/portainer.md)
 - [Rancher](example_configs/rancher.md)
