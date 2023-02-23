@@ -85,7 +85,7 @@ version = "*"
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.17"
+version = "1.25"
 
 [dependencies.uuid]
 features = ["v3"]

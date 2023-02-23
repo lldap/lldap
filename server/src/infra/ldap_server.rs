@@ -67,7 +67,7 @@ async fn handle_ldap_stream<Stream, Backend>(
 ) -> Result<Stream>
 where
     Backend: BackendHandler + LoginHandler + OpaqueHandler + 'static,
-    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite,
+    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + std::marker::Unpin,
 {
     use tokio_stream::StreamExt;
     let (r, w) = tokio::io::split(stream);
