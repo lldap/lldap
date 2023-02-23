@@ -12,6 +12,7 @@ use crate::{
     },
 };
 use anyhow::Context as AnyhowContext;
+use base64::Engine;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
 use tracing::{debug, debug_span, Instrument};
 
@@ -89,7 +90,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         let user_id = UserId::new(&user.id);
         let avatar = user
             .avatar
-            .map(base64::decode)
+            .map(|bytes| base64::engine::general_purpose::STANDARD.decode(bytes))
             .transpose()
             .context("Invalid base64 image")?
             .map(JpegPhoto::try_from)
@@ -146,7 +147,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .ok_or_else(field_error_callback(&span, "Unauthorized user update"))?;
         let avatar = user
             .avatar
-            .map(base64::decode)
+            .map(|bytes| base64::engine::general_purpose::STANDARD.decode(bytes))
             .transpose()
             .context("Invalid base64 image")?
             .map(JpegPhoto::try_from)
