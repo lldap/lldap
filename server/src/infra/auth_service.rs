@@ -451,14 +451,15 @@ where
 #[instrument(skip_all, level = "debug")]
 async fn opaque_register_start<Backend>(
     request: actix_web::HttpRequest,
-    mut payload: actix_web::web::Payload,
+    payload: actix_web::web::Payload,
     data: web::Data<AppState<Backend>>,
 ) -> TcpResult<registration::ServerRegistrationStartResponse>
 where
     Backend: BackendHandler + OpaqueHandler + 'static,
 {
     use actix_web::FromRequest;
-    let validation_result = BearerAuth::from_request(&request, &mut payload.0)
+    let inner_payload = &mut payload.into_inner();
+    let validation_result = BearerAuth::from_request(&request, inner_payload)
         .await
         .ok()
         .and_then(|bearer| check_if_token_is_valid(&data, bearer.token()).ok())
@@ -468,7 +469,7 @@ where
     let registration_start_request =
         web::Json::<registration::ClientRegistrationStartRequest>::from_request(
             &request,
-            &mut payload.0,
+            inner_payload,
         )
         .await
         .map_err(|e| TcpError::BadRequest(format!("{:#?}", e)))?
