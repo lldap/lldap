@@ -18,7 +18,7 @@ use actix_server::ServerBuilder;
 use actix_service::map_config;
 use actix_web::{dev::AppConfig, web, App, HttpResponse};
 use anyhow::{Context, Result};
-use hmac::{Hmac, NewMac};
+use hmac::Hmac;
 use sha2::Sha512;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -80,7 +80,7 @@ fn http_config<Backend>(
     let enable_password_reset = mail_options.enable_password_reset;
     cfg.app_data(web::Data::new(AppState::<Backend> {
         backend_handler: AccessControlledBackendHandler::new(backend_handler),
-        jwt_key: Hmac::new_varkey(jwt_secret.unsecure().as_bytes()).unwrap(),
+        jwt_key: hmac::Mac::new_from_slice(jwt_secret.unsecure().as_bytes()).unwrap(),
         jwt_blacklist: RwLock::new(jwt_blacklist),
         server_url,
         mail_options,

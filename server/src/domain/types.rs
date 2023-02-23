@@ -1,3 +1,4 @@
+use base64::Engine;
 use chrono::{NaiveDateTime, TimeZone};
 use sea_orm::{
     entity::IntoActiveValue,
@@ -224,13 +225,15 @@ impl TryFrom<String> for JpegPhoto {
     type Error = anyhow::Error;
     fn try_from(string: String) -> anyhow::Result<Self> {
         // The String format is in base64.
-        <Self as TryFrom<_>>::try_from(base64::decode(string.as_str())?)
+        <Self as TryFrom<_>>::try_from(
+            base64::engine::general_purpose::STANDARD.decode(string.as_str())?,
+        )
     }
 }
 
 impl From<&JpegPhoto> for String {
     fn from(val: &JpegPhoto) -> Self {
-        base64::encode(&val.0)
+        base64::engine::general_purpose::STANDARD.encode(&val.0)
     }
 }
 

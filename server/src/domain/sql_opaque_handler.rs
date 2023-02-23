@@ -7,6 +7,7 @@ use super::{
     types::UserId,
 };
 use async_trait::async_trait;
+use base64::Engine;
 use lldap_auth::opaque;
 use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, QuerySelect};
 use secstr::SecUtf8;
@@ -129,7 +130,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         let encrypted_state = orion::aead::seal(&secret_key, &bincode::serialize(&server_data)?)?;
 
         Ok(login::ServerLoginStartResponse {
-            server_data: base64::encode(encrypted_state),
+            server_data: base64::engine::general_purpose::STANDARD.encode(encrypted_state),
             credential_response: start_response.message,
         })
     }
@@ -142,7 +143,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
             server_login,
         } = bincode::deserialize(&orion::aead::open(
             &secret_key,
-            &base64::decode(&request.server_data)?,
+            &base64::engine::general_purpose::STANDARD.decode(&request.server_data)?,
         )?)?;
         // Finish the login: this makes sure the client data is correct, and gives a session key we
         // don't need.
@@ -170,7 +171,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         };
         let encrypted_state = orion::aead::seal(&secret_key, &bincode::serialize(&server_data)?)?;
         Ok(registration::ServerRegistrationStartResponse {
-            server_data: base64::encode(encrypted_state),
+            server_data: base64::engine::general_purpose::STANDARD.encode(encrypted_state),
             registration_response: start_response.message,
         })
     }
@@ -183,7 +184,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         let secret_key = self.get_orion_secret_key()?;
         let registration::ServerData { username } = bincode::deserialize(&orion::aead::open(
             &secret_key,
-            &base64::decode(&request.server_data)?,
+            &base64::engine::general_purpose::STANDARD.decode(&request.server_data)?,
         )?)?;
 
         let password_file =
