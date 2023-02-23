@@ -11,3 +11,6 @@ default-members = ["server"]
 [patch.crates-io.opaque-ke]
 git = 'https://github.com/nitnelave/opaque-ke/'
 branch = 'zeroize_1.5'
+
+[patch.crates-io.lber]
+git = 'https://github.com/inejge/ldap3/'

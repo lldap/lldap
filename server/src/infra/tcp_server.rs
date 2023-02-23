@@ -85,7 +85,10 @@ fn http_config<Backend>(
         server_url,
         mail_options,
     }))
-    .route("/health", web::get().to(|| HttpResponse::Ok().finish()))
+    .route(
+        "/health",
+        web::get().to(|| async { HttpResponse::Ok().finish() }),
+    )
     .service(
         web::scope("/auth")
             .configure(|cfg| auth_service::configure_server::<Backend>(cfg, enable_password_reset)),
@@ -165,7 +168,7 @@ where
                 let jwt_blacklist = jwt_blacklist.clone();
                 let server_url = server_url.clone();
                 let mail_options = mail_options.clone();
-                HttpServiceBuilder::new()
+                HttpServiceBuilder::default()
                     .finish(map_config(
                         App::new()
                             .wrap(tracing_actix_web::TracingLogger::<CustomRootSpanBuilder>::new())
