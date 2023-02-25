@@ -26,11 +26,7 @@ async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOpti
                 .header(lettre::message::header::ContentType::TEXT_PLAIN)
                 .body(body),
         )?;
-    let creds = Credentials::new(
-        options.user.clone(),
-        options.password.unsecure().to_string(),
-    );
-    let mailer = match options.smtp_encryption {
+    let mut mailer = match options.smtp_encryption {
         SmtpEncryption::NONE => {
             AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&options.server)
         }
@@ -39,12 +35,15 @@ async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOpti
             AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&options.server)?
         }
     };
-    mailer
-        .credentials(creds)
-        .port(options.port)
-        .build()
-        .send(email)
-        .await?;
+    if options.user.as_str() != "" {
+        let creds = Credentials::new(
+            options.user.clone(),
+            options.password.unsecure().to_string(),
+        );
+        mailer = mailer.credentials(creds)
+    }
+
+    mailer.port(options.port).build().send(email).await?;
     Ok(())
 }
 
