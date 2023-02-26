@@ -118,6 +118,8 @@ services:
     ports:
       # For LDAP
       - "3890:3890"
+      # For LDAPS (LDAP Over SSL) if enabled via LLDAP_LDAPS_OPTIONS__ENABLED
+      - "6360:6360"
       # For the web front-end
       - "17170:17170"
     volumes:
@@ -131,6 +133,9 @@ services:
       - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
       - LLDAP_LDAP_USER_PASS=REPLACE_WITH_PASSWORD
       - LLDAP_LDAP_BASE_DN=dc=example,dc=com
+      # If using LDAPS, configure your cert and keys
+      # - LLDAP_LDAPS_OPTIONS__CERT_FILE=PATH_TO_CERT
+      # - LLDAP_LDAPS_OPTIONS__KEY_FILE=PATH_TO_KEY
 ```
 
 Then the service will listen on two ports, one for LDAP and one for the web
