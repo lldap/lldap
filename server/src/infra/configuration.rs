@@ -29,7 +29,7 @@ pub struct MailOptions {
     pub user: String,
     #[builder(default = r#"SecUtf8::from("")"#)]
     pub password: SecUtf8,
-    #[builder(default = "SmtpEncryption::TLS")]
+    #[builder(default = "SmtpEncryption::Tls")]
     pub smtp_encryption: SmtpEncryption,
     /// Deprecated.
     #[builder(default = "None")]
