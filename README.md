@@ -269,26 +269,27 @@ folder for help with:
 
 ### vs OpenLDAP
 
-OpenLDAP is a monster of a service that implements all of LDAP and all of its
-extensions, plus some of its own. That said, if you need all that flexibility,
-it might be what you need! Note that installation can be a bit painful
-(figuring out how to use `slapd`) and people have mixed experiences following
-tutorials online. If you don't configure it properly, you might end up storing
-passwords in clear, so a breach of your server would reveal all the stored
-passwords!
+[OpenLDAP](https://www.openldap.org) is a monster of a service that implements
+all of LDAP and all of its extensions, plus some of its own. That said, if you
+need all that flexibility, it might be what you need! Note that installation
+can be a bit painful (figuring out how to use `slapd`) and people have mixed
+experiences following tutorials online. If you don't configure it properly, you
+might end up storing passwords in clear, so a breach of your server would
+reveal all the stored passwords!
 
 OpenLDAP doesn't come with a UI: if you want a web interface, you'll have to
-install one (not that many that look nice) and configure it.
+install one (not that many look nice) and configure it.
 
 LLDAP is much simpler to setup, has a much smaller image (10x smaller, 20x if
 you add PhpLdapAdmin), and comes packed with its own purpose-built web UI.
+However, it's not as flexible as OpenLDAP.
 
 ### vs FreeIPA
 
-FreeIPA is the one-stop shop for identity management: LDAP, Kerberos, NTP, DNS,
-Samba, you name it, it has it. In addition to user management, it also does
-security policies, single sign-on, certificate management, linux account
-management and so on.
+[FreeIPA](http://www.freeipa.org) is the one-stop shop for identity management:
+LDAP, Kerberos, NTP, DNS, Samba, you name it, it has it. In addition to user
+management, it also does security policies, single sign-on, certificate
+management, linux account management and so on.
 
 If you need all of that, go for it! Keep in mind that a more complex system is
 more complex to maintain, though.
@@ -296,6 +297,18 @@ more complex to maintain, though.
 LLDAP is much lighter to run (<10 MB RAM including the DB), easier to
 configure (no messing around with DNS or security policies) and simpler to
 use. It also comes conveniently packed in a docker container.
+
+### vs Kanidm
+
+[Kanidm](https://kanidm.com) is an up-and-coming Rust identity management
+platform, covering all your bases: OAuth, Linux accounts, SSH keys, Radius,
+WebAuthn. It comes with a (read-only) LDAPS server.
+
+It's fairly easy to install and does much more; but their LDAP server is
+read-only, and by having more moving parts it is inherently more complex. If
+you don't need to modify the users through LDAP and you're planning on
+installing something like [KeyCloak](https://www.keycloak.org) to provide
+modern identity protocols, check out Kanidm.
 
 ## I can't log in!
 
