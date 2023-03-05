@@ -6,20 +6,17 @@ ENV PATH="/opt/aarch64-linux-musl-cross/:/opt/aarch64-linux-musl-cross/bin/:/opt
 
 ### Install build deps x86_64
 RUN apt update && \
-    apt install -y --no-install-recommends curl git wget build-essential make perl pkg-config curl tar jq musl-tools && \
+    apt install -y --no-install-recommends curl git wget build-essential make perl pkg-config curl tar jq musl-tools gzip && \
     curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
     apt update && \
     apt install -y --no-install-recommends nodejs && \
     apt clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    npm install -g npm && \
-    npm install -g yarn && \
-    npm install -g pnpm
+    rm -rf /var/lib/apt/lists/*
 
 ### Install build deps aarch64 build
 RUN dpkg --add-architecture arm64 && \
     apt update && \
-    apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross && \
+    apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross gzip && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
     rustup target add aarch64-unknown-linux-gnu
@@ -27,7 +24,7 @@ RUN dpkg --add-architecture arm64 && \
 ### armhf deps
 RUN dpkg --add-architecture armhf && \
     apt update && \
-    apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross && \
+    apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross gzip && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
     rustup target add armv7-unknown-linux-gnueabihf
@@ -43,6 +40,6 @@ RUN wget -c https://musl.cc/x86_64-linux-musl-cross.tgz && \
 ### Add musl target
 RUN rustup target add x86_64-unknown-linux-musl && \
     rustup target add aarch64-unknown-linux-musl
-    
+
 
 CMD ["bash"]

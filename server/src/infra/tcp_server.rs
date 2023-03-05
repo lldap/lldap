@@ -13,10 +13,10 @@ use crate::{
     },
 };
 use actix_files::{Files, NamedFile};
-use actix_http::HttpServiceBuilder;
+use actix_http::{header, HttpServiceBuilder};
 use actix_server::ServerBuilder;
 use actix_service::map_config;
-use actix_web::{dev::AppConfig, web, App, HttpResponse};
+use actix_web::{dev::AppConfig, guard, middleware, web, App, HttpResponse, Responder};
 use anyhow::{Context, Result};
 use hmac::Hmac;
 use sha2::Sha512;
@@ -67,6 +67,16 @@ pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
     .body(error.to_string())
 }
 
+async fn wasm_handler() -> actix_web::Result<impl Responder> {
+    Ok(
+        actix_files::NamedFile::open_async("./app/pkg/lldap_app_bg.wasm.gz")
+            .await?
+            .customize()
+            .insert_header(header::ContentEncoding::Gzip)
+            .insert_header((header::CONTENT_TYPE, "application/wasm")),
+    )
+}
+
 fn http_config<Backend>(
     cfg: &mut web::ServiceConfig,
     backend_handler: Backend,
@@ -99,6 +109,13 @@ fn http_config<Backend>(
             .wrap(auth_service::CookieToHeaderTranslatorFactory)
             .configure(super::graphql::api::configure_endpoint::<Backend>),
     )
+    .service(
+        web::resource("/pkg/lldap_app_bg.wasm").route(
+            web::route()
+                .wrap(middleware::Compress::default())
+                .to(wasm_handler),
+        ),
+    )
     // Serve the /pkg path with the compiled WASM app.
     .service(Files::new("/pkg", "./app/pkg"))
     // Serve static files
@@ -106,11 +123,7 @@ fn http_config<Backend>(
     // Serve static fonts
     .service(Files::new("/static/fonts", "./app/static/fonts"))
     // Default to serve index.html for unknown routes, to support routing.
-    .service(
-        web::scope("/")
-            .route("", web::get().to(index)) // this is necessary because the below doesn't match a request for "/"
-            .route(".*", web::get().to(index)),
-    );
+    .default_service(web::route().guard(guard::Get()).to(index));
 }
 
 pub(crate) struct AppState<Backend> {
@@ -157,6 +170,7 @@ where
         .context("while getting the jwt blacklist")?;
     let server_url = config.http_url.clone();
     let mail_options = config.smtp_options.clone();
+    let verbose = config.verbose;
     info!("Starting the API/web server on port {}", config.http_port);
     server_builder
         .bind(
@@ -171,7 +185,10 @@ where
                 HttpServiceBuilder::default()
                     .finish(map_config(
                         App::new()
-                            .wrap(tracing_actix_web::TracingLogger::<CustomRootSpanBuilder>::new())
+                            .wrap(actix_web::middleware::Condition::new(
+                                verbose,
+                                tracing_actix_web::TracingLogger::<CustomRootSpanBuilder>::new(),
+                            ))
                             .configure(move |cfg| {
                                 http_config(
                                     cfg,

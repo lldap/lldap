@@ -11,7 +11,7 @@ RUN set -x \
         --uid 10001 \
         app \
     # Install required packages
-    && apk add npm openssl-dev musl-dev make perl curl
+    && apk add openssl-dev musl-dev make perl curl gzip
 
 USER app
 WORKDIR /app
@@ -19,7 +19,6 @@ WORKDIR /app
 RUN set -x \
     # Install build tools
     && RUSTFLAGS=-Ctarget-feature=-crt-static cargo install wasm-pack cargo-chef \
-    && npm install rollup \
     && rustup target add wasm32-unknown-unknown
 
 # Prepare the dependency list.
