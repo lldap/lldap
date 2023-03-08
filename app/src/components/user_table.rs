@@ -126,9 +126,10 @@ impl UserTable {
     }
 
     fn view_user(&self, user: &User) -> Html {
+        let link = &self.common;
         html! {
-          <tr key=user.id.clone()>
-              <td><Link route=AppRoute::UserDetails(user.id.clone())>{&user.id}</Link></td>
+          <tr key={user.id.clone()}>
+              <td><Link route={AppRoute::UserDetails(user.id.clone())}>{&user.id}</Link></td>
               <td>{&user.email}</td>
               <td>{&user.display_name}</td>
               <td>{&user.first_name}</td>
@@ -136,9 +137,9 @@ impl UserTable {
               <td>{&user.creation_date.naive_local().date()}</td>
               <td>
                 <DeleteUser
-                  username=user.id.clone()
-                  on_user_deleted=self.common.callback(Msg::OnUserDeleted)
-                  on_error=self.common.callback(Msg::OnError)/>
+                  username={user.id.clone()}
+                  on_user_deleted={link.callback(Msg::OnUserDeleted)}
+                  on_error={link.callback(Msg::OnError)}/>
               </td>
           </tr>
         }

@@ -117,9 +117,9 @@ impl GroupTable {
 
     fn view_group(&self, group: &Group) -> Html {
         html! {
-          <tr key=group.id>
+          <tr key={group.id}>
               <td>
-                <Link route=AppRoute::GroupDetails(group.id)>
+                <Link route={AppRoute::GroupDetails(group.id)}>
                   {&group.display_name}
                 </Link>
               </td>
@@ -128,9 +128,9 @@ impl GroupTable {
               </td>
               <td>
                 <DeleteGroup
-                  group=group.clone()
-                  on_group_deleted=self.common.callback(Msg::OnGroupDeleted)
-                  on_error=self.common.callback(Msg::OnError)/>
+                  group={group.clone()}
+                  on_group_deleted={self.common.callback(Msg::OnGroupDeleted)}
+                  on_error={self.common.callback(Msg::OnError)}/>
               </td>
           </tr>
         }

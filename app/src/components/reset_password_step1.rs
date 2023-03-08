@@ -82,6 +82,7 @@ impl Component for ResetPasswordStep1Form {
 
     fn view(&self) -> Html {
         type Field = yew_form::Field<FormModel>;
+        let link = &self.common;
         html! {
             <form
               class="form center-block col-sm-4 col-offset-4">
@@ -95,11 +96,11 @@ impl Component for ResetPasswordStep1Form {
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
-                    form=&self.form
+                    form={&self.form}
                     field_name="username"
                     placeholder="Username or email"
                     autocomplete="username"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                 </div>
                 { if self.just_succeeded {
                     html! {
@@ -111,15 +112,15 @@ impl Component for ResetPasswordStep1Form {
                           <button
                             type="submit"
                             class="btn btn-primary"
-                            disabled=self.common.is_task_running()
-                            onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                            disabled={self.common.is_task_running()}
+                            onclick={self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
                             <i class="bi-check-circle me-2"/>
                             {"Reset password"}
                           </button>
                           <NavButton
                             classes="btn-link btn"
-                            disabled=self.common.is_task_running()
-                            route=AppRoute::Login>
+                            disabled={self.common.is_task_running()}
+                            route={AppRoute::Login}>
                             {"Back"}
                           </NavButton>
                         </div>

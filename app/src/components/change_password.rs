@@ -212,6 +212,7 @@ impl Component for ChangePasswordForm {
 
     fn view(&self) -> Html {
         let is_admin = self.common.is_admin;
+        let link = &self.common;
         type Field = yew_form::Field<FormModel>;
         html! {
           <>
@@ -239,14 +240,14 @@ impl Component for ChangePasswordForm {
                   </label>
                   <div class="col-sm-10">
                     <Field
-                      form=&self.form
+                      form={&self.form}
                       field_name="old_password"
                       input_type="password"
                       class="form-control"
                       class_invalid="is-invalid has-error"
                       class_valid="has-success"
                       autocomplete="current-password"
-                      oninput=self.common.callback(|_| Msg::FormUpdate) />
+                      oninput={link.callback(|_| Msg::FormUpdate)} />
                     <div class="invalid-feedback">
                       {&self.form.field_message("old_password")}
                     </div>
@@ -262,14 +263,14 @@ impl Component for ChangePasswordForm {
                 </label>
                 <div class="col-sm-10">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     field_name="password"
                     input_type="password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.common.callback(|_| Msg::FormUpdate) />
+                    oninput={link.callback(|_| Msg::FormUpdate)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("password")}
                   </div>
@@ -284,14 +285,14 @@ impl Component for ChangePasswordForm {
                 </label>
                 <div class="col-sm-10">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     field_name="confirm_password"
                     input_type="password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.common.callback(|_| Msg::FormUpdate) />
+                    oninput={link.callback(|_| Msg::FormUpdate)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("confirm_password")}
                   </div>
@@ -301,14 +302,14 @@ impl Component for ChangePasswordForm {
                 <button
                   class="btn btn-primary col-auto col-form-label"
                   type="submit"
-                  disabled=self.common.is_task_running()
-                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                  disabled={self.common.is_task_running()}
+                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
                   <i class="bi-save me-2"></i>
                   {"Save changes"}
                 </button>
                 <NavButton
                   classes="btn btn-secondary ms-2 col-auto col-form-label"
-                  route=AppRoute::UserDetails(self.common.username.clone())>
+                  route={AppRoute::UserDetails(self.common.username.clone())}>
                   <i class="bi-arrow-return-left me-2"></i>
                   {"Back"}
                 </NavButton>

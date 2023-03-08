@@ -86,11 +86,12 @@ impl Component for RemoveUserFromGroupComponent {
     }
 
     fn view(&self) -> Html {
+        let link = &self.common;
         html! {
           <button
             class="btn btn-danger"
-            disabled=self.common.is_task_running()
-            onclick=self.common.callback(|_| Msg::SubmitRemoveGroup)>
+            disabled={self.common.is_task_running()}
+            onclick={link.callback(|_| Msg::SubmitRemoveGroup)}>
             <i class="bi-x-circle-fill" aria-label="Remove user from group" />
           </button>
         }

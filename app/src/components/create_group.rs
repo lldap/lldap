@@ -97,6 +97,7 @@ impl Component for CreateGroupForm {
     }
 
     fn view(&self) -> Html {
+        let link = &self.common;
         type Field = yew_form::Field<CreateGroupModel>;
         html! {
           <div class="row justify-content-center">
@@ -113,13 +114,13 @@ impl Component for CreateGroupForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     field_name="groupname"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="groupname"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("groupname")}
                   </div>
@@ -129,8 +130,8 @@ impl Component for CreateGroupForm {
                 <button
                   class="btn btn-primary col-auto col-form-label"
                   type="submit"
-                  disabled=self.common.is_task_running()
-                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
+                  disabled={self.common.is_task_running()}
+                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})}>
                   <i class="bi-save me-2"></i>
                   {"Submit"}
                 </button>

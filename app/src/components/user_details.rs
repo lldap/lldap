@@ -100,23 +100,24 @@ impl UserDetails {
     }
 
     fn view_group_memberships(&self, u: &User) -> Html {
+        let link = &self.common;
         let make_group_row = |group: &Group| {
             let display_name = group.display_name.clone();
             html! {
-              <tr key="groupRow_".to_string() + &display_name>
+              <tr key={"groupRow_".to_string() + &display_name}>
                 {if self.common.is_admin { html! {
                   <>
                     <td>
-                      <Link route=AppRoute::GroupDetails(group.id)>
+                      <Link route={AppRoute::GroupDetails(group.id)}>
                         {&group.display_name}
                       </Link>
                     </td>
                     <td>
                       <RemoveUserFromGroupComponent
-                        username=u.id.clone()
-                        group_id=group.id
-                        on_user_removed_from_group=self.common.callback(Msg::OnUserRemovedFromGroup)
-                        on_error=self.common.callback(Msg::OnError)/>
+                        username={u.id.clone()}
+                        group_id={group.id}
+                        on_user_removed_from_group={link.callback(Msg::OnUserRemovedFromGroup)}
+                        on_error={link.callback(Msg::OnError)}/>
                     </td>
                   </>
                 } } else { html! {
@@ -154,13 +155,14 @@ impl UserDetails {
     }
 
     fn view_add_group_button(&self, u: &User) -> Html {
+        let link = &self.common;
         if self.common.is_admin {
             html! {
                 <AddUserToGroupComponent
-                    username=u.id.clone()
-                    groups=u.groups.clone()
-                    on_error=self.common.callback(Msg::OnError)
-                    on_user_added_to_group=self.common.callback(Msg::OnUserAddedToGroup)/>
+                    username={u.id.clone()}
+                    groups={u.groups.clone()}
+                    on_error={link.callback(Msg::OnError)}
+                    on_user_added_to_group={link.callback(Msg::OnUserAddedToGroup)}/>
             }
         } else {
             html! {}
@@ -199,7 +201,7 @@ impl Component for UserDetails {
                     <h3>{u.id.to_string()}</h3>
                     <div class="d-flex flex-row-reverse">
                       <NavButton
-                        route=AppRoute::ChangePassword(u.id.clone())
+                        route={AppRoute::ChangePassword(u.id.clone())}
                         classes="btn btn-secondary">
                         <i class="bi-key me-2"></i>
                         {"Modify password"}
@@ -208,8 +210,7 @@ impl Component for UserDetails {
                     <div>
                       <h5 class="row m-3 fw-bold">{"User details"}</h5>
                     </div>
-                    <UserDetailsForm
-                      user=u.clone() />
+                    <UserDetailsForm user={u.clone()} />
                     {self.view_group_memberships(u)}
                     {self.view_add_group_button(u)}
                     {self.view_messages(error)}

@@ -173,6 +173,7 @@ impl Component for UserDetailsForm {
 
     fn view(&self) -> Html {
         type Field = yew_form::Field<UserModel>;
+        let link = &self.common;
 
         let avatar_base64 = maybe_to_base64(&self.avatar).unwrap_or_default();
         let avatar_string = avatar_base64
@@ -221,10 +222,10 @@ impl Component for UserDetailsForm {
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
-                    form=&self.form
+                    form={&self.form}
                     field_name="email"
                     autocomplete="email"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("email")}
                   </div>
@@ -240,10 +241,10 @@ impl Component for UserDetailsForm {
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
-                    form=&self.form
+                    form={&self.form}
                     field_name="display_name"
                     autocomplete="name"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("display_name")}
                   </div>
@@ -257,10 +258,10 @@ impl Component for UserDetailsForm {
                 <div class="col-8">
                   <Field
                     class="form-control"
-                    form=&self.form
+                    form={&self.form}
                     field_name="first_name"
                     autocomplete="given-name"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("first_name")}
                   </div>
@@ -274,10 +275,10 @@ impl Component for UserDetailsForm {
                 <div class="col-8">
                   <Field
                     class="form-control"
-                    form=&self.form
+                    form={&self.form}
                     field_name="last_name"
                     autocomplete="family-name"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("last_name")}
                   </div>
@@ -296,7 +297,7 @@ impl Component for UserDetailsForm {
                         id="avatarInput"
                         type="file"
                         accept="image/jpeg"
-                        oninput=self.common.callback(|_| Msg::Update) />
+                        oninput={link.callback(|_| Msg::Update)} />
                     </div>
                     <div class="col-4">
                       <img
@@ -312,8 +313,8 @@ impl Component for UserDetailsForm {
                 <button
                   type="submit"
                   class="btn btn-primary col-auto col-form-label"
-                  disabled=self.common.is_task_running()
-                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})>
+                  disabled={self.common.is_task_running()}
+                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})}>
                   <i class="bi-save me-2"></i>
                   {"Save changes"}
                 </button>
@@ -328,7 +329,7 @@ impl Component for UserDetailsForm {
                 }
               } else { html! {} }
             }
-            <div hidden=!self.just_updated>
+            <div hidden={!self.just_updated}>
               <div class="alert alert-success mt-4">{"User successfully updated!"}</div>
             </div>
           </div>

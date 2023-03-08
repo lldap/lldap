@@ -149,6 +149,7 @@ impl Component for LoginForm {
     fn view(&self) -> Html {
         type Field = yew_form::Field<FormModel>;
         let password_reset_enabled = self.common.password_reset_enabled;
+        let link = &self.common;
         if self.refreshing {
             html! {
               <div>
@@ -169,11 +170,11 @@ impl Component for LoginForm {
                       class="form-control"
                       class_invalid="is-invalid has-error"
                       class_valid="has-success"
-                      form=&self.form
+                      form={&self.form}
                       field_name="username"
                       placeholder="Username"
                       autocomplete="username"
-                      oninput=self.common.callback(|_| Msg::Update) />
+                      oninput={link.callback(|_| Msg::Update)} />
                   </div>
                   <div class="input-group">
                     <div class="input-group-prepend">
@@ -185,7 +186,7 @@ impl Component for LoginForm {
                       class="form-control"
                       class_invalid="is-invalid has-error"
                       class_valid="has-success"
-                      form=&self.form
+                      form={&self.form}
                       field_name="password"
                       input_type="password"
                       placeholder="Password"
@@ -195,8 +196,8 @@ impl Component for LoginForm {
                     <button
                       type="submit"
                       class="btn btn-primary"
-                      disabled=self.common.is_task_running()
-                      onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                      disabled={self.common.is_task_running()}
+                      onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
                       <i class="bi-box-arrow-in-right me-2"/>
                       {"Login"}
                     </button>
@@ -204,8 +205,8 @@ impl Component for LoginForm {
                       html! {
                         <NavButton
                           classes="btn-link btn"
-                          disabled=self.common.is_task_running()
-                          route=AppRoute::StartResetPassword>
+                          disabled={self.common.is_task_running()}
+                          route={AppRoute::StartResetPassword}>
                           {"Forgot your password?"}
                         </NavButton>
                       }

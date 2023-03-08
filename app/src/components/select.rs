@@ -68,9 +68,9 @@ impl Component for Select {
     fn view(&self) -> Html {
         html! {
             <select class="form-select"
-              ref=self.node_ref.clone()
-              disabled=self.props.children.is_empty()
-              onchange=self.link.callback(SelectMsg::OnSelectChange)>
+              ref={self.node_ref.clone()}
+              disabled={self.props.children.is_empty()}
+              onchange={self.link.callback(SelectMsg::OnSelectChange)}>
             { self.props.children.clone() }
             </select>
         }
@@ -105,7 +105,7 @@ impl Component for SelectOption {
 
     fn view(&self) -> Html {
         html! {
-          <option value=self.props.value.clone()>
+          <option value={self.props.value.clone()}>
             {&self.props.text}
           </option>
         }

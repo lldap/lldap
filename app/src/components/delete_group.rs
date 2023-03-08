@@ -109,12 +109,13 @@ impl Component for DeleteGroup {
     }
 
     fn view(&self) -> Html {
+        let link = &self.common;
         html! {
           <>
           <button
             class="btn btn-danger"
-            disabled=self.common.is_task_running()
-            onclick=self.common.callback(|_| Msg::ClickedDeleteGroup)>
+            disabled={self.common.is_task_running()}
+            onclick={link.callback(|_| Msg::ClickedDeleteGroup)}>
             <i class="bi-x-circle-fill" aria-label="Delete group" />
           </button>
           {self.show_modal()}
@@ -125,14 +126,15 @@ impl Component for DeleteGroup {
 
 impl DeleteGroup {
     fn show_modal(&self) -> Html {
+        let link = &self.common;
         html! {
           <div
             class="modal fade"
-            id="deleteGroupModal".to_string() + &self.common.group.id.to_string()
+            id={"deleteGroupModal".to_string() + &self.common.group.id.to_string()}
             tabindex="-1"
             aria-labelledby="deleteGroupModalLabel"
             aria-hidden="true"
-            ref=self.node_ref.clone()>
+            ref={self.node_ref.clone()}>
             <div class="modal-dialog">
               <div class="modal-content">
                 <div class="modal-header">
@@ -141,7 +143,7 @@ impl DeleteGroup {
                     type="button"
                     class="btn-close"
                     aria-label="Close"
-                    onclick=self.common.callback(|_| Msg::DismissModal) />
+                    onclick={link.callback(|_| Msg::DismissModal)} />
                 </div>
                 <div class="modal-body">
                 <span>
@@ -153,13 +155,13 @@ impl DeleteGroup {
                   <button
                     type="button"
                     class="btn btn-secondary"
-                    onclick=self.common.callback(|_| Msg::DismissModal)>
+                    onclick={link.callback(|_| Msg::DismissModal)}>
                       <i class="bi-x-circle me-2"></i>
                       {"Cancel"}
                   </button>
                   <button
                     type="button"
-                    onclick=self.common.callback(|_| Msg::ConfirmDeleteGroup)
+                    onclick={link.callback(|_| Msg::ConfirmDeleteGroup)}
                     class="btn btn-danger">
                     <i class="bi-check-circle me-2"></i>
                     {"Yes, I'm sure"}
