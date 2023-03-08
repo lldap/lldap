@@ -1,34 +1,30 @@
-use yew_router::{
-    components::{RouterAnchor, RouterButton},
-    Switch,
-};
+use yew_router::Routable;
 
-#[derive(Switch, Debug, Clone)]
+#[derive(Routable, Debug, Clone, PartialEq)]
 pub enum AppRoute {
-    #[to = "/login"]
+    #[at("/login")]
     Login,
-    #[to = "/reset-password/step1"]
+    #[at("/reset-password/step1")]
     StartResetPassword,
-    #[to = "/reset-password/step2/{token}"]
-    FinishResetPassword(String),
-    #[to = "/users/create"]
+    #[at("/reset-password/step2/:token")]
+    FinishResetPassword { token: String },
+    #[at("/users/create")]
     CreateUser,
-    #[to = "/users"]
+    #[at("/users")]
     ListUsers,
-    #[to = "/user/{user_id}/password"]
-    ChangePassword(String),
-    #[to = "/user/{user_id}"]
-    UserDetails(String),
-    #[to = "/groups/create"]
+    #[at("/user/:user_id/password")]
+    ChangePassword { user_id: String },
+    #[at("/user/:user_id")]
+    UserDetails { user_id: String },
+    #[at("/groups/create")]
     CreateGroup,
-    #[to = "/groups"]
+    #[at("/groups")]
     ListGroups,
-    #[to = "/group/{group_id}"]
-    GroupDetails(i64),
-    #[to = "/"]
+    #[at("/group/:group_id")]
+    GroupDetails { group_id: i64 },
+    #[at("/")]
     Index,
 }
 
-pub type Link = RouterAnchor<AppRoute>;
-
-pub type NavButton = RouterButton<AppRoute>;
+pub type Link = yew_router::components::Link<AppRoute>;
+pub type Redirect = yew_router::components::Redirect<AppRoute>;
