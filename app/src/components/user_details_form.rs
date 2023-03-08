@@ -8,7 +8,7 @@ use anyhow::{bail, Error, Result};
 use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
 use wasm_bindgen::JsCast;
-use yew::{prelude::*, services::ConsoleService};
+use yew::prelude::*;
 use yew_form_derive::Model;
 
 #[derive(PartialEq, Eq, Clone, Default)]
@@ -96,11 +96,8 @@ impl CommonComponent<UserDetailsForm> for UserDetailsForm {
                     .expect("Form field avatarInput should be present")
                     .dyn_into::<web_sys::HtmlInputElement>()
                     .expect("Should be an HtmlInputElement");
-                ConsoleService::log("Form update");
                 if let Some(files) = input.files() {
-                    ConsoleService::log("Got file list");
                     if files.length() > 0 {
-                        ConsoleService::log("Got a file");
                         let new_avatar = JsFile {
                             file: files.item(0),
                             contents: None,
@@ -339,11 +336,9 @@ impl Component for UserDetailsForm {
 
 impl UserDetailsForm {
     fn submit_user_update_form(&mut self) -> Result<bool> {
-        ConsoleService::log("Submit");
         if !self.form.validate() {
             bail!("Invalid inputs");
         }
-        ConsoleService::log("Valid inputs");
         if let JsFile {
             file: Some(_),
             contents: None,
@@ -351,7 +346,6 @@ impl UserDetailsForm {
         {
             bail!("Image file hasn't finished loading, try again");
         }
-        ConsoleService::log("File is correctly loaded");
         let base_user = &self.common.user;
         let mut user_input = update_user::UpdateUserInput {
             id: self.common.user.id.clone(),
@@ -379,11 +373,9 @@ impl UserDetailsForm {
         user_input.avatar = maybe_to_base64(&self.avatar)?;
         // Nothing changed.
         if user_input == default_user_input {
-            ConsoleService::log("No changes");
             return Ok(false);
         }
         let req = update_user::Variables { user: user_input };
-        ConsoleService::log("Querying");
         self.common.call_graphql::<UpdateUser, _>(
             req,
             Msg::UserUpdated,

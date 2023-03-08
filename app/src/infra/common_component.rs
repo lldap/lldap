@@ -23,13 +23,13 @@
 
 use crate::infra::api::HostService;
 use anyhow::{Error, Result};
+use gloo_console::{error, log};
 use graphql_client::GraphQLQuery;
 use yew::{
     prelude::*,
     services::{
         fetch::FetchTask,
         reader::{FileData, ReaderService, ReaderTask},
-        ConsoleService,
     },
 };
 use yewtil::NeqAssign;
@@ -100,7 +100,7 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         com.mut_common().error = None;
         match com.handle_msg(msg) {
             Err(e) => {
-                ConsoleService::error(&e.to_string());
+                error!(&e.to_string());
                 com.mut_common().error = Some(e);
                 com.mut_common().cancel_task();
                 true
@@ -178,7 +178,7 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
             error_message,
         )
         .map_err::<(), _>(|e| {
-            ConsoleService::log(&e.to_string());
+            log!(&e.to_string());
             self.error = Some(e);
         })
         .ok()

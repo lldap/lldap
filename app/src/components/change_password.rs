@@ -6,9 +6,10 @@ use crate::{
     },
 };
 use anyhow::{anyhow, bail, Context, Result};
+use gloo_console::error;
 use lldap_auth::*;
 use validator_derive::Validate;
-use yew::{prelude::*, services::ConsoleService};
+use yew::prelude::*;
 use yew_form::Form;
 use yew_form_derive::Model;
 use yew_router::{
@@ -114,10 +115,7 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                             |e| {
                                 // Common error, we want to print a full error to the console but only a
                                 // simple one to the user.
-                                ConsoleService::error(&format!(
-                                    "Invalid username or password: {}",
-                                    e
-                                ));
+                                error!(&format!("Invalid username or password: {}", e));
                                 anyhow!("Invalid username or password")
                             },
                         )?;

@@ -3,10 +3,10 @@ use crate::{
     infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{bail, Result};
+use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
 use yew::prelude::*;
-use yew::services::ConsoleService;
 use yew_form_derive::Model;
 use yew_router::{
     agent::{RouteAgentDispatcher, RouteRequest},
@@ -60,7 +60,7 @@ impl CommonComponent<CreateGroupForm> for CreateGroupForm {
                 Ok(true)
             }
             Msg::CreateGroupResponse(response) => {
-                ConsoleService::log(&format!(
+                log!(&format!(
                     "Created group '{}'",
                     &response?.create_group.display_name
                 ));
