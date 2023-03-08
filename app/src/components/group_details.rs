@@ -46,10 +46,11 @@ pub struct Props {
 }
 
 impl GroupDetails {
-    fn get_group_details(&mut self) {
+    fn get_group_details(&mut self, ctx: &Context<Self>) {
         self.common.call_graphql::<GetGroupDetails, _>(
+            ctx,
             get_group_details::Variables {
-                id: self.common.group_id,
+                id: ctx.props().group_id,
             },
             Msg::GroupDetailsResponse,
             "Error trying to fetch group details",
@@ -107,14 +108,15 @@ impl GroupDetails {
         }
     }
 
-    fn view_user_list(&self, g: &Group) -> Html {
+    fn view_user_list(&self, ctx: &Context<Self>, g: &Group) -> Html {
+        let link = ctx.link();
         let make_user_row = |user: &User| {
             let user_id = user.id.clone();
             let display_name = user.display_name.clone();
             html! {
               <tr>
                 <td>
-                  <Link route={AppRoute::UserDetails(user_id.clone())}>
+                  <Link to={AppRoute::UserDetails{user_id: user_id.clone()}}>
                     {user_id.clone()}
                   </Link>
                 </td>
@@ -123,8 +125,8 @@ impl GroupDetails {
                   <RemoveUserFromGroupComponent
                     username={user_id}
                     group_id={g.id}
-                    on_user_removed_from_group={self.common.callback(Msg::OnUserRemovedFromGroup)}
-                    on_error={self.common.callback(Msg::OnError)}/>
+                    on_user_removed_from_group={link.callback(Msg::OnUserRemovedFromGroup)}
+                    on_error={link.callback(Msg::OnError)}/>
                 </td>
               </tr>
             }
@@ -159,7 +161,8 @@ impl GroupDetails {
         }
     }
 
-    fn view_add_user_button(&self, g: &Group) -> Html {
+    fn view_add_user_button(&self, ctx: &Context<Self>, g: &Group) -> Html {
+        let link = ctx.link();
         let users: Vec<_> = g
             .users
             .iter()
@@ -172,14 +175,14 @@ impl GroupDetails {
             <AddGroupMemberComponent
                 group_id={g.id}
                 users={users}
-                on_error={self.common.callback(Msg::OnError)}
-                on_user_added_to_group={self.common.callback(Msg::OnUserAddedToGroup)}/>
+                on_error={link.callback(Msg::OnError)}
+                on_user_added_to_group={link.callback(Msg::OnUserAddedToGroup)}/>
         }
     }
 }
 
 impl CommonComponent<GroupDetails> for GroupDetails {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(&mut self, _: &Context<Self>, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::GroupDetailsResponse(response) => match response {
                 Ok(group) => self.group = Some(group.group),
@@ -215,24 +218,20 @@ impl Component for GroupDetails {
     type Message = Msg;
     type Properties = Props;
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         let mut table = Self {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             group: None,
         };
-        table.get_group_details();
+        table.get_group_details(ctx);
         table
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         match (&self.group, &self.common.error) {
             (None, None) => html! {{"Loading..."}},
             (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
@@ -240,8 +239,8 @@ impl Component for GroupDetails {
                 html! {
                     <div>
                       {self.view_details(u)}
-                      {self.view_user_list(u)}
-                      {self.view_add_user_button(u)}
+                      {self.view_user_list(ctx, u)}
+                      {self.view_add_user_button(ctx, u)}
                       {self.view_messages(error)}
                     </div>
                 }

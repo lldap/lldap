@@ -1,9 +1,6 @@
-use yew::{html::ChangeData, prelude::*};
-use yewtil::NeqAssign;
+use yew::prelude::*;
 
 pub struct Select {
-    link: ComponentLink<Self>,
-    props: SelectProps,
     node_ref: NodeRef,
 }
 
@@ -14,71 +11,57 @@ pub struct SelectProps {
 }
 
 pub enum SelectMsg {
-    OnSelectChange(ChangeData),
+    OnSelectChange,
 }
 
 impl Select {
-    fn get_nth_child_props(&self, nth: i32) -> Option<SelectOptionProps> {
+    fn get_nth_child_props(&self, ctx: &Context<Self>, nth: i32) -> Option<SelectOptionProps> {
         if nth == -1 {
             return None;
         }
-        self.props
+        ctx.props()
             .children
             .iter()
             .nth(nth as usize)
-            .map(|child| child.props)
+            .map(|child| (*child.props).clone())
     }
 
-    fn send_selection_update(&self) {
+    fn send_selection_update(&self, ctx: &Context<Self>) {
         let select_node = self.node_ref.cast::<web_sys::HtmlSelectElement>().unwrap();
-        self.props
+        ctx.props()
             .on_selection_change
-            .emit(self.get_nth_child_props(select_node.selected_index()))
+            .emit(self.get_nth_child_props(ctx, select_node.selected_index()))
     }
 }
 
 impl Component for Select {
     type Message = SelectMsg;
     type Properties = SelectProps;
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(_: &Context<Self>) -> Self {
         Self {
-            link,
-            props,
             node_ref: NodeRef::default(),
         }
     }
 
-    fn rendered(&mut self, _first_render: bool) {
-        self.send_selection_update();
+    fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {
+        self.send_selection_update(ctx);
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        let SelectMsg::OnSelectChange(data) = msg;
-        match data {
-            ChangeData::Select(_) => self.send_selection_update(),
-            _ => unreachable!(),
-        }
+    fn update(&mut self, ctx: &Context<Self>, _: Self::Message) -> bool {
+        self.send_selection_update(ctx);
         false
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.props.children.neq_assign(props.children)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
             <select class="form-select"
               ref={self.node_ref.clone()}
-              disabled={self.props.children.is_empty()}
-              onchange={self.link.callback(SelectMsg::OnSelectChange)}>
-            { self.props.children.clone() }
+              disabled={ctx.props().children.is_empty()}
+              onchange={ctx.link().callback(|_| SelectMsg::OnSelectChange)}>
+            { ctx.props().children.clone() }
             </select>
         }
     }
-}
-
-pub struct SelectOption {
-    props: SelectOptionProps,
 }
 
 #[derive(yew::Properties, Clone, PartialEq, Eq, Debug)]
@@ -87,27 +70,11 @@ pub struct SelectOptionProps {
     pub text: String,
 }
 
-impl Component for SelectOption {
-    type Message = ();
-    type Properties = SelectOptionProps;
-
-    fn create(props: Self::Properties, _: ComponentLink<Self>) -> Self {
-        Self { props }
-    }
-
-    fn update(&mut self, _: Self::Message) -> ShouldRender {
-        false
-    }
-
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.props.neq_assign(props)
-    }
-
-    fn view(&self) -> Html {
-        html! {
-          <option value={self.props.value.clone()}>
-            {&self.props.text}
-          </option>
-        }
+#[function_component(SelectOption)]
+pub fn select_option(props: &SelectOptionProps) -> Html {
+    html! {
+      <option value={props.value.clone()}>
+        {&props.text}
+      </option>
     }
 }
