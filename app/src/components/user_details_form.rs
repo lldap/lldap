@@ -5,15 +5,19 @@ use crate::{
     infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{bail, Error, Result};
+use gloo_file::{
+    callbacks::{read_as_bytes, FileReader},
+    File,
+};
 use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
-use wasm_bindgen::JsCast;
+use web_sys::{FileList, HtmlInputElement, InputEvent};
 use yew::prelude::*;
 use yew_form_derive::Model;
 
-#[derive(PartialEq, Eq, Clone, Default)]
+#[derive(Default)]
 struct JsFile {
-    file: Option<web_sys::File>,
+    file: Option<File>,
     contents: Option<Vec<u8>>,
 }
 
@@ -21,7 +25,7 @@ impl ToString for JsFile {
     fn to_string(&self) -> String {
         self.file
             .as_ref()
-            .map(web_sys::File::name)
+            .map(File::name)
             .unwrap_or_else(String::new)
     }
 }
@@ -64,17 +68,21 @@ pub struct UserDetailsForm {
     common: CommonComponentParts<Self>,
     form: yew_form::Form<UserModel>,
     avatar: JsFile,
+    reader: Option<FileReader>,
     /// True if we just successfully updated the user, to display a success message.
     just_updated: bool,
+    user: User,
 }
 
 pub enum Msg {
     /// A form field changed.
     Update,
+    /// A new file was selected.
+    FileSelected(File),
     /// The "Submit" button was clicked.
     SubmitClicked,
     /// A picked file finished loading.
-    FileLoaded(yew::services::reader::FileData),
+    FileLoaded(String, Result<Vec<u8>>),
     /// We got the response from the server about our update message.
     UserUpdated(Result<update_user::ResponseData>),
 }
@@ -86,50 +94,47 @@ pub struct Props {
 }
 
 impl CommonComponent<UserDetailsForm> for UserDetailsForm {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
-            Msg::Update => {
-                let window = web_sys::window().expect("no global `window` exists");
-                let document = window.document().expect("should have a document on window");
-                let input = document
-                    .get_element_by_id("avatarInput")
-                    .expect("Form field avatarInput should be present")
-                    .dyn_into::<web_sys::HtmlInputElement>()
-                    .expect("Should be an HtmlInputElement");
-                if let Some(files) = input.files() {
-                    if files.length() > 0 {
-                        let new_avatar = JsFile {
-                            file: files.item(0),
-                            contents: None,
-                        };
-                        if self.avatar.file.as_ref().map(|f| f.name())
-                            != new_avatar.file.as_ref().map(|f| f.name())
-                        {
-                            if let Some(ref file) = new_avatar.file {
-                                self.mut_common().read_file(file.clone(), Msg::FileLoaded)?;
-                            }
-                            self.avatar = new_avatar;
-                        }
-                    }
+            Msg::Update => Ok(true),
+            Msg::FileSelected(new_avatar) => {
+                if self.avatar.file.as_ref().map(|f| f.name()) != Some(new_avatar.name()) {
+                    let file_name = new_avatar.name();
+                    let link = ctx.link().clone();
+                    self.reader = Some(read_as_bytes(&new_avatar, move |res| {
+                        link.send_message(Msg::FileLoaded(
+                            file_name,
+                            res.map_err(|e| anyhow::anyhow!("{:#}", e)),
+                        ))
+                    }));
+                    self.avatar = JsFile {
+                        file: Some(new_avatar),
+                        contents: None,
+                    };
                 }
                 Ok(true)
             }
-            Msg::SubmitClicked => self.submit_user_update_form(),
+            Msg::SubmitClicked => self.submit_user_update_form(ctx),
             Msg::UserUpdated(response) => self.user_update_finished(response),
-            Msg::FileLoaded(data) => {
-                self.common.cancel_task();
+            Msg::FileLoaded(file_name, data) => {
                 if let Some(file) = &self.avatar.file {
-                    if file.name() == data.name {
-                        if !is_valid_jpeg(data.content.as_slice()) {
+                    if file.name() == file_name {
+                        let data = data?;
+                        if !is_valid_jpeg(data.as_slice()) {
                             // Clear the selection.
                             self.avatar = JsFile::default();
                             bail!("Chosen image is not a valid JPEG");
                         } else {
-                            self.avatar.contents = Some(data.content);
+                            self.avatar.contents = Some(data);
                             return Ok(true);
                         }
                     }
                 }
+                self.reader = None;
                 Ok(false)
             }
         }
@@ -144,38 +149,36 @@ impl Component for UserDetailsForm {
     type Message = Msg;
     type Properties = Props;
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         let model = UserModel {
-            email: props.user.email.clone(),
-            display_name: props.user.display_name.clone(),
-            first_name: props.user.first_name.clone(),
-            last_name: props.user.last_name.clone(),
+            email: ctx.props().user.email.clone(),
+            display_name: ctx.props().user.display_name.clone(),
+            first_name: ctx.props().user.first_name.clone(),
+            last_name: ctx.props().user.last_name.clone(),
         };
         Self {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             form: yew_form::Form::new(model),
             avatar: JsFile::default(),
             just_updated: false,
+            reader: None,
+            user: ctx.props().user.clone(),
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         self.just_updated = false;
-        CommonComponentParts::<Self>::update(self, msg)
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         type Field = yew_form::Field<UserModel>;
-        let link = &self.common;
+        let link = &ctx.link();
 
         let avatar_base64 = maybe_to_base64(&self.avatar).unwrap_or_default();
         let avatar_string = avatar_base64
             .as_deref()
-            .or(self.common.user.avatar.as_deref())
+            .or(self.user.avatar.as_deref())
             .unwrap_or("");
         html! {
           <div class="py-3">
@@ -186,7 +189,7 @@ impl Component for UserDetailsForm {
                   {"User ID: "}
                 </label>
                 <div class="col-8">
-                  <span id="userId" class="form-control-static"><i>{&self.common.user.id}</i></span>
+                  <span id="userId" class="form-control-static"><i>{&self.user.id}</i></span>
                 </div>
               </div>
               <div class="form-group row mb-3">
@@ -195,7 +198,7 @@ impl Component for UserDetailsForm {
                   {"Creation date: "}
                 </label>
                 <div class="col-8">
-                  <span id="creationDate" class="form-control-static">{&self.common.user.creation_date.naive_local().date()}</span>
+                  <span id="creationDate" class="form-control-static">{&self.user.creation_date.naive_local().date()}</span>
                 </div>
               </div>
               <div class="form-group row mb-3">
@@ -204,7 +207,7 @@ impl Component for UserDetailsForm {
                   {"UUID: "}
                 </label>
                 <div class="col-8">
-                  <span id="creationDate" class="form-control-static">{&self.common.user.uuid}</span>
+                  <span id="creationDate" class="form-control-static">{&self.user.uuid}</span>
                 </div>
               </div>
               <div class="form-group row mb-3">
@@ -294,7 +297,10 @@ impl Component for UserDetailsForm {
                         id="avatarInput"
                         type="file"
                         accept="image/jpeg"
-                        oninput={link.callback(|_| Msg::Update)} />
+                        oninput={link.callback(|e: InputEvent| {
+                            let input: HtmlInputElement = e.target_unchecked_into();
+                            Self::upload_files(input.files())
+                        })} />
                     </div>
                     <div class="col-4">
                       <img
@@ -335,7 +341,7 @@ impl Component for UserDetailsForm {
 }
 
 impl UserDetailsForm {
-    fn submit_user_update_form(&mut self) -> Result<bool> {
+    fn submit_user_update_form(&mut self, ctx: &Context<Self>) -> Result<bool> {
         if !self.form.validate() {
             bail!("Invalid inputs");
         }
@@ -346,9 +352,9 @@ impl UserDetailsForm {
         {
             bail!("Image file hasn't finished loading, try again");
         }
-        let base_user = &self.common.user;
+        let base_user = &self.user;
         let mut user_input = update_user::UpdateUserInput {
-            id: self.common.user.id.clone(),
+            id: self.user.id.clone(),
             email: None,
             displayName: None,
             firstName: None,
@@ -377,6 +383,7 @@ impl UserDetailsForm {
         }
         let req = update_user::Variables { user: user_input };
         self.common.call_graphql::<UpdateUser, _>(
+            ctx,
             req,
             Msg::UserUpdated,
             "Error trying to update user",
@@ -385,22 +392,29 @@ impl UserDetailsForm {
     }
 
     fn user_update_finished(&mut self, r: Result<update_user::ResponseData>) -> Result<bool> {
-        self.common.cancel_task();
-        match r {
-            Err(e) => return Err(e),
-            Ok(_) => {
-                let model = self.form.model();
-                self.common.user.email = model.email;
-                self.common.user.display_name = model.display_name;
-                self.common.user.first_name = model.first_name;
-                self.common.user.last_name = model.last_name;
-                if let Some(avatar) = maybe_to_base64(&self.avatar)? {
-                    self.common.user.avatar = Some(avatar);
-                }
-                self.just_updated = true;
-            }
-        };
+        r?;
+        let model = self.form.model();
+        self.user.email = model.email;
+        self.user.display_name = model.display_name;
+        self.user.first_name = model.first_name;
+        self.user.last_name = model.last_name;
+        if let Some(avatar) = maybe_to_base64(&self.avatar)? {
+            self.user.avatar = Some(avatar);
+        }
+        self.just_updated = true;
         Ok(true)
+    }
+
+    fn upload_files(files: Option<FileList>) -> Msg {
+        if let Some(files) = files {
+            if files.length() > 0 {
+                Msg::FileSelected(File::from(files.item(0).unwrap()))
+            } else {
+                Msg::Update
+            }
+        } else {
+            Msg::Update
+        }
     }
 }
 

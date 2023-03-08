@@ -21,16 +21,20 @@ pub enum Msg {
 }
 
 impl CommonComponent<LogoutButton> for LogoutButton {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
             Msg::LogoutRequested => {
                 self.common
-                    .call_backend(HostService::logout, (), Msg::LogoutCompleted)?;
+                    .call_backend(ctx, HostService::logout(), Msg::LogoutCompleted);
             }
             Msg::LogoutCompleted(res) => {
                 res?;
                 delete_cookie("user_id")?;
-                self.common.on_logged_out.emit(());
+                ctx.props().on_logged_out.emit(());
             }
         }
         Ok(false)
@@ -45,22 +49,18 @@ impl Component for LogoutButton {
     type Message = Msg;
     type Properties = Props;
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(_: &Context<Self>) -> Self {
         LogoutButton {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
-        let link = &self.common;
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = &ctx.link();
         html! {
             <button
               class="dropdown-item"

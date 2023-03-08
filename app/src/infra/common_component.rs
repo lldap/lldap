@@ -21,88 +21,62 @@
 //! [`CommonComponentParts::update`]. This will in turn call [`CommonComponent::handle_msg`] and
 //! take care of error and task handling.
 
+use std::{
+    future::Future,
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
+
 use crate::infra::api::HostService;
 use anyhow::{Error, Result};
-use gloo_console::{error, log};
+use gloo_console::error;
 use graphql_client::GraphQLQuery;
-use yew::{
-    prelude::*,
-    services::{
-        fetch::FetchTask,
-        reader::{FileData, ReaderService, ReaderTask},
-    },
-};
-use yewtil::NeqAssign;
+use yew::prelude::*;
 
 /// Trait required for common components.
 pub trait CommonComponent<C: Component + CommonComponent<C>>: Component {
     /// Handle the incoming message. If an error is returned here, any running task will be
     /// cancelled, the error will be written to the [`CommonComponentParts::error`] and the
     /// component will be refreshed.
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool>;
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool>;
     /// Get a mutable reference to the inner component parts, necessary for the CRTP.
     fn mut_common(&mut self) -> &mut CommonComponentParts<C>;
-}
-
-enum AnyTask {
-    None,
-    FetchTask(FetchTask),
-    ReaderTask(ReaderTask),
-}
-
-impl AnyTask {
-    fn is_some(&self) -> bool {
-        !matches!(self, AnyTask::None)
-    }
-}
-
-impl From<Option<FetchTask>> for AnyTask {
-    fn from(task: Option<FetchTask>) -> Self {
-        match task {
-            Some(t) => AnyTask::FetchTask(t),
-            None => AnyTask::None,
-        }
-    }
 }
 
 /// Structure that contains the common parts needed by most components.
 /// The fields of [`props`] are directly accessible through a `Deref` implementation.
 pub struct CommonComponentParts<C: CommonComponent<C>> {
-    link: ComponentLink<C>,
-    pub props: <C as Component>::Properties,
     pub error: Option<Error>,
-    task: AnyTask,
+    is_task_running: Arc<Mutex<bool>>,
+    _phantom: PhantomData<C>,
 }
 
 impl<C: CommonComponent<C>> CommonComponentParts<C> {
+    pub fn create() -> Self {
+        CommonComponentParts {
+            error: None,
+            is_task_running: Arc::new(Mutex::new(false)),
+            _phantom: PhantomData::<C>,
+        }
+    }
     /// Whether there is a currently running task in the background.
     pub fn is_task_running(&self) -> bool {
-        self.task.is_some()
-    }
-
-    /// Cancel any background task.
-    pub fn cancel_task(&mut self) {
-        self.task = AnyTask::None;
-    }
-
-    pub fn create(props: <C as Component>::Properties, link: ComponentLink<C>) -> Self {
-        Self {
-            link,
-            props,
-            error: None,
-            task: AnyTask::None,
-        }
+        *self.is_task_running.lock().unwrap()
     }
 
     /// This should be called from the [`yew::prelude::Component::update`]: it will in turn call
     /// [`CommonComponent::handle_msg`] and handle any resulting error.
-    pub fn update(com: &mut C, msg: <C as Component>::Message) -> ShouldRender {
+    pub fn update(com: &mut C, ctx: &Context<C>, msg: <C as Component>::Message) -> bool {
         com.mut_common().error = None;
-        match com.handle_msg(msg) {
+        match com.handle_msg(ctx, msg) {
             Err(e) => {
                 error!(&e.to_string());
                 com.mut_common().error = Some(e);
-                com.mut_common().cancel_task();
+                assert!(!*com.mut_common().is_task_running.lock().unwrap());
                 true
             }
             Ok(b) => b,
@@ -112,10 +86,11 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
     /// Same as above, but the resulting error is instead passed to the reporting function.
     pub fn update_and_report_error(
         com: &mut C,
+        ctx: &Context<C>,
         msg: <C as Component>::Message,
         report_fn: Callback<Error>,
-    ) -> ShouldRender {
-        let should_render = Self::update(com, msg);
+    ) -> bool {
+        let should_render = Self::update(com, ctx, msg);
         com.mut_common()
             .error
             .take()
@@ -126,38 +101,24 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
             .unwrap_or(should_render)
     }
 
-    /// This can be called from [`yew::prelude::Component::update`]: it will check if the
-    /// properties have changed and return whether the component should update.
-    pub fn change(&mut self, props: <C as Component>::Properties) -> ShouldRender
-    where
-        <C as yew::Component>::Properties: std::cmp::PartialEq,
-    {
-        self.props.neq_assign(props)
-    }
-
-    /// Create a callback from the link.
-    pub fn callback<F, IN, M>(&self, function: F) -> Callback<IN>
-    where
-        M: Into<C::Message>,
-        F: Fn(IN) -> M + 'static,
-    {
-        self.link.callback(function)
-    }
-
     /// Call `method` from the backend with the given `request`, and pass the `callback` for the
     /// result. Returns whether _starting the call_ failed.
-    pub fn call_backend<M, Req, Cb, Resp>(
-        &mut self,
-        method: M,
-        req: Req,
-        callback: Cb,
-    ) -> Result<()>
+    pub fn call_backend<Fut, Cb, Resp>(&mut self, ctx: &Context<C>, fut: Fut, callback: Cb)
     where
-        M: Fn(Req, Callback<Resp>) -> Result<FetchTask>,
+        Fut: Future<Output = Resp> + 'static,
         Cb: FnOnce(Resp) -> <C as Component>::Message + 'static,
     {
-        self.task = AnyTask::FetchTask(method(req, self.link.callback_once(callback))?);
-        Ok(())
+        {
+            let mut running = self.is_task_running.lock().unwrap();
+            assert!(!*running);
+            *running = true;
+        }
+        let is_task_running = self.is_task_running.clone();
+        ctx.link().send_future(async move {
+            let res = fut.await;
+            *is_task_running.lock().unwrap() = false;
+            callback(res)
+        });
     }
 
     /// Call the backend with a GraphQL query.
@@ -165,6 +126,7 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
     /// `EnumCallback` should usually be left as `_`.
     pub fn call_graphql<QueryType, EnumCallback>(
         &mut self,
+        ctx: &Context<C>,
         variables: QueryType::Variables,
         enum_callback: EnumCallback,
         error_message: &'static str,
@@ -172,19 +134,20 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         QueryType: GraphQLQuery + 'static,
         EnumCallback: Fn(Result<QueryType::ResponseData>) -> <C as Component>::Message + 'static,
     {
-        self.task = HostService::graphql_query::<QueryType>(
-            variables,
-            self.link.callback(enum_callback),
-            error_message,
-        )
-        .map_err::<(), _>(|e| {
-            log!(&e.to_string());
-            self.error = Some(e);
-        })
-        .ok()
-        .into();
+        {
+            let mut running = self.is_task_running.lock().unwrap();
+            assert!(!*running);
+            *running = true;
+        }
+        let is_task_running = self.is_task_running.clone();
+        ctx.link().send_future(async move {
+            let res = HostService::graphql_query::<QueryType>(variables, error_message).await;
+            *is_task_running.lock().unwrap() = false;
+            enum_callback(res)
+        });
     }
 
+    /*
     pub(crate) fn read_file<Cb>(&mut self, file: web_sys::File, callback: Cb) -> Result<()>
     where
         Cb: FnOnce(FileData) -> <C as Component>::Message + 'static,
@@ -195,18 +158,5 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         )?);
         Ok(())
     }
-}
-
-impl<C: Component + CommonComponent<C>> std::ops::Deref for CommonComponentParts<C> {
-    type Target = <C as Component>::Properties;
-
-    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
-        &self.props
-    }
-}
-
-impl<C: Component + CommonComponent<C>> std::ops::DerefMut for CommonComponentParts<C> {
-    fn deref_mut(&mut self) -> &mut <Self as std::ops::Deref>::Target {
-        &mut self.props
-    }
+    */
 }

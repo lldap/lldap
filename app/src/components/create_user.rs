@@ -5,17 +5,14 @@ use crate::{
         common_component::{CommonComponent, CommonComponentParts},
     },
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use lldap_auth::{opaque, registration};
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form_derive::Model;
-use yew_router::{
-    agent::{RouteAgentDispatcher, RouteRequest},
-    route::Route,
-};
+use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -28,7 +25,6 @@ pub struct CreateUser;
 
 pub struct CreateUserForm {
     common: CommonComponentParts<Self>,
-    route_dispatcher: RouteAgentDispatcher,
     form: yew_form::Form<CreateUserModel>,
 }
 
@@ -73,7 +69,11 @@ pub enum Msg {
 }
 
 impl CommonComponent<CreateUserForm> for CreateUserForm {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
             Msg::SubmitForm => {
@@ -93,6 +93,7 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                     },
                 };
                 self.common.call_graphql::<CreateUser, _>(
+                    ctx,
                     req,
                     Msg::CreateUserResponse,
                     "Error trying to create user",
@@ -122,12 +123,11 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                         registration_start_request: message,
                     };
                     self.common
-                        .call_backend(HostService::register_start, req, move |r| {
+                        .call_backend(ctx, HostService::register_start(req), move |r| {
                             Msg::RegistrationStartResponse((state, r))
-                        })
-                        .context("Error trying to create user")?;
+                        });
                 } else {
-                    self.update(Msg::SuccessfulCreation);
+                    self.update(ctx, Msg::SuccessfulCreation);
                 }
                 Ok(false)
             }
@@ -143,22 +143,19 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                     server_data: response.server_data,
                     registration_upload: registration_upload.message,
                 };
-                self.common
-                    .call_backend(
-                        HostService::register_finish,
-                        req,
-                        Msg::RegistrationFinishResponse,
-                    )
-                    .context("Error trying to register user")?;
+                self.common.call_backend(
+                    ctx,
+                    HostService::register_finish(req),
+                    Msg::RegistrationFinishResponse,
+                );
                 Ok(false)
             }
             Msg::RegistrationFinishResponse(response) => {
                 response?;
-                self.handle_msg(Msg::SuccessfulCreation)
+                self.handle_msg(ctx, Msg::SuccessfulCreation)
             }
             Msg::SuccessfulCreation => {
-                self.route_dispatcher
-                    .send(RouteRequest::ChangeRoute(Route::from(AppRoute::ListUsers)));
+                ctx.link().history().unwrap().push(AppRoute::ListUsers);
                 Ok(true)
             }
         }
@@ -173,24 +170,19 @@ impl Component for CreateUserForm {
     type Message = Msg;
     type Properties = ();
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(_: &Context<Self>) -> Self {
         Self {
-            common: CommonComponentParts::<Self>::create(props, link),
-            route_dispatcher: RouteAgentDispatcher::new(),
+            common: CommonComponentParts::<Self>::create(),
             form: yew_form::Form::<CreateUserModel>::new(CreateUserModel::default()),
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
-        let link = &self.common;
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = &ctx.link();
         type Field = yew_form::Field<CreateUserModel>;
         html! {
           <div class="row justify-content-center">
