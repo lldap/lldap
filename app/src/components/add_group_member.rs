@@ -149,18 +149,19 @@ impl Component for AddGroupMemberComponent {
     }
 
     fn view(&self) -> Html {
+        let link = &self.common;
         if let Some(user_list) = &self.user_list {
             let to_add_user_list = self.get_selectable_user_list(user_list);
             #[allow(unused_braces)]
             let make_select_option = |user: User| {
                 html_nested! {
-                    <SelectOption value=user.id.clone() text=user.display_name.clone() key=user.id />
+                    <SelectOption value={user.id.clone()} text={user.display_name.clone()} key={user.id} />
                 }
             };
             html! {
             <div class="row">
               <div class="col-sm-3">
-                <Select on_selection_change=self.common.callback(Msg::SelectionChanged)>
+                <Select on_selection_change={link.callback(Msg::SelectionChanged)}>
                   {
                     to_add_user_list
                         .into_iter()
@@ -172,8 +173,8 @@ impl Component for AddGroupMemberComponent {
               <div class="col-3">
                 <button
                   class="btn btn-secondary"
-                  disabled=self.selected_user.is_none() || self.common.is_task_running()
-                  onclick=self.common.callback(|_| Msg::SubmitAddMember)>
+                  disabled={self.selected_user.is_none() || self.common.is_task_running()}
+                  onclick={link.callback(|_| Msg::SubmitAddMember)}>
                    <i class="bi-person-plus me-2"></i>
                   {"Add to group"}
                 </button>

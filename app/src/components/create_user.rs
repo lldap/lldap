@@ -190,6 +190,7 @@ impl Component for CreateUserForm {
     }
 
     fn view(&self) -> Html {
+        let link = &self.common;
         type Field = yew_form::Field<CreateUserModel>;
         html! {
           <div class="row justify-content-center">
@@ -206,13 +207,13 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     field_name="username"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="username"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("username")}
                   </div>
@@ -227,14 +228,14 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     input_type="email"
                     field_name="email"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="email"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("email")}
                   </div>
@@ -247,13 +248,13 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     autocomplete="name"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     field_name="display_name"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("display_name")}
                   </div>
@@ -266,13 +267,13 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     autocomplete="given-name"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     field_name="first_name"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("first_name")}
                   </div>
@@ -285,13 +286,13 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     autocomplete="family-name"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     field_name="last_name"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("last_name")}
                   </div>
@@ -304,14 +305,14 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     input_type="password"
                     field_name="password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("password")}
                   </div>
@@ -324,14 +325,14 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     input_type="password"
                     field_name="confirm_password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("confirm_password")}
                   </div>
@@ -340,9 +341,9 @@ impl Component for CreateUserForm {
               <div class="form-group row justify-content-center">
                 <button
                   class="btn btn-primary col-auto col-form-label mt-4"
-                  disabled=self.common.is_task_running()
+                  disabled={self.common.is_task_running()}
                   type="submit"
-                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
+                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})}>
                   <i class="bi-save me-2"></i>
                   {"Submit"}
                 </button>

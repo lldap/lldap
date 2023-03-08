@@ -106,12 +106,13 @@ impl Component for DeleteUser {
     }
 
     fn view(&self) -> Html {
+        let link = &self.common;
         html! {
           <>
           <button
             class="btn btn-danger"
-            disabled=self.common.is_task_running()
-            onclick=self.common.callback(|_| Msg::ClickedDeleteUser)>
+            disabled={self.common.is_task_running()}
+            onclick={link.callback(|_| Msg::ClickedDeleteUser)}>
             <i class="bi-x-circle-fill" aria-label="Delete user" />
           </button>
           {self.show_modal()}
@@ -122,15 +123,16 @@ impl Component for DeleteUser {
 
 impl DeleteUser {
     fn show_modal(&self) -> Html {
+        let link = &self.common;
         html! {
           <div
             class="modal fade"
-            id="deleteUserModal".to_string() + &self.common.username
+            id={"deleteUserModal".to_string() + &self.common.username}
             tabindex="-1"
             //role="dialog"
             aria-labelledby="deleteUserModalLabel"
             aria-hidden="true"
-            ref=self.node_ref.clone()>
+            ref={self.node_ref.clone()}>
             <div class="modal-dialog" /*role="document"*/>
               <div class="modal-content">
                 <div class="modal-header">
@@ -139,7 +141,7 @@ impl DeleteUser {
                     type="button"
                     class="btn-close"
                     aria-label="Close"
-                    onclick=self.common.callback(|_| Msg::DismissModal) />
+                    onclick={link.callback(|_| Msg::DismissModal)} />
                 </div>
                 <div class="modal-body">
                 <span>
@@ -151,13 +153,13 @@ impl DeleteUser {
                   <button
                     type="button"
                     class="btn btn-secondary"
-                    onclick=self.common.callback(|_| Msg::DismissModal)>
+                    onclick={link.callback(|_| Msg::DismissModal)}>
                     <i class="bi-x-circle me-2"></i>
                     {"Cancel"}
                   </button>
                   <button
                     type="button"
-                    onclick=self.common.callback(|_| Msg::ConfirmDeleteUser)
+                    onclick={link.callback(|_| Msg::ConfirmDeleteUser)}
                     class="btn btn-danger">
                     <i class="bi-check-circle me-2"></i>
                     {"Yes, I'm sure"}

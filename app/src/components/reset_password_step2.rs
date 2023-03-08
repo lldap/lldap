@@ -150,6 +150,7 @@ impl Component for ResetPasswordStep2Form {
     }
 
     fn view(&self) -> Html {
+        let link = &self.common;
         match (&self.username, &self.common.error) {
             (None, None) => {
                 return html! {
@@ -164,8 +165,8 @@ impl Component for ResetPasswordStep2Form {
                     </div>
                     <NavButton
                       classes="btn-link btn"
-                      disabled=self.common.is_task_running()
-                      route=AppRoute::Login>
+                      disabled={self.common.is_task_running()}
+                      route={AppRoute::Login}>
                       {"Back"}
                     </NavButton>
                   </>
@@ -186,14 +187,14 @@ impl Component for ResetPasswordStep2Form {
                 </label>
                 <div class="col-sm-10">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     field_name="password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
                     input_type="password"
-                    oninput=self.common.callback(|_| Msg::FormUpdate) />
+                    oninput={link.callback(|_| Msg::FormUpdate)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("password")}
                   </div>
@@ -206,14 +207,14 @@ impl Component for ResetPasswordStep2Form {
                 </label>
                 <div class="col-sm-10">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     field_name="confirm_password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
                     input_type="password"
-                    oninput=self.common.callback(|_| Msg::FormUpdate) />
+                    oninput={link.callback(|_| Msg::FormUpdate)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("confirm_password")}
                   </div>
@@ -223,8 +224,8 @@ impl Component for ResetPasswordStep2Form {
                 <button
                   class="btn btn-primary col-sm-1 col-form-label"
                   type="submit"
-                  disabled=self.common.is_task_running()
-                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                  disabled={self.common.is_task_running()}
+                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
                   {"Submit"}
                 </button>
               </div>

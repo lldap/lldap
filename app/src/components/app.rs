@@ -128,7 +128,7 @@ impl Component for App {
               <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <div class="py-3" style="max-width: 1000px">
                   <Router<AppRoute>
-                    render = Router::render(move |s| Self::dispatch_route(s, &link, is_admin, password_reset_enabled))
+                    render={Router::render(move |s| Self::dispatch_route(s, &link, is_admin, password_reset_enabled))}
                   />
                 </div>
               </div>
@@ -198,7 +198,7 @@ impl App {
     ) -> Html {
         match switch {
             AppRoute::Login => html! {
-                <LoginForm on_logged_in=link.callback(Msg::Login) password_reset_enabled=password_reset_enabled.unwrap_or(false)/>
+                <LoginForm on_logged_in={link.callback(Msg::Login)} password_reset_enabled={password_reset_enabled.unwrap_or(false)}/>
             },
             AppRoute::CreateUser => html! {
                 <CreateUserForm/>
@@ -206,7 +206,7 @@ impl App {
             AppRoute::Index | AppRoute::ListUsers => html! {
                 <div>
                   <UserTable />
-                  <NavButton classes="btn btn-primary" route=AppRoute::CreateUser>
+                  <NavButton classes="btn btn-primary" route={AppRoute::CreateUser}>
                     <i class="bi-person-plus me-2"></i>
                     {"Create a user"}
                   </NavButton>
@@ -218,20 +218,20 @@ impl App {
             AppRoute::ListGroups => html! {
                 <div>
                   <GroupTable />
-                  <NavButton classes="btn btn-primary" route=AppRoute::CreateGroup>
+                  <NavButton classes="btn btn-primary" route={AppRoute::CreateGroup}>
                     <i class="bi-plus-circle me-2"></i>
                     {"Create a group"}
                   </NavButton>
                 </div>
             },
             AppRoute::GroupDetails(group_id) => html! {
-                <GroupDetails group_id=group_id />
+                <GroupDetails group_id={group_id} />
             },
             AppRoute::UserDetails(username) => html! {
-                <UserDetails username=username is_admin=is_admin />
+                <UserDetails username={username} is_admin={is_admin} />
             },
             AppRoute::ChangePassword(username) => html! {
-                <ChangePasswordForm username=username is_admin=is_admin />
+                <ChangePasswordForm username={username} is_admin={is_admin} />
             },
             AppRoute::StartResetPassword => match password_reset_enabled {
                 Some(true) => html! { <ResetPasswordStep1Form /> },
@@ -242,7 +242,7 @@ impl App {
                 None => html! {},
             },
             AppRoute::FinishResetPassword(token) => match password_reset_enabled {
-                Some(true) => html! { <ResetPasswordStep2Form token=token /> },
+                Some(true) => html! { <ResetPasswordStep2Form token={token} /> },
                 Some(false) => {
                     App::dispatch_route(AppRoute::Login, link, is_admin, password_reset_enabled)
                 }
@@ -252,6 +252,7 @@ impl App {
     }
 
     fn view_banner(&self) -> Html {
+        let link = &self.link;
         html! {
           <header class="p-2 mb-3 border-bottom">
             <div class="container">
@@ -266,7 +267,7 @@ impl App {
                       <li>
                         <Link
                           classes="nav-link px-2 link-dark h6"
-                          route=AppRoute::ListUsers>
+                          route={AppRoute::ListUsers}>
                           <i class="bi-people me-2"></i>
                           {"Users"}
                         </Link>
@@ -274,7 +275,7 @@ impl App {
                       <li>
                         <Link
                           classes="nav-link px-2 link-dark h6"
-                          route=AppRoute::ListGroups>
+                          route={AppRoute::ListGroups}>
                           <i class="bi-collection me-2"></i>
                           {"Groups"}
                         </Link>
@@ -312,13 +313,13 @@ impl App {
                           <li>
                             <Link
                               classes="dropdown-item"
-                              route=AppRoute::UserDetails(user_id.clone())>
+                              route={AppRoute::UserDetails(user_id.clone())}>
                               {"View details"}
                             </Link>
                           </li>
                           <li><hr class="dropdown-divider" /></li>
                           <li>
-                            <LogoutButton on_logged_out=self.link.callback(|_| Msg::Logout) />
+                            <LogoutButton on_logged_out={link.callback(|_| Msg::Logout)} />
                           </li>
                         </ul>
                       </div>

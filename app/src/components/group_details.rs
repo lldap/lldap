@@ -114,17 +114,17 @@ impl GroupDetails {
             html! {
               <tr>
                 <td>
-                  <Link route=AppRoute::UserDetails(user_id.clone())>
+                  <Link route={AppRoute::UserDetails(user_id.clone())}>
                     {user_id.clone()}
                   </Link>
                 </td>
                 <td>{display_name}</td>
                 <td>
                   <RemoveUserFromGroupComponent
-                    username=user_id
-                    group_id=g.id
-                    on_user_removed_from_group=self.common.callback(Msg::OnUserRemovedFromGroup)
-                    on_error=self.common.callback(Msg::OnError)/>
+                    username={user_id}
+                    group_id={g.id}
+                    on_user_removed_from_group={self.common.callback(Msg::OnUserRemovedFromGroup)}
+                    on_error={self.common.callback(Msg::OnError)}/>
                 </td>
               </tr>
             }
@@ -170,10 +170,10 @@ impl GroupDetails {
             .collect();
         html! {
             <AddGroupMemberComponent
-                group_id=g.id
-                users=users
-                on_error=self.common.callback(Msg::OnError)
-                on_user_added_to_group=self.common.callback(Msg::OnUserAddedToGroup)/>
+                group_id={g.id}
+                users={users}
+                on_error={self.common.callback(Msg::OnError)}
+                on_user_added_to_group={self.common.callback(Msg::OnUserAddedToGroup)}/>
         }
     }
 }

@@ -162,18 +162,19 @@ impl Component for AddUserToGroupComponent {
     }
 
     fn view(&self) -> Html {
+        let link = &self.common;
         if let Some(group_list) = &self.group_list {
             let to_add_group_list = self.get_selectable_group_list(group_list);
             #[allow(unused_braces)]
             let make_select_option = |group: Group| {
                 html_nested! {
-                    <SelectOption value=group.id.to_string() text=group.display_name key=group.id />
+                    <SelectOption value={group.id.to_string()} text={group.display_name} key={group.id} />
                 }
             };
             html! {
             <div class="row">
               <div class="col-sm-3">
-                <Select on_selection_change=self.common.callback(Msg::SelectionChanged)>
+                <Select on_selection_change={link.callback(Msg::SelectionChanged)}>
                   {
                     to_add_group_list
                         .into_iter()
@@ -185,8 +186,8 @@ impl Component for AddUserToGroupComponent {
               <div class="col-sm-3">
                 <button
                   class="btn btn-secondary"
-                  disabled=self.selected_group.is_none() || self.common.is_task_running()
-                  onclick=self.common.callback(|_| Msg::SubmitAddGroup)>
+                  disabled={self.selected_group.is_none() || self.common.is_task_running()}
+                  onclick={link.callback(|_| Msg::SubmitAddGroup)}>
                   <i class="bi-person-plus me-2"></i>
                   {"Add to group"}
                 </button>
