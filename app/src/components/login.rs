@@ -6,9 +6,10 @@ use crate::{
     },
 };
 use anyhow::{anyhow, bail, Context, Result};
+use gloo_console::{debug, error};
 use lldap_auth::*;
 use validator_derive::Validate;
-use yew::{prelude::*, services::ConsoleService};
+use yew::prelude::*;
 use yew_form::Form;
 use yew_form_derive::Model;
 
@@ -77,7 +78,7 @@ impl CommonComponent<LoginForm> for LoginForm {
                         Err(e) => {
                             // Common error, we want to print a full error to the console but only a
                             // simple one to the user.
-                            ConsoleService::error(&format!("Invalid username or password: {}", e));
+                            error!(&format!("Invalid username or password: {}", e));
                             self.common.error = Some(anyhow!("Invalid username or password"));
                             self.common.cancel_task();
                             return Ok(true);
@@ -132,7 +133,7 @@ impl Component for LoginForm {
             app.common
                 .call_backend(HostService::refresh, (), Msg::AuthenticationRefreshResponse)
         {
-            ConsoleService::debug(&format!("Could not refresh auth: {}", e));
+            debug!(&format!("Could not refresh auth: {}", e));
             app.refreshing = false;
         }
         app

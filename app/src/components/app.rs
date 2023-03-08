@@ -16,10 +16,8 @@ use crate::{
     infra::{api::HostService, cookies::get_cookie},
 };
 
-use yew::{
-    prelude::*,
-    services::{fetch::FetchTask, ConsoleService},
-};
+use gloo_console::error;
+use yew::{prelude::*, services::fetch::FetchTask};
 use yew_router::{
     agent::{RouteAgentDispatcher, RouteRequest},
     route::Route,
@@ -51,14 +49,14 @@ impl Component for App {
             link,
             user_info: get_cookie("user_id")
                 .unwrap_or_else(|e| {
-                    ConsoleService::error(&e.to_string());
+                    error!(&e.to_string());
                     None
                 })
                 .and_then(|u| {
                     get_cookie("is_admin")
                         .map(|so| so.map(|s| (u, s == "true")))
                         .unwrap_or_else(|e| {
-                            ConsoleService::error(&e.to_string());
+                            error!(&e.to_string());
                             None
                         })
                 }),
@@ -105,7 +103,7 @@ impl Component for App {
             Msg::PasswordResetProbeFinished(Err(err)) => {
                 self.task = None;
                 self.password_reset_enabled = Some(false);
-                ConsoleService::error(&format!(
+                error!(&format!(
                     "Could not probe for password reset support: {err:#}"
                 ));
             }

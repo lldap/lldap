@@ -6,11 +6,11 @@ use crate::{
     },
 };
 use anyhow::{bail, Context, Result};
+use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use lldap_auth::{opaque, registration};
 use validator_derive::Validate;
 use yew::prelude::*;
-use yew::services::ConsoleService;
 use yew_form_derive::Model;
 use yew_router::{
     agent::{RouteAgentDispatcher, RouteRequest},
@@ -102,7 +102,7 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
             Msg::CreateUserResponse(r) => {
                 match r {
                     Err(e) => return Err(e),
-                    Ok(r) => ConsoleService::log(&format!(
+                    Ok(r) => log!(&format!(
                         "Created user '{}' at '{}'",
                         &r.create_user.id, &r.create_user.creation_date
                     )),
