@@ -75,16 +75,16 @@
 #ldap_user_pass = "REPLACE_WITH_PASSWORD"
 
 ## Database URL.
-## This encodes the type of database (SQlite, Mysql and so
-## on), the path, the user, password, and sometimes the mode (when
+## This encodes the type of database (SQlite, MySQL, or PostgreSQL)
+## , the path, the user, password, and sometimes the mode (when
 ## relevant).
-## Note: Currently, only SQlite is supported. SQlite should come with
-## "?mode=rwc" to create the DB if not present.
+## Note: SQlite should come with "?mode=rwc" to create the DB
+## if not present.
 ## Example URLs:
 ##  - "postgres://postgres-user:password@postgres-server/my-database"
 ##  - "mysql://mysql-user:password@mysql-server/my-database"
 ##
-## This can be overridden with the DATABASE_URL env variable.
+## This can be overridden with the LLDAP_DATABASE_URL env variable.
 database_url = "sqlite:///data/users.db?mode=rwc"
 
 ## Private key file.
