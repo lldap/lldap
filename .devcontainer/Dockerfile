@@ -13,7 +13,8 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
 RUN apt update && \
-    apt install -y --no-install-recommends libssl-dev musl-dev make perl curl gzip
+    apt install -y --no-install-recommends libssl-dev musl-dev make perl curl gzip && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN RUSTFLAGS=-Ctarget-feature=-crt-static cargo install wasm-pack \
     && rustup target add wasm32-unknown-unknown
