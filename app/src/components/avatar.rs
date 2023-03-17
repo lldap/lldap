@@ -7,12 +7,10 @@ use yew::prelude::*;
 #[graphql(
     schema_path = "../schema.graphql",
     query_path = "queries/get_user_avatar.graphql",
-    response_derives = "Debug, Hash, PartialEq, Eq, Clone",
+    response_derives = "Debug",
     custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct GetUserAvatar;
-
-pub type User = get_user_avatar::GetUserAvatarUser;
 
 pub struct Avatar {
     common: CommonComponentParts<Self>,

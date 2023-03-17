@@ -88,7 +88,6 @@ impl Component for App {
             self.route_dispatcher
                 .send(RouteRequest::ReplaceRoute(Route::from(AppRoute::Login)));
         }
-        ConsoleService::log("update app");
         true
     }
 
