@@ -22,8 +22,8 @@ if [[ ! -r "$CONFIG_FILE" ]]; then
 fi
 
 echo "> Setup permissions.."
-find /app \! -user "$UID" -exec chown "$UID:$GID" '{}' +
-find /data \! -user "$UID" -exec chown "$UID:$GID" '{}' +
+find /app \! -user "$UID" -exec chown "$UID:$GID" '{}' + || true
+find /data \! -user "$UID" -exec chown "$UID:$GID" '{}' +  || true
 
 
 echo "> Starting lldap.."
