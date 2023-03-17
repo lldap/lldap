@@ -27,6 +27,6 @@ connectors:
         baseDN: ou=groups,dc=example,dc=com
         filter: "(objectClass=groupOfUniqueNames)"
         userMatchers:
-          - userAttr: uid
+          - userAttr: DN
             groupAttr: member
-        nameAttr: displayName
+        nameAttr: cn
