@@ -16,17 +16,12 @@ use yew_router::{
     route::Route,
 };
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Default)]
 enum OpaqueData {
+    #[default]
     None,
     Login(opaque::client::login::ClientLogin),
     Registration(opaque::client::registration::ClientRegistration),
-}
-
-impl Default for OpaqueData {
-    fn default() -> Self {
-        OpaqueData::None
-    }
 }
 
 impl OpaqueData {
