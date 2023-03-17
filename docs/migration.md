@@ -2,6 +2,8 @@
 
 Existing servers can migrate from one database backend to another. This page includes guidance for migrating from sqlite - similar concepts apply when migrating from databases of other types.
 
+NOTE: [pgloader](https://github.com/dimitri/pgloader) is a tool that can easily migrate to postgres from other databases. Consider it if your target database is postgres
+
 The process is as follows:
 
 1. Create a dump of existing data.
