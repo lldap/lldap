@@ -75,7 +75,7 @@
 #ldap_user_pass = "REPLACE_WITH_PASSWORD"
 
 ## Database URL.
-## This encodes the type of database (SQlite, MySQL, and PostgreSQL)
+## This encodes the type of database (SQlite, MySQL, or PostgreSQL)
 ## , the path, the user, password, and sometimes the mode (when
 ## relevant).
 ## Note: SQlite should come with "?mode=rwc" to create the DB
