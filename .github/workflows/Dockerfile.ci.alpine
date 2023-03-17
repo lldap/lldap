@@ -98,8 +98,8 @@ RUN apk add --no-cache tini ca-certificates bash tzdata && \
     "$USER" && \
     mkdir -p /data && \
     chown $USER:$USER /data
-COPY --from=lldap --chown=$CONTAINERUSER:$CONTAINERUSER /lldap /app
-COPY --from=lldap --chown=$CONTAINERUSER:$CONTAINERUSER /docker-entrypoint.sh /docker-entrypoint.sh
+COPY --from=lldap --chown=$USER:$USER /lldap /app
+COPY --from=lldap --chown=$USER:$USER /docker-entrypoint.sh /docker-entrypoint.sh
 VOLUME ["/data"]
 WORKDIR /app
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
