@@ -26,6 +26,13 @@ use yew_router::{
     router::Router,
     service::RouteService,
 };
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+extern "C" {
+  #[wasm_bindgen(js_namespace = darkmode)]
+  fn toggleDarkMode(doSave: bool);
+}
 
 pub struct App {
     link: ComponentLink<Self>,
@@ -256,7 +263,7 @@ impl App {
           <header class="p-2 mb-3 border-bottom">
             <div class="container">
               <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
-                <a href="/" class="d-flex align-items-center mt-2 mb-lg-0 me-md-5 text-dark text-decoration-none">
+                <a href="/" class="d-flex align-items-center mt-2 mb-lg-0 me-md-5 text-body text-decoration-none">
                   <h2>{"LLDAP"}</h2>
                 </a>
 
@@ -265,7 +272,7 @@ impl App {
                     <>
                       <li>
                         <Link
-                          classes="nav-link px-2 link-dark h6"
+                          classes="nav-link px-2 text-body h6"
                           route=AppRoute::ListUsers>
                           <i class="bi-people me-2"></i>
                           {"Users"}
@@ -273,7 +280,7 @@ impl App {
                       </li>
                       <li>
                         <Link
-                          classes="nav-link px-2 link-dark h6"
+                          classes="nav-link px-2 text-body h6"
                           route=AppRoute::ListGroups>
                           <i class="bi-collection me-2"></i>
                           {"Groups"}
@@ -287,8 +294,9 @@ impl App {
                   if let Some((user_id, _)) = &self.user_info {
                     html! {
                       <div class="dropdown text-end">
+                        <input class="form-check-input" onclick={Callback::from(move |_| toggleDarkMode(true))} type="checkbox" id="darkModeToggle"/>
                         <a href="#"
-                          class="d-block link-dark text-decoration-none dropdown-toggle"
+                          class="d-block text-body text-decoration-none dropdown-toggle"
                           id="dropdownUser"
                           data-bs-toggle="dropdown"
                           aria-expanded="false">
