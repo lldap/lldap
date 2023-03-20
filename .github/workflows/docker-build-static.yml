@@ -125,8 +125,8 @@ jobs:
           key: lldap-bin-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-bin-${{ matrix.target }}-
-      - name: Compile ${{ matrix.target }} lldap and migration tool
-        run: cargo build --target=${{ matrix.target }} --release -p lldap -p migration-tool
+      - name: Compile ${{ matrix.target }} lldap and tools
+        run: cargo build --target=${{ matrix.target }} --release -p lldap -p migration-tool -p lldap_set_password
       - name: Check path
         run: ls -al target/release
       - name: Upload ${{ matrix.target}} lldap artifacts
@@ -139,6 +139,11 @@ jobs:
         with:
           name: ${{ matrix.target }}-migration-tool-bin
           path: target/${{ matrix.target }}/release/migration-tool
+      - name: Upload ${{ matrix.target }} password tool artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.target }}-lldap_set_password-bin
+          path: target/${{ matrix.target }}/release/lldap_set_password
 
   lldap-database-integration-test:
     needs: [build-ui,build-bin]
@@ -347,8 +352,12 @@ jobs:
              mv bin/aarch64-unknown-linux-musl-migration-tool-bin/migration-tool bin/aarch64-migration-tool
              mv bin/x86_64-unknown-linux-musl-migration-tool-bin/migration-tool bin/amd64-migration-tool
              mv bin/armv7-unknown-linux-gnueabihf-migration-tool-bin/migration-tool bin/armhf-migration-tool
+             mv bin/aarch64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password bin/aarch64-lldap_set_password
+             mv bin/x86_64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password bin/amd64-lldap_set_password
+             mv bin/armv7-unknown-linux-gnueabihf-lldap_set_password-bin/lldap_set_password bin/armhf-lldap_set_password
              chmod +x bin/*-lldap
              chmod +x bin/*-migration-tool
+             chmod +x bin/*-lldap_set_password
 
       - name: Download llap ui artifacts
         uses: actions/download-artifact@v3
@@ -376,6 +385,9 @@ jobs:
              mv bin/aarch64-migration-tool aarch64-lldap/migration-tool
              mv bin/amd64-migration-tool amd64-lldap/migration-tool
              mv bin/armhf-migration-tool armhf-lldap/migration-tool
+             mv bin/aarch64-lldap_set_password aarch64-lldap/lldap_set_password
+             mv bin/amd64-lldap_set_password amd64-lldap/lldap_set_password
+             mv bin/armhf-lldap_set_password armhf-lldap/lldap_set_password
              cp -r app aarch64-lldap/
              cp -r app amd64-lldap/
              cp -r app armhf-lldap/

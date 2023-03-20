@@ -45,11 +45,7 @@ pub fn get_user_attribute(
             .into_iter()
             .flatten()
             .map(|id_and_name| {
-                format!(
-                    "uid={},ou=groups,{}",
-                    &id_and_name.display_name, base_dn_str
-                )
-                .into_bytes()
+                format!("cn={},ou=groups,{}", &id_and_name.display_name, base_dn_str).into_bytes()
             })
             .collect(),
         "cn" | "displayname" => vec![user.display_name.clone()?.into_bytes()],

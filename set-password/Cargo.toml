@@ -1,0 +1,25 @@
+[package]
+name = "lldap_set_password"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "*"
+rand = "0.8"
+serde = "1"
+serde_json = "1"
+
+[dependencies.clap]
+features = ["std", "color", "suggestions", "derive", "env"]
+version = "4"
+
+[dependencies.lldap_auth]
+path = "../auth"
+features = ["opaque_client"]
+
+[dependencies.reqwest]
+version = "*"
+default-features = false
+features = ["json", "blocking", "rustls-tls"]
