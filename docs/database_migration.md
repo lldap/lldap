@@ -83,7 +83,7 @@ or
 
 `mysql -u <username> -p <database> < /path/to/dump.sql`
 
-NOTE: MySQL will limit avatar size to 64Kb. You may need to remove avatars for some users. (Untested: you could probably change the column type to LONGBLOB )
+NOTE: MySQL will limit avatar size to 64Kb. You may need to remove avatars for some users. See #486
 
 ## Switch to new database
 

@@ -193,7 +193,7 @@ async fn create_schema(database_url: String) -> Result<()> {
     let sql_pool = {
         let mut sql_opt = sea_orm::ConnectOptions::new(database_url.clone());
         sql_opt
-            .max_connections(5)
+            .max_connections(1)
             .sqlx_logging(true)
             .sqlx_logging_level(log::LevelFilter::Debug);
         Database::connect(sql_opt).await?
@@ -217,7 +217,7 @@ fn create_schema_command(opts: RunOpts) -> Result<()> {
         create_schema(database_url).unwrap_or_else(|e| error!("Could not create schema: {:#}", e)),
     )?;
 
-    info!("End.");
+    info!("Schema created successfully.");
     Ok(())
 }
 
