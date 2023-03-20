@@ -258,12 +258,11 @@ impl App {
     }
 
     fn view_banner(&self, ctx: &Context<Self>) -> Html {
-        let link = ctx.link();
         html! {
           <header class="p-2 mb-3 border-bottom">
             <div class="container">
               <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
-                <a href="/" class="d-flex align-items-center mt-2 mb-lg-0 me-md-5 text-body text-decoration-none">
+                <a href="/" class="d-flex align-items-center mt-2 mb-lg-0 me-md-5 text-decoration-none">
                   <h2>{"LLDAP"}</h2>
                 </a>
 
@@ -272,7 +271,7 @@ impl App {
                     <>
                       <li>
                         <Link
-                          classes="nav-link px-2 text-body h6"
+                          classes="nav-link px-2 h6"
                           to={AppRoute::ListUsers}>
                           <i class="bi-people me-2"></i>
                           {"Users"}
@@ -280,7 +279,7 @@ impl App {
                       </li>
                       <li>
                         <Link
-                          classes="nav-link px-2 text-body h6"
+                          classes="nav-link px-2 h6"
                           to={AppRoute::ListGroups}>
                           <i class="bi-collection me-2"></i>
                           {"Groups"}
@@ -289,7 +288,7 @@ impl App {
                     </>
                   } } else { html!{} } }
                 </ul>
-                { self.view_user_menu(ctx) } // TODO migrate chagnes from above
+                { self.view_user_menu(ctx) }
                 <DarkModeToggle />
               </div>
             </div>
@@ -303,7 +302,7 @@ impl App {
             html! {
               <div class="dropdown text-end">
                 <a href="#"
-                  class="d-block text-body nav-link text-decoration-none dropdown-toggle"
+                  class="d-block nav-link text-decoration-none dropdown-toggle"
                   id="dropdownUser"
                   data-bs-toggle="dropdown"
                   aria-expanded="false">
@@ -345,7 +344,7 @@ impl App {
 
     fn view_footer(&self) -> Html {
         html! {
-          <footer class="text-center fixed-bottom bg-light py-2">
+          <footer class="text-center fixed-bottom text-muted bg-light py-2">
             <div>
               <span>{format!("LLDAP version {}", env!("CARGO_PKG_VERSION"))}</span>
             </div>
