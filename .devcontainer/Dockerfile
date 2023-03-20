@@ -13,12 +13,10 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
 RUN apt update && \
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
-    apt update && \
-    apt install -y --no-install-recommends nodejs libssl-dev musl-dev make perl curl 
+    apt install -y --no-install-recommends libssl-dev musl-dev make perl curl gzip && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN RUSTFLAGS=-Ctarget-feature=-crt-static cargo install wasm-pack \
-    && npm install -g rollup \
     && rustup target add wasm32-unknown-unknown
 
 USER $USERNAME
