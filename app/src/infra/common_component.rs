@@ -102,7 +102,7 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
     }
 
     /// Call `method` from the backend with the given `request`, and pass the `callback` for the
-    /// result. Returns whether _starting the call_ failed.
+    /// result.
     pub fn call_backend<Fut, Cb, Resp>(&mut self, ctx: &Context<C>, fut: Fut, callback: Cb)
     where
         Fut: Future<Output = Resp> + 'static,
@@ -134,29 +134,10 @@ impl<C: CommonComponent<C>> CommonComponentParts<C> {
         QueryType: GraphQLQuery + 'static,
         EnumCallback: Fn(Result<QueryType::ResponseData>) -> <C as Component>::Message + 'static,
     {
-        {
-            let mut running = self.is_task_running.lock().unwrap();
-            assert!(!*running);
-            *running = true;
-        }
-        let is_task_running = self.is_task_running.clone();
-        ctx.link().send_future(async move {
-            let res = HostService::graphql_query::<QueryType>(variables, error_message).await;
-            *is_task_running.lock().unwrap() = false;
-            enum_callback(res)
-        });
+        self.call_backend(
+            ctx,
+            HostService::graphql_query::<QueryType>(variables, error_message),
+            enum_callback,
+        );
     }
-
-    /*
-    pub(crate) fn read_file<Cb>(&mut self, file: web_sys::File, callback: Cb) -> Result<()>
-    where
-        Cb: FnOnce(FileData) -> <C as Component>::Message + 'static,
-    {
-        self.task = AnyTask::ReaderTask(ReaderService::read_file(
-            file,
-            self.link.callback_once(callback),
-        )?);
-        Ok(())
-    }
-    */
 }

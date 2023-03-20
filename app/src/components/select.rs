@@ -64,31 +64,17 @@ impl Component for Select {
     }
 }
 
-pub struct SelectOption;
-
 #[derive(yew::Properties, Clone, PartialEq, Eq, Debug)]
 pub struct SelectOptionProps {
     pub value: String,
     pub text: String,
 }
 
-impl Component for SelectOption {
-    type Message = ();
-    type Properties = SelectOptionProps;
-
-    fn create(_: &Context<Self>) -> Self {
-        Self
-    }
-
-    fn update(&mut self, _: &Context<Self>, _: Self::Message) -> bool {
-        false
-    }
-
-    fn view(&self, ctx: &Context<Self>) -> Html {
-        html! {
-          <option value={ctx.props().value.clone()}>
-            {&ctx.props().text}
-          </option>
-        }
+#[function_component(SelectOption)]
+pub fn select_option(props: &SelectOptionProps) -> Html {
+    html! {
+      <option value={props.value.clone()}>
+        {&props.text}
+      </option>
     }
 }

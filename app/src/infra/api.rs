@@ -65,6 +65,15 @@ async fn call_server_empty_response_with_error_message<Body: Serialize>(
     call_server(url, request, error_message).await.map(|_| ())
 }
 
+fn set_cookies_from_jwt(response: login::ServerLoginResponse) -> Result<(String, bool)> {
+    let jwt_claims = get_claims_from_jwt(response.token.as_str()).context("Could not parse JWT")?;
+    let is_admin = jwt_claims.groups.contains("lldap_admin");
+    set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
+        .map(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
+        .map(|_| (jwt_claims.user.clone(), is_admin))
+        .context("Error setting cookie")
+}
+
 impl HostService {
     pub async fn graphql_query<QueryType>(
         variables: QueryType::Variables,
@@ -87,10 +96,13 @@ impl HostService {
             })
         };
         let request_body = QueryType::build_query(variables);
-        let response = call_server("/api/graphql", Some(request_body), error_message).await?;
-        serde_json::from_str(&response)
-            .context("Could not parse response")
-            .and_then(unwrap_graphql_response)
+        call_server_json_with_error_message::<graphql_client::Response<_>, _>(
+            "/api/graphql",
+            Some(request_body),
+            error_message,
+        )
+        .await
+        .and_then(unwrap_graphql_response)
     }
 
     pub async fn login_start(
@@ -105,26 +117,13 @@ impl HostService {
     }
 
     pub async fn login_finish(request: login::ClientLoginFinishRequest) -> Result<(String, bool)> {
-        let set_cookies = |jwt_claims: JWTClaims| {
-            let is_admin = jwt_claims.groups.contains("lldap_admin");
-            set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
-                .map(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
-                .map(|_| (jwt_claims.user.clone(), is_admin))
-                .context("Error clearing cookie")
-        };
-        let response = call_server(
+        call_server_json_with_error_message::<login::ServerLoginResponse, _>(
             "/auth/opaque/login/finish",
             Some(request),
             "Could not finish authentication",
         )
-        .await?;
-        serde_json::from_str::<login::ServerLoginResponse>(&response)
-            .context("Could not parse response")
-            .and_then(|r| {
-                get_claims_from_jwt(r.token.as_str())
-                    .context("Could not parse response")
-                    .and_then(set_cookies)
-            })
+        .await
+        .and_then(set_cookies_from_jwt)
     }
 
     pub async fn register_start(
@@ -150,22 +149,13 @@ impl HostService {
     }
 
     pub async fn refresh() -> Result<(String, bool)> {
-        let set_cookies = |jwt_claims: JWTClaims| {
-            let is_admin = jwt_claims.groups.contains("lldap_admin");
-            set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
-                .map(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
-                .map(|_| (jwt_claims.user.clone(), is_admin))
-                .context("Error clearing cookie")
-        };
-        let response =
-            call_server("/auth/refresh", NO_BODY, "Could not start authentication: ").await?;
-        serde_json::from_str::<login::ServerLoginResponse>(&response)
-            .context("Could not parse response")
-            .and_then(|r| {
-                get_claims_from_jwt(r.token.as_str())
-                    .context("Could not parse response")
-                    .and_then(set_cookies)
-            })
+        call_server_json_with_error_message::<login::ServerLoginResponse, _>(
+            "/auth/refresh",
+            NO_BODY,
+            "Could not start authentication: ",
+        )
+        .await
+        .and_then(set_cookies_from_jwt)
     }
 
     // The `_request` parameter is to make it the same shape as the other functions.

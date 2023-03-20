@@ -92,10 +92,8 @@ impl Component for App {
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
         };
-        let link = ctx.link().clone();
-        wasm_bindgen_futures::spawn_local(async move {
-            let result = HostService::probe_password_reset().await;
-            link.send_message(Msg::PasswordResetProbeFinished(result));
+        ctx.link().send_future(async move {
+            Msg::PasswordResetProbeFinished(HostService::probe_password_reset().await)
         });
         app.apply_initial_redirections(ctx);
         app
@@ -157,47 +155,41 @@ impl Component for App {
 }
 
 impl App {
+    // Get the page to land on after logging in, defaulting to the index.
     fn get_redirect_route(ctx: &Context<Self>) -> Option<AppRoute> {
-        let history = ctx.link().history().unwrap();
-        let route = history.location().route::<AppRoute>();
-        route.and_then(|route| match route {
-            AppRoute::Index
-            | AppRoute::Login
-            | AppRoute::StartResetPassword
-            | AppRoute::FinishResetPassword { token: _ } => None,
-            _ => Some(route),
+        let route = ctx.link().history().unwrap().location().route::<AppRoute>();
+        route.filter(|route| {
+            !matches!(
+                route,
+                AppRoute::Index
+                    | AppRoute::Login
+                    | AppRoute::StartResetPassword
+                    | AppRoute::FinishResetPassword { token: _ }
+            )
         })
     }
 
     fn apply_initial_redirections(&self, ctx: &Context<Self>) {
         let history = ctx.link().history().unwrap();
         let route = history.location().route::<AppRoute>();
-        let redirection = if let Some(route) = route {
-            if matches!(
-                route,
-                AppRoute::StartResetPassword | AppRoute::FinishResetPassword { token: _ }
-            ) && self.password_reset_enabled == Some(false)
-            {
-                Some(AppRoute::Login)
-            } else {
-                match &self.user_info {
-                    None => Some(AppRoute::Login),
-                    Some((user_name, is_admin)) => match &self.redirect_to {
-                        Some(url) => Some(url.clone()),
-                        None => {
-                            if *is_admin {
-                                Some(AppRoute::ListUsers)
-                            } else {
-                                Some(AppRoute::UserDetails {
-                                    user_id: user_name.clone(),
-                                })
-                            }
-                        }
-                    },
+        let redirection = match (route, &self.user_info, &self.redirect_to) {
+            (
+                Some(AppRoute::StartResetPassword | AppRoute::FinishResetPassword { token: _ }),
+                _,
+                _,
+            ) if self.password_reset_enabled == Some(false) => Some(AppRoute::Login),
+            (None, _, _) | (_, None, _) => Some(AppRoute::Login),
+            // User is logged in, a URL was given, don't redirect.
+            (_, Some(_), Some(_)) => None,
+            (_, Some((user_name, is_admin)), None) => {
+                if *is_admin {
+                    Some(AppRoute::ListUsers)
+                } else {
+                    Some(AppRoute::UserDetails {
+                        user_id: user_name.clone(),
+                    })
                 }
             }
-        } else {
-            Some(AppRoute::Login)
         };
         if let Some(redirect_to) = redirection {
             history.push(redirect_to);
@@ -340,10 +332,57 @@ impl App {
                     }
                   } else { html!{} }
                 }
+                { self.view_user_menu(ctx) } // TODO migrate chagnes from above
                 <DarkModeToggle />
               </div>
             </div>
           </header>
+        }
+    }
+
+    fn view_user_menu(&self, ctx: &Context<Self>) -> Html {
+        if let Some((user_id, _)) = &self.user_info {
+            let link = ctx.link();
+            html! {
+              <div class="dropdown text-end">
+                <a href="#"
+                  class="d-block link-dark text-decoration-none dropdown-toggle"
+                  id="dropdownUser"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false">
+                  <svg xmlns="http://www.w3.org/2000/svg"
+                    width="32"
+                    height="32"
+                    fill="currentColor"
+                    class="bi bi-person-circle"
+                    viewBox="0 0 16 16">
+                    <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+                    <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
+                  </svg>
+                  <span class="ms-2">
+                    {user_id}
+                  </span>
+                </a>
+                <ul
+                  class="dropdown-menu text-small dropdown-menu-lg-end"
+                  aria-labelledby="dropdownUser1"
+                  style="">
+                  <li>
+                    <Link
+                      classes="dropdown-item"
+                      to={AppRoute::UserDetails{ user_id: user_id.clone() }}>
+                      {"View details"}
+                    </Link>
+                  </li>
+                  <li><hr class="dropdown-divider" /></li>
+                  <li>
+                    <LogoutButton on_logged_out={link.callback(|_| Msg::Logout)} />
+                  </li>
+                </ul>
+              </div>
+            }
+        } else {
+            html! {}
         }
     }
 
