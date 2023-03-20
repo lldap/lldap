@@ -21,7 +21,7 @@ impl From<SchemaVersion> for Value {
     }
 }
 
-pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(2);
+pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(3);
 
 pub async fn init_table(pool: &DbConnection) -> anyhow::Result<()> {
     let version = {
@@ -100,21 +100,21 @@ mod tests {
         let sql_pool = get_in_memory_db().await;
         sql_pool
             .execute(raw_statement(
-                r#"CREATE TABLE users ( user_id TEXT, display_name TEXT, creation_date TEXT);"#,
+                r#"CREATE TABLE users ( user_id TEXT, display_name TEXT, first_name TEXT NOT NULL, last_name TEXT, avatar BLOB, creation_date TEXT);"#,
             ))
             .await
             .unwrap();
         sql_pool
             .execute(raw_statement(
-                r#"INSERT INTO users (user_id, display_name, creation_date)
-                       VALUES ("bôb", "", "1970-01-01 00:00:00")"#,
+                r#"INSERT INTO users (user_id, display_name, first_name, creation_date)
+                       VALUES ("bôb", "", "", "1970-01-01 00:00:00")"#,
             ))
             .await
             .unwrap();
         sql_pool
             .execute(raw_statement(
-                r#"INSERT INTO users (user_id, display_name, creation_date)
-                       VALUES ("john", "John Doe", "1971-01-01 00:00:00")"#,
+                r#"INSERT INTO users (user_id, display_name, first_name, creation_date)
+                       VALUES ("john", "John Doe", "John", "1971-01-01 00:00:00")"#,
             ))
             .await
             .unwrap();
@@ -142,11 +142,12 @@ mod tests {
         #[derive(FromQueryResult, PartialEq, Eq, Debug)]
         struct SimpleUser {
             display_name: Option<String>,
+            first_name: Option<String>,
             uuid: Uuid,
         }
         assert_eq!(
             SimpleUser::find_by_statement(raw_statement(
-                r#"SELECT display_name, uuid FROM users ORDER BY display_name"#
+                r#"SELECT display_name, first_name, uuid FROM users ORDER BY display_name"#
             ))
             .all(&sql_pool)
             .await
@@ -154,10 +155,12 @@ mod tests {
             vec![
                 SimpleUser {
                     display_name: None,
+                    first_name: None,
                     uuid: crate::uuid!("a02eaf13-48a7-30f6-a3d4-040ff7c52b04")
                 },
                 SimpleUser {
                     display_name: Some("John Doe".to_owned()),
+                    first_name: Some("John".to_owned()),
                     uuid: crate::uuid!("986765a5-3f03-389e-b47b-536b2d6e1bec")
                 }
             ]
