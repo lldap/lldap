@@ -302,6 +302,7 @@ impl App {
                   if let Some((user_id, _)) = &self.user_info {
                     html! {
                       <div class="dropdown text-end">
+                        <input class="form-check-input" onclick={Callback::from(move |_| toggleDarkMode(true))} type="checkbox" id="darkModeToggle"/>
                         <a href="#"
                           class="d-block text-body text-decoration-none dropdown-toggle"
                           id="dropdownUser"
