@@ -1,5 +1,8 @@
 {
 	"name": "LLDAP dev",
 	"build": { "dockerfile": "Dockerfile" },
-	"forwardPorts": [3890, 17170]
+	"forwardPorts": [
+		3890,
+		17170
+	]
 }
