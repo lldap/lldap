@@ -17,6 +17,7 @@ use crate::{
 };
 
 use gloo_console::error;
+use wasm_bindgen::prelude::*;
 use yew::{
     function_component,
     html::Scope,
@@ -28,25 +29,24 @@ use yew_router::{
     scope_ext::RouterScopeExt,
     BrowserRouter, Switch,
 };
-use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 extern "C" {
-  #[wasm_bindgen(js_namespace = darkmode)]
-  fn toggleDarkMode(doSave: bool);
+    #[wasm_bindgen(js_namespace = darkmode)]
+    fn toggleDarkMode(doSave: bool);
 
-  #[wasm_bindgen]
-  fn inDarkMode() -> bool;
+    #[wasm_bindgen]
+    fn inDarkMode() -> bool;
 }
 
 #[function_component(DarkModeToggle)]
 pub fn dark_mode_toggle() -> Html {
-  html! {
-    <div class="form-check form-switch">
-      <input class="form-check-input" onclick={|_| toggleDarkMode(true)} type="checkbox" id="darkModeToggle" checked={inDarkMode()}/>
-      <label class="form-check-label" for="darkModeToggle">{"Dark mode"}</label>
-    </div>
-  }
+    html! {
+      <div class="form-check form-switch">
+        <input class="form-check-input" onclick={|_| toggleDarkMode(true)} type="checkbox" id="darkModeToggle" checked={inDarkMode()}/>
+        <label class="form-check-label" for="darkModeToggle">{"Dark mode"}</label>
+      </div>
+    }
 }
 
 #[function_component(AppContainer)]
