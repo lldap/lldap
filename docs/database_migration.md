@@ -6,43 +6,53 @@ NOTE: [pgloader](https://github.com/dimitri/pgloader) is a tool that can easily 
 
 The process is as follows:
 
-1. Create a dump of existing data.
-2. Change all `CREATE TABLE ...` lines to `DELETE FROM tablename;`. We will later have LLDAP create the schema for us, so we want to clear out existing data to replace it with the original data.
-3. Do any syntax fixes for the target db syntax
-4. Change your LLDAP config database_url to point to the new target and restart.
-5. After LLDAP has started, stop it.
-6. Execute the manicured dump file against the new database.
+1. Create empty schema on target database
+2. Dump existing values
+3. Sanitize for target DB (not always required)
+4. Insert data into target
+5. Change LLDAP config to new target
 
 The steps below assume you already have PostgreSQL or MySQL set up with an empty database for LLDAP to use.
 
-## Create a dump
+## Create schema on target
 
-First, we must dump the existing data to a file. The dump must be tweaked slightly according to your target db. See below for commands
-
-### PostgreSQL
-
-PostgreSQL uses a different hex string format and doesn't support `PRAGMA`.
+LLDAP has a command that will connect to a target database and initialize the
+schema. If running with docker, run the following command to use your active
+instance (this has the benefit of ensuring your container has access):
 
 ```
-sqlite3 /path/to/lldap/config/users.db .dump | \
-sed -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" \
--e 's/^CREATE TABLE IF NOT EXISTS "([^"]*)".*/DELETE FROM \1;/' \
--e '/^PRAGMA.*/d' > /path/to/dump.sql
+docker exec -it <LLDAP container name> /app/lldap create_schema -d <Target database url>
 ```
 
-### MySQL
+If it succeeds, you can proceed to the next step.
 
-MySQL doesn't support `PRAGMA`.
+## Create a dump of existing data
+
+We want to dump all existing values to some file. The dump should consist just INSERT
+statements. There are various ways to do this, but a simple enough way is filtering a
+whole database dump. For example:
 
 ```
-sqlite3 /path/to/lldap/config/users.db .dump | \
--e 's/^CREATE TABLE IF NOT EXISTS "([^"]*)".*/DELETE FROM \1;/' \
--e '/^PRAGMA.*/d' > /path/to/dump.sql
+sqlite3 /path/to/lldap/config/users.db .dump | grep "^INSERT" > /path/to/dump.sql
 ```
 
-## Generate New Schema
+## Sanitize data (if needed)
 
-Modify your `database_url` in `lldap_config.toml` (or `LLDAP_DATABASE_URL` in the env) to point to your new database. Restart LLDAP and check the logs to ensure there were no errors connecting and creating the tables. After that, stop LLDAP. Now we can import our original data!
+Some databases might use different formats for some data - for example, PostgreSQL uses
+a different syntax for hex strings than SQLite.
+
+### To PostgreSQL
+
+PostgreSQL uses a different hex string format. The command below should switch SQLite
+format to PostgreSQL format.
+
+```
+sed -i -r "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" /path/to/dump.sql
+```
+
+## Insert data
+
+Insert the data generated from the previous step into the target database.
 
 ### PostgreSQL
 
@@ -52,6 +62,8 @@ Modify your `database_url` in `lldap_config.toml` (or `LLDAP_DATABASE_URL` in th
 
 `mysql -u < -p <database> < /path/to/dump.sql`
 
-## Finish
+## Switch to new database
 
-If all succeeds, you're all set to start LLDAP with your new database!
+Modify your `database_url` in `lldap_config.toml` (or `LLDAP_DATABASE_URL` in the env)
+to point to your new database (the same value used when generating schema). Restart
+LLDAP and check the logs to ensure there were no errors.
