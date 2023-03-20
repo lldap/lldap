@@ -28,7 +28,7 @@ pub enum Command {
     SendTestEmail(TestEmailOpts),
     /// Create database schema.
     #[clap(name = "create_schema")]
-    CreateSchema(CreateSchemaOpts),
+    CreateSchema(RunOpts),
 }
 
 #[derive(Debug, Parser, Clone)]
@@ -77,6 +77,10 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_HTTP_URL")]
     pub http_url: Option<String>,
 
+    /// Database connection URL
+    #[clap(short, long, env = "LLDAP_DATABASE_URL")]
+    pub database_url: Option<String>,
+
     #[clap(flatten)]
     pub smtp_opts: SmtpOpts,
 
@@ -95,13 +99,6 @@ pub struct TestEmailOpts {
 
     #[clap(flatten)]
     pub smtp_opts: SmtpOpts,
-}
-
-#[derive(Debug, Parser, Clone)]
-pub struct CreateSchemaOpts {
-    /// Database connection URL
-    #[clap(short, long, env = "LLDAP_CREATE_SCHEMA_DATABASE_URL")]
-    pub database_url: String,
 }
 
 #[derive(Debug, Parser, Clone)]

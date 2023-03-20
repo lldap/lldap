@@ -200,15 +200,19 @@ async fn create_schema(database_url: String) -> Result<()> {
     };
     domain::sql_tables::init_table(&sql_pool)
         .await
-        .context("while creating the tables")?;
+        .context("while creating base tables")?;
+    infra::jwt_sql_tables::init_table(&sql_pool).await.context("while creating jwt tables")?;
     Ok(())
 }
 
-fn create_schema_command(opts: CreateSchemaOpts) -> Result<()> {
+fn create_schema_command(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
+    let config = infra::configuration::init(opts)?;
+    infra::logging::init(&config)?;
+    let database_url = config.database_url;
 
     actix::run(
-        create_schema(opts.database_url)
+        create_schema(database_url)
             .unwrap_or_else(|e| error!("Could not create schema: {:#}", e)),
     )?;
 
