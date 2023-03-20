@@ -303,7 +303,7 @@ impl App {
                     html! {
                       <div class="dropdown text-end">
                         <a href="#"
-                          class="d-block text-body text-decoration-none dropdown-toggle"
+                          class="d-block text-body nav-link text-decoration-none dropdown-toggle"
                           id="dropdownUser"
                           data-bs-toggle="dropdown"
                           aria-expanded="false">
