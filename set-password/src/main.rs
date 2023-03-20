@@ -1,0 +1,133 @@
+use anyhow::{bail, ensure, Context, Result};
+use clap::Parser;
+use lldap_auth::{opaque, registration};
+use serde::Serialize;
+
+/// Set the password for a user in LLDAP.
+#[derive(Debug, Parser, Clone)]
+pub struct CliOpts {
+    /// Base LLDAP url, e.g. "https://lldap/".
+    #[clap(short, long)]
+    pub base_url: String,
+
+    /// Admin username.
+    #[clap(long, default_value = "admin")]
+    pub admin_username: String,
+
+    /// Admin password.
+    #[clap(long)]
+    pub admin_password: Option<String>,
+
+    /// Connection token (JWT).
+    #[clap(short, long)]
+    pub token: Option<String>,
+
+    /// Username.
+    #[clap(short, long)]
+    pub username: String,
+
+    /// New password for the user.
+    #[clap(short, long)]
+    pub password: String,
+}
+
+fn get_token(base_url: &str, username: &str, password: &str) -> Result<String> {
+    let client = reqwest::blocking::Client::new();
+    let response = client
+        .post(format!("{base_url}/auth/simple/login"))
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(
+            serde_json::to_string(&lldap_auth::login::ClientSimpleLoginRequest {
+                username: username.to_string(),
+                password: password.to_string(),
+            })
+            .expect("Failed to encode the username/password as json to log in"),
+        )
+        .send()?
+        .error_for_status()?;
+    Ok(serde_json::from_str::<lldap_auth::login::ServerLoginResponse>(&response.text()?)?.token)
+}
+
+fn call_server(url: &str, token: &str, body: impl Serialize) -> Result<String> {
+    let client = reqwest::blocking::Client::new();
+    let request = client
+        .post(url)
+        .header("Content-Type", "application/json")
+        .bearer_auth(token)
+        .body(serde_json::to_string(&body)?);
+    let response = request.send()?.error_for_status()?;
+    Ok(response.text()?)
+}
+
+pub fn register_start(
+    base_url: &str,
+    token: &str,
+    request: registration::ClientRegistrationStartRequest,
+) -> Result<registration::ServerRegistrationStartResponse> {
+    let request = Some(request);
+    let data = call_server(
+        &format!("{base_url}/auth/opaque/register/start"),
+        token,
+        request,
+    )?;
+    serde_json::from_str(&data).context("Could not parse response")
+}
+
+pub fn register_finish(
+    base_url: &str,
+    token: &str,
+    request: registration::ClientRegistrationFinishRequest,
+) -> Result<()> {
+    let request = Some(request);
+    call_server(
+        &format!("{base_url}/auth/opaque/register/finish"),
+        token,
+        request,
+    )
+    .map(|_| ())
+}
+
+fn main() -> Result<()> {
+    let opts = CliOpts::parse();
+    ensure!(
+        opts.password.len() >= 8,
+        "New password is too short, expected at least 8 characters"
+    );
+    ensure!(
+        opts.base_url.starts_with("http://") || opts.base_url.starts_with("https://"),
+        "Base URL should start with `http://` or `https://`"
+    );
+    let token = match (opts.token.as_ref(), opts.admin_password.as_ref()) {
+        (Some(token), _) => token.clone(),
+        (None, Some(password)) => {
+            get_token(&opts.base_url, &opts.admin_username, password).context("While logging in")?
+        }
+        (None, None) => bail!("Either the token or the admin password is required"),
+    };
+
+    let mut rng = rand::rngs::OsRng;
+    let registration_start_request =
+        opaque::client::registration::start_registration(&opts.password, &mut rng)
+            .context("Could not initiate password change")?;
+    let start_request = registration::ClientRegistrationStartRequest {
+        username: opts.username.to_string(),
+        registration_start_request: registration_start_request.message,
+    };
+    let res = register_start(&opts.base_url, &token, start_request)?;
+
+    let registration_finish = opaque::client::registration::finish_registration(
+        registration_start_request.state,
+        res.registration_response,
+        &mut rng,
+    )
+    .context("Error during password change")?;
+    let req = registration::ClientRegistrationFinishRequest {
+        server_data: res.server_data,
+        registration_upload: registration_finish.message,
+    };
+
+    register_finish(&opts.base_url, &token, req)?;
+
+    println!("Successfully changed {}'s password", &opts.username);
+    Ok(())
+}
