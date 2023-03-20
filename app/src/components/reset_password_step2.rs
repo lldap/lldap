@@ -1,11 +1,11 @@
 use crate::{
-    components::router::{AppRoute, NavButton},
+    components::router::{AppRoute, Link},
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
     },
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use lldap_auth::{
     opaque::client::registration as opaque_registration,
     password_reset::ServerPasswordResetResponse, registration,
@@ -14,10 +14,7 @@ use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
 use yew_form_derive::Model;
-use yew_router::{
-    agent::{RouteAgentDispatcher, RouteRequest},
-    route::Route,
-};
+use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 
 /// The fields of the form, with the constraints.
 #[derive(Model, Validate, PartialEq, Eq, Clone, Default)]
@@ -33,7 +30,6 @@ pub struct ResetPasswordStep2Form {
     form: Form<FormModel>,
     username: Option<String>,
     opaque_data: Option<opaque_registration::ClientRegistration>,
-    route_dispatcher: RouteAgentDispatcher,
 }
 
 #[derive(Clone, PartialEq, Eq, Properties)]
@@ -50,11 +46,15 @@ pub enum Msg {
 }
 
 impl CommonComponent<ResetPasswordStep2Form> for ResetPasswordStep2Form {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
+        use anyhow::Context;
         match msg {
             Msg::ValidateTokenResponse(response) => {
                 self.username = Some(response?.user_id);
-                self.common.cancel_task();
                 Ok(true)
             }
             Msg::FormUpdate => Ok(true),
@@ -73,10 +73,10 @@ impl CommonComponent<ResetPasswordStep2Form> for ResetPasswordStep2Form {
                 };
                 self.opaque_data = Some(registration_start_request.state);
                 self.common.call_backend(
-                    HostService::register_start,
-                    req,
+                    ctx,
+                    HostService::register_start(req),
                     Msg::RegistrationStartResponse,
-                )?;
+                );
                 Ok(true)
             }
             Msg::RegistrationStartResponse(res) => {
@@ -94,17 +94,15 @@ impl CommonComponent<ResetPasswordStep2Form> for ResetPasswordStep2Form {
                     registration_upload: registration_finish.message,
                 };
                 self.common.call_backend(
-                    HostService::register_finish,
-                    req,
+                    ctx,
+                    HostService::register_finish(req),
                     Msg::RegistrationFinishResponse,
-                )?;
+                );
                 Ok(false)
             }
             Msg::RegistrationFinishResponse(response) => {
-                self.common.cancel_task();
                 if response.is_ok() {
-                    self.route_dispatcher
-                        .send(RouteRequest::ChangeRoute(Route::from(AppRoute::Login)));
+                    ctx.link().history().unwrap().push(AppRoute::Login);
                 }
                 response?;
                 Ok(true)
@@ -121,35 +119,28 @@ impl Component for ResetPasswordStep2Form {
     type Message = Msg;
     type Properties = Props;
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         let mut component = ResetPasswordStep2Form {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             form: yew_form::Form::<FormModel>::new(FormModel::default()),
             opaque_data: None,
-            route_dispatcher: RouteAgentDispatcher::new(),
             username: None,
         };
-        let token = component.common.token.clone();
-        component
-            .common
-            .call_backend(
-                HostService::reset_password_step2,
-                &token,
-                Msg::ValidateTokenResponse,
-            )
-            .unwrap();
+        let token = ctx.props().token.clone();
+        component.common.call_backend(
+            ctx,
+            HostService::reset_password_step2(token),
+            Msg::ValidateTokenResponse,
+        );
         component
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = &ctx.link();
         match (&self.username, &self.common.error) {
             (None, None) => {
                 return html! {
@@ -162,12 +153,12 @@ impl Component for ResetPasswordStep2Form {
                     <div class="alert alert-danger">
                       {e.to_string() }
                     </div>
-                    <NavButton
+                    <Link
                       classes="btn-link btn"
-                      disabled=self.common.is_task_running()
-                      route=AppRoute::Login>
+                      disabled={self.common.is_task_running()}
+                      to={AppRoute::Login}>
                       {"Back"}
-                    </NavButton>
+                    </Link>
                   </>
                 }
             }
@@ -186,14 +177,14 @@ impl Component for ResetPasswordStep2Form {
                 </label>
                 <div class="col-sm-10">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     field_name="password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
                     input_type="password"
-                    oninput=self.common.callback(|_| Msg::FormUpdate) />
+                    oninput={link.callback(|_| Msg::FormUpdate)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("password")}
                   </div>
@@ -206,14 +197,14 @@ impl Component for ResetPasswordStep2Form {
                 </label>
                 <div class="col-sm-10">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     field_name="confirm_password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
                     input_type="password"
-                    oninput=self.common.callback(|_| Msg::FormUpdate) />
+                    oninput={link.callback(|_| Msg::FormUpdate)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("confirm_password")}
                   </div>
@@ -223,8 +214,8 @@ impl Component for ResetPasswordStep2Form {
                 <button
                   class="btn btn-primary col-sm-1 col-form-label"
                   type="submit"
-                  disabled=self.common.is_task_running()
-                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                  disabled={self.common.is_task_running()}
+                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
                   {"Submit"}
                 </button>
               </div>

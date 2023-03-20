@@ -34,7 +34,7 @@ pub enum Msg {
 }
 
 impl CommonComponent<GroupTable> for GroupTable {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(&mut self, _: &Context<Self>, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::ListGroupsResponse(groups) => {
                 self.groups = Some(groups?.groups.into_iter().collect());
@@ -58,12 +58,13 @@ impl Component for GroupTable {
     type Message = Msg;
     type Properties = ();
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         let mut table = GroupTable {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             groups: None,
         };
         table.common.call_graphql::<GetGroupList, _>(
+            ctx,
             get_group_list::Variables {},
             Msg::ListGroupsResponse,
             "Error trying to fetch groups",
@@ -71,18 +72,14 @@ impl Component for GroupTable {
         table
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
             <div>
-              {self.view_groups()}
+              {self.view_groups(ctx)}
               {self.view_errors()}
             </div>
         }
@@ -90,7 +87,7 @@ impl Component for GroupTable {
 }
 
 impl GroupTable {
-    fn view_groups(&self) -> Html {
+    fn view_groups(&self, ctx: &Context<Self>) -> Html {
         let make_table = |groups: &Vec<Group>| {
             html! {
                 <div class="table-responsive">
@@ -103,7 +100,7 @@ impl GroupTable {
                       </tr>
                     </thead>
                     <tbody>
-                      {groups.iter().map(|u| self.view_group(u)).collect::<Vec<_>>()}
+                      {groups.iter().map(|u| self.view_group(ctx, u)).collect::<Vec<_>>()}
                     </tbody>
                   </table>
                 </div>
@@ -115,11 +112,12 @@ impl GroupTable {
         }
     }
 
-    fn view_group(&self, group: &Group) -> Html {
+    fn view_group(&self, ctx: &Context<Self>, group: &Group) -> Html {
+        let link = ctx.link();
         html! {
-          <tr key=group.id>
+          <tr key={group.id}>
               <td>
-                <Link route=AppRoute::GroupDetails(group.id)>
+                <Link to={AppRoute::GroupDetails{group_id: group.id}}>
                   {&group.display_name}
                 </Link>
               </td>
@@ -128,9 +126,9 @@ impl GroupTable {
               </td>
               <td>
                 <DeleteGroup
-                  group=group.clone()
-                  on_group_deleted=self.common.callback(Msg::OnGroupDeleted)
-                  on_error=self.common.callback(Msg::OnError)/>
+                  group={group.clone()}
+                  on_group_deleted={link.callback(Msg::OnGroupDeleted)}
+                  on_error={link.callback(Msg::OnError)}/>
               </td>
           </tr>
         }
