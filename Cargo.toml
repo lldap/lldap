@@ -3,7 +3,8 @@ members = [
   "server",
   "auth",
   "app",
-  "migration-tool"
+  "migration-tool",
+  "set-password",
 ]
 
 default-members = ["server"]

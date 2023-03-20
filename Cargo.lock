@@ -2457,6 +2457,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "lldap_set_password"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "lldap_auth",
+ "rand 0.8.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "local-channel"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
