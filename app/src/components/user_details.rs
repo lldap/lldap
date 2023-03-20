@@ -2,7 +2,7 @@ use crate::{
     components::{
         add_user_to_group::AddUserToGroupComponent,
         remove_user_from_group::RemoveUserFromGroupComponent,
-        router::{AppRoute, Link, NavButton},
+        router::{AppRoute, Link},
         user_details_form::UserDetailsForm,
     },
     infra::common_component::{CommonComponent, CommonComponentParts},
@@ -47,7 +47,7 @@ pub struct Props {
 }
 
 impl CommonComponent<UserDetails> for UserDetails {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(&mut self, _: &Context<Self>, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::UserDetailsResponse(response) => match response {
                 Ok(user) => self.user = Some(user.user),
@@ -77,10 +77,11 @@ impl CommonComponent<UserDetails> for UserDetails {
 }
 
 impl UserDetails {
-    fn get_user_details(&mut self) {
+    fn get_user_details(&mut self, ctx: &Context<Self>) {
         self.common.call_graphql::<GetUserDetails, _>(
+            ctx,
             get_user_details::Variables {
-                id: self.common.username.clone(),
+                id: ctx.props().username.clone(),
             },
             Msg::UserDetailsResponse,
             "Error trying to fetch user details",
@@ -99,24 +100,25 @@ impl UserDetails {
         }
     }
 
-    fn view_group_memberships(&self, u: &User) -> Html {
+    fn view_group_memberships(&self, ctx: &Context<Self>, u: &User) -> Html {
+        let link = &ctx.link();
         let make_group_row = |group: &Group| {
             let display_name = group.display_name.clone();
             html! {
-              <tr key="groupRow_".to_string() + &display_name>
-                {if self.common.is_admin { html! {
+              <tr key={"groupRow_".to_string() + &display_name}>
+                {if ctx.props().is_admin { html! {
                   <>
                     <td>
-                      <Link route=AppRoute::GroupDetails(group.id)>
+                      <Link to={AppRoute::GroupDetails{group_id: group.id}}>
                         {&group.display_name}
                       </Link>
                     </td>
                     <td>
                       <RemoveUserFromGroupComponent
-                        username=u.id.clone()
-                        group_id=group.id
-                        on_user_removed_from_group=self.common.callback(Msg::OnUserRemovedFromGroup)
-                        on_error=self.common.callback(Msg::OnError)/>
+                        username={u.id.clone()}
+                        group_id={group.id}
+                        on_user_removed_from_group={link.callback(Msg::OnUserRemovedFromGroup)}
+                        on_error={link.callback(Msg::OnError)}/>
                     </td>
                   </>
                 } } else { html! {
@@ -133,7 +135,7 @@ impl UserDetails {
                 <thead>
                   <tr key="headerRow">
                     <th>{"Group"}</th>
-                    { if self.common.is_admin { html!{ <th></th> }} else { html!{} }}
+                    { if ctx.props().is_admin { html!{ <th></th> }} else { html!{} }}
                   </tr>
                 </thead>
                 <tbody>
@@ -153,14 +155,15 @@ impl UserDetails {
         }
     }
 
-    fn view_add_group_button(&self, u: &User) -> Html {
-        if self.common.is_admin {
+    fn view_add_group_button(&self, ctx: &Context<Self>, u: &User) -> Html {
+        let link = &ctx.link();
+        if ctx.props().is_admin {
             html! {
                 <AddUserToGroupComponent
-                    username=u.id.clone()
-                    groups=u.groups.clone()
-                    on_error=self.common.callback(Msg::OnError)
-                    on_user_added_to_group=self.common.callback(Msg::OnUserAddedToGroup)/>
+                    username={u.id.clone()}
+                    groups={u.groups.clone()}
+                    on_error={link.callback(Msg::OnError)}
+                    on_user_added_to_group={link.callback(Msg::OnUserAddedToGroup)}/>
             }
         } else {
             html! {}
@@ -172,24 +175,20 @@ impl Component for UserDetails {
     type Message = Msg;
     type Properties = Props;
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         let mut table = Self {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             user: None,
         };
-        table.get_user_details();
+        table.get_user_details(ctx);
         table
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         match (&self.user, &self.common.error) {
             (None, None) => html! {{"Loading..."}},
             (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
@@ -198,20 +197,19 @@ impl Component for UserDetails {
                   <>
                     <h3>{u.id.to_string()}</h3>
                     <div class="d-flex flex-row-reverse">
-                      <NavButton
-                        route=AppRoute::ChangePassword(u.id.clone())
+                      <Link
+                        to={AppRoute::ChangePassword{user_id: u.id.clone()}}
                         classes="btn btn-secondary">
                         <i class="bi-key me-2"></i>
                         {"Modify password"}
-                      </NavButton>
+                      </Link>
                     </div>
                     <div>
                       <h5 class="row m-3 fw-bold">{"User details"}</h5>
                     </div>
-                    <UserDetailsForm
-                      user=u.clone() />
-                    {self.view_group_memberships(u)}
-                    {self.view_add_group_button(u)}
+                    <UserDetailsForm user={u.clone()} />
+                    {self.view_group_memberships(ctx, u)}
+                    {self.view_add_group_button(ctx, u)}
                     {self.view_messages(error)}
                   </>
                 }

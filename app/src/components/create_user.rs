@@ -5,17 +5,14 @@ use crate::{
         common_component::{CommonComponent, CommonComponentParts},
     },
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
+use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use lldap_auth::{opaque, registration};
 use validator_derive::Validate;
 use yew::prelude::*;
-use yew::services::ConsoleService;
 use yew_form_derive::Model;
-use yew_router::{
-    agent::{RouteAgentDispatcher, RouteRequest},
-    route::Route,
-};
+use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -28,7 +25,6 @@ pub struct CreateUser;
 
 pub struct CreateUserForm {
     common: CommonComponentParts<Self>,
-    route_dispatcher: RouteAgentDispatcher,
     form: yew_form::Form<CreateUserModel>,
 }
 
@@ -73,7 +69,11 @@ pub enum Msg {
 }
 
 impl CommonComponent<CreateUserForm> for CreateUserForm {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
             Msg::SubmitForm => {
@@ -93,6 +93,7 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                     },
                 };
                 self.common.call_graphql::<CreateUser, _>(
+                    ctx,
                     req,
                     Msg::CreateUserResponse,
                     "Error trying to create user",
@@ -102,7 +103,7 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
             Msg::CreateUserResponse(r) => {
                 match r {
                     Err(e) => return Err(e),
-                    Ok(r) => ConsoleService::log(&format!(
+                    Ok(r) => log!(&format!(
                         "Created user '{}' at '{}'",
                         &r.create_user.id, &r.create_user.creation_date
                     )),
@@ -122,12 +123,11 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                         registration_start_request: message,
                     };
                     self.common
-                        .call_backend(HostService::register_start, req, move |r| {
+                        .call_backend(ctx, HostService::register_start(req), move |r| {
                             Msg::RegistrationStartResponse((state, r))
-                        })
-                        .context("Error trying to create user")?;
+                        });
                 } else {
-                    self.update(Msg::SuccessfulCreation);
+                    self.update(ctx, Msg::SuccessfulCreation);
                 }
                 Ok(false)
             }
@@ -143,22 +143,19 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                     server_data: response.server_data,
                     registration_upload: registration_upload.message,
                 };
-                self.common
-                    .call_backend(
-                        HostService::register_finish,
-                        req,
-                        Msg::RegistrationFinishResponse,
-                    )
-                    .context("Error trying to register user")?;
+                self.common.call_backend(
+                    ctx,
+                    HostService::register_finish(req),
+                    Msg::RegistrationFinishResponse,
+                );
                 Ok(false)
             }
             Msg::RegistrationFinishResponse(response) => {
                 response?;
-                self.handle_msg(Msg::SuccessfulCreation)
+                self.handle_msg(ctx, Msg::SuccessfulCreation)
             }
             Msg::SuccessfulCreation => {
-                self.route_dispatcher
-                    .send(RouteRequest::ChangeRoute(Route::from(AppRoute::ListUsers)));
+                ctx.link().history().unwrap().push(AppRoute::ListUsers);
                 Ok(true)
             }
         }
@@ -173,23 +170,19 @@ impl Component for CreateUserForm {
     type Message = Msg;
     type Properties = ();
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(_: &Context<Self>) -> Self {
         Self {
-            common: CommonComponentParts::<Self>::create(props, link),
-            route_dispatcher: RouteAgentDispatcher::new(),
+            common: CommonComponentParts::<Self>::create(),
             form: yew_form::Form::<CreateUserModel>::new(CreateUserModel::default()),
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = &ctx.link();
         type Field = yew_form::Field<CreateUserModel>;
         html! {
           <div class="row justify-content-center">
@@ -206,13 +199,13 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     field_name="username"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="username"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("username")}
                   </div>
@@ -227,14 +220,14 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     input_type="email"
                     field_name="email"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="email"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("email")}
                   </div>
@@ -247,13 +240,13 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     autocomplete="name"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     field_name="display_name"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("display_name")}
                   </div>
@@ -266,13 +259,13 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     autocomplete="given-name"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     field_name="first_name"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("first_name")}
                   </div>
@@ -285,13 +278,13 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     autocomplete="family-name"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     field_name="last_name"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("last_name")}
                   </div>
@@ -304,14 +297,14 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     input_type="password"
                     field_name="password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("password")}
                   </div>
@@ -324,14 +317,14 @@ impl Component for CreateUserForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     input_type="password"
                     field_name="confirm_password"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="new-password"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("confirm_password")}
                   </div>
@@ -340,9 +333,9 @@ impl Component for CreateUserForm {
               <div class="form-group row justify-content-center">
                 <button
                   class="btn btn-primary col-auto col-form-label mt-4"
-                  disabled=self.common.is_task_running()
+                  disabled={self.common.is_task_running()}
                   type="submit"
-                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
+                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})}>
                   <i class="bi-save me-2"></i>
                   {"Submit"}
                 </button>
