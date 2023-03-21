@@ -209,6 +209,10 @@ impl ConfigOverrider for RunOpts {
         if let Some(url) = self.http_url.as_ref() {
             config.http_url = url.to_string();
         }
+
+        if let Some(database_url) = self.database_url.as_ref() {
+            config.database_url = database_url.to_string();
+        }
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);
     }

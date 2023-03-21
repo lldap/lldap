@@ -26,6 +26,9 @@ pub enum Command {
     /// Send a test email.
     #[clap(name = "send_test_email")]
     SendTestEmail(TestEmailOpts),
+    /// Create database schema.
+    #[clap(name = "create_schema")]
+    CreateSchema(RunOpts),
 }
 
 #[derive(Debug, Parser, Clone)]
@@ -73,6 +76,10 @@ pub struct RunOpts {
     /// URL of the server, for password reset links.
     #[clap(long, env = "LLDAP_HTTP_URL")]
     pub http_url: Option<String>,
+
+    /// Database connection URL
+    #[clap(short, long, env = "LLDAP_DATABASE_URL")]
+    pub database_url: Option<String>,
 
     #[clap(flatten)]
     pub smtp_opts: SmtpOpts,
