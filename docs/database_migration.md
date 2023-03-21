@@ -28,13 +28,14 @@ If it succeeds, you can proceed to the next step.
 
 ## Create a dump of existing data
 
-We want to dump (almost) all existing values to some file - the exception being the `metadata` table. Be sure to stop/pause LLDAP during this step, as some
+We want to dump (almost) all existing values to some file - the exception being the `metadata` table (and sometimes
+the `sqlite_sequence`, when it exists). Be sure to stop/pause LLDAP during this step, as some
 databases (SQLite in this example) will give an error if LLDAP is in the middle of a write. The dump should consist just INSERT
 statements. There are various ways to do this, but a simple enough way is filtering a
 whole database dump. For example:
 
 ```
-sqlite3 /path/to/lldap/config/users.db .dump | grep "^INSERT" | grep -v "^INSERT INTO metadata" > /path/to/dump.sql
+sqlite3 /path/to/lldap/config/users.db .dump | grep "^INSERT" | grep -v "^INSERT INTO metadata" | grep -v "^INSERT INTO sqlite_sequence"  > /path/to/dump.sql
 ```
 
 ## Sanitize data
