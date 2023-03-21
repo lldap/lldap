@@ -6,13 +6,16 @@
     <title>LLDAP Administration</title>
     <script src="/static/main.js" type="module" defer></script>
     <link
-      href="/static/bootstrap.min.css"
+      href="/static/bootstrap-nightshade.min.css"
       rel="preload stylesheet"
-      integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x"
+      integrity="sha384-CvItGYrXmque42UjYhp+bjRR8tgQz78Nlwk42gYsNzBc6y0DuXNtdUaRzr1cl2uK"
       as="style" />
     <script
       src="/static/bootstrap.bundle.min.js"
       integrity="sha384-/bQdsTh/da6pkI1MST/rWKFNjaCP5gBSY4sEBT38Q/9RBh9AH40zEOg7Hlq2THRZ"></script>
+    <script 
+    src="/static/darkmode.min.js" 
+    integrity="sha384-A4SLs39X/aUfwRclRaXvNeXNBTLZdnZdHhhteqbYFS2jZTRD79tKeFeBn7SGXNpi"></script>
     <link
       rel="stylesheet"
       href="/static/bootstrap-icons.css"
@@ -28,6 +31,11 @@
     <link
       rel="stylesheet"
       href="/static/style.css" />
+    <script>
+      function inDarkMode(){
+        return darkmode.inDarkMode;
+      }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 

@@ -17,6 +17,7 @@ use crate::{
 };
 
 use gloo_console::error;
+use wasm_bindgen::prelude::*;
 use yew::{
     function_component,
     html::Scope,
@@ -28,6 +29,25 @@ use yew_router::{
     scope_ext::RouterScopeExt,
     BrowserRouter, Switch,
 };
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = darkmode)]
+    fn toggleDarkMode(doSave: bool);
+
+    #[wasm_bindgen]
+    fn inDarkMode() -> bool;
+}
+
+#[function_component(DarkModeToggle)]
+pub fn dark_mode_toggle() -> Html {
+    html! {
+      <div class="form-check form-switch">
+        <input class="form-check-input" onclick={|_| toggleDarkMode(true)} type="checkbox" id="darkModeToggle" checked={inDarkMode()}/>
+        <label class="form-check-label" for="darkModeToggle">{"Dark mode"}</label>
+      </div>
+    }
+}
 
 #[function_component(AppContainer)]
 pub fn app_container() -> Html {
@@ -242,7 +262,7 @@ impl App {
           <header class="p-2 mb-3 border-bottom">
             <div class="container">
               <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
-                <a href="/" class="d-flex align-items-center mt-2 mb-lg-0 me-md-5 text-dark text-decoration-none">
+                <a href="/" class="d-flex align-items-center mt-2 mb-lg-0 me-md-5 text-decoration-none">
                   <h2>{"LLDAP"}</h2>
                 </a>
 
@@ -251,7 +271,7 @@ impl App {
                     <>
                       <li>
                         <Link
-                          classes="nav-link px-2 link-dark h6"
+                          classes="nav-link px-2 h6"
                           to={AppRoute::ListUsers}>
                           <i class="bi-people me-2"></i>
                           {"Users"}
@@ -259,7 +279,7 @@ impl App {
                       </li>
                       <li>
                         <Link
-                          classes="nav-link px-2 link-dark h6"
+                          classes="nav-link px-2 h6"
                           to={AppRoute::ListGroups}>
                           <i class="bi-collection me-2"></i>
                           {"Groups"}
@@ -269,6 +289,7 @@ impl App {
                   } } else { html!{} } }
                 </ul>
                 { self.view_user_menu(ctx) }
+                <DarkModeToggle />
               </div>
             </div>
           </header>
@@ -281,7 +302,7 @@ impl App {
             html! {
               <div class="dropdown text-end">
                 <a href="#"
-                  class="d-block link-dark text-decoration-none dropdown-toggle"
+                  class="d-block nav-link text-decoration-none dropdown-toggle"
                   id="dropdownUser"
                   data-bs-toggle="dropdown"
                   aria-expanded="false">
@@ -323,7 +344,7 @@ impl App {
 
     fn view_footer(&self) -> Html {
         html! {
-          <footer class="text-center text-muted fixed-bottom bg-light py-2">
+          <footer class="text-center fixed-bottom text-muted bg-light py-2">
             <div>
               <span>{format!("LLDAP version {}", env!("CARGO_PKG_VERSION"))}</span>
             </div>
