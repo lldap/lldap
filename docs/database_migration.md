@@ -32,10 +32,10 @@ We want to dump (almost) all existing values to some file - the exception being 
 the `sqlite_sequence`, when it exists). Be sure to stop/pause LLDAP during this step, as some
 databases (SQLite in this example) will give an error if LLDAP is in the middle of a write. The dump should consist just INSERT
 statements. There are various ways to do this, but a simple enough way is filtering a
-whole database dump. For example:
+whole database dump. This repo contains [a script](/scripts/sqlite_dump_commands.sh) to generate SQLite commands for creating an appropriate dump:
 
 ```
-sqlite3 /path/to/lldap/config/users.db .dump | grep "^INSERT" | grep -v "^INSERT INTO metadata" | grep -v "^INSERT INTO sqlite_sequence"  > /path/to/dump.sql
+./sqlite_dump_commands.sh | sqlite3 /path/to/lldap/config/users.db > /path/to/dump.sql
 ```
 
 ## Sanitize data
@@ -62,7 +62,19 @@ following command to wrap all table names in backticks for good measure, and wra
 a transaction:
 
 ```
-sed -i -r -e 's/^INSERT INTO ([a-zA-Z0-9_]+) /INSERT INTO `\1` /' \
+sed -i -r -e 's/^INSERT INTO ([a-zA-Z0-9_]+)/INSERT INTO `\1`/' \
+-e '1s/^/START TRANSACTION;\n/' \
+-e '$aCOMMIT;' /path/to/dump.sql
+```
+
+### To MariaDB
+
+While MariaDB is supposed to be identical to MySQL, it doesn't support timezone offsets on DATETIME
+strings. Use the following command to remove those and perform the additional MySQL sanitization:
+
+```
+sed -i -r -e "s/([^']'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9})\+00:00'([^'])/\1'\2/g" \
+-e 's/^INSERT INTO ([a-zA-Z0-9_]+)/INSERT INTO `\1`/' \
 -e '1s/^/START TRANSACTION;\n/' \
 -e '$aCOMMIT;' /path/to/dump.sql
 ```
