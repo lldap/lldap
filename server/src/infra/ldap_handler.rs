@@ -949,7 +949,7 @@ mod tests {
                     dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![LdapPartialAttribute {
                         atype: "memberOf".to_string(),
-                        vals: vec![b"uid=rockstars,ou=groups,dc=example,dc=com".to_vec()]
+                        vals: vec![b"cn=rockstars,ou=groups,dc=example,dc=com".to_vec()]
                     }],
                 }),
                 make_search_success(),
