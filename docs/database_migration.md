@@ -29,7 +29,7 @@ If it succeeds, you can proceed to the next step.
 ## Create a dump of existing data
 
 We want to dump (almost) all existing values to some file - the exception being the `metadata` table (and sometimes
-the `sqlite_sequence`, when it exists). Be sure to stop/pause LLDAP during this step, as some
+the `sqlite_sequence` table, when it exists). Be sure to stop/pause LLDAP during this step, as some
 databases (SQLite in this example) will give an error if LLDAP is in the middle of a write. The dump should consist just INSERT
 statements. There are various ways to do this, but a simple enough way is filtering a
 whole database dump. This repo contains [a script](/scripts/sqlite_dump_commands.sh) to generate SQLite commands for creating an appropriate dump:
@@ -57,12 +57,13 @@ sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" \
 
 ### To MySQL
 
-MySQL mostly cooperates, but it gets some errors if you don't escape the `groups` table. Run the
+MySQL mostly cooperates, but it gets some errors if you don't escape the `groups` table. It also uses
+backticks to escape table name instead of quotes.  Run the
 following command to wrap all table names in backticks for good measure, and wrap the inserts in
 a transaction:
 
 ```
-sed -i -r -e 's/^INSERT INTO ([a-zA-Z0-9_]+)/INSERT INTO `\1`/' \
+sed -i -r -e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' \
 -e '1s/^/START TRANSACTION;\n/' \
 -e '$aCOMMIT;' /path/to/dump.sql
 ```
@@ -74,7 +75,7 @@ strings. Use the following command to remove those and perform the additional My
 
 ```
 sed -i -r -e "s/([^']'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9})\+00:00'([^'])/\1'\2/g" \
--e 's/^INSERT INTO ([a-zA-Z0-9_]+)/INSERT INTO `\1`/' \
+-e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' \
 -e '1s/^/START TRANSACTION;\n/' \
 -e '$aCOMMIT;' /path/to/dump.sql
 ```
