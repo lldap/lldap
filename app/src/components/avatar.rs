@@ -1,7 +1,10 @@
-use crate::infra::common_component::{CommonComponent, CommonComponentParts};
+use crate::{
+    components::avatar_event_bus::AvatarEventBus,
+    infra::common_component::{CommonComponent, CommonComponentParts}};
 use anyhow::{bail, Result};
 use graphql_client::GraphQLQuery;
-use yew::prelude::*;
+use yew::{prelude::*};
+use yew_agent::{Bridge, Bridged};
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -16,7 +19,8 @@ pub struct Avatar {
     common: CommonComponentParts<Self>,
     /// The user info. If none, the error is in `error`. If `error` is None, then we haven't
     /// received the server response yet.
-    avatar: Option<String>,
+    avatar: Option<String>,    
+    _producer: Box<dyn Bridge<AvatarEventBus>>,
 }
 
 /// State machine describing the possible transitions of the component state.
@@ -35,16 +39,16 @@ pub struct Props {
 }
 
 impl CommonComponent<Avatar> for Avatar {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(&mut self, ctx: &Context<Self>, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::UserAvatarResponse(response) => match response {
                 Ok(user) => self.avatar = user.user.avatar,
                 Err(e) => {
                     self.avatar = None;
-                    bail!("Error getting user details: {}", e);
+                    bail!("Error getting user avatar: {}", e);
                 }
             },
-            Msg::Update => self.get_user_avatar(),
+            Msg::Update => self.get_user_avatar(ctx),
         }
         Ok(true)
     }
@@ -55,16 +59,15 @@ impl CommonComponent<Avatar> for Avatar {
 }
 
 impl Avatar {
-    fn get_user_avatar(&mut self) {
-        if self.common.username.len() > 0 {
-            self.common.call_graphql::<GetUserAvatar, _>(
-                get_user_avatar::Variables {
-                    id: self.common.username.clone(),
-                },
-                Msg::UserAvatarResponse,
-                "Error trying to fetch user avatar",
-            )
-        }
+    fn get_user_avatar(&mut self, ctx: &Context<Self>) {
+        self.common.call_graphql::<GetUserAvatar, _>(
+            ctx,
+            get_user_avatar::Variables {
+                id: ctx.props().username.clone(),
+            },
+            Msg::UserAvatarResponse,
+            "Error trying to fetch user avatar",
+        )
     }
 }
 
@@ -72,36 +75,33 @@ impl Component for Avatar {
     type Message = Msg;
     type Properties = Props;
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         let mut avatar = Self {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             avatar: None,
+            _producer: AvatarEventBus::bridge(ctx.link().callback(|_| Msg::Update)),
         };
-        avatar.get_user_avatar();
+        avatar.get_user_avatar(ctx);
         avatar
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         match &self.avatar {
             Some(avatar) => html! {
                 <img
                         id="avatarDisplay"
                         src={format!("data:image/jpeg;base64, {}", avatar)}
-                        style={format!("max-height:{}px;max-width:{}px;height:auto;width:auto;", self.common.props.height,self.common.props.width)}
+                        style={format!("max-height:{}px;max-width:{}px;height:auto;width:auto;", ctx.props().height,ctx.props().width)}
                         alt="Avatar" />
             },
             None => html! {
                 <svg xmlns="http://www.w3.org/2000/svg"
-                      width={self.common.props.width.to_string()}
-                      height={self.common.props.height.to_string()}
+                      width={ctx.props().width.to_string()}
+                      height={ctx.props().height.to_string()}
                       fill="currentColor"
                       class="bi bi-person-circle"
                       viewBox="0 0 16 16">

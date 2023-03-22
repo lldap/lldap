@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use crate::{
     components::user_details::User,
+    components::avatar_event_bus::{AvatarEventBus, Request},
     infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{bail, Error, Result};
@@ -14,6 +15,7 @@ use validator_derive::Validate;
 use web_sys::{FileList, HtmlInputElement, InputEvent};
 use yew::prelude::*;
 use yew_form_derive::Model;
+use yew_agent::{Dispatched, Dispatcher};
 
 #[derive(Default)]
 struct JsFile {
@@ -72,6 +74,7 @@ pub struct UserDetailsForm {
     /// True if we just successfully updated the user, to display a success message.
     just_updated: bool,
     user: User,
+    avatar_event_bus: Dispatcher<AvatarEventBus>,
 }
 
 pub enum Msg {
@@ -163,6 +166,7 @@ impl Component for UserDetailsForm {
             just_updated: false,
             reader: None,
             user: ctx.props().user.clone(),
+            avatar_event_bus: AvatarEventBus::dispatcher(),
         }
     }
 
@@ -402,6 +406,7 @@ impl UserDetailsForm {
             self.user.avatar = Some(avatar);
         }
         self.just_updated = true;
+        self.avatar_event_bus.send(Request::Update);
         Ok(true)
     }
 
