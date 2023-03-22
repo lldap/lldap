@@ -289,49 +289,6 @@ impl App {
                     </>
                   } } else { html!{} } }
                 </ul>
-
-                /*<div class="dropdown text-end">
-                  <a href="#"
-                    class="d-block link-dark text-decoration-none dropdown-toggle"
-                    id="dropdownUser"
-                    data-bs-toggle="dropdown"
-                    aria-expanded="false">
-                    {
-                      if let Some((user_id, _)) = &self.user_info {
-                        html! {
-                          <Avatar username=user_id.clone() width=32 height=32 />
-                        }
-                      } else { html!{} }
-                    }
-                    {
-                      if let Some((user_id, _)) = &self.user_info {
-                        html! {
-                          <span class="ms-2">
-                            {user_id}
-                          </span>
-                        }
-                      } else { html!{} }
-                    }
-                  </a>
-                  {if let Some((user_id, _)) = &self.user_info { html! {
-                    <ul
-                      class="dropdown-menu text-small dropdown-menu-lg-end"
-                      aria-labelledby="dropdownUser1"
-                      style="">
-                      <li>
-                        <Link
-                          classes="dropdown-item"
-                          route=AppRoute::UserDetails(user_id.clone())>
-                          {"View details"}
-                        </Link>
-                      </li>
-                      <li><hr class="dropdown-divider" /></li>
-                      <li>
-                        <LogoutButton on_logged_out=self.link.callback(|_| Msg::Logout) />
-                      </li>
-                    </ul>
-                  } } else { html!{} } }
-                </div>*/
                 { self.view_user_menu(ctx) }
                 <DarkModeToggle />
               </div>
