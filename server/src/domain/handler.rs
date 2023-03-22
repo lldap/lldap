@@ -15,16 +15,59 @@ pub struct BindRequest {
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub struct SubStringFilter {
+    pub initial: Option<String>,
+    pub any: Vec<String>,
+    pub final_: Option<String>,
+}
+
+impl SubStringFilter {
+    pub fn to_sql_filter(&self) -> String {
+        let mut filter = String::with_capacity(
+            self.initial.as_ref().map(String::len).unwrap_or_default()
+                + 1
+                + self.any.iter().map(String::len).sum::<usize>()
+                + self.any.len()
+                + self.final_.as_ref().map(String::len).unwrap_or_default(),
+        );
+        if let Some(f) = &self.initial {
+            filter.push_str(&f.to_ascii_lowercase());
+        }
+        filter.push('%');
+        for part in self.any.iter() {
+            filter.push_str(&part.to_ascii_lowercase());
+            filter.push('%');
+        }
+        if let Some(f) = &self.final_ {
+            filter.push_str(&f.to_ascii_lowercase());
+        }
+        filter
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum UserRequestFilter {
     And(Vec<UserRequestFilter>),
     Or(Vec<UserRequestFilter>),
     Not(Box<UserRequestFilter>),
     UserId(UserId),
+    UserIdSubString(SubStringFilter),
     Equality(UserColumn, String),
+    SubString(UserColumn, SubStringFilter),
     // Check if a user belongs to a group identified by name.
     MemberOf(String),
     // Same, by id.
     MemberOfId(GroupId),
+}
+
+impl From<bool> for UserRequestFilter {
+    fn from(val: bool) -> Self {
+        if val {
+            Self::And(vec![])
+        } else {
+            Self::Not(Box::new(Self::And(vec![])))
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
@@ -33,10 +76,21 @@ pub enum GroupRequestFilter {
     Or(Vec<GroupRequestFilter>),
     Not(Box<GroupRequestFilter>),
     DisplayName(String),
+    DisplayNameSubString(SubStringFilter),
     Uuid(Uuid),
     GroupId(GroupId),
     // Check if the group contains a user identified by uid.
     Member(UserId),
+}
+
+impl From<bool> for GroupRequestFilter {
+    fn from(val: bool) -> Self {
+        if val {
+            Self::And(vec![])
+        } else {
+            Self::Not(Box::new(Self::And(vec![])))
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
@@ -68,13 +122,17 @@ pub struct UpdateGroupRequest {
 }
 
 #[async_trait]
-pub trait LoginHandler: Clone + Send {
+pub trait LoginHandler: Send + Sync {
     async fn bind(&self, request: BindRequest) -> Result<()>;
 }
 
 #[async_trait]
-pub trait GroupBackendHandler {
+pub trait GroupListerBackendHandler {
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
+}
+
+#[async_trait]
+pub trait GroupBackendHandler {
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
     async fn create_group(&self, group_name: &str) -> Result<GroupId>;
@@ -82,12 +140,16 @@ pub trait GroupBackendHandler {
 }
 
 #[async_trait]
-pub trait UserBackendHandler {
+pub trait UserListerBackendHandler {
     async fn list_users(
         &self,
         filters: Option<UserRequestFilter>,
         get_groups: bool,
     ) -> Result<Vec<UserAndGroups>>;
+}
+
+#[async_trait]
+pub trait UserBackendHandler {
     async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
@@ -98,7 +160,15 @@ pub trait UserBackendHandler {
 }
 
 #[async_trait]
-pub trait BackendHandler: Clone + Send + GroupBackendHandler + UserBackendHandler {}
+pub trait BackendHandler:
+    Send
+    + Sync
+    + GroupBackendHandler
+    + UserBackendHandler
+    + UserListerBackendHandler
+    + GroupListerBackendHandler
+{
+}
 
 #[cfg(test)]
 mockall::mock! {
@@ -107,16 +177,22 @@ mockall::mock! {
         fn clone(&self) -> Self;
     }
     #[async_trait]
-    impl GroupBackendHandler for TestBackendHandler {
+    impl GroupListerBackendHandler for TestBackendHandler {
         async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
+    }
+    #[async_trait]
+    impl GroupBackendHandler for TestBackendHandler {
         async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
         async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
         async fn create_group(&self, group_name: &str) -> Result<GroupId>;
         async fn delete_group(&self, group_id: GroupId) -> Result<()>;
     }
     #[async_trait]
-    impl UserBackendHandler for TestBackendHandler {
+    impl UserListerBackendHandler for TestBackendHandler {
         async fn list_users(&self, filters: Option<UserRequestFilter>, get_groups: bool) -> Result<Vec<UserAndGroups>>;
+    }
+    #[async_trait]
+    impl UserBackendHandler for TestBackendHandler {
         async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
         async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
         async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
@@ -135,13 +211,21 @@ mockall::mock! {
 
 #[cfg(test)]
 mod tests {
+    use base64::Engine;
+
     use super::*;
     #[test]
     fn test_uuid_time() {
         use chrono::prelude::*;
         let user_id = "bob";
-        let date1 = Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap();
-        let date2 = Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 12).unwrap();
+        let date1 = Utc
+            .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
+            .unwrap()
+            .naive_utc();
+        let date2 = Utc
+            .with_ymd_and_hms(2014, 7, 8, 9, 10, 12)
+            .unwrap()
+            .naive_utc();
         assert_ne!(
             Uuid::from_name_and_date(user_id, &date1),
             Uuid::from_name_and_date(user_id, &date2)
@@ -151,7 +235,9 @@ mod tests {
     #[test]
     fn test_jpeg_try_from_bytes() {
         let base64_raw = "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCADqATkDASIAAhEBAxEB/8QAFwABAQEBAAAAAAAAAAAAAAAAAAECA//EACQQAQEBAAIBBAMBAQEBAAAAAAABESExQQISUXFhgZGxocHw/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAH/xAAWEQEBAQAAAAAAAAAAAAAAAAAAEQH/2gAMAwEAAhEDEQA/AMriLyCKgg1gQwCgs4FTMOdutepjQak+FzMSVqgxZdRdPPIIvH5WzzGdBriphtTeAXg2ZjKA1pqKDUGZca3foBek8gFv8Ie3fKdA1qb8s7hoL6eLVt51FsAnql3Ut1M7AWbflLMDkEMX/F6/YjK/pADFQAUNA6alYagKk72m/j9p4Bq2fDDSYKLNXPNLoHE/NT6RYC31cJxZ3yWVM+aBYi/S2ZgiAsnYJx5D21vPmqrm3PTfpQQwyAC8JZvSKDni41ZrMuUVVl+Uz9w9v/1QWrZsZ5nFPHYH+JZyureQSF5M+fJ0CAfwRAVRBQA1DAWVUayoJUWoDpsxntPsueBV4+VxhdyAtv8AjOLGpIDMLbeGvbF4iozJfr/WukAVABAXAQXEAAASzVAZdO2WNordm+emFl7XcQSNZiFtv0C9w90nhJf4mA1u+GcJFwIyAqL/AOovwgGNfSRqdIrNa29M0gKCAojU9PAMjWXpckEJFNFEAAXEUBABYz6rZ0ureQc9vyt9XxDF2QAXtABcQAs0AZywkvluJbyipifas52DcyxjlZweAO0xri/hc+wZOEKIu6nSyeToVZyWXwvCg53gW81QQ7aTNAn5dGZJPs1UXURQAUEMCXQLZE93PRZ5hPTgNMrbIzKCm52LZwCs+2M8w2g3sjPuZAXb4IsMAUACzVUGM4/K+md6vEXUUyM5PDR0IxYe6ramih0VNBrS4xoqN8Q1BFQk3yqyAsioioAAKgDSJL4/jQIn5igLrPqtOuf6oOaxbMoAltUAhhIoJiiggrPu+AaOIxtAX3JbaAIaLwi4t9X4T3fg2AFtqcrUUarP20zUDAmqoE0WRBZPNVUVEAAAAVAC8kvih2DSKxOdBqs7Z0l0gI0mKAC4AuHE7ZtBriM+744QAAAAABAFsveIttBICyaikvy1+r/Cen5rWQHIBQa4rIDRqSl5qDWqziqgAAAATA7BpGdqXb2C2+J/UgAtRQBSQtkBWb6vhLbQAAAAAEBRAAAAAUbm+GZNdPxAP+ql2Tjwx7/wIgZ8iKvBk+CJoCXii9gaqZ/qqihAAAEVABGkBFUwBftNkZ3QW34QAAABFAQAVAAAAAARVkl8gs/43sk1jL45LvHArepk+E9XTG35oLqsmIKmLAEygKg0y1AFQBUXwgAAAoBC34S3UAAABAVAAAAAABAUQAVABdRQa1PcYyit2z58M8C4ouM2NXpOEGeWtNZUatiAIoAKIoCoAoG4C9MW6dgIoAIAAAAAAACKWAgL0CAAAALiANCKioNLgM1CrLihmTafkt1EF3SZ5ZVUW4mnIKvAi5fhEURVDWVQBRAAAAAAAAQFRVyAyulgAqCKlF8IqLsEgC9mGoC+IusqCrv5ZEUVOk1RuJfwSLOOkGFi4XPCoYYrNiKauosBGi9ICstM1UAAAAAAFQ0VcTBAXUGgIqGoKhKAzRRUQUAwxoSrGRpkQA/qiosOL9oJptMRRVZa0VUqSiChE6BqMgCwqKqIogAIAqKCKgKoogg0lBFuIKgAAAKNRlf2gqsftsEtZWoAAqAACKoMqAAeSoqp39kL2AqLOlE8rEBFQARYALhigrNC9gGmooLp4TweEQFFBFAECgIoAu0ifIAqAAA//9k=";
-        let base64_jpeg = base64::decode(base64_raw).unwrap();
+        let base64_jpeg = base64::engine::general_purpose::STANDARD
+            .decode(base64_raw)
+            .unwrap();
         JpegPhoto::try_from(base64_jpeg).unwrap();
     }
 }

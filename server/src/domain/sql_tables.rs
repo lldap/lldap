@@ -3,16 +3,15 @@ use sea_orm::Value;
 
 pub type DbConnection = sea_orm::DatabaseConnection;
 
-#[derive(Copy, PartialEq, Eq, Debug, Clone)]
-pub struct SchemaVersion(pub u8);
+#[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord)]
+pub struct SchemaVersion(pub i16);
 
 impl sea_orm::TryGetable for SchemaVersion {
-    fn try_get(
+    fn try_get_by<I: sea_orm::ColIdx>(
         res: &sea_orm::QueryResult,
-        pre: &str,
-        col: &str,
+        index: I,
     ) -> Result<Self, sea_orm::TryGetError> {
-        Ok(SchemaVersion(u8::try_get(res, pre, col)?))
+        Ok(SchemaVersion(i16::try_get_by(res, index)?))
     }
 }
 
@@ -21,6 +20,8 @@ impl From<SchemaVersion> for Value {
         version.0.into()
     }
 }
+
+pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(3);
 
 pub async fn init_table(pool: &DbConnection) -> anyhow::Result<()> {
     let version = {
@@ -67,7 +68,7 @@ mod tests {
         #[derive(FromQueryResult, PartialEq, Eq, Debug)]
         struct ShortUserDetails {
             display_name: String,
-            creation_date: chrono::DateTime<chrono::Utc>,
+            creation_date: chrono::NaiveDateTime,
         }
         let result = ShortUserDetails::find_by_statement(raw_statement(
             r#"SELECT display_name, creation_date FROM users WHERE user_id = "bôb""#,
@@ -80,7 +81,7 @@ mod tests {
             result,
             ShortUserDetails {
                 display_name: "Bob Bobbersön".to_owned(),
-                creation_date: Utc.timestamp_opt(0, 0).unwrap()
+                creation_date: Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
             }
         );
     }
@@ -99,14 +100,21 @@ mod tests {
         let sql_pool = get_in_memory_db().await;
         sql_pool
             .execute(raw_statement(
-                r#"CREATE TABLE users ( user_id TEXT , creation_date TEXT);"#,
+                r#"CREATE TABLE users ( user_id TEXT, display_name TEXT, first_name TEXT NOT NULL, last_name TEXT, avatar BLOB, creation_date TEXT);"#,
             ))
             .await
             .unwrap();
         sql_pool
             .execute(raw_statement(
-                r#"INSERT INTO users (user_id, creation_date)
-                       VALUES ("bôb", "1970-01-01 00:00:00")"#,
+                r#"INSERT INTO users (user_id, display_name, first_name, creation_date)
+                       VALUES ("bôb", "", "", "1970-01-01 00:00:00")"#,
+            ))
+            .await
+            .unwrap();
+        sql_pool
+            .execute(raw_statement(
+                r#"INSERT INTO users (user_id, display_name, first_name, creation_date)
+                       VALUES ("john", "John Doe", "John", "1971-01-01 00:00:00")"#,
             ))
             .await
             .unwrap();
@@ -132,17 +140,30 @@ mod tests {
             .await
             .unwrap();
         #[derive(FromQueryResult, PartialEq, Eq, Debug)]
-        struct JustUuid {
+        struct SimpleUser {
+            display_name: Option<String>,
+            first_name: Option<String>,
             uuid: Uuid,
         }
         assert_eq!(
-            JustUuid::find_by_statement(raw_statement(r#"SELECT uuid FROM users"#))
-                .all(&sql_pool)
-                .await
-                .unwrap(),
-            vec![JustUuid {
-                uuid: crate::uuid!("a02eaf13-48a7-30f6-a3d4-040ff7c52b04")
-            }]
+            SimpleUser::find_by_statement(raw_statement(
+                r#"SELECT display_name, first_name, uuid FROM users ORDER BY display_name"#
+            ))
+            .all(&sql_pool)
+            .await
+            .unwrap(),
+            vec![
+                SimpleUser {
+                    display_name: None,
+                    first_name: None,
+                    uuid: crate::uuid!("a02eaf13-48a7-30f6-a3d4-040ff7c52b04")
+                },
+                SimpleUser {
+                    display_name: Some("John Doe".to_owned()),
+                    first_name: Some("John".to_owned()),
+                    uuid: crate::uuid!("986765a5-3f03-389e-b47b-536b2d6e1bec")
+                }
+            ]
         );
         #[derive(FromQueryResult, PartialEq, Eq, Debug)]
         struct ShortGroupDetails {
@@ -180,7 +201,7 @@ mod tests {
             .unwrap()
             .unwrap(),
             sql_migrations::JustSchemaVersion {
-                version: SchemaVersion(1)
+                version: LAST_SCHEMA_VERSION
             }
         );
     }

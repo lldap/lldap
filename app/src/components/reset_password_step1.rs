@@ -1,5 +1,5 @@
 use crate::{
-    components::router::{AppRoute, NavButton},
+    components::router::{AppRoute, Link},
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
@@ -31,7 +31,11 @@ pub enum Msg {
 }
 
 impl CommonComponent<ResetPasswordStep1Form> for ResetPasswordStep1Form {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
             Msg::Submit => {
@@ -40,10 +44,10 @@ impl CommonComponent<ResetPasswordStep1Form> for ResetPasswordStep1Form {
                 }
                 let FormModel { username } = self.form.model();
                 self.common.call_backend(
-                    HostService::reset_password_step1,
-                    &username,
+                    ctx,
+                    HostService::reset_password_step1(username),
                     Msg::PasswordResetResponse,
-                )?;
+                );
                 Ok(true)
             }
             Msg::PasswordResetResponse(response) => {
@@ -63,25 +67,22 @@ impl Component for ResetPasswordStep1Form {
     type Message = Msg;
     type Properties = ();
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(_: &Context<Self>) -> Self {
         ResetPasswordStep1Form {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             form: Form::<FormModel>::new(FormModel::default()),
             just_succeeded: false,
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         self.just_succeeded = false;
-        CommonComponentParts::<Self>::update(self, msg)
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         type Field = yew_form::Field<FormModel>;
+        let link = &ctx.link();
         html! {
             <form
               class="form center-block col-sm-4 col-offset-4">
@@ -95,11 +96,11 @@ impl Component for ResetPasswordStep1Form {
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
-                    form=&self.form
+                    form={&self.form}
                     field_name="username"
                     placeholder="Username or email"
                     autocomplete="username"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                 </div>
                 { if self.just_succeeded {
                     html! {
@@ -111,17 +112,17 @@ impl Component for ResetPasswordStep1Form {
                           <button
                             type="submit"
                             class="btn btn-primary"
-                            disabled=self.common.is_task_running()
-                            onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                            disabled={self.common.is_task_running()}
+                            onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
                             <i class="bi-check-circle me-2"/>
                             {"Reset password"}
                           </button>
-                          <NavButton
+                          <Link
                             classes="btn-link btn"
-                            disabled=self.common.is_task_running()
-                            route=AppRoute::Login>
+                            disabled={self.common.is_task_running()}
+                            to={AppRoute::Login}>
                             {"Back"}
-                          </NavButton>
+                          </Link>
                         </div>
                     }
                 }}

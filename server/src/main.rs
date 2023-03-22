@@ -1,12 +1,16 @@
 #![forbid(unsafe_code)]
 #![forbid(non_ascii_idents)]
-#![allow(clippy::nonstandard_macro_braces)]
+// TODO: Remove next line once ubuntu upgrades rustc to >=1.67.1
+#![allow(clippy::uninlined_format_args)]
 
 use std::time::Duration;
 
 use crate::{
     domain::{
-        handler::{CreateUserRequest, GroupBackendHandler, GroupRequestFilter, UserBackendHandler},
+        handler::{
+            CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+            UserBackendHandler,
+        },
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
     },
@@ -158,6 +162,8 @@ fn run_healthcheck(opts: RunOpts) -> Result<()> {
         .enable_all()
         .build()?;
 
+    info!("Starting healthchecks");
+
     use tokio::time::timeout;
     let delay = Duration::from_millis(3000);
     let (ldap, ldaps, api) = runtime.block_on(async {
@@ -168,15 +174,51 @@ fn run_healthcheck(opts: RunOpts) -> Result<()> {
         )
     });
 
-    let mut failure = false;
-    [ldap, ldaps, api]
+    let failure = [ldap, ldaps, api]
         .into_iter()
-        .filter_map(Result::err)
-        .for_each(|e| {
-            failure = true;
-            error!("{:#}", e)
-        });
+        .flat_map(|res| {
+            if let Err(e) = &res {
+                error!("Error running the health check: {:#}", e);
+            }
+            res
+        })
+        .any(|r| r.is_err());
+    if failure {
+        error!("Healthcheck failed");
+    }
     std::process::exit(i32::from(failure))
+}
+
+async fn create_schema(database_url: String) -> Result<()> {
+    let sql_pool = {
+        let mut sql_opt = sea_orm::ConnectOptions::new(database_url.clone());
+        sql_opt
+            .max_connections(1)
+            .sqlx_logging(true)
+            .sqlx_logging_level(log::LevelFilter::Debug);
+        Database::connect(sql_opt).await?
+    };
+    domain::sql_tables::init_table(&sql_pool)
+        .await
+        .context("while creating base tables")?;
+    infra::jwt_sql_tables::init_table(&sql_pool)
+        .await
+        .context("while creating jwt tables")?;
+    Ok(())
+}
+
+fn create_schema_command(opts: RunOpts) -> Result<()> {
+    debug!("CLI: {:#?}", &opts);
+    let config = infra::configuration::init(opts)?;
+    infra::logging::init(&config)?;
+    let database_url = config.database_url;
+
+    actix::run(
+        create_schema(database_url).unwrap_or_else(|e| error!("Could not create schema: {:#}", e)),
+    )?;
+
+    info!("Schema created successfully.");
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -186,5 +228,6 @@ fn main() -> Result<()> {
         Command::Run(opts) => run_server_command(opts),
         Command::HealthCheck(opts) => run_healthcheck(opts),
         Command::SendTestEmail(opts) => send_test_email_command(opts),
+        Command::CreateSchema(opts) => create_schema_command(opts),
     }
 }

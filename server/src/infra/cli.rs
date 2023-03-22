@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{builder::EnumValueParser, Parser};
 use lettre::message::Mailbox;
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +26,9 @@ pub enum Command {
     /// Send a test email.
     #[clap(name = "send_test_email")]
     SendTestEmail(TestEmailOpts),
+    /// Create database schema.
+    #[clap(name = "create_schema")]
+    CreateSchema(RunOpts),
 }
 
 #[derive(Debug, Parser, Clone)]
@@ -74,6 +77,10 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_HTTP_URL")]
     pub http_url: Option<String>,
 
+    /// Database connection URL
+    #[clap(short, long, env = "LLDAP_DATABASE_URL")]
+    pub database_url: Option<String>,
+
     #[clap(flatten)]
     pub smtp_opts: SmtpOpts,
 
@@ -95,7 +102,7 @@ pub struct TestEmailOpts {
 }
 
 #[derive(Debug, Parser, Clone)]
-#[clap(next_help_heading = Some("LDAPS"), setting = clap::AppSettings::DeriveDisplayOrder)]
+#[clap(next_help_heading = Some("LDAPS"))]
 pub struct LdapsOpts {
     /// Enable LDAPS. Default: false.
     #[clap(long, env = "LLDAP_LDAPS_OPTIONS__ENABLED")]
@@ -114,16 +121,16 @@ pub struct LdapsOpts {
     pub ldaps_key_file: Option<String>,
 }
 
-clap::arg_enum! {
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, clap::ValueEnum)]
+#[serde(rename_all = "UPPERCASE")]
 pub enum SmtpEncryption {
-    TLS,
-    STARTTLS,
-}
+    None,
+    Tls,
+    StartTls,
 }
 
 #[derive(Debug, Parser, Clone)]
-#[clap(next_help_heading = Some("SMTP"), setting = clap::AppSettings::DeriveDisplayOrder)]
+#[clap(next_help_heading = Some("SMTP"))]
 pub struct SmtpOpts {
     /// Sender email address.
     #[clap(long, env = "LLDAP_SMTP_OPTIONS__FROM")]
@@ -150,10 +157,10 @@ pub struct SmtpOpts {
     pub smtp_password: Option<String>,
 
     /// Whether TLS should be used to connect to SMTP.
-    #[clap(long, env = "LLDAP_SMTP_OPTIONS__TLS_REQUIRED", setting=clap::ArgSettings::Hidden)]
+    #[clap(long, env = "LLDAP_SMTP_OPTIONS__TLS_REQUIRED", hide = true)]
     pub smtp_tls_required: Option<bool>,
 
-    #[clap(long, env = "LLDAP_SMTP_OPTIONS__ENCRYPTION", possible_values = SmtpEncryption::variants(), case_insensitive = true)]
+    #[clap(long, env = "LLDAP_SMTP_OPTIONS__ENCRYPTION", value_parser = EnumValueParser::<SmtpEncryption>::new(), ignore_case = true)]
     pub smtp_encryption: Option<SmtpEncryption>,
 }
 

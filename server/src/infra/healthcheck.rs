@@ -99,6 +99,7 @@ fn get_tls_connector() -> Result<RustlsTlsConnector> {
 #[instrument(skip_all, level = "info", err)]
 pub async fn check_ldaps(ldaps_options: &LdapsOptions) -> Result<()> {
     if !ldaps_options.enabled {
+        info!("LDAPS not enabled");
         return Ok(());
     };
     let tls_connector = get_tls_connector()?;

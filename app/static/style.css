@@ -10,3 +10,23 @@ header h2 {
   font-weight: 700;
   text-decoration: none;
 }
+
+html.dark .bg-light {
+  background-color: rgba(59,59,59,1) !important;
+}
+
+html.dark a {
+  color: #e1e1e1
+}
+
+a {
+  color: #212529
+}
+
+html.dark .nav-link {
+  color: #e1e1e1
+}
+
+.nav-link {
+  color: #212529
+}

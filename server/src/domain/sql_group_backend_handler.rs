@@ -1,20 +1,23 @@
 use crate::domain::{
     error::{DomainError, Result},
-    handler::{GroupBackendHandler, GroupRequestFilter, UpdateGroupRequest},
+    handler::{
+        GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter, UpdateGroupRequest,
+    },
     model::{self, GroupColumn, MembershipColumn},
     sql_backend_handler::SqlBackendHandler,
     types::{Group, GroupDetails, GroupId, Uuid},
 };
 use async_trait::async_trait;
 use sea_orm::{
+    sea_query::{Alias, Cond, Expr, Func, IntoCondition, SimpleExpr},
     ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
     QueryTrait,
 };
-use sea_query::{Cond, IntoCondition, SimpleExpr};
 use tracing::{debug, instrument};
 
 fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
     use GroupRequestFilter::*;
+    let group_table = Alias::new("groups");
     match filter {
         And(fs) => {
             if fs.is_empty() {
@@ -46,11 +49,17 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
                     .into_query(),
             )
             .into_condition(),
+        DisplayNameSubString(filter) => SimpleExpr::FunctionCall(Func::lower(Expr::col((
+            group_table,
+            GroupColumn::DisplayName,
+        ))))
+        .like(filter.to_sql_filter())
+        .into_condition(),
     }
 }
 
 #[async_trait]
-impl GroupBackendHandler for SqlBackendHandler {
+impl GroupListerBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
         debug!(?filters);
@@ -87,7 +96,10 @@ impl GroupBackendHandler for SqlBackendHandler {
             })
             .collect())
     }
+}
 
+#[async_trait]
+impl GroupBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails> {
         debug!(?group_id);
@@ -116,7 +128,7 @@ impl GroupBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn create_group(&self, group_name: &str) -> Result<GroupId> {
         debug!(?group_name);
-        let now = chrono::Utc::now();
+        let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(group_name, &now);
         let new_group = model::groups::ActiveModel {
             display_name: ActiveValue::Set(group_name.to_owned()),
@@ -146,7 +158,7 @@ impl GroupBackendHandler for SqlBackendHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{sql_backend_handler::tests::*, types::UserId};
+    use crate::domain::{handler::SubStringFilter, sql_backend_handler::tests::*, types::UserId};
 
     async fn get_group_ids(
         handler: &SqlBackendHandler,
@@ -217,6 +229,24 @@ mod tests {
                 ]))
             )
             .await,
+            vec![fixture.groups[0]]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_groups_substring_filter() {
+        let fixture = TestFixture::new().await;
+        assert_eq!(
+            get_group_ids(
+                &fixture.handler,
+                Some(GroupRequestFilter::DisplayNameSubString(SubStringFilter {
+                    initial: Some("be".to_owned()),
+                    any: vec!["sT".to_owned()],
+                    final_: Some("P".to_owned()),
+                })),
+            )
+            .await,
+            // Best group
             vec![fixture.groups[0]]
         );
     }

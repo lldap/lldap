@@ -1,3 +1,5 @@
+use base64::Engine;
+use chrono::{NaiveDateTime, TimeZone};
 use sea_orm::{
     entity::IntoActiveValue,
     sea_query::{value::ValueType, ArrayType, ColumnType, Nullable, ValueTypeErr},
@@ -7,18 +9,23 @@ use serde::{Deserialize, Serialize};
 
 pub use super::model::{GroupColumn, UserColumn};
 
-pub type DateTime = chrono::DateTime<chrono::Utc>;
-
 #[derive(PartialEq, Hash, Eq, Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(try_from = "&str")]
 pub struct Uuid(String);
 
 impl Uuid {
-    pub fn from_name_and_date(name: &str, creation_date: &DateTime) -> Self {
+    pub fn from_name_and_date(name: &str, creation_date: &NaiveDateTime) -> Self {
         Uuid(
             uuid::Uuid::new_v3(
                 &uuid::Uuid::NAMESPACE_X500,
-                &[name.as_bytes(), creation_date.to_rfc3339().as_bytes()].concat(),
+                &[
+                    name.as_bytes(),
+                    chrono::Utc
+                        .from_utc_datetime(creation_date)
+                        .to_rfc3339()
+                        .as_bytes(),
+                ]
+                .concat(),
             )
             .to_string(),
         )
@@ -47,8 +54,11 @@ impl std::string::ToString for Uuid {
 }
 
 impl TryGetable for Uuid {
-    fn try_get(res: &QueryResult, pre: &str, col: &str) -> std::result::Result<Self, TryGetError> {
-        Ok(Uuid(String::try_get(res, pre, col)?))
+    fn try_get_by<I: sea_orm::ColIdx>(
+        res: &QueryResult,
+        index: I,
+    ) -> std::result::Result<Self, TryGetError> {
+        Ok(Uuid(String::try_get_by(res, index)?))
     }
 }
 
@@ -136,8 +146,8 @@ impl From<&UserId> for Value {
 }
 
 impl TryGetable for UserId {
-    fn try_get(res: &QueryResult, pre: &str, col: &str) -> Result<Self, TryGetError> {
-        Ok(UserId::new(&String::try_get(res, pre, col)?))
+    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
+        Ok(UserId::new(&String::try_get_by(res, index)?))
     }
 }
 
@@ -215,13 +225,15 @@ impl TryFrom<String> for JpegPhoto {
     type Error = anyhow::Error;
     fn try_from(string: String) -> anyhow::Result<Self> {
         // The String format is in base64.
-        <Self as TryFrom<_>>::try_from(base64::decode(string.as_str())?)
+        <Self as TryFrom<_>>::try_from(
+            base64::engine::general_purpose::STANDARD.decode(string.as_str())?,
+        )
     }
 }
 
 impl From<&JpegPhoto> for String {
     fn from(val: &JpegPhoto) -> Self {
-        base64::encode(&val.0)
+        base64::engine::general_purpose::STANDARD.encode(&val.0)
     }
 }
 
@@ -255,8 +267,8 @@ impl JpegPhoto {
 }
 
 impl TryGetable for JpegPhoto {
-    fn try_get(res: &QueryResult, pre: &str, col: &str) -> Result<Self, TryGetError> {
-        <Self as std::convert::TryFrom<Vec<_>>>::try_from(Vec::<u8>::try_get(res, pre, col)?)
+    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
+        <Self as std::convert::TryFrom<Vec<_>>>::try_from(Vec::<u8>::try_get_by(res, index)?)
             .map_err(|e| {
                 TryGetError::DbErr(DbErr::TryIntoErr {
                     from: "[u8]",
@@ -308,15 +320,14 @@ pub struct User {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,
-    pub creation_date: DateTime,
+    pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
 }
 
 #[cfg(test)]
 impl Default for User {
     fn default() -> Self {
-        use chrono::TimeZone;
-        let epoch = chrono::Utc.timestamp_opt(0, 0).unwrap();
+        let epoch = chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc();
         User {
             user_id: UserId::default(),
             email: String::new(),
@@ -340,8 +351,8 @@ impl From<GroupId> for Value {
 }
 
 impl TryGetable for GroupId {
-    fn try_get(res: &QueryResult, pre: &str, col: &str) -> Result<Self, TryGetError> {
-        Ok(GroupId(i32::try_get(res, pre, col)?))
+    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
+        Ok(GroupId(i32::try_get_by(res, index)?))
     }
 }
 
@@ -359,7 +370,7 @@ impl ValueType for GroupId {
     }
 
     fn column_type() -> ColumnType {
-        ColumnType::Integer(None)
+        ColumnType::Integer
     }
 }
 
@@ -373,7 +384,7 @@ impl TryFromU64 for GroupId {
 pub struct Group {
     pub id: GroupId,
     pub display_name: String,
-    pub creation_date: DateTime,
+    pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
     pub users: Vec<UserId>,
 }
@@ -382,7 +393,7 @@ pub struct Group {
 pub struct GroupDetails {
     pub group_id: GroupId,
     pub display_name: String,
-    pub creation_date: DateTime,
+    pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
 }
 

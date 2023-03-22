@@ -11,7 +11,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub jwt_hash: i64,
     pub user_id: UserId,
-    pub expiry_date: chrono::DateTime<chrono::Utc>,
+    pub expiry_date: chrono::NaiveDateTime,
     pub blacklisted: bool,
 }
 

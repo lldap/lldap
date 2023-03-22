@@ -36,16 +36,21 @@ pub enum Msg {
 }
 
 impl CommonComponent<DeleteUser> for DeleteUser {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
             Msg::ClickedDeleteUser => {
                 self.modal.as_ref().expect("modal not initialized").show();
             }
             Msg::ConfirmDeleteUser => {
-                self.update(Msg::DismissModal);
+                self.update(ctx, Msg::DismissModal);
                 self.common.call_graphql::<DeleteUserQuery, _>(
+                    ctx,
                     delete_user_query::Variables {
-                        user: self.common.username.clone(),
+                        user: ctx.props().username.clone(),
                     },
                     Msg::DeleteUserResponse,
                     "Error trying to delete user",
@@ -55,12 +60,10 @@ impl CommonComponent<DeleteUser> for DeleteUser {
                 self.modal.as_ref().expect("modal not initialized").hide();
             }
             Msg::DeleteUserResponse(response) => {
-                self.common.cancel_task();
                 response?;
-                self.common
-                    .props
+                ctx.props()
                     .on_user_deleted
-                    .emit(self.common.username.clone());
+                    .emit(ctx.props().username.clone());
             }
         }
         Ok(true)
@@ -75,15 +78,15 @@ impl Component for DeleteUser {
     type Message = Msg;
     type Properties = DeleteUserProps;
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(_: &Context<Self>) -> Self {
         Self {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             node_ref: NodeRef::default(),
             modal: None,
         }
     }
 
-    fn rendered(&mut self, first_render: bool) {
+    fn rendered(&mut self, _: &Context<Self>, first_render: bool) {
         if first_render {
             self.modal = Some(Modal::new(
                 self.node_ref
@@ -93,44 +96,43 @@ impl Component for DeleteUser {
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         CommonComponentParts::<Self>::update_and_report_error(
             self,
+            ctx,
             msg,
-            self.common.on_error.clone(),
+            ctx.props().on_error.clone(),
         )
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = &ctx.link();
         html! {
           <>
           <button
             class="btn btn-danger"
-            disabled=self.common.is_task_running()
-            onclick=self.common.callback(|_| Msg::ClickedDeleteUser)>
+            disabled={self.common.is_task_running()}
+            onclick={link.callback(|_| Msg::ClickedDeleteUser)}>
             <i class="bi-x-circle-fill" aria-label="Delete user" />
           </button>
-          {self.show_modal()}
+          {self.show_modal(ctx)}
           </>
         }
     }
 }
 
 impl DeleteUser {
-    fn show_modal(&self) -> Html {
+    fn show_modal(&self, ctx: &Context<Self>) -> Html {
+        let link = &ctx.link();
         html! {
           <div
             class="modal fade"
-            id="deleteUserModal".to_string() + &self.common.username
+            id={"deleteUserModal".to_string() + &ctx.props().username}
             tabindex="-1"
             //role="dialog"
             aria-labelledby="deleteUserModalLabel"
             aria-hidden="true"
-            ref=self.node_ref.clone()>
+            ref={self.node_ref.clone()}>
             <div class="modal-dialog" /*role="document"*/>
               <div class="modal-content">
                 <div class="modal-header">
@@ -139,25 +141,25 @@ impl DeleteUser {
                     type="button"
                     class="btn-close"
                     aria-label="Close"
-                    onclick=self.common.callback(|_| Msg::DismissModal) />
+                    onclick={link.callback(|_| Msg::DismissModal)} />
                 </div>
                 <div class="modal-body">
                 <span>
                   {"Are you sure you want to delete user "}
-                  <b>{&self.common.username}</b>{"?"}
+                  <b>{&ctx.props().username}</b>{"?"}
                 </span>
                 </div>
                 <div class="modal-footer">
                   <button
                     type="button"
                     class="btn btn-secondary"
-                    onclick=self.common.callback(|_| Msg::DismissModal)>
+                    onclick={link.callback(|_| Msg::DismissModal)}>
                     <i class="bi-x-circle me-2"></i>
                     {"Cancel"}
                   </button>
                   <button
                     type="button"
-                    onclick=self.common.callback(|_| Msg::ConfirmDeleteUser)
+                    onclick={link.callback(|_| Msg::ConfirmDeleteUser)}
                     class="btn btn-danger">
                     <i class="bi-check-circle me-2"></i>
                     {"Yes, I'm sure"}

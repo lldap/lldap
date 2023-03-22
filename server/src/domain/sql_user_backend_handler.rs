@@ -1,6 +1,9 @@
-use super::{
+use crate::domain::{
     error::{DomainError, Result},
-    handler::{CreateUserRequest, UpdateUserRequest, UserBackendHandler, UserRequestFilter},
+    handler::{
+        CreateUserRequest, UpdateUserRequest, UserBackendHandler, UserListerBackendHandler,
+        UserRequestFilter,
+    },
     model::{self, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
     types::{GroupDetails, GroupId, User, UserAndGroups, UserId, Uuid},
@@ -8,11 +11,10 @@ use super::{
 use async_trait::async_trait;
 use sea_orm::{
     entity::IntoActiveValue,
-    sea_query::{Cond, Expr, IntoCondition, SimpleExpr},
+    sea_query::{Alias, Cond, Expr, Func, IntoColumnRef, IntoCondition, SimpleExpr},
     ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder,
     QuerySelect, QueryTrait, Set,
 };
-use sea_query::{Alias, IntoColumnRef};
 use std::collections::HashSet;
 use tracing::{debug, instrument};
 
@@ -50,8 +52,15 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
         MemberOfId(group_id) => Expr::col((group_table, GroupColumn::GroupId))
             .eq(group_id)
             .into_condition(),
+        UserIdSubString(filter) => UserColumn::UserId
+            .like(&filter.to_sql_filter())
+            .into_condition(),
+        SubString(col, filter) => SimpleExpr::FunctionCall(Func::lower(Expr::col(col)))
+            .like(filter.to_sql_filter())
+            .into_condition(),
     }
 }
+
 fn to_value(opt_name: &Option<String>) -> ActiveValue<Option<String>> {
     match opt_name {
         None => ActiveValue::NotSet,
@@ -64,7 +73,7 @@ fn to_value(opt_name: &Option<String>) -> ActiveValue<Option<String>> {
 }
 
 #[async_trait]
-impl UserBackendHandler for SqlBackendHandler {
+impl UserListerBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn list_users(
         &self,
@@ -129,7 +138,10 @@ impl UserBackendHandler for SqlBackendHandler {
                 .collect())
         }
     }
+}
 
+#[async_trait]
+impl UserBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret)]
     async fn get_user_details(&self, user_id: &UserId) -> Result<User> {
         debug!(?user_id);
@@ -158,7 +170,7 @@ impl UserBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
         debug!(user_id = ?request.user_id);
-        let now = chrono::Utc::now();
+        let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(request.user_id.as_str(), &now);
         let new_user = model::users::ActiveModel {
             user_id: Set(request.user_id),
@@ -237,6 +249,7 @@ impl UserBackendHandler for SqlBackendHandler {
 mod tests {
     use super::*;
     use crate::domain::{
+        handler::SubStringFilter,
         sql_backend_handler::tests::*,
         types::{JpegPhoto, UserColumn},
     };
@@ -285,6 +298,31 @@ mod tests {
         )
         .await;
         assert_eq!(users, vec!["bob"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_users_substring_filter() {
+        let fixture = TestFixture::new().await;
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::And(vec![
+                UserRequestFilter::UserIdSubString(SubStringFilter {
+                    initial: Some("Pa".to_owned()),
+                    any: vec!["rI".to_owned()],
+                    final_: Some("K".to_owned()),
+                }),
+                UserRequestFilter::SubString(
+                    UserColumn::FirstName,
+                    SubStringFilter {
+                        initial: None,
+                        any: vec!["r".to_owned(), "t".to_owned()],
+                        final_: None,
+                    },
+                ),
+            ])),
+        )
+        .await;
+        assert_eq!(users, vec!["patrick"]);
     }
 
     #[tokio::test]

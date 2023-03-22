@@ -5,47 +5,47 @@ name = "lldap"
 version = "0.4.2-alpha"
 
 [dependencies]
-actix = "0.12"
-actix-files = "0.6.0-beta.6"
-actix-http = "=3.0.0-beta.9"
-actix-rt = "2.2.0"
-actix-server = "=2.0.0-beta.5"
-actix-service = "2.0.0"
-actix-web = "=4.0.0-beta.8"
-actix-web-httpauth = "0.6.0-beta.2"
+actix = "0.13"
+actix-files = "0.6"
+actix-http = "3"
+actix-rt = "2"
+actix-server = "2"
+actix-service = "2"
+actix-web = "4.3"
+actix-web-httpauth = "0.8"
 anyhow = "*"
 async-trait = "0.1"
-base64 = "0.13"
+base64 = "*"
 bincode = "1.3"
 cron = "*"
-derive_builder = "0.10.2"
+derive_builder = "0.12"
 figment_file_provider_adapter = "0.1"
 futures = "*"
 futures-util = "*"
-hmac = "0.10"
+hmac = "0.12"
 http = "*"
-itertools = "0.10.1"
-juniper = "0.15.10"
-juniper_actix = "0.4.0"
-jwt = "0.13"
-ldap3_proto = "*"
+itertools = "0.10"
+juniper = "0.15"
+jwt = "0.16"
+lber = "0.4.1"
+ldap3_proto = ">=0.3.1"
 log = "*"
-orion = "0.16"
+orion = "0.17"
 rustls = "0.20"
 serde = "*"
 serde_json = "1"
-sha2 = "0.9"
+sha2 = "0.10"
 thiserror = "*"
-time = "0.2"
+time = "0.3"
 tokio-rustls = "0.23"
 tokio-stream = "*"
-tokio-util = "0.7.3"
+tokio-util = "0.7"
 tracing = "*"
-tracing-actix-web = "0.4.0-beta.7"
+tracing-actix-web = "0.7"
 tracing-attributes = "^0.1.21"
 tracing-log = "*"
-rustls-pemfile = "1.0.0"
-serde_bytes = "0.11.7"
+rustls-pemfile = "1"
+serde_bytes = "0.11"
 webpki-roots = "*"
 
 [dependencies.chrono]
@@ -54,7 +54,7 @@ version = "*"
 
 [dependencies.clap]
 features = ["std", "color", "suggestions", "derive", "env"]
-version = "3.1.15"
+version = "4"
 
 [dependencies.figment]
 features = ["env", "toml"]
@@ -67,14 +67,10 @@ features = ["env-filter", "tracing-log"]
 [dependencies.lettre]
 features = ["builder", "serde", "smtp-transport", "tokio1-rustls-tls"]
 default-features = false
-version = "0.10.0-rc.3"
+version = "0.10.1"
 
 [dependencies.lldap_auth]
 path = "../auth"
-
-[dependencies.sea-query]
-version = "*"
-features = ["with-chrono"]
 
 [dependencies.opaque-ke]
 version = "0.6"
@@ -89,7 +85,7 @@ version = "*"
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.17"
+version = "1.25"
 
 [dependencies.uuid]
 features = ["v3"]
@@ -101,7 +97,7 @@ version = "^0.1.4"
 
 [dependencies.actix-tls]
 features = ["default", "rustls"]
-version = "=3.0.0-beta.5"
+version = "3"
 
 [dependencies.image]
 features = ["jpeg"]
@@ -109,7 +105,7 @@ default-features = false
 version = "0.24"
 
 [dependencies.sea-orm]
-version= "0.10.3"
+version= "0.11"
 default-features = false
 features = ["macros", "with-chrono", "with-uuid", "sqlx-all", "runtime-actix-rustls"]
 
@@ -119,4 +115,4 @@ default-features = false
 features = ["rustls-tls-webpki-roots"]
 
 [dev-dependencies]
-mockall = "0.9.1"
+mockall = "0.11"

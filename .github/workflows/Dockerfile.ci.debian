@@ -10,28 +10,34 @@ RUN mkdir -p target/
 RUN mkdir -p /lldap/app
 
 RUN if [ "${TARGETPLATFORM}" = "linux/amd64" ]; then \
-    mv bin/amd64-bin/lldap target/lldap && \
-    mv bin/amd64-bin/migration-tool target/migration-tool && \
+    mv bin/x86_64-unknown-linux-musl-lldap-bin/lldap target/lldap && \
+    mv bin/x86_64-unknown-linux-musl-migration-tool-bin/migration-tool target/migration-tool && \
+    mv bin/x86_64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
     chmod +x target/lldap && \
     chmod +x target/migration-tool && \
+    chmod +x target/lldap_set_password && \
     ls -la target/ . && \
     pwd \
     ; fi
 
 RUN if [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
-    mv bin/aarch64-bin/lldap target/lldap && \
-    mv bin/aarch64-bin/migration-tool target/migration-tool && \
+    mv bin/aarch64-unknown-linux-musl-lldap-bin/lldap target/lldap && \
+    mv bin/aarch64-unknown-linux-musl-migration-tool-bin/migration-tool target/migration-tool && \
+    mv bin/aarch64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
     chmod +x target/lldap && \
     chmod +x target/migration-tool && \
+    chmod +x target/lldap_set_password && \
     ls -la target/ . && \
     pwd \
     ; fi
 
 RUN if [ "${TARGETPLATFORM}" = "linux/arm/v7" ]; then \
-    mv bin/armhf-bin/lldap target/lldap && \
-    mv bin/armhf-bin/migration-tool target/migration-tool && \
+    mv bin/armv7-unknown-linux-gnueabihf-lldap-bin/lldap target/lldap && \
+    mv bin/armv7-unknown-linux-gnueabihf-migration-tool-bin/migration-tool target/migration-tool && \
+    mv bin/armv7-unknown-linux-gnueabihf-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
     chmod +x target/lldap && \
     chmod +x target/migration-tool && \
+    chmod +x target/lldap_set_password && \
     ls -la target/ . && \
     pwd \
     ; fi
@@ -42,6 +48,7 @@ COPY lldap_config.docker_template.toml /lldap/
 COPY web/index_local.html web/index.html
 RUN cp target/lldap /lldap/ && \
     cp target/migration-tool /lldap/ && \
+    cp target/lldap_set_password /lldap/ && \
     cp -R web/index.html \
           web/pkg \
           web/static \
@@ -69,4 +76,4 @@ VOLUME ["/data"]
 WORKDIR /app
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
 CMD ["run", "--config-file", "/data/lldap_config.toml"]
-HEALTHCHECK CMD ["/app/lldap", "run", "--config-file", "/data/lldap_config.toml"]
+HEALTHCHECK CMD ["/app/lldap", "healthcheck", "--config-file", "/data/lldap_config.toml"]

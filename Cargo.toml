@@ -3,16 +3,21 @@ members = [
   "server",
   "auth",
   "app",
-  "migration-tool"
+  "migration-tool",
+  "set-password",
 ]
 
 default-members = ["server"]
 
-# Remove once https://github.com/kanidm/ldap3_proto/pull/8 is merged.
-[patch.crates-io.ldap3_proto]
-git = 'https://github.com/nitnelave/ldap3_server/'
-rev = '7b50b2b82c383f5f70e02e11072bb916629ed2bc'
+[profile.release]
+lto = true
+
+[profile.release.package.lldap_app]
+opt-level = 's'
 
 [patch.crates-io.opaque-ke]
 git = 'https://github.com/nitnelave/opaque-ke/'
 branch = 'zeroize_1.5'
+
+[patch.crates-io.lber]
+git = 'https://github.com/inejge/ldap3/'

@@ -1,10 +1,10 @@
 use ldap3_proto::{
     proto::LdapOp, LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry,
 };
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, instrument, warn};
 
 use crate::domain::{
-    handler::{BackendHandler, GroupRequestFilter},
+    handler::{GroupListerBackendHandler, GroupRequestFilter},
     ldap::error::LdapError,
     types::{Group, GroupColumn, UserId, Uuid},
 };
@@ -12,15 +12,16 @@ use crate::domain::{
 use super::{
     error::LdapResult,
     utils::{
-        expand_attribute_wildcards, get_user_id_from_distinguished_name, map_group_field, LdapInfo,
+        expand_attribute_wildcards, get_group_id_from_distinguished_name,
+        get_user_id_from_distinguished_name, map_group_field, LdapInfo,
     },
 };
 
-fn get_group_attribute(
+pub fn get_group_attribute(
     group: &Group,
     base_dn_str: &str,
     attribute: &str,
-    user_filter: &Option<&UserId>,
+    user_filter: &Option<UserId>,
     ignored_group_attributes: &[String],
 ) -> Option<Vec<Vec<u8>>> {
     let attribute = attribute.to_ascii_lowercase();
@@ -28,12 +29,12 @@ fn get_group_attribute(
         "objectclass" => vec![b"groupOfUniqueNames".to_vec()],
         // Always returned as part of the base response.
         "dn" | "distinguishedname" => return None,
-        "cn" | "uid" => vec![group.display_name.clone().into_bytes()],
-        "entryuuid" => vec![group.uuid.to_string().into_bytes()],
+        "cn" | "uid" | "id" => vec![group.display_name.clone().into_bytes()],
+        "entryuuid" | "uuid" => vec![group.uuid.to_string().into_bytes()],
         "member" | "uniquemember" => group
             .users
             .iter()
-            .filter(|u| user_filter.map(|f| *u == f).unwrap_or(true))
+            .filter(|u| user_filter.as_ref().map(|f| *u == f).unwrap_or(true))
             .map(|u| format!("uid={},ou=people,{}", u, base_dn_str).into_bytes())
             .collect(),
         "1.1" => return None,
@@ -72,14 +73,18 @@ const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] = &[
     "entryuuid",
 ];
 
+fn expand_group_attribute_wildcards(attributes: &[String]) -> Vec<&str> {
+    expand_attribute_wildcards(attributes, ALL_GROUP_ATTRIBUTE_KEYS)
+}
+
 fn make_ldap_search_group_result_entry(
     group: Group,
     base_dn_str: &str,
     attributes: &[String],
-    user_filter: &Option<&UserId>,
+    user_filter: &Option<UserId>,
     ignored_group_attributes: &[String],
 ) -> LdapSearchResultEntry {
-    let expanded_attributes = expand_attribute_wildcards(attributes, ALL_GROUP_ATTRIBUTE_KEYS);
+    let expanded_attributes = expand_group_attribute_wildcards(attributes);
 
     LdapSearchResultEntry {
         dn: format!("cn={},ou=groups,{}", group.display_name, base_dn_str),
@@ -120,12 +125,20 @@ fn convert_group_filter(
                     )?;
                     Ok(GroupRequestFilter::Member(user_name))
                 }
-                "objectclass" => match value.as_str() {
-                    "groupofuniquenames" | "groupofnames" => Ok(GroupRequestFilter::And(vec![])),
-                    _ => Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
-                        vec![],
-                    )))),
-                },
+                "objectclass" => Ok(GroupRequestFilter::from(matches!(
+                    value.as_str(),
+                    "groupofuniquenames" | "groupofnames"
+                ))),
+                "dn" => Ok(get_group_id_from_distinguished_name(
+                    value.to_ascii_lowercase().as_str(),
+                    &ldap_info.base_dn,
+                    &ldap_info.base_dn_str,
+                )
+                .map(GroupRequestFilter::DisplayName)
+                .unwrap_or_else(|_| {
+                    warn!("Invalid dn filter on group: {}", value);
+                    GroupRequestFilter::from(false)
+                })),
                 _ => match map_group_field(field) {
                     Some(GroupColumn::DisplayName) => {
                         Ok(GroupRequestFilter::DisplayName(value.to_string()))
@@ -144,9 +157,7 @@ fn convert_group_filter(
                                 field
                             );
                         }
-                        Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
-                            vec![],
-                        ))))
+                        Ok(GroupRequestFilter::from(false))
                     }
                 },
             }
@@ -160,16 +171,26 @@ fn convert_group_filter(
         LdapFilter::Not(filter) => Ok(GroupRequestFilter::Not(Box::new(rec(filter)?))),
         LdapFilter::Present(field) => {
             let field = &field.to_ascii_lowercase();
-            if field == "objectclass"
-                || field == "dn"
-                || field == "distinguishedname"
-                || map_group_field(field).is_some()
-            {
-                Ok(GroupRequestFilter::And(vec![]))
-            } else {
-                Ok(GroupRequestFilter::Not(Box::new(GroupRequestFilter::And(
-                    vec![],
-                ))))
+            Ok(GroupRequestFilter::from(
+                field == "objectclass"
+                    || field == "dn"
+                    || field == "distinguishedname"
+                    || map_group_field(field).is_some(),
+            ))
+        }
+        LdapFilter::Substring(field, substring_filter) => {
+            let field = &field.to_ascii_lowercase();
+            match map_group_field(field.as_str()) {
+                Some(GroupColumn::DisplayName) => Ok(GroupRequestFilter::DisplayNameSubString(
+                    substring_filter.clone().into(),
+                )),
+                _ => Err(LdapError {
+                    code: LdapResultCode::UnwillingToPerform,
+                    message: format!(
+                        "Unsupported group attribute for substring filter: {:?}",
+                        field
+                    ),
+                }),
             }
         }
         _ => Err(LdapError {
@@ -180,42 +201,37 @@ fn convert_group_filter(
 }
 
 #[instrument(skip_all, level = "debug")]
-pub async fn get_groups_list<Backend: BackendHandler>(
+pub async fn get_groups_list<Backend: GroupListerBackendHandler>(
     ldap_info: &LdapInfo,
     ldap_filter: &LdapFilter,
-    attributes: &[String],
     base: &str,
-    user_filter: &Option<&UserId>,
-    backend: &mut Backend,
-) -> LdapResult<Vec<LdapOp>> {
+    backend: &Backend,
+) -> LdapResult<Vec<Group>> {
     debug!(?ldap_filter);
-    let filter = convert_group_filter(ldap_info, ldap_filter)?;
-    let parsed_filters = match user_filter {
-        None => filter,
-        Some(u) => {
-            info!("Unprivileged search, limiting results");
-            GroupRequestFilter::And(vec![filter, GroupRequestFilter::Member((*u).clone())])
-        }
-    };
-    debug!(?parsed_filters);
-    let groups = backend
-        .list_groups(Some(parsed_filters))
+    let filters = convert_group_filter(ldap_info, ldap_filter)?;
+    debug!(?filters);
+    backend
+        .list_groups(Some(filters))
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::Other,
             message: format!(r#"Error while listing groups "{}": {:#}"#, base, e),
-        })?;
-
-    Ok(groups
-        .into_iter()
-        .map(|u| {
-            LdapOp::SearchResultEntry(make_ldap_search_group_result_entry(
-                u,
-                &ldap_info.base_dn_str,
-                attributes,
-                user_filter,
-                &ldap_info.ignored_group_attributes,
-            ))
         })
-        .collect::<Vec<_>>())
+}
+
+pub fn convert_groups_to_ldap_op<'a>(
+    groups: Vec<Group>,
+    attributes: &'a [String],
+    ldap_info: &'a LdapInfo,
+    user_filter: &'a Option<UserId>,
+) -> impl Iterator<Item = LdapOp> + 'a {
+    groups.into_iter().map(move |g| {
+        LdapOp::SearchResultEntry(make_ldap_search_group_result_entry(
+            g,
+            &ldap_info.base_dn_str,
+            attributes,
+            user_filter,
+            &ldap_info.ignored_group_attributes,
+        ))
+    })
 }

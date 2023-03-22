@@ -11,7 +11,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub group_id: GroupId,
     pub display_name: String,
-    pub creation_date: chrono::DateTime<chrono::Utc>,
+    pub creation_date: chrono::NaiveDateTime,
     pub uuid: Uuid,
 }
 

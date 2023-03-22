@@ -21,17 +21,29 @@ async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOpti
         .reply_to(reply_to)
         .to(to)
         .subject(subject)
-        .body(body)?;
-    let creds = Credentials::new(
-        options.user.clone(),
-        options.password.unsecure().to_string(),
-    );
-    let relay_factory = match options.smtp_encryption {
-        SmtpEncryption::TLS => AsyncSmtpTransport::<Tokio1Executor>::relay,
-        SmtpEncryption::STARTTLS => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay,
+        .singlepart(
+            lettre::message::SinglePart::builder()
+                .header(lettre::message::header::ContentType::TEXT_PLAIN)
+                .body(body),
+        )?;
+    let mut mailer = match options.smtp_encryption {
+        SmtpEncryption::None => {
+            AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&options.server)
+        }
+        SmtpEncryption::Tls => AsyncSmtpTransport::<Tokio1Executor>::relay(&options.server)?,
+        SmtpEncryption::StartTls => {
+            AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&options.server)?
+        }
     };
-    let mailer = relay_factory(&options.server)?.credentials(creds).build();
-    mailer.send(email).await?;
+    if options.user.as_str() != "" {
+        let creds = Credentials::new(
+            options.user.clone(),
+            options.password.unsecure().to_string(),
+        );
+        mailer = mailer.credentials(creds)
+    }
+
+    mailer.port(options.port).build().send(email).await?;
     Ok(())
 }
 
@@ -52,7 +64,9 @@ compromised. You should reset your password and contact an administrator.
 To reset your password please visit the following URL: {}/reset-password/step2/{}
 
 Please contact an administrator if you did not initiate the process.",
-        username, domain, token
+        username,
+        domain.trim_end_matches('/'),
+        token
     );
     send_email(to, "[LLDAP] Password reset requested", body, options).await
 }

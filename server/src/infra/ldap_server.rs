@@ -3,7 +3,10 @@ use crate::{
         handler::{BackendHandler, LoginHandler},
         opaque_handler::OpaqueHandler,
     },
-    infra::{configuration::Configuration, ldap_handler::LdapHandler},
+    infra::{
+        access_control::AccessControlledBackendHandler, configuration::Configuration,
+        ldap_handler::LdapHandler,
+    },
 };
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
@@ -64,7 +67,7 @@ async fn handle_ldap_stream<Stream, Backend>(
 ) -> Result<Stream>
 where
     Backend: BackendHandler + LoginHandler + OpaqueHandler + 'static,
-    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite,
+    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + std::marker::Unpin,
 {
     use tokio_stream::StreamExt;
     let (r, w) = tokio::io::split(stream);
@@ -73,7 +76,7 @@ where
     let mut resp = FramedWrite::new(w, LdapCodec);
 
     let mut session = LdapHandler::new(
-        backend_handler,
+        AccessControlledBackendHandler::new(backend_handler),
         ldap_base_dn,
         ignored_user_attributes,
         ignored_group_attributes,
@@ -145,7 +148,7 @@ pub fn build_ldap_server<Backend>(
     server_builder: ServerBuilder,
 ) -> Result<ServerBuilder>
 where
-    Backend: BackendHandler + LoginHandler + OpaqueHandler + 'static,
+    Backend: BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
     let context = (
         backend_handler,

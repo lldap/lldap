@@ -31,15 +31,18 @@ pub enum Msg {
 }
 
 impl CommonComponent<RemoveUserFromGroupComponent> for RemoveUserFromGroupComponent {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
-            Msg::SubmitRemoveGroup => self.submit_remove_group(),
+            Msg::SubmitRemoveGroup => self.submit_remove_group(ctx),
             Msg::RemoveGroupResponse(response) => {
                 response?;
-                self.common.cancel_task();
-                self.common
+                ctx.props()
                     .on_user_removed_from_group
-                    .emit((self.common.username.clone(), self.common.group_id));
+                    .emit((ctx.props().username.clone(), ctx.props().group_id));
             }
         }
         Ok(true)
@@ -51,11 +54,12 @@ impl CommonComponent<RemoveUserFromGroupComponent> for RemoveUserFromGroupCompon
 }
 
 impl RemoveUserFromGroupComponent {
-    fn submit_remove_group(&mut self) {
+    fn submit_remove_group(&mut self, ctx: &Context<Self>) {
         self.common.call_graphql::<RemoveUserFromGroup, _>(
+            ctx,
             remove_user_from_group::Variables {
-                user: self.common.username.clone(),
-                group: self.common.group_id,
+                user: ctx.props().username.clone(),
+                group: ctx.props().group_id,
             },
             Msg::RemoveGroupResponse,
             "Error trying to initiate removing the user from a group",
@@ -67,30 +71,28 @@ impl Component for RemoveUserFromGroupComponent {
     type Message = Msg;
     type Properties = Props;
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(_: &Context<Self>) -> Self {
         Self {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         CommonComponentParts::<Self>::update_and_report_error(
             self,
+            ctx,
             msg,
-            self.common.on_error.clone(),
+            ctx.props().on_error.clone(),
         )
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = &ctx.link();
         html! {
           <button
             class="btn btn-danger"
-            disabled=self.common.is_task_running()
-            onclick=self.common.callback(|_| Msg::SubmitRemoveGroup)>
+            disabled={self.common.is_task_running()}
+            onclick={link.callback(|_| Msg::SubmitRemoveGroup)}>
             <i class="bi-x-circle-fill" aria-label="Remove user from group" />
           </button>
         }
