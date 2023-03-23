@@ -1,8 +1,9 @@
 use std::str::FromStr;
 
 use crate::{
-    components::user_details::User,
+    components::avatar::AvatarData,
     components::avatar_event_bus::{AvatarEventBus, Request},
+    components::user_details::User,
     infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{bail, Error, Result};
@@ -14,8 +15,8 @@ use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
 use web_sys::{FileList, HtmlInputElement, InputEvent};
 use yew::prelude::*;
-use yew_form_derive::Model;
 use yew_agent::{Dispatched, Dispatcher};
+use yew_form_derive::Model;
 
 #[derive(Default)]
 struct JsFile {
@@ -406,7 +407,13 @@ impl UserDetailsForm {
             self.user.avatar = Some(avatar);
         }
         self.just_updated = true;
-        self.avatar_event_bus.send(Request::Update);
+        self.avatar_event_bus.send(Request::Update((
+            self.user.id.clone(),
+            self.user
+                .avatar
+                .as_ref()
+                .map(|data| AvatarData::new(data.clone())),
+        )));
         Ok(true)
     }
 

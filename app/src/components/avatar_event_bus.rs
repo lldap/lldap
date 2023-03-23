@@ -2,9 +2,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use yew_agent::{Agent, AgentLink, Context, HandlerId};
 
+use super::avatar::AvatarData;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Request {
-    Update,
+    Update((String, Option<AvatarData>)),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Response {
+    Update((String, Option<AvatarData>)),
 }
 
 pub struct AvatarEventBus {
@@ -16,7 +23,7 @@ impl Agent for AvatarEventBus {
     type Reach = Context<Self>;
     type Message = ();
     type Input = Request;
-    type Output = ();
+    type Output = Response;
 
     fn create(link: AgentLink<Self>) -> Self {
         Self {
@@ -29,9 +36,10 @@ impl Agent for AvatarEventBus {
 
     fn handle_input(&mut self, msg: Self::Input, _id: HandlerId) {
         match msg {
-            Request::Update => {
+            Request::Update((username, avatar)) => {
                 for sub in self.subscribers.iter() {
-                    self.link.respond(*sub, ());
+                    self.link
+                        .respond(*sub, Response::Update((username.clone(), avatar.clone())));
                 }
             }
         }

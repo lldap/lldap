@@ -30,3 +30,7 @@ html.dark .nav-link {
 .nav-link {
   color: #212529
 }
+
+.avatar {
+  border-radius: 50%;
+}

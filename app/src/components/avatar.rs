@@ -1,9 +1,11 @@
 use crate::{
-    components::avatar_event_bus::AvatarEventBus,
-    infra::common_component::{CommonComponent, CommonComponentParts}};
+    components::avatar_event_bus::{AvatarEventBus, Response},
+    infra::common_component::{CommonComponent, CommonComponentParts},
+};
 use anyhow::{bail, Result};
 use graphql_client::GraphQLQuery;
-use yew::{prelude::*};
+use serde::{Deserialize, Serialize};
+use yew::prelude::*;
 use yew_agent::{Bridge, Bridged};
 
 #[derive(GraphQLQuery)]
@@ -15,11 +17,18 @@ use yew_agent::{Bridge, Bridged};
 )]
 pub struct GetUserAvatar;
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AvatarData(String);
+
+impl AvatarData {
+    pub fn new(data: String) -> Self {
+        AvatarData(data)
+    }
+}
+
 pub struct Avatar {
     common: CommonComponentParts<Self>,
-    /// The user info. If none, the error is in `error`. If `error` is None, then we haven't
-    /// received the server response yet.
-    avatar: Option<String>,    
+    avatar: Option<AvatarData>,
     _producer: Box<dyn Bridge<AvatarEventBus>>,
 }
 
@@ -28,7 +37,7 @@ pub struct Avatar {
 pub enum Msg {
     /// Received the user details response, either the user data or an error.
     UserAvatarResponse(Result<get_user_avatar::ResponseData>),
-    Update
+    Update(Response),
 }
 
 #[derive(yew::Properties, Clone, PartialEq, Eq)]
@@ -39,16 +48,26 @@ pub struct Props {
 }
 
 impl CommonComponent<Avatar> for Avatar {
-    fn handle_msg(&mut self, ctx: &Context<Self>, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
             Msg::UserAvatarResponse(response) => match response {
-                Ok(user) => self.avatar = user.user.avatar,
+                Ok(user) => self.avatar = user.user.avatar.map(AvatarData::new),
                 Err(e) => {
                     self.avatar = None;
                     bail!("Error getting user avatar: {}", e);
                 }
             },
-            Msg::Update => self.get_user_avatar(ctx),
+            Msg::Update(Response::Update((username, avatar))) => {
+                if username == ctx.props().username {
+                    self.avatar = avatar;
+                    return Ok(true);
+                }
+                return Ok(false);
+            }
         }
         Ok(true)
     }
@@ -79,7 +98,7 @@ impl Component for Avatar {
         let mut avatar = Self {
             common: CommonComponentParts::<Self>::create(),
             avatar: None,
-            _producer: AvatarEventBus::bridge(ctx.link().callback(|_| Msg::Update)),
+            _producer: AvatarEventBus::bridge(ctx.link().callback(Msg::Update)),
         };
         avatar.get_user_avatar(ctx);
         avatar
@@ -93,8 +112,8 @@ impl Component for Avatar {
         match &self.avatar {
             Some(avatar) => html! {
                 <img
-                        id="avatarDisplay"
-                        src={format!("data:image/jpeg;base64, {}", avatar)}
+                        class="avatar"
+                        src={format!("data:image/jpeg;base64, {}", avatar.0)}
                         style={format!("max-height:{}px;max-width:{}px;height:auto;width:auto;", ctx.props().height,ctx.props().width)}
                         alt="Avatar" />
             },
