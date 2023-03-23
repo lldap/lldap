@@ -26,7 +26,7 @@ impl AvatarData {
     }
 }
 
-pub struct Avatar {
+pub struct ShowAvatar {
     common: CommonComponentParts<Self>,
     avatar: Option<AvatarData>,
     _producer: Box<dyn Bridge<AvatarEventBus>>,
@@ -47,7 +47,7 @@ pub struct Props {
     pub height: i32,
 }
 
-impl CommonComponent<Avatar> for Avatar {
+impl CommonComponent<ShowAvatar> for ShowAvatar {
     fn handle_msg(
         &mut self,
         ctx: &Context<Self>,
@@ -77,7 +77,7 @@ impl CommonComponent<Avatar> for Avatar {
     }
 }
 
-impl Avatar {
+impl ShowAvatar {
     fn get_user_avatar(&mut self, ctx: &Context<Self>) {
         self.common.call_graphql::<GetUserAvatar, _>(
             ctx,
@@ -90,7 +90,7 @@ impl Avatar {
     }
 }
 
-impl Component for Avatar {
+impl Component for ShowAvatar {
     type Message = Msg;
     type Properties = Props;
 

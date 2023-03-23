@@ -1,6 +1,6 @@
 use crate::{
     components::{
-        avatar::Avatar,
+        avatar::ShowAvatar,
         change_password::ChangePasswordForm,
         create_group::CreateGroupForm,
         create_user::CreateUserForm,
@@ -307,7 +307,7 @@ impl App {
                   id="dropdownUser"
                   data-bs-toggle="dropdown"
                   aria-expanded="false">
-                  <Avatar username={user_id.clone()} width=32 height=32 />
+                  <ShowAvatar username={user_id.clone()} width=32 height=32 />
                   <span class="ms-2">
                     {user_id}
                   </span>
