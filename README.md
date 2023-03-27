@@ -282,8 +282,8 @@ folder for help with:
 ## Migrating from SQLite
 
 If you started with an SQLite database and would like to migrate to
-MySQL/MariaDB or PostgreSQL, check out the [./docs/database_migration.md](DB
-migration docs).
+MySQL/MariaDB or PostgreSQL, check out the [DB
+migration docs](/docs/database_migration.md).
 
 ## Comparisons with other services
 

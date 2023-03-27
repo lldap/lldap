@@ -27,7 +27,7 @@ Frontend:
 Data storage:
 * The data (users, groups, memberships, active JWTs, ...) is stored in SQL.
 * The main SQL DBs are supported: SQLite by default, MySQL, MariaDB, PostgreSQL
-  (see [./database_migration.md](DB Migration) for how to migrate off of
+  (see [DB Migration](/database_migration.md) for how to migrate off of
   SQLite).
 
 ### Code organization
