@@ -13,7 +13,6 @@ jobs:
   pre_job:
     continue-on-error: true
     runs-on: ubuntu-latest
-    # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
@@ -22,7 +21,7 @@ jobs:
         with:
           concurrent_skipping: 'outdated_runs'
           skip_after_successful_duplicate: 'true'
-          paths_ignore: '["**/*.md", "**/docs/**", "example_configs/**", "*.sh"]'
+          paths_ignore: '["**/*.md", "**/docs/**", "example_configs/**", "*.sh", ".dockerignore", ".gitignore", "lldap_config.docker_template.toml", "Dockerfile"]'
           do_not_skip: '["workflow_dispatch", "schedule"]'
           cancel_others: true
 
