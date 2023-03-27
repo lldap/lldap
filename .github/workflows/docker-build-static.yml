@@ -405,6 +405,8 @@ jobs:
       - name: Upload compressed release
         uses: ncipollo/release-action@v1
         id: create_release
+        permissions:
+          contents: write
         with:
           allowUpdates: true
           artifacts:  aarch64-lldap.tar.gz,
