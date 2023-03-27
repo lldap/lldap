@@ -5,7 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.2] - 2023-03-27
+
+### Added
+
+ - Add support for MySQL/MariaDB/PostgreSQL, in addition to SQLite.
+ - Healthcheck command for docker setups.
+ - User creation through LDAP.
+ - IPv6 support.
+ - Dev container for VsCode.
+ - Add support for DN LDAP filters.
+ - Add support for SubString LDAP filters.
+ - Add support for LdapCompare operation.
+ - Add support for unencrypted/unauthenticated SMTP connection.
+ - Add a command to setup the database schema.
+ - Add a tool to set a user's password from the command line.
+ - Added consistent release artifacts.
+
+### Changed
+
+ - Payload is now compressed, reducing the size to 700kb.
+ - entryUUID is returned in the default LDAP fields.
+ - Slightly improved support for LDAP browsing tools.
+ - Password reset can be identified by email (instead of just username).
+ - Various front-end improvements, and support for dark mode.
+ - Add content-type header to the password reset email, fixing rendering issues in some clients.
+ - Identify groups with "cn" instead of "uid" in memberOf field.
+
+### Removed
+
+ - Removed dependency on nodejs/rollup.
+
+### Fixed
+
+ - Email is now using the async API.
+ - Fix handling of empty/null names (display, first, last).
+ - Obscured old password field when changing password.
+ - Respect user setting to disable password resets.
+ - Fix handling of "present" filters with unknown attributes.
+ - Fix handling of filters that could lead to an ambiguous SQL query.
+
+### New services
+
+ - Authentik
+ - Dell iDRAC
+ - Dex
+ - Kanboard
+ - NextCloud + OIDC or Authelia
+ - Nexus
+ - SUSE Rancher
+ - VaultWarden
+ - WeKan
+ - WikiJS
+ - ZendTo
+
+### Dependencies (highlights)
+
+ - Upgraded Yew to 0.19
+ - Upgraded actix to 0.13
+ - Upgraded clap to 4
+ - Switched from sea-query to sea-orm 0.11
 
 ## [0.4.1] - 2022-10-10
 
