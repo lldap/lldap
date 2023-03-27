@@ -17,6 +17,7 @@ Dockerfile
 *.md
 LICENSE
 CHANGELOG.md
+README.md
 docs/*
 example_configs/*
 
