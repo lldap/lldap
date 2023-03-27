@@ -2404,7 +2404,7 @@ dependencies = [
  "tracing-forest",
  "tracing-log",
  "tracing-subscriber",
- "uuid 1.3.0",
+ "uuid 0.8.2",
  "webpki-roots",
 ]
 
@@ -2429,7 +2429,7 @@ dependencies = [
  "serde_json",
  "url-escape",
  "validator",
- "validator_derive 0.16.0",
+ "validator_derive",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -2529,6 +2529,12 @@ checksum = "6365506850d44bff6e2fbcb5176cf63650e48bd45ef2fe2665ae1570e0f4b9ca"
 dependencies = [
  "digest 0.10.6",
 ]
+
+[[package]]
+name = "md5"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "memchr"
@@ -4398,6 +4404,9 @@ name = "uuid"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+dependencies = [
+ "md5",
+]
 
 [[package]]
 name = "uuid"
@@ -4406,7 +4415,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1674845326ee10d37ca60470760d4288a6f80f304007d92e5c53bab78c9cfd79"
 dependencies = [
  "getrandom 0.2.8",
- "md-5",
 ]
 
 [[package]]
@@ -4422,7 +4430,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "url",
- "validator_types 0.14.0",
+ "validator_types",
 ]
 
 [[package]]
@@ -4438,23 +4446,7 @@ dependencies = [
  "quote",
  "regex",
  "syn",
- "validator_types 0.14.0",
-]
-
-[[package]]
-name = "validator_derive"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc44ca3088bb3ba384d9aecf40c6a23a676ce23e09bdaca2073d99c207f864af"
-dependencies = [
- "if_chain",
- "lazy_static",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "regex",
- "syn",
- "validator_types 0.16.0",
+ "validator_types",
 ]
 
 [[package]]
@@ -4462,16 +4454,6 @@ name = "validator_types"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ded9d97e1d42327632f5f3bae6403c04886e2de3036261ef42deebd931a6a291"
-dependencies = [
- "proc-macro2",
- "syn",
-]
-
-[[package]]
-name = "validator_types"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "111abfe30072511849c5910134e8baf8dc05de4c0e5903d681cbd5c9c4d611e3"
 dependencies = [
  "proc-macro2",
  "syn",
@@ -4850,7 +4832,7 @@ source = "git+https://github.com/jfbilodeau/yew_form?rev=4b9fabffb63393ec7626a44
 dependencies = [
  "gloo-console",
  "validator",
- "validator_derive 0.14.0",
+ "validator_derive",
  "wasm-bindgen",
  "web-sys",
  "yew",
