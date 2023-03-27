@@ -77,6 +77,9 @@ For more features (OAuth/OpenID support, reverse proxy, ...) you can install
 other components (KeyCloak, Authelia, ...) using this server as the source of
 truth for users, via LDAP.
 
+By default, the data is stored in SQLite, but you can swap the backend with
+MySQL/MariaDB or PostgreSQL.
+
 ## Installation
 
 ### With Docker
@@ -275,6 +278,12 @@ folder for help with:
 - [WikiJS](example_configs/wikijs.md)
 - [XBackBone](example_configs/xbackbone_config.php)
 - [Zendto](example_configs/zendto.md)
+
+## Migrating from SQLite
+
+If you started with an SQLite database and would like to migrate to
+MySQL/MariaDB or PostgreSQL, check out the [./docs/database_migration.md](DB
+migration docs).
 
 ## Comparisons with other services
 
