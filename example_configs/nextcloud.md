@@ -62,6 +62,7 @@ occ ldap:set-config s01 ldapGroupFilterMode 0
 occ ldap:set-config s01 ldapGroupDisplayName cn
 occ ldap:set-config s01 ldapGroupFilterObjectclass groupOfUniqueNames
 occ ldap:set-config s01 ldapGroupMemberAssocAttr uniqueMember
+occ ldap:set-config s01 ldapEmailAttribute "mail" 
 occ ldap:set-config s01 ldapLoginFilterEmail 0
 occ ldap:set-config s01 ldapLoginFilterUsername 1
 occ ldap:set-config s01 ldapMatchingRuleInChainState unknown
