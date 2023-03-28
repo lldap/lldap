@@ -76,7 +76,7 @@ jobs:
         uses: fkirc/skip-duplicate-actions@master
         with:
           concurrent_skipping: 'outdated_runs'
-          skip_after_successful_duplicate: 'true'
+          skip_after_successful_duplicate: ${{ env.GITHUB_REF != 'refs/heads/main' }}
           paths_ignore: '["**/*.md", "**/docs/**", "example_configs/**", "*.sh", ".gitignore", "lldap_config.docker_template.toml"]'
           do_not_skip: '["workflow_dispatch", "schedule"]'
           cancel_others: true
@@ -237,7 +237,7 @@ jobs:
            LLDAP_database_url: sqlite://users.db?mode=rwc
            LLDAP_ldap_port: 3892
            LLDAP_http_port: 17172
-           
+
        - name: Check DB container logs
          run: |
               docker logs -n 20 mariadb
@@ -275,9 +275,9 @@ jobs:
             MYSQL_USER: lldapuser
             MYSQL_PASSWORD: lldappass
             MYSQL_DATABASE: lldap
-            MYSQL_ROOT_PASSWORD: rootpass    
+            MYSQL_ROOT_PASSWORD: rootpass
           options: --name mysql
-      
+
 
     steps:
        - name: Download LLDAP artifacts
@@ -285,11 +285,11 @@ jobs:
          with:
            name: x86_64-unknown-linux-musl-lldap-bin
            path: bin/
-           
+
        - name: Download LLDAP set password
          uses: actions/download-artifact@v3
          with:
-           name: x86_64-unknown-linux-musl-lldap_set_password-bin 
+           name: x86_64-unknown-linux-musl-lldap_set_password-bin
            path: bin/
 
        - name: Set executables to LLDAP and LLDAP set password
@@ -343,7 +343,7 @@ jobs:
               docker cp ./dump.sql postgresql:/tmp/dump.sql
               docker exec postgresql bash -c "psql -U lldapuser -d lldap < /tmp/dump.sql"
               rm ./dump.sql
-              
+
        - name: Export and Converting to mariadb
          run: |
               curl -L https://raw.githubusercontent.com/nitnelave/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
@@ -352,7 +352,7 @@ jobs:
               cp ./dump.sql ./dump-no-sed.sql
               sed -i -r -e "s/([^']'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9})\+00:00'([^'])/\1'\2/g" \-e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' -e '1s/^/START TRANSACTION;\n/' -e '$aCOMMIT;' ./dump.sql
               sed  -i '1 i\SET FOREIGN_KEY_CHECKS = 0;' ./dump.sql
-              
+
        - name: Create schema on mariadb
          run: bin/lldap create_schema -d mysql://lldapuser:lldappass@localhost:3306/lldap
 
@@ -362,7 +362,7 @@ jobs:
               docker cp ./dump.sql mariadb:/tmp/dump.sql
               docker exec mariadb bash -c "mariadb -ulldapuser -plldappass -f lldap < /tmp/dump.sql"
               rm ./dump.sql
-              
+
        - name: Export and Converting to mysql
          run: |
               curl -L https://raw.githubusercontent.com/nitnelave/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
@@ -370,7 +370,7 @@ jobs:
               ./helper.sh | sqlite3 ./users.db > ./dump.sql
               sed -i -r -e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' -e '1s/^/START TRANSACTION;\n/' -e '$aCOMMIT;' ./dump.sql
               sed  -i '1 i\SET FOREIGN_KEY_CHECKS = 0;' ./dump.sql
-             
+
        - name: Create schema on mysql
          run: bin/lldap create_schema -d mysql://lldapuser:lldappass@localhost:3307/lldap
 
@@ -380,7 +380,7 @@ jobs:
               docker cp ./dump.sql mysql:/tmp/dump.sql
               docker exec mysql bash -c "mysql -ulldapuser -plldappass -f lldap < /tmp/dump.sql"
               rm ./dump.sql
-           
+
        - name: Run lldap with postgres DB and healthcheck again
          run: |
               bin/lldap run &
@@ -392,7 +392,7 @@ jobs:
            LLDAP_http_port: 17171
            LLDAP_LDAP_USER_PASS: ldappass
            LLDAP_JWT_SECRET: somejwtsecret
-           
+
        - name: Run lldap with mariaDB and healthcheck again
          run: |
               bin/lldap run &
@@ -403,7 +403,7 @@ jobs:
            LLDAP_ldap_port: 3892
            LLDAP_http_port: 17172
            LLDAP_JWT_SECRET: somejwtsecret
-           
+
        - name: Run lldap with mysql and healthcheck again
          run: |
               bin/lldap run &
@@ -414,13 +414,13 @@ jobs:
            LLDAP_ldap_port: 3893
            LLDAP_http_port: 17173
            LLDAP_JWT_SECRET: somejwtsecret
-           
+
        - name: Test Dummy User
          run: |
               ldapsearch -H ldap://localhost:3891 -LLL -D "uid=dummyuser,ou=people,dc=example,dc=com" -w 'dummypassword' -s "One" -b "ou=people,dc=example,dc=com"
               ldapsearch -H ldap://localhost:3892 -LLL -D "uid=dummyuser,ou=people,dc=example,dc=com" -w 'dummypassword' -s "One" -b "ou=people,dc=example,dc=com"
               ldapsearch -H ldap://localhost:3893 -LLL -D "uid=dummyuser,ou=people,dc=example,dc=com" -w 'dummypassword' -s "One" -b "ou=people,dc=example,dc=com"
-         
+
   build-docker-image:
     needs: [build-ui, build-bin]
     name: Build Docker image
