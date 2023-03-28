@@ -1,0 +1,10 @@
+example-configs/** linguist-documentation
+docs/** linguist-documentation
+*.md linguist-documentation
+lldap_config.docker_template.toml linguist-documentation
+
+schema.graphql linguist-generated
+
+.github/**  -linguist-detectable
+.devcontainer/**  -linguist-detectable
+.config/**  -linguist-detectable

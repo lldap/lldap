@@ -2,6 +2,7 @@
 .git/*
 .github/*
 .gitignore
+.gitattributes
 
 # Don't track cargo generated files
 target/*
