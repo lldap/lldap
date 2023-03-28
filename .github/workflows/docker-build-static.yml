@@ -4,15 +4,18 @@ on:
   push:
     branches:
       - 'main'
-    paths:
-      - '!docs/**'
-      - '!example_configs/**'
+    paths-ignore:
+      - 'docs/**'
+      - 'example_configs/**'
   release:
     types:
       - 'published'
   pull_request:
     branches:
       - 'main'
+    paths-ignore:
+      - 'docs/**'
+      - 'example_configs/**'
   workflow_dispatch:
     inputs:
       msg:
@@ -288,9 +291,6 @@ jobs:
          with:
            name: x86_64-unknown-linux-musl-lldap_set_password-bin 
            path: bin/
-
-       - name: Where is the bin?
-         run: ls -alR bin
 
        - name: Set executables to LLDAP and LLDAP set password
          run: |
