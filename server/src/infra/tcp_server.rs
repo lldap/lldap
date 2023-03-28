@@ -16,7 +16,7 @@ use actix_files::{Files, NamedFile};
 use actix_http::{header, HttpServiceBuilder};
 use actix_server::ServerBuilder;
 use actix_service::map_config;
-use actix_web::{dev::AppConfig, guard, middleware, web, App, HttpResponse, Responder};
+use actix_web::{dev::AppConfig, guard, web, App, HttpResponse, Responder};
 use anyhow::{Context, Result};
 use hmac::Hmac;
 use sha2::Sha512;
@@ -68,6 +68,10 @@ pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
 }
 
 async fn wasm_handler() -> actix_web::Result<impl Responder> {
+    Ok(actix_files::NamedFile::open_async("./app/pkg/lldap_app_bg.wasm").await?)
+}
+
+async fn wasm_handler_compressed() -> actix_web::Result<impl Responder> {
     Ok(
         actix_files::NamedFile::open_async("./app/pkg/lldap_app_bg.wasm.gz")
             .await?
@@ -110,12 +114,9 @@ fn http_config<Backend>(
             .configure(super::graphql::api::configure_endpoint::<Backend>),
     )
     .service(
-        web::resource("/pkg/lldap_app_bg.wasm").route(
-            web::route()
-                .wrap(middleware::Compress::default())
-                .to(wasm_handler),
-        ),
+        web::resource("/pkg/lldap_app_bg.wasm.gz").route(web::route().to(wasm_handler_compressed)),
     )
+    .service(web::resource("/pkg/lldap_app_bg.wasm").route(web::route().to(wasm_handler)))
     // Serve the /pkg path with the compiled WASM app.
     .service(Files::new("/pkg", "./app/pkg"))
     // Serve static files
