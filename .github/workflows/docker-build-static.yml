@@ -76,7 +76,7 @@ jobs:
         uses: fkirc/skip-duplicate-actions@master
         with:
           concurrent_skipping: 'outdated_runs'
-          skip_after_successful_duplicate: ${{ env.GITHUB_REF != 'refs/heads/main' }}
+          skip_after_successful_duplicate: ${{ github.ref != 'refs/heads/main' }}
           paths_ignore: '["**/*.md", "**/docs/**", "example_configs/**", "*.sh", ".gitignore", "lldap_config.docker_template.toml"]'
           do_not_skip: '["workflow_dispatch", "schedule"]'
           cancel_others: true
