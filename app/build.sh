@@ -14,4 +14,4 @@ fi
 
 wasm-pack build --target web --release
 
-gzip -9 -f pkg/lldap_app_bg.wasm
+gzip -9 -k -f pkg/lldap_app_bg.wasm
