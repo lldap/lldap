@@ -65,7 +65,8 @@ a transaction:
 ```
 sed -i -r -e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' \
 -e '1s/^/START TRANSACTION;\n/' \
--e '$aCOMMIT;' /path/to/dump.sql
+-e '$aCOMMIT;' \
+-e '1 i\SET FOREIGN_KEY_CHECKS = 0;' /path/to/dump.sql
 ```
 
 ### To MariaDB
@@ -77,7 +78,8 @@ strings. Use the following command to remove those and perform the additional My
 sed -i -r -e "s/([^']'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9})\+00:00'([^'])/\1'\2/g" \
 -e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' \
 -e '1s/^/START TRANSACTION;\n/' \
--e '$aCOMMIT;' /path/to/dump.sql
+-e '$aCOMMIT;' \
+-e '1 i\SET FOREIGN_KEY_CHECKS = 0;' /path/to/dump.sql
 ```
 
 ## Insert data
@@ -103,3 +105,5 @@ or
 Modify your `database_url` in `lldap_config.toml` (or `LLDAP_DATABASE_URL` in the env)
 to point to your new database (the same value used when generating schema). Restart
 LLDAP and check the logs to ensure there were no errors.
+
+#### More details/examples can be seen in the CI process [here](https://raw.githubusercontent.com/nitnelave/lldap/main/.github/workflows/docker-build-static.yml), look for the job `lldap-database-migration-test`

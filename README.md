@@ -77,6 +77,9 @@ For more features (OAuth/OpenID support, reverse proxy, ...) you can install
 other components (KeyCloak, Authelia, ...) using this server as the source of
 truth for users, via LDAP.
 
+By default, the data is stored in SQLite, but you can swap the backend with
+MySQL/MariaDB or PostgreSQL.
+
 ## Installation
 
 ### With Docker
@@ -131,6 +134,9 @@ services:
       - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
       - LLDAP_LDAP_USER_PASS=REPLACE_WITH_PASSWORD
       - LLDAP_LDAP_BASE_DN=dc=example,dc=com
+      # You can also set a different database:
+      # - LLDAP_DATABASE_URL=mysql://mysql-user:password@mysql-server/my-database
+      # - LLDAP_DATABASE_URL=postgres://postgres-user:password@postgres-server/my-database
 ```
 
 Then the service will listen on two ports, one for LDAP and one for the web
@@ -141,6 +147,8 @@ front-end.
 See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for Kubernetes
 
 ### From source
+
+#### Backend
 
 To compile the project, you'll need:
 
@@ -156,13 +164,21 @@ cargo build --release -p lldap -p migration-tool
 The resulting binaries will be in `./target/release/`. Alternatively, you can
 just run `cargo run -- run` to run the server.
 
+#### Frontend
+
 To bring up the server, you'll need to compile the frontend. In addition to
-cargo, you'll need:
+`cargo`, you'll need:
 
 - WASM-pack: `cargo install wasm-pack`
 
-Then you can build the frontend files with `./app/build.sh` (you'll need to run
-this after every front-end change to update the WASM package served).
+Then you can build the frontend files with
+
+```shell
+./app/build.sh
+````
+
+(you'll need to run this after every front-end change to update the WASM
+package served).
 
 The default config is in `src/infra/configuration.rs`, but you can override it
 by creating an `lldap_config.toml`, setting environment variables or passing
@@ -262,6 +278,12 @@ folder for help with:
 - [WikiJS](example_configs/wikijs.md)
 - [XBackBone](example_configs/xbackbone_config.php)
 - [Zendto](example_configs/zendto.md)
+
+## Migrating from SQLite
+
+If you started with an SQLite database and would like to migrate to
+MySQL/MariaDB or PostgreSQL, check out the [DB
+migration docs](/docs/database_migration.md).
 
 ## Comparisons with other services
 

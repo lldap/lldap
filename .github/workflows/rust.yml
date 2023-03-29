@@ -13,7 +13,6 @@ jobs:
   pre_job:
     continue-on-error: true
     runs-on: ubuntu-latest
-    # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
@@ -22,7 +21,7 @@ jobs:
         with:
           concurrent_skipping: 'outdated_runs'
           skip_after_successful_duplicate: 'true'
-          paths_ignore: '["**/*.md", "**/docs/**", "example_configs/**", "*.sh"]'
+          paths_ignore: '["**/*.md", "**/docs/**", "example_configs/**", "*.sh", ".dockerignore", ".gitignore", "lldap_config.docker_template.toml", "Dockerfile"]'
           do_not_skip: '["workflow_dispatch", "schedule"]'
           cancel_others: true
 
@@ -34,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3.4.0
+        uses: actions/checkout@v3.5.0
       - uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --verbose --workspace
@@ -53,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3.4.0
+        uses: actions/checkout@v3.5.0
 
       - uses: Swatinem/rust-cache@v2
 
@@ -70,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3.4.0
+        uses: actions/checkout@v3.5.0
 
       - uses: Swatinem/rust-cache@v2
 
@@ -87,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3.4.0
+        uses: actions/checkout@v3.5.0
 
       - name: Install Rust
         run: rustup toolchain install nightly --component llvm-tools-preview && rustup component add llvm-tools-preview --toolchain stable-x86_64-unknown-linux-gnu
@@ -105,3 +104,4 @@ jobs:
         with:
           files: lcov.info
           fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}

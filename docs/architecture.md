@@ -26,9 +26,9 @@ Frontend:
 
 Data storage:
 * The data (users, groups, memberships, active JWTs, ...) is stored in SQL.
-* Currently only SQLite is supported (see
-  https://github.com/launchbadge/sqlx/issues/1225 for what blocks us from
-  supporting more SQL backends).
+* The main SQL DBs are supported: SQLite by default, MySQL, MariaDB, PostgreSQL
+  (see [DB Migration](/database_migration.md) for how to migrate off of
+  SQLite).
 
 ### Code organization
 
