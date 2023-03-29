@@ -18,7 +18,7 @@ use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
 use sha2::Sha512;
 use time::ext::NumericalDuration;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 use lldap_auth::{login, password_reset, registration, JWTClaims};
 
@@ -183,6 +183,7 @@ where
     .await
     {
         warn!("Error sending email: {:#?}", e);
+        info!("Reset token: {}", token);
         return Err(TcpError::InternalServerError(format!(
             "Could not send email: {}",
             e
