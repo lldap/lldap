@@ -177,7 +177,13 @@ impl App {
                 Some(AppRoute::StartResetPassword | AppRoute::FinishResetPassword { token: _ }),
                 _,
                 _,
-            ) if self.password_reset_enabled == Some(false) => Some(AppRoute::Login),
+            ) => {
+                if self.password_reset_enabled == Some(false) {
+                    Some(AppRoute::Login)
+                } else {
+                    None
+                }
+            }
             (None, _, _) | (_, None, _) => Some(AppRoute::Login),
             // User is logged in, a URL was given, don't redirect.
             (_, Some(_), Some(_)) => None,
