@@ -1,6 +1,7 @@
 use crate::{
     components::{
         avatar::ShowAvatar,
+        avatar_cache::*,
         change_password::ChangePasswordForm,
         create_group::CreateGroupForm,
         create_user::CreateUserForm,
@@ -137,8 +138,19 @@ impl Component for App {
         let link = ctx.link().clone();
         let is_admin = self.is_admin();
         let password_reset_enabled = self.password_reset_enabled;
+        let mode = self
+            .user_info
+            .clone()
+            .map(|(username, is_admin)| {
+                if is_admin {
+                    CacheMode::AllUsers
+                } else {
+                    CacheMode::SingleUser(username)
+                }
+            })
+            .unwrap_or(CacheMode::None);
         html! {
-          <div>
+          <AvatarCacheProvider {mode}>
             {self.view_banner(ctx)}
             <div class="container py-3 bg-kug">
               <div class="row justify-content-center" style="padding-bottom: 80px;">
@@ -150,7 +162,7 @@ impl Component for App {
               </div>
               {self.view_footer()}
             </div>
-          </div>
+          </AvatarCacheProvider>
         }
     }
 }

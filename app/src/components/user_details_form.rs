@@ -1,8 +1,7 @@
 use std::str::FromStr;
 
 use crate::{
-    components::avatar::AvatarData,
-    components::avatar_event_bus::{AvatarEventBus, Request},
+    components::avatar_cache::*,
     components::user_details::User,
     infra::common_component::{CommonComponent, CommonComponentParts},
 };
@@ -15,7 +14,7 @@ use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
 use web_sys::{FileList, HtmlInputElement, InputEvent};
 use yew::prelude::*;
-use yew_agent::{Dispatched, Dispatcher};
+use yew::context::ContextHandle;
 use yew_form_derive::Model;
 
 #[derive(Default)]
@@ -75,7 +74,8 @@ pub struct UserDetailsForm {
     /// True if we just successfully updated the user, to display a success message.
     just_updated: bool,
     user: User,
-    avatar_event_bus: Dispatcher<AvatarEventBus>,
+    avatar_cache: AvatarCacheContext,
+    _context_handle: ContextHandle<AvatarCacheContext>,
 }
 
 pub enum Msg {
@@ -160,6 +160,10 @@ impl Component for UserDetailsForm {
             first_name: ctx.props().user.first_name.clone(),
             last_name: ctx.props().user.last_name.clone(),
         };
+        let (avatar_cache, _context_handle) = ctx
+            .link()
+            .context(Callback::noop())
+            .expect("No Message Context Provided");
         Self {
             common: CommonComponentParts::<Self>::create(),
             form: yew_form::Form::new(model),
@@ -167,7 +171,8 @@ impl Component for UserDetailsForm {
             just_updated: false,
             reader: None,
             user: ctx.props().user.clone(),
-            avatar_event_bus: AvatarEventBus::dispatcher(),
+            avatar_cache,
+            _context_handle,
         }
     }
 
@@ -407,13 +412,7 @@ impl UserDetailsForm {
             self.user.avatar = Some(avatar);
         }
         self.just_updated = true;
-        self.avatar_event_bus.send(Request::Update((
-            self.user.id.clone(),
-            self.user
-                .avatar
-                .as_ref()
-                .map(|data| AvatarData::new(data.clone())),
-        )));
+        self.avatar_cache.dispatch(CacheAction::AddAvatar((self.user.id.clone(), self.user.avatar.clone())));
         Ok(true)
     }
 

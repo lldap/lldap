@@ -2,7 +2,7 @@ pub mod add_group_member;
 pub mod add_user_to_group;
 pub mod app;
 pub mod avatar;
-pub mod avatar_event_bus;
+pub mod avatar_cache;
 pub mod change_password;
 pub mod create_group;
 pub mod create_user;
