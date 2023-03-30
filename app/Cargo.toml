@@ -24,7 +24,6 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "*"
 yew = "0.19.3"
 yew-router = "0.16"
-yew-agent = "0.2.0"
 
 # Needed because of https://github.com/tkaitchuck/aHash/issues/95
 indexmap = "=1.6.2"
