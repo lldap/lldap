@@ -276,6 +276,9 @@ impl ConfigOverrider for SmtpOpts {
         if let Some(tls_required) = self.smtp_tls_required {
             config.smtp_options.tls_required = Some(tls_required);
         }
+        if let Some(enable_password_reset) = self.smtp_enable_password_reset {
+            config.smtp_options.enable_password_reset = enable_password_reset;
+        }
     }
 }
 
