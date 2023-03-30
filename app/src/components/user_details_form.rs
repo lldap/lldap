@@ -13,8 +13,8 @@ use gloo_file::{
 use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
 use web_sys::{FileList, HtmlInputElement, InputEvent};
-use yew::prelude::*;
 use yew::context::ContextHandle;
+use yew::prelude::*;
 use yew_form_derive::Model;
 
 #[derive(Default)]
@@ -412,7 +412,10 @@ impl UserDetailsForm {
             self.user.avatar = Some(avatar);
         }
         self.just_updated = true;
-        self.avatar_cache.dispatch(CacheAction::AddAvatar((self.user.id.clone(), self.user.avatar.clone())));
+        self.avatar_cache.dispatch(CacheAction::AddAvatar((
+            self.user.id.clone(),
+            self.user.avatar.clone(),
+        )));
         Ok(true)
     }
 

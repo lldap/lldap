@@ -1,6 +1,4 @@
-use crate::{
-    components::avatar_cache::{AvatarCacheContext},
-};
+use crate::components::avatar_cache::AvatarCacheContext;
 use yew::{function_component, prelude::*};
 
 #[derive(Properties, PartialEq)]
@@ -13,7 +11,11 @@ pub struct Props {
 #[function_component(ShowAvatar)]
 pub fn show_avatar(props: &Props) -> Html {
     let cache = use_context::<AvatarCacheContext>().expect("no ctx found");
-    let avatar = cache.avatars.get(&props.username).map(|val| val.clone()).unwrap_or(None);
+    let avatar = cache
+        .avatars
+        .get(&props.username)
+        .map(|val| val.clone())
+        .unwrap_or(None);
     match avatar {
         Some(avatar) => html! {
             <img

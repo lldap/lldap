@@ -18,19 +18,19 @@ pub struct GetUserAvatar;
 #[graphql(
     schema_path = "../schema.graphql",
     query_path = "queries/list_users.graphql",
-    response_derives = "Debug,Clone,PartialEq,Eq,Hash",
+    response_derives = "Debug",
     variables_derives = "Clone",
     custom_scalars_module = "crate::infra::graphql"
 )]
 pub struct ListUserNames;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum CacheAction {
     Clear,
     AddAvatar((String, Option<String>)),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct AvatarCache {
     pub avatars: HashMap<String, Option<String>>,
 }
@@ -55,14 +55,14 @@ impl Reducible for AvatarCache {
 
 pub type AvatarCacheContext = UseReducerHandle<AvatarCache>;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum CacheMode {
     AllUsers,
     SingleUser(String),
     None,
 }
 
-#[derive(Properties, Debug, PartialEq)]
+#[derive(Properties, PartialEq)]
 pub struct AvatarCacheProviderProps {
     #[prop_or_default]
     pub children: Children,
@@ -81,9 +81,7 @@ pub fn avatar_cache_provider(props: &AvatarCacheProviderProps) -> Html {
         use_effect_with_deps(
             move |mode| {
                 match mode {
-                    CacheMode::None => {
-                        cache.dispatch(CacheAction::Clear)
-                    }
+                    CacheMode::None => cache.dispatch(CacheAction::Clear),
                     CacheMode::AllUsers => {
                         let cache = cache.clone();
                         wasm_bindgen_futures::spawn_local(async move {
