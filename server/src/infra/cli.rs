@@ -132,6 +132,10 @@ pub enum SmtpEncryption {
 #[derive(Debug, Parser, Clone)]
 #[clap(next_help_heading = Some("SMTP"))]
 pub struct SmtpOpts {
+    /// Enable password reset.
+    #[clap(long, env = "LLDAP_SMTP_OPTIONS__ENABLE_PASSWORD_RESET")]
+    pub smtp_enable_password_reset: Option<bool>,
+
     /// Sender email address.
     #[clap(long, env = "LLDAP_SMTP_OPTIONS__FROM")]
     pub smtp_from: Option<Mailbox>,
