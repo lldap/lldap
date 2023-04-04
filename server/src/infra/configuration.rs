@@ -25,7 +25,7 @@ pub struct MailOptions {
     pub server: String,
     #[builder(default = "587")]
     pub port: u16,
-    #[builder(default = r#""admin".to_string()"#)]
+    #[builder(default = r#"String::default()"#)]
     pub user: String,
     #[builder(default = r#"SecUtf8::from("")"#)]
     pub password: SecUtf8,
