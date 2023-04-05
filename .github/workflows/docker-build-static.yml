@@ -314,7 +314,7 @@ jobs:
 
        - name: Create dummy user
          run: |
-              TOKEN=$(curl -X POST -H "Content-Type: application/json" -d '{"username": "admin", "password": "ldappass"}' http://localhost:17170/auth/simple/login | cut -c 11-277)
+              TOKEN=$(curl -X POST -H "Content-Type: application/json" -d '{"username": "admin", "password": "ldappass"}' http://localhost:17170/auth/simple/login | jq -r .token)
               echo "$TOKEN"
               curl 'http://localhost:17170/api/graphql' -H 'Content-Type: application/json' -H "Authorization: Bearer ${TOKEN//[$'\t\r\n ']}" --data-binary '{"query":"mutation{\n  createUser(user:\n    {\n      id: \"dummyuser\",\n      email: \"dummyuser@example.com\"\n    }\n  )\n  {\n    id\n    email\n  }\n}\n\n\n"}' --compressed
               bin/lldap_set_password --base-url http://localhost:17170 --admin-username admin --admin-password ldappass --token $TOKEN --username dummyuser --password dummypassword
