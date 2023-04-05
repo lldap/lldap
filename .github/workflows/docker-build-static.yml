@@ -473,6 +473,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: nitnelave
+          password: ${{ secrets.GITHUB_TOKEN }}
+
 ########################################
 #### docker image :latest tag build ####
 ########################################
@@ -484,7 +492,11 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64,linux/arm64
           file: ./.github/workflows/Dockerfile.ci.alpine
-          tags: nitnelave/lldap:latest, nitnelave/lldap:latest-alpine
+          tags: |
+            nitnelave/lldap:latest, nitnelave/lldap:latest-alpine
+            lldap/lldap:latest, lldap/lldap:latest-alpine
+            ghcr.io/${{ github.repository }}:latest, ghcr.io/${{ github.repository }}:latest-alpine
+            ghcr.io/nitnelave/lldap:latest, ghcr.io/nitnelave/lldap:latest-alpine
           cache-from: type=gha,mode=max
           cache-to: type=gha,mode=max
 
@@ -496,7 +508,11 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           file: ./.github/workflows/Dockerfile.ci.debian
-          tags: nitnelave/lldap:latest-debian
+          tags: |
+            nitnelave/lldap:latest-debian
+            lldap/lldap:latest-debian
+            ghcr.io/${{ github.repository }}:latest-debian
+            ghcr.io/nitnelave/lldap:latest-debian
           cache-from: type=gha,mode=max
           cache-to: type=gha,mode=max
 
@@ -512,7 +528,11 @@ jobs:
           push: true
           # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
           file: ./.github/workflows/Dockerfile.ci.alpine
-          tags: nitnelave/lldap:stable, nitnelave/lldap:stable-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
+          tags: |
+            nitnelave/lldap:stable, nitnelave/lldap:stable-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
+            lldap/lldap:stable, lldap/lldap:stable-alpine, lldap/lldap:v${{ steps.slug.outputs.version-semantic }}, lldap/lldap:v${{ steps.slug.outputs.version-major }}, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, lldap/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, lldap/lldap:v${{ steps.slug.outputs.version-major }}-alpine, lldap/lldap:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
+            ghcr.io/${{ github.repository }}:stable, ghcr.io/${{ github.repository }}:stable-alpine, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-semantic }}, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-semantic }}-alpine, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}-alpine, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
+            ghcr.io/nitnelave/lldap:stable, ghcr.io/nitnelave/lldap:stable-alpine, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
           cache-from: type=gha,mode=max
           cache-to: type=gha,mode=max
 
@@ -525,7 +545,11 @@ jobs:
           push: true
           # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
           file: ./.github/workflows/Dockerfile.ci.debian
-          tags: nitnelave/lldap:stable-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
+          tags: |
+            nitnelave/lldap:stable-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
+            lldap/lldap:stable-debian, lldap/lldap:v${{ steps.slug.outputs.version-semantic }}-debian, lldap/lldap:v${{ steps.slug.outputs.version-major }}-debian, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
+            ghcr.io/${{ github.repository }}:stable-debian, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-semantic }}-debian, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}-debian, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
+            ghcr.io/nitnelave/lldap:stable-debian, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-debian, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-debian, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
           cache-from: type=gha,mode=max
           cache-to: type=gha,mode=max
 
@@ -537,6 +561,14 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
           repository: nitnelave/lldap
 
+      - name: Update lldap repo description
+        if: github.event_name != 'pull_request'
+        uses: peter-evans/dockerhub-description@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          repository: lldap/lldap
+            
 ###############################################################
 ### Download artifacts, clean up ui, upload to release page ###
 ###############################################################
