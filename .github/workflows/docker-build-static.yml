@@ -257,6 +257,7 @@ jobs:
              POSTGRES_PASSWORD: lldappass
              POSTGRES_DB: lldap
            options: --name postgresql
+
         mariadb:
           image: mariadb:latest
           ports:
@@ -267,6 +268,7 @@ jobs:
             MYSQL_DATABASE: lldap
             MYSQL_ROOT_PASSWORD: rootpass
           options: --name mariadb
+
         mysql:
           image: mysql:latest
           ports:
@@ -328,7 +330,7 @@ jobs:
 
        - name: Export and Converting to Postgress
          run: |
-              curl -L https://raw.githubusercontent.com/nitnelave/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
+              curl -L https://raw.githubusercontent.com/lldap/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
               chmod +x ./helper.sh
               ./helper.sh | sqlite3 ./users.db > ./dump.sql
               sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" -e '1s/^/BEGIN;\n/' -e '$aCOMMIT;' ./dump.sql
@@ -346,7 +348,7 @@ jobs:
 
        - name: Export and Converting to mariadb
          run: |
-              curl -L https://raw.githubusercontent.com/nitnelave/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
+              curl -L https://raw.githubusercontent.com/lldap/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
               chmod +x ./helper.sh
               ./helper.sh | sqlite3 ./users.db > ./dump.sql
               cp ./dump.sql ./dump-no-sed.sql
@@ -365,7 +367,7 @@ jobs:
 
        - name: Export and Converting to mysql
          run: |
-              curl -L https://raw.githubusercontent.com/nitnelave/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
+              curl -L https://raw.githubusercontent.com/lldap/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
               chmod +x ./helper.sh
               ./helper.sh | sqlite3 ./users.db > ./dump.sql
               sed -i -r -e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' -e '1s/^/START TRANSACTION;\n/' -e '$aCOMMIT;' ./dump.sql
@@ -425,6 +427,34 @@ jobs:
     needs: [build-ui, build-bin]
     name: Build Docker image
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        container: ["debian","alpine"]
+        include:
+          - container: alpine
+            platforms: linux/amd64,linux/arm64
+            tags: |
+                  type=ref,event=pr
+                  type=semver,pattern=v{{version}}
+                  type=semver,pattern=v{{major}}
+                  type=semver,pattern=v{{major}}.{{minor}}
+                  type=semver,pattern=v{{version}},suffix=
+                  type=semver,pattern=v{{major}},suffix=
+                  type=semver,pattern=v{{major}}.{{minor}},suffix=
+                  type=raw,value=latest,enable={{ is_default_branch }}
+                  type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+                  type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') }},suffix=
+                  type=raw,value=latest,enable={{ is_default_branch }},suffix=
+          - container: debian
+            platforms: linux/amd64,linux/arm64,linux/arm/v7
+            tags: |
+                  type=ref,event=pr
+                  type=semver,pattern=v{{version}}
+                  type=semver,pattern=v{{major}}
+                  type=semver,pattern=v{{major}}.{{minor}}
+                  type=raw,value=latest,enable={{ is_default_branch }}
+                  type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
     permissions:
       contents: read
       packages: write
@@ -446,27 +476,38 @@ jobs:
         uses: docker/setup-qemu-action@v2
       - uses: docker/setup-buildx-action@v2
 
-      - name: Docker meta
+      - name: Docker ${{ matrix.container }} meta
         id: meta
         uses: docker/metadata-action@v4
         with:
           # list of Docker images to use as base name for tags
           images: |
             nitnelave/lldap
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha
+            lldap/lldap
+            ghcr.io/lldap/lldap
+          # Wanted Docker tags
+          # vX-alpine
+          # vX.Y-alpine
+          # vX.Y.Z-alpine
+          # latest
+          # latest-alpine
+          # stable
+          # stable-alpine
+          #################
+          # vX-debian
+          # vX.Y-debian
+          # vX.Y.Z-debian
+          # latest-debian
+          # stable-debian
+          #################
+          # Check matrix for tag list definition
+          flavor: |
+            latest=false
+            suffix=-${{ matrix.container }}
+          tags: ${{ matrix.tags }}
 
-      - name: parse tag
-        uses: gacts/github-slug@v1
-        id: slug
-
-      - name: Login to Docker Hub
+      # Docker login to nitnelave/lldap and lldap/lldap
+      - name: Login to Nitnelave/LLDAP Docker Hub
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v2
         with:
@@ -481,75 +522,20 @@ jobs:
           username: nitnelave
           password: ${{ secrets.GITHUB_TOKEN }}
 
+
 ########################################
-#### docker image :latest tag build ####
+####       docker image build       ####
 ########################################
-      - name: Build and push latest alpine
-        if: github.event_name != 'release'
+      - name: Build ${{ matrix.container }} Docker Image
         uses: docker/build-push-action@v4
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
-          platforms: linux/amd64,linux/arm64
-          file: ./.github/workflows/Dockerfile.ci.alpine
+          platforms: ${{ matrix.platforms  }}
+          file: ./.github/workflows/Dockerfile.ci.${{ matrix.container  }}
           tags: |
-            nitnelave/lldap:latest, nitnelave/lldap:latest-alpine
-            lldap/lldap:latest, lldap/lldap:latest-alpine
-            ghcr.io/${{ github.repository }}:latest, ghcr.io/${{ github.repository }}:latest-alpine
-            ghcr.io/nitnelave/lldap:latest, ghcr.io/nitnelave/lldap:latest-alpine
-          cache-from: type=gha,mode=max
-          cache-to: type=gha,mode=max
-
-      - name: Build and push latest debian
-        if: github.event_name != 'release'
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
-          file: ./.github/workflows/Dockerfile.ci.debian
-          tags: |
-            nitnelave/lldap:latest-debian
-            lldap/lldap:latest-debian
-            ghcr.io/${{ github.repository }}:latest-debian
-            ghcr.io/nitnelave/lldap:latest-debian
-          cache-from: type=gha,mode=max
-          cache-to: type=gha,mode=max
-
-########################################
-#### docker image :semver tag build ####
-########################################
-      - name: Build and push release alpine
-        if: github.event_name == 'release'
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
-          file: ./.github/workflows/Dockerfile.ci.alpine
-          tags: |
-            nitnelave/lldap:stable, nitnelave/lldap:stable-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
-            lldap/lldap:stable, lldap/lldap:stable-alpine, lldap/lldap:v${{ steps.slug.outputs.version-semantic }}, lldap/lldap:v${{ steps.slug.outputs.version-major }}, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, lldap/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, lldap/lldap:v${{ steps.slug.outputs.version-major }}-alpine, lldap/lldap:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
-            ghcr.io/${{ github.repository }}:stable, ghcr.io/${{ github.repository }}:stable-alpine, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-semantic }}, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-semantic }}-alpine, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}-alpine, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
-            ghcr.io/nitnelave/lldap:stable, ghcr.io/nitnelave/lldap:stable-alpine, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
-          cache-from: type=gha,mode=max
-          cache-to: type=gha,mode=max
-
-      - name: Build and push release debian
-        if: github.event_name == 'release'
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
-          push: true
-          # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
-          file: ./.github/workflows/Dockerfile.ci.debian
-          tags: |
-            nitnelave/lldap:stable-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
-            lldap/lldap:stable-debian, lldap/lldap:v${{ steps.slug.outputs.version-semantic }}-debian, lldap/lldap:v${{ steps.slug.outputs.version-major }}-debian, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
-            ghcr.io/${{ github.repository }}:stable-debian, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-semantic }}-debian, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}-debian, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, ghcr.io/${{ github.repository }}:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
-            ghcr.io/nitnelave/lldap:stable-debian, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-debian, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-debian, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, ghcr.io/nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
+                ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,mode=max
           cache-to: type=gha,mode=max
 
@@ -568,7 +554,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
           repository: lldap/lldap
-            
+
 ###############################################################
 ### Download artifacts, clean up ui, upload to release page ###
 ###############################################################
