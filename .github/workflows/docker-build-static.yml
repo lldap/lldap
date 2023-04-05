@@ -453,6 +453,9 @@ jobs:
           # list of Docker images to use as base name for tags
           images: |
             nitnelave/lldap
+            lldap/lldap
+            ghcr.io/nitnelave/lldap
+            ghcr.io/lldap/lldap
           # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=branch
@@ -461,7 +464,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
-
       - name: parse tag
         uses: gacts/github-slug@v1
         id: slug
@@ -492,6 +494,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64,linux/arm64
           file: ./.github/workflows/Dockerfile.ci.alpine
+          labels: ${{ steps.meta.outputs.labels }}
           tags: |
             nitnelave/lldap:latest, nitnelave/lldap:latest-alpine
             lldap/lldap:latest, lldap/lldap:latest-alpine
@@ -508,6 +511,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           file: ./.github/workflows/Dockerfile.ci.debian
+          labels: ${{ steps.meta.outputs.labels }}
           tags: |
             nitnelave/lldap:latest-debian
             lldap/lldap:latest-debian
@@ -528,6 +532,7 @@ jobs:
           push: true
           # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
           file: ./.github/workflows/Dockerfile.ci.alpine
+          labels: ${{ steps.meta.outputs.labels }}
           tags: |
             nitnelave/lldap:stable, nitnelave/lldap:stable-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
             lldap/lldap:stable, lldap/lldap:stable-alpine, lldap/lldap:v${{ steps.slug.outputs.version-semantic }}, lldap/lldap:v${{ steps.slug.outputs.version-major }}, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}, lldap/lldap:v${{ steps.slug.outputs.version-semantic }}-alpine, lldap/lldap:v${{ steps.slug.outputs.version-major }}-alpine, lldap/lldap:v${{ steps.slug.outputs.version-major }}-alpine.${{ steps.slug.outputs.version-minor }}-alpine, lldap/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-alpine
@@ -544,6 +549,7 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           # Tag as latest, stable, semver, major, major.minor and major.minor.patch.
+          labels: ${{ steps.meta.outputs.labels }}
           file: ./.github/workflows/Dockerfile.ci.debian
           tags: |
             nitnelave/lldap:stable-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-semantic }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}-debian, nitnelave/lldap:v${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}.${{ steps.slug.outputs.version-patch }}-debian
