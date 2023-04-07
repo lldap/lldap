@@ -1,0 +1,5 @@
+mutation AddUserToGroup($user: String!, $group: Int!) {
+  addUserToGroup(userId: $user, groupId: $group) {
+    ok
+  }
+}
