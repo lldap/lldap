@@ -19,6 +19,7 @@ use actix_service::map_config;
 use actix_web::{dev::AppConfig, guard, web, App, HttpResponse, Responder};
 use anyhow::{Context, Result};
 use hmac::Hmac;
+use secstr::SecUtf8;
 use sha2::Sha512;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -38,10 +39,10 @@ pub enum TcpError {
     BadRequest(String),
     #[error("Internal server error: `{0}`")]
     InternalServerError(String),
-    #[error("Not found: `{0}`")]
-    NotFoundError(String),
     #[error("Unauthorized: `{0}`")]
     UnauthorizedError(String),
+    #[error("Not implemented: `{0}`")]
+    NotImplemented(String),
 }
 
 pub type TcpResult<T> = std::result::Result<T, TcpError>;
@@ -60,9 +61,9 @@ pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
             | DomainError::EntityNotFound(_) => HttpResponse::BadRequest(),
         },
         TcpError::BadRequest(_) => HttpResponse::BadRequest(),
-        TcpError::NotFoundError(_) => HttpResponse::NotFound(),
         TcpError::InternalServerError(_) => HttpResponse::InternalServerError(),
         TcpError::UnauthorizedError(_) => HttpResponse::Unauthorized(),
+        TcpError::NotImplemented(_) => HttpResponse::NotImplemented(),
     }
     .body(error.to_string())
 }
@@ -88,6 +89,7 @@ fn http_config<Backend>(
     jwt_blacklist: HashSet<u64>,
     server_url: String,
     mail_options: MailOptions,
+    hipb_api_key: SecUtf8,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
@@ -98,6 +100,7 @@ fn http_config<Backend>(
         jwt_blacklist: RwLock::new(jwt_blacklist),
         server_url,
         mail_options,
+        hipb_api_key,
     }))
     .route(
         "/health",
@@ -133,6 +136,7 @@ pub(crate) struct AppState<Backend> {
     pub jwt_blacklist: RwLock<HashSet<u64>>,
     pub server_url: String,
     pub mail_options: MailOptions,
+    pub hipb_api_key: SecUtf8,
 }
 
 impl<Backend: BackendHandler> AppState<Backend> {
@@ -173,6 +177,7 @@ where
     let mail_options = config.smtp_options.clone();
     let verbose = config.verbose;
     info!("Starting the API/web server on port {}", config.http_port);
+    let hipb_api_key = config.hipb_api_key.clone();
     server_builder
         .bind(
             "http",
@@ -183,6 +188,7 @@ where
                 let jwt_blacklist = jwt_blacklist.clone();
                 let server_url = server_url.clone();
                 let mail_options = mail_options.clone();
+                let hipb_api_key = hipb_api_key.clone();
                 HttpServiceBuilder::default()
                     .finish(map_config(
                         App::new()
@@ -198,6 +204,7 @@ where
                                     jwt_blacklist,
                                     server_url,
                                     mail_options,
+                                    hipb_api_key,
                                 )
                             }),
                         |_| AppConfig::default(),

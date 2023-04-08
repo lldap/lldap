@@ -149,9 +149,9 @@ impl Component for LoginForm {
         let link = &ctx.link();
         if self.refreshing {
             html! {
-              <div>
-                <img src={"spinner.gif"} alt={"Loading"} />
-              </div>
+                <div class="spinner-border" role="status">
+                  <span class="sr-only">{"Loading..."}</span>
+                </div>
             }
         } else {
             html! {

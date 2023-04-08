@@ -1,4 +1,4 @@
-use super::cookies::set_cookie;
+use crate::infra::cookies::set_cookie;
 use anyhow::{anyhow, Context, Result};
 use gloo_net::http::{Method, Request};
 use graphql_client::GraphQLQuery;
@@ -72,6 +72,19 @@ fn set_cookies_from_jwt(response: login::ServerLoginResponse) -> Result<(String,
         .map(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
         .map(|_| (jwt_claims.user.clone(), is_admin))
         .context("Error setting cookie")
+}
+
+#[derive(PartialEq)]
+pub struct PasswordHash(String);
+
+#[derive(PartialEq)]
+pub struct PasswordWasLeaked(pub bool);
+
+pub fn hash_password(password: &str) -> PasswordHash {
+    use sha1::{Digest, Sha1};
+    let mut hasher = Sha1::new();
+    hasher.update(password);
+    PasswordHash(format!("{:X}", hasher.finalize()))
 }
 
 impl HostService {
@@ -193,5 +206,36 @@ impl HostService {
                 .status()
                 != http::StatusCode::NOT_FOUND,
         )
+    }
+
+    pub async fn check_password_haveibeenpwned(
+        password_hash: PasswordHash,
+    ) -> Result<(Option<PasswordWasLeaked>, PasswordHash)> {
+        use lldap_auth::password_reset::*;
+        let hash_prefix = &password_hash.0[0..5];
+        match call_server_json_with_error_message::<PasswordHashList, _>(
+            &format!("/auth/password/check/{}", hash_prefix),
+            NO_BODY,
+            "Could not validate token",
+        )
+        .await
+        {
+            Ok(r) => {
+                for PasswordHashCount { hash, count } in r.hashes {
+                    if password_hash.0[5..] == hash && count != 0 {
+                        return Ok((Some(PasswordWasLeaked(true)), password_hash));
+                    }
+                }
+                Ok((Some(PasswordWasLeaked(false)), password_hash))
+            }
+            Err(e) => {
+                if e.to_string().contains("[501]:") {
+                    // Unimplemented, no API key.
+                    Ok((None, password_hash))
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 }

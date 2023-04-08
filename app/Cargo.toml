@@ -19,6 +19,7 @@ serde = "1"
 serde_json = "1"
 url-escape = "0.1.1"
 validator = "=0.14"
+sha1 = "*"
 validator_derive = "*"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "*"
@@ -27,6 +28,7 @@ yew-router = "0.16"
 
 # Needed because of https://github.com/tkaitchuck/aHash/issues/95
 indexmap = "=1.6.2"
+gloo-timers = "0.2.6"
 
 [dependencies.web-sys]
 version = "0.3"
