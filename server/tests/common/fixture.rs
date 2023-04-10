@@ -32,7 +32,7 @@ pub struct LLDAPFixture {
 
 impl LLDAPFixture {
     pub fn new() -> Self {
-        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("cargo bin found");
+        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("cargo bin not found");
 
         let path = canonicalize("..").expect("canonical path");
         let db_url = env::database_url();
