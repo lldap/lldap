@@ -1,6 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use crate::common::fixture::{LLDAPFixture, User};
+use crate::common::{
+    env,
+    fixture::{new_id, LLDAPFixture, User},
+};
 use ldap3::{LdapConn, Scope, SearchEntry};
 use serial_test::file_serial;
 mod common;
@@ -9,29 +12,26 @@ mod common;
 #[file_serial]
 fn gitea() {
     let mut fixture = LLDAPFixture::new();
-    let gitea_user_group = "gitea_user";
+    let gitea_user_group = new_id(Some("gitea_user-"));
+    let gitea_admin_group = new_id(Some("gitea_admin-"));
+    let gitea_user1 = new_id(Some("gitea1-"));
+    let gitea_user2 = new_id(Some("gitea2-"));
+    let gitea_user3 = new_id(Some("gitea3-"));
     let initial_state = vec![
-        User::new("bob", vec![gitea_user_group, "gitea-admin"]),
-        User::new("alice", vec![gitea_user_group]),
-        User::new("james", vec![]),
+        User::new(&gitea_user1, vec![&gitea_user_group, &gitea_admin_group]),
+        User::new(&gitea_user2, vec![&gitea_user_group]),
+        User::new(&gitea_user3, vec![]),
     ];
     fixture.load_state(&initial_state);
 
-    let mut ldap = LdapConn::new(common::fixture::get_ldap_url().as_str())
-        .expect("failed to create ldap connection");
-    let base_dn = common::fixture::get_base_dn();
-    let bind_dn = format!(
-        "uid={},ou=people,{}",
-        common::fixture::get_admin_dn(),
-        base_dn
-    );
-    ldap.simple_bind(
-        bind_dn.as_str(),
-        common::fixture::get_admin_password().as_str(),
-    )
-    .expect("failed to bind to ldap");
+    let mut ldap =
+        LdapConn::new(env::ldap_url().as_str()).expect("failed to create ldap connection");
+    let base_dn = env::base_dn();
+    let bind_dn = format!("uid={},ou=people,{}", env::admin_dn(), base_dn);
+    ldap.simple_bind(bind_dn.as_str(), env::admin_password().as_str())
+        .expect("failed to bind to ldap");
 
-    let user_base = format!("ou=people,{}", common::fixture::get_base_dn());
+    let user_base = format!("ou=people,{}", base_dn);
     let attrs = vec!["uid", "givenName", "sn", "mail", "jpegPhoto"];
     let results = ldap
         .search(
@@ -50,8 +50,8 @@ fn gitea() {
         let user = attrs.get("uid").unwrap().get(0).unwrap();
         found_users.insert(user.clone());
     }
-    assert!(found_users.contains("bob"));
-    assert!(found_users.contains("alice"));
-    assert!(!found_users.contains("james"));
+    assert!(found_users.contains(&gitea_user1));
+    assert!(found_users.contains(&gitea_user2));
+    assert!(!found_users.contains(&gitea_user3));
     ldap.unbind().expect("failed to unbind ldap connection");
 }

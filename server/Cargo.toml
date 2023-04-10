@@ -143,3 +143,7 @@ version = "0.11"
 version = "*"
 default-features = false
 features = ["json", "blocking", "rustls-tls"]
+
+[dev-dependencies.uuid]
+version = "*"
+features = ["v4"]

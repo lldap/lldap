@@ -1,78 +1,12 @@
-use anyhow::{anyhow, bail, Context, Result};
+use crate::common::auth::get_token;
+use crate::common::env;
+use crate::common::graphql::*;
 use assert_cmd::prelude::*;
-use graphql_client::GraphQLQuery;
 use reqwest::blocking::{Client, ClientBuilder};
 use std::collections::{HashMap, HashSet};
 use std::process::{Child, Command};
-use std::{env::var, fs::canonicalize, thread, time::Duration};
-
-const DB_KEY: &str = "LLDAP_DATABASE_URL";
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "tests/queries/add_user_to_group.graphql",
-    response_derives = "Debug",
-    variables_derives = "Debug,Clone",
-    custom_scalars_module = "crate::infra::graphql"
-)]
-struct AddUserToGroup;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "tests/queries/create_user.graphql",
-    response_derives = "Debug",
-    variables_derives = "Debug,Clone",
-    custom_scalars_module = "crate::infra::graphql"
-)]
-struct CreateUser;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "tests/queries/create_group.graphql",
-    response_derives = "Debug",
-    variables_derives = "Debug,Clone",
-    custom_scalars_module = "crate::infra::graphql"
-)]
-struct CreateGroup;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "tests/queries/list_users.graphql",
-    response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
-)]
-pub struct ListUsers;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "tests/queries/list_groups.graphql",
-    response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
-)]
-struct ListGroups;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "tests/queries/delete_group.graphql",
-    response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
-)]
-struct DeleteGroupQuery;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "tests/queries/delete_user.graphql",
-    response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
-)]
-struct DeleteUserQuery;
+use std::{fs::canonicalize, thread, time::Duration};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct User {
@@ -101,11 +35,11 @@ impl LLDAPFixture {
         let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("cargo bin found");
 
         let path = canonicalize("..").expect("canonical path");
-        let db_url = get_database_url();
+        let db_url = env::database_url();
         println!("Running from directory: {:?}", path);
         println!("Using database: {db_url}");
         cmd.current_dir(path.clone());
-        cmd.env(DB_KEY, db_url);
+        cmd.env(env::DB_KEY, db_url);
         cmd.arg("run");
         cmd.arg("--verbose");
         let child = cmd.spawn().expect("Unable to start server");
@@ -127,7 +61,7 @@ impl LLDAPFixture {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("failed to make http client");
-        let token = get_token(&client).expect("failed to get token");
+        let token = get_token(&client);
         Self {
             client,
             token,
@@ -244,99 +178,11 @@ impl Drop for LLDAPFixture {
     }
 }
 
-fn get_database_url() -> String {
-    let url = var(DB_KEY).ok();
-    let url = url.unwrap_or("sqlite://e2e_test.db?mode=rwc".to_string());
-    url.to_string()
-}
-
-pub fn get_ldap_url() -> String {
-    let port = option_env!("LLDAP_LDAP_PORT");
-    let port = port.unwrap_or("3890");
-    let mut url = String::from("ldap://localhost:");
-    url += port;
-    url
-}
-
-pub fn get_http_url() -> String {
-    let port = option_env!("LLDAP_HTTP_PORT");
-    let port = port.unwrap_or("17170");
-    let mut url = String::from("http://localhost:");
-    url += port;
-    url
-}
-
-pub fn get_admin_dn() -> String {
-    let user = option_env!("LLDAP_LDAP_USER_DN");
-    let user = user.unwrap_or("admin");
-    user.to_string()
-}
-
-pub fn get_admin_password() -> String {
-    let pass = option_env!("LLDAP_LDAP_USER_PASS");
-    let pass = pass.unwrap_or("password");
-    pass.to_string()
-}
-
-pub fn get_base_dn() -> String {
-    let dn = option_env!("LLDAP_LDAP_BASE_DN");
-    let dn = dn.unwrap_or("dc=example,dc=com");
-    dn.to_string()
-}
-
-pub fn get_token(client: &Client) -> Result<String> {
-    let username = get_admin_dn();
-    let password = get_admin_password();
-    let base_url = get_http_url();
-    let response = client
-        .post(format!("{base_url}/auth/simple/login"))
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(
-            serde_json::to_string(&lldap_auth::login::ClientSimpleLoginRequest {
-                username: username,
-                password: password,
-            })
-            .expect("Failed to encode the username/password as json to log in"),
-        )
-        .send()?
-        .error_for_status()?;
-    Ok(serde_json::from_str::<lldap_auth::login::ServerLoginResponse>(&response.text()?)?.token)
-}
-pub fn post<QueryType>(
-    client: &Client,
-    token: &String,
-    variables: QueryType::Variables,
-) -> Result<QueryType::ResponseData>
-where
-    QueryType: GraphQLQuery + 'static,
-{
-    let unwrap_graphql_response = |graphql_client::Response { data, errors, .. }| {
-        data.ok_or_else(|| {
-            anyhow!(
-                "Errors: [{}]",
-                errors
-                    .unwrap_or_default()
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        })
-    };
-    let url = get_http_url() + "/api/graphql";
-    let auth_header = format!("Bearer {}", token);
-    client
-        .post(url)
-        .header(reqwest::header::AUTHORIZATION, auth_header)
-        // Request body.
-        .json(&QueryType::build_query(variables))
-        .send()
-        .context("while sending a request to the LLDAP server")?
-        .error_for_status()
-        .context("error from an LLDAP response")?
-        // Parse response as Json.
-        .json::<graphql_client::Response<QueryType::ResponseData>>()
-        .context("while parsing backend response")
-        .and_then(unwrap_graphql_response)
-        .context("GraphQL error from an LLDAP response")
+pub fn new_id(prefix: Option<&str>) -> String {
+    let id = Uuid::new_v4();
+    let id = format!("{}-lldap-test", id.to_simple());
+    match prefix {
+        Some(prefix) => format!("{}{}", prefix, id),
+        None => id,
+    }
 }

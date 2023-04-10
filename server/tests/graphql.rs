@@ -1,19 +1,27 @@
-use crate::common::fixture::{LLDAPFixture, User};
-use graphql_client::GraphQLQuery;
-use ldap3::{LdapConn, Scope, SearchEntry};
-use reqwest::blocking::{Client, ClientBuilder};
+use crate::common::{
+    auth::get_token,
+    fixture::{new_id, LLDAPFixture, User},
+    graphql::{post, ListUsers},
+};
+use reqwest::blocking::ClientBuilder;
 use serial_test::file_serial;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 mod common;
 
 #[test]
 #[file_serial]
 fn list_users() {
     let mut fixture = LLDAPFixture::new();
+    let prefix = "graphql-list_users-";
+    let user1_name = new_id(Some(prefix));
+    let user2_name = new_id(Some(prefix));
+    let user3_name = new_id(Some(prefix));
+    let group1_name = new_id(Some(prefix));
+    let group2_name = new_id(Some(prefix));
     let initial_state = vec![
-        User::new("user1", vec!["group-one"]),
-        User::new("user2", vec!["group-one", "group-two"]),
-        User::new("user3", vec![]),
+        User::new(&user1_name, vec![&group1_name]),
+        User::new(&user2_name, vec![&group1_name, &group2_name]),
+        User::new(&user3_name, vec![]),
     ];
     fixture.load_state(&initial_state);
 
@@ -23,20 +31,11 @@ fn list_users() {
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("failed to make http client");
-    let token = common::fixture::get_token(&client).expect("failed to get token");
-    let result = common::fixture::post::<ListUsers>(&client, &token, list_users::Variables {})
+    let token = get_token(&client);
+    let result = post::<ListUsers>(&client, &token, common::graphql::list_users::Variables {})
         .expect("failed to list users");
     let users: HashSet<String> = result.users.iter().map(|user| user.id.clone()).collect();
-    assert!(users.contains("user1"));
-    assert!(users.contains("user2"));
-    assert!(users.contains("user3"));
+    assert!(users.contains(&user1_name));
+    assert!(users.contains(&user2_name));
+    assert!(users.contains(&user3_name));
 }
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "../schema.graphql",
-    query_path = "tests/queries/list_users.graphql",
-    response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
-)]
-struct ListUsers;
