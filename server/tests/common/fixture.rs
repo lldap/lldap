@@ -110,18 +110,18 @@ impl LLDAPFixture {
         self.users.insert(user.clone());
     }
 
-    fn add_group(&mut self, group: &String) {
+    fn add_group(&mut self, group: &str) {
         let id = post::<CreateGroup>(
             &self.client,
             &self.token,
             create_group::Variables {
-                name: group.clone(),
+                name: group.to_owned(),
             },
         )
         .expect("failed to add group")
         .create_group
         .id;
-        self.groups.insert(group.clone(), id);
+        self.groups.insert(group.to_owned(), id);
     }
 
     fn delete_user(&mut self, user: &String) {
@@ -147,13 +147,13 @@ impl LLDAPFixture {
         self.groups.remove(group);
     }
 
-    fn add_user_to_group(&mut self, user: &String, group: &String) {
+    fn add_user_to_group(&mut self, user: &str, group: &String) {
         let group_id = self.groups.get(group).unwrap();
         post::<AddUserToGroup>(
             &self.client,
             &self.token,
             add_user_to_group::Variables {
-                user: user.clone(),
+                user: user.to_owned(),
                 group: *group_id,
             },
         )
