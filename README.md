@@ -23,8 +23,8 @@
       src="https://img.shields.io/badge/unsafe-forbidden-success.svg"
       alt="Unsafe forbidden"/>
   </a>
-  <a href="https://app.codecov.io/gh/nitnelave/lldap">
-    <img alt="Codecov" src="https://img.shields.io/codecov/c/github/nitnelave/lldap" />
+  <a href="https://app.codecov.io/gh/lldap/lldap">
+    <img alt="Codecov" src="https://img.shields.io/codecov/c/github/lldap/lldap" />
   </a>
 </p>
 
