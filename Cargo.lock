@@ -2345,7 +2345,7 @@ checksum = "f051f77a7c8e6957c0696eac88f26b0117e54f52d3fc682ab19397a8812846a4"
 
 [[package]]
 name = "lldap"
-version = "0.4.3"
+version = "0.4.4-alpha"
 dependencies = [
  "actix",
  "actix-files",
@@ -2411,7 +2411,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_app"
-version = "0.4.3"
+version = "0.4.4-alpha"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
