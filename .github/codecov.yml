@@ -10,3 +10,5 @@ ignore:
   - "docs"
   - "example_configs"
   - "migration-tool"
+  - "scripts"
+  - "set-password"
