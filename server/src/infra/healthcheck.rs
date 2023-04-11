@@ -1,4 +1,4 @@
-use crate::infra::configuration::LdapsOptions;
+use crate::infra::{configuration::LdapsOptions, ldap_server::read_certificates};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use futures_util::SinkExt;
 use ldap3_proto::{
@@ -65,6 +65,7 @@ where
         invalid_answer
     );
     info!("Success");
+    resp.close().await?;
     Ok(())
 }
 
@@ -85,15 +86,44 @@ fn get_root_certificates() -> rustls::RootCertStore {
     root_store
 }
 
-fn get_tls_connector() -> Result<RustlsTlsConnector> {
-    use rustls::ClientConfig;
-    let client_config = std::sync::Arc::new(
-        ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(get_root_certificates())
-            .with_no_client_auth(),
-    );
-    Ok(client_config.into())
+fn get_tls_connector(ldaps_options: &LdapsOptions) -> Result<RustlsTlsConnector> {
+    let mut client_config = rustls::ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(get_root_certificates())
+        .with_no_client_auth();
+    let (certs, _private_key) = read_certificates(ldaps_options)?;
+    // Check that the server cert is the one in the config file.
+    struct CertificateVerifier {
+        certificate: rustls::Certificate,
+        certificate_path: String,
+    }
+    impl rustls::client::ServerCertVerifier for CertificateVerifier {
+        fn verify_server_cert(
+            &self,
+            end_entity: &rustls::Certificate,
+            _intermediates: &[rustls::Certificate],
+            _server_name: &rustls::ServerName,
+            _scts: &mut dyn Iterator<Item = &[u8]>,
+            _ocsp_response: &[u8],
+            _now: std::time::SystemTime,
+        ) -> std::result::Result<rustls::client::ServerCertVerified, rustls::Error> {
+            if end_entity != &self.certificate {
+                return Err(rustls::Error::InvalidCertificateData(format!(
+                    "Server certificate doesn't match the one in the config file {}",
+                    &self.certificate_path
+                )));
+            }
+            Ok(rustls::client::ServerCertVerified::assertion())
+        }
+    }
+    let mut dangerous_config = rustls::client::DangerousClientConfig {
+        cfg: &mut client_config,
+    };
+    dangerous_config.set_certificate_verifier(std::sync::Arc::new(CertificateVerifier {
+        certificate: certs.first().expect("empty certificate chain").clone(),
+        certificate_path: ldaps_options.cert_file.clone(),
+    }));
+    Ok(std::sync::Arc::new(client_config).into())
 }
 
 #[instrument(skip_all, level = "info", err)]
@@ -102,15 +132,20 @@ pub async fn check_ldaps(ldaps_options: &LdapsOptions) -> Result<()> {
         info!("LDAPS not enabled");
         return Ok(());
     };
-    let tls_connector = get_tls_connector()?;
+    let tls_connector =
+        get_tls_connector(ldaps_options).context("while preparing the tls connection")?;
     let url = format!("localhost:{}", ldaps_options.port);
     check_ldap_endpoint(
         tls_connector
             .connect(
-                rustls::ServerName::try_from(url.as_str())?,
-                TcpStream::connect(&url).await?,
+                rustls::ServerName::try_from("localhost")
+                    .context("while parsing the server name")?,
+                TcpStream::connect(&url)
+                    .await
+                    .context("while connecting TCP")?,
             )
-            .await?,
+            .await
+            .context("while connecting TLS")?,
     )
     .await
 }
