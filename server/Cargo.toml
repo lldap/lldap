@@ -31,7 +31,6 @@ lber = "0.4.1"
 ldap3_proto = ">=0.3.1"
 log = "*"
 orion = "0.17"
-rustls = "0.20"
 rustls-pemfile = "1"
 serde = "*"
 serde_bytes = "0.11"
@@ -114,6 +113,10 @@ features = ["macros", "with-chrono", "with-uuid", "sqlx-all", "runtime-actix-rus
 version = "0.11"
 default-features = false
 features = ["rustls-tls-webpki-roots"]
+
+[dependencies.rustls]
+version = "0.20"
+features = ["dangerous_configuration"]
 
 [dev-dependencies]
 mockall = "0.11"

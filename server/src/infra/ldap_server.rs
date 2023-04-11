@@ -4,7 +4,8 @@ use crate::{
         opaque_handler::OpaqueHandler,
     },
     infra::{
-        access_control::AccessControlledBackendHandler, configuration::Configuration,
+        access_control::AccessControlledBackendHandler,
+        configuration::{Configuration, LdapsOptions},
         ldap_handler::LdapHandler,
     },
 };
@@ -126,20 +127,22 @@ fn read_private_key(key_file: &str) -> Result<PrivateKey> {
         .map(rustls::PrivateKey)
 }
 
-fn get_tls_acceptor(config: &Configuration) -> Result<RustlsTlsAcceptor> {
-    use rustls::{Certificate, ServerConfig};
-    use rustls_pemfile::certs;
+pub fn read_certificates(
+    ldaps_options: &LdapsOptions,
+) -> Result<(Vec<rustls::Certificate>, rustls::PrivateKey)> {
     use std::{fs::File, io::BufReader};
-    // Load TLS key and cert files
-    let certs = certs(&mut BufReader::new(File::open(
-        &config.ldaps_options.cert_file,
-    )?))?
-    .into_iter()
-    .map(Certificate)
-    .collect::<Vec<_>>();
-    let private_key = read_private_key(&config.ldaps_options.key_file)?;
+    let certs = rustls_pemfile::certs(&mut BufReader::new(File::open(&ldaps_options.cert_file)?))?
+        .into_iter()
+        .map(rustls::Certificate)
+        .collect::<Vec<_>>();
+    let private_key = read_private_key(&ldaps_options.key_file)?;
+    Ok((certs, private_key))
+}
+
+fn get_tls_acceptor(ldaps_options: &LdapsOptions) -> Result<RustlsTlsAcceptor> {
+    let (certs, private_key) = read_certificates(ldaps_options)?;
     let server_config = std::sync::Arc::new(
-        ServerConfig::builder()
+        rustls::ServerConfig::builder()
             .with_safe_defaults()
             .with_no_client_auth()
             .with_single_cert(certs, private_key)?,
@@ -190,7 +193,8 @@ where
     if config.ldaps_options.enabled {
         let tls_context = (
             context_for_tls,
-            get_tls_acceptor(config).context("while setting up the SSL certificate")?,
+            get_tls_acceptor(&config.ldaps_options)
+                .context("while setting up the SSL certificate")?,
         );
         let tls_binder = move || {
             let tls_context = tls_context.clone();
