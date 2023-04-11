@@ -180,11 +180,13 @@ jobs:
           ports:
             - 3306:3306
           env:
-            MYSQL_USER: lldapuser
-            MYSQL_PASSWORD: lldappass
-            MYSQL_DATABASE: lldap
-            MYSQL_ROOT_PASSWORD: rootpass
-          options: --name mariadb
+            MARIADB_USER: lldapuser
+            MARIADB_PASSWORD: lldappass
+            MARIADB_DATABASE: lldap
+            MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 1
+          options: >-
+            --name mariadb
+            --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
         postgresql:
            image: postgres:latest
@@ -194,7 +196,12 @@ jobs:
              POSTGRES_USER: lldapuser
              POSTGRES_PASSWORD: lldappass
              POSTGRES_DB: lldap
-           options: --name postgresql
+           options: >-
+             --health-cmd pg_isready
+             --health-interval 10s
+             --health-timeout 5s
+             --health-retries 5
+             --name postgresql
 
     steps:
        - name: Download artifacts
@@ -256,18 +263,26 @@ jobs:
              POSTGRES_USER: lldapuser
              POSTGRES_PASSWORD: lldappass
              POSTGRES_DB: lldap
-           options: --name postgresql
-
+           options: >-
+             --health-cmd pg_isready
+             --health-interval 10s
+             --health-timeout 5s
+             --health-retries 5
+             --name postgresql
+             
         mariadb:
           image: mariadb:latest
           ports:
             - 3306:3306
           env:
-            MYSQL_USER: lldapuser
-            MYSQL_PASSWORD: lldappass
-            MYSQL_DATABASE: lldap
-            MYSQL_ROOT_PASSWORD: rootpass
-          options: --name mariadb
+            MARIADB_USER: lldapuser
+            MARIADB_PASSWORD: lldappass
+            MARIADB_DATABASE: lldap
+            MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 1
+          options: >-
+            --name mariadb
+            --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=2s --health-retries=3
+
 
         mysql:
           image: mysql:latest
@@ -277,8 +292,10 @@ jobs:
             MYSQL_USER: lldapuser
             MYSQL_PASSWORD: lldappass
             MYSQL_DATABASE: lldap
-            MYSQL_ROOT_PASSWORD: rootpass
-          options: --name mysql
+            MYSQL_ALLOW_EMPTY_PASSWORD: 1
+          options: >-
+            --name mysql
+            --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
 
     steps:

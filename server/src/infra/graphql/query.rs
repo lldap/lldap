@@ -124,10 +124,12 @@ impl<Handler: BackendHandler> Query<Handler> {
     }
 
     pub async fn user(context: &Context<Handler>, user_id: String) -> FieldResult<User<Handler>> {
+        use anyhow::Context;
         let span = debug_span!("[GraphQL query] user");
         span.in_scope(|| {
             debug!(?user_id);
         });
+        let user_id = urlencoding::decode(&user_id).context("Invalid user parameter")?;
         let user_id = UserId::new(&user_id);
         let handler = context
             .get_readable_handler(&user_id)
