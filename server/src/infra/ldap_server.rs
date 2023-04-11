@@ -94,7 +94,7 @@ where
 }
 
 fn read_private_key(key_file: &str) -> Result<PrivateKey> {
-    use rustls_pemfile::{pkcs8_private_keys, rsa_private_keys};
+    use rustls_pemfile::{ec_private_keys, pkcs8_private_keys, rsa_private_keys};
     use std::{fs::File, io::BufReader};
     pkcs8_private_keys(&mut BufReader::new(File::open(key_file)?))
         .map_err(anyhow::Error::from)
@@ -112,9 +112,14 @@ fn read_private_key(key_file: &str) -> Result<PrivateKey> {
                         .ok_or_else(|| anyhow!("No PKCS1 key"))
                 })
         })
+        .or_else(|_| {
+            ec_private_keys(&mut BufReader::new(File::open(key_file)?))
+                .map_err(anyhow::Error::from)
+                .and_then(|keys| keys.into_iter().next().ok_or_else(|| anyhow!("No EC key")))
+        })
         .with_context(|| {
             format!(
-                "Cannot read either PKCS1 or PKCS8 private key from {}",
+                "Cannot read either PKCS1, PKCS8 or EC private key from {}",
                 key_file
             )
         })
