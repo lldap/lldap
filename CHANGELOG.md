@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] 2023-04-11
+
+The repository has changed from `nitnelave/lldap` to `lldap/lldap`, both on GitHub
+and on DockerHub (although we will keep publishing the images to 
+`nitnelave/lldap` for the foreseeable future). All data on GitHub has been
+migrated, and the new docker images are available both on DockerHub and on the
+GHCR under `lldap/lldap`.
+
+### Added
+
+ - EC private keys are not supported for LDAPS.
+
+### Changed
+
+ - SMTP user no longer has a default value (and instead defaults to unauthenticated).
+
+### Fixed
+
+ - WASM payload is now delivered uncompressed to Safari due to a Safari bug.
+ - Password reset no longer redirects to login page.
+ - NextCloud config should add the "mail" attribute.
+ - GraphQL parameters are now urldecoded, to support special characters in usernames.
+ - Healthcheck correctly checks the server certificate.
+
+### New services
+
+ - Home Assistant
+ - Shaarli
+
 ## [0.4.2] - 2023-03-27
 
 ### Added
