@@ -1,7 +1,8 @@
 use crate::common::{
     auth::get_token,
+    env,
     fixture::{new_id, LLDAPFixture, User},
-    graphql::{post, ListUsers},
+    graphql::{get_user_details, list_users, post, GetUserDetails, ListUsers},
 };
 use reqwest::blocking::ClientBuilder;
 use serial_test::file_serial;
@@ -32,10 +33,40 @@ fn list_users() {
         .build()
         .expect("failed to make http client");
     let token = get_token(&client);
-    let result = post::<ListUsers>(&client, &token, common::graphql::list_users::Variables {})
-        .expect("failed to list users");
+    let result =
+        post::<ListUsers>(&client, &token, list_users::Variables {}).expect("failed to list users");
     let users: HashSet<String> = result.users.iter().map(|user| user.id.clone()).collect();
     assert!(users.contains(&user1_name));
     assert!(users.contains(&user2_name));
     assert!(users.contains(&user3_name));
+}
+
+#[test]
+#[file_serial]
+fn get_admin() {
+    let mut _fixture = LLDAPFixture::new();
+    let client = ClientBuilder::new()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("failed to make http client");
+    let admin_name = env::admin_dn();
+    let admin_group_name = "lldap_admin";
+    let token = get_token(&client);
+    let result = post::<GetUserDetails>(
+        &client,
+        &token,
+        get_user_details::Variables {
+            id: admin_name.clone(),
+        },
+    )
+    .expect("failed to get admin");
+    let admin_groups: HashSet<String> = result
+        .user
+        .groups
+        .iter()
+        .map(|group| group.display_name.clone())
+        .collect();
+    assert!(admin_groups.contains(admin_group_name));
 }

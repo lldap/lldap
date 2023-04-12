@@ -3,13 +3,15 @@ use anyhow::{anyhow, Context, Result};
 use graphql_client::GraphQLQuery;
 use reqwest::blocking::Client;
 
+pub type DateTimeUtc = chrono::DateTime<chrono::Utc>;
+
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
     query_path = "tests/queries/add_user_to_group.graphql",
     response_derives = "Debug",
     variables_derives = "Debug,Clone",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::common::graphql"
 )]
 pub struct AddUserToGroup;
 
@@ -19,7 +21,7 @@ pub struct AddUserToGroup;
     query_path = "tests/queries/create_user.graphql",
     response_derives = "Debug",
     variables_derives = "Debug,Clone",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::common::graphql"
 )]
 pub struct CreateUser;
 
@@ -29,7 +31,7 @@ pub struct CreateUser;
     query_path = "tests/queries/create_group.graphql",
     response_derives = "Debug",
     variables_derives = "Debug,Clone",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::common::graphql"
 )]
 pub struct CreateGroup;
 
@@ -38,16 +40,26 @@ pub struct CreateGroup;
     schema_path = "../schema.graphql",
     query_path = "tests/queries/list_users.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::common::graphql"
 )]
 pub struct ListUsers;
 
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
+    query_path = "tests/queries/get_user_details.graphql",
+    response_derives = "Debug",
+    variables_derives = "Debug,Clone",
+    custom_scalars_module = "crate::common::graphql"
+)]
+pub struct GetUserDetails;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
     query_path = "tests/queries/list_groups.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::common::graphql"
 )]
 pub struct ListGroups;
 
@@ -56,7 +68,7 @@ pub struct ListGroups;
     schema_path = "../schema.graphql",
     query_path = "tests/queries/delete_group.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::common::graphql"
 )]
 pub struct DeleteGroupQuery;
 
@@ -65,7 +77,7 @@ pub struct DeleteGroupQuery;
     schema_path = "../schema.graphql",
     query_path = "tests/queries/delete_user.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::common::graphql"
 )]
 pub struct DeleteUserQuery;
 
