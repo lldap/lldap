@@ -1,10 +1,15 @@
-use crate::common::auth::get_token;
-use crate::common::env;
-use crate::common::graphql::*;
+use crate::common::{
+    auth::get_token,
+    env,
+    graphql::{
+        add_user_to_group, create_group, create_user, delete_group_query, delete_user_query, post,
+        AddUserToGroup, CreateGroup, CreateUser, DeleteGroupQuery, DeleteUserQuery,
+    },
+};
 use assert_cmd::prelude::*;
 use reqwest::blocking::{Client, ClientBuilder};
 use std::collections::{HashMap, HashSet};
-use std::process::{Child, Command};
+use std::process::{Child as ChildProcess, Command};
 use std::{fs::canonicalize, thread, time::Duration};
 use uuid::Uuid;
 
@@ -16,7 +21,7 @@ pub struct User {
 
 impl User {
     pub fn new(username: &str, groups: Vec<&str>) -> Self {
-        let username = username.to_string();
+        let username = username.to_owned();
         let groups = groups.iter().map(|username| username.to_string()).collect();
         Self { username, groups }
     }
@@ -25,36 +30,32 @@ impl User {
 pub struct LLDAPFixture {
     token: String,
     client: Client,
-    child: Child,
+    child: ChildProcess,
     users: HashSet<String>,
     groups: HashMap<String, i64>,
 }
 
+const MAX_HEALTHCHECK_ATTEMPS: u8 = 10;
+
 impl LLDAPFixture {
     pub fn new() -> Self {
-        let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("cargo bin not found");
-
-        let path = canonicalize("..").expect("canonical path");
-        let db_url = env::database_url();
-        println!("Running from directory: {:?}", path);
-        println!("Using database: {db_url}");
-        cmd.current_dir(path.clone());
-        cmd.env(env::DB_KEY, db_url);
+        let mut cmd = create_lldap_command();
         cmd.arg("run");
         cmd.arg("--verbose");
         let child = cmd.spawn().expect("Unable to start server");
-        loop {
-            let status = Command::cargo_bin(env!("CARGO_PKG_NAME"))
-                .expect("cargo bin not found")
-                .current_dir(path.clone())
+        let mut started = false;
+        for _ in 0..MAX_HEALTHCHECK_ATTEMPS {
+            let status = create_lldap_command()
                 .arg("healthcheck")
                 .status()
                 .expect("healthcheck fail");
             if status.success() {
+                started = true;
                 break;
             }
             thread::sleep(Duration::from_millis(1000));
         }
+        assert!(started);
         let client = ClientBuilder::new()
             .connect_timeout(std::time::Duration::from_secs(2))
             .timeout(std::time::Duration::from_secs(5))
@@ -185,4 +186,13 @@ pub fn new_id(prefix: Option<&str>) -> String {
         Some(prefix) => format!("{}{}", prefix, id),
         None => id,
     }
+}
+
+fn create_lldap_command() -> Command {
+    let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("cargo bin not found");
+    let path = canonicalize("..").expect("canonical path");
+    let db_url = env::database_url();
+    cmd.current_dir(path.clone());
+    cmd.env(env::DB_KEY, db_url);
+    cmd
 }

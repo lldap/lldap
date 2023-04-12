@@ -20,7 +20,7 @@ pub fn get_token(client: &Client) -> String {
         .error_for_status()
         .expect("Auth attempt failed");
     serde_json::from_str::<lldap_auth::login::ServerLoginResponse>(
-        &response.text().expect("Failed to get response as text"),
+        &response.text().expect("Failed to get response text"),
     )
     .expect("Failed to parse json")
     .token
