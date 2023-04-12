@@ -57,9 +57,7 @@ fn get_admin() {
     let result = post::<GetUserDetails>(
         &client,
         &token,
-        get_user_details::Variables {
-            id: admin_name.clone(),
-        },
+        get_user_details::Variables { id: admin_name },
     )
     .expect("failed to get admin");
     let admin_groups: HashSet<String> = result

@@ -7,6 +7,7 @@ pub fn database_url() -> String {
     url.unwrap_or("sqlite://e2e_test.db?mode=rwc".to_string())
 }
 
+#[cfg(test)]
 pub fn ldap_url() -> String {
     let port = var("LLDAP_LDAP_PORT").ok();
     let port = port.unwrap_or("3890".to_string());
@@ -29,6 +30,7 @@ pub fn admin_password() -> String {
     pass.unwrap_or("password".to_string())
 }
 
+#[cfg(test)]
 pub fn base_dn() -> String {
     let dn = var("LLDAP_LDAP_BASE_DN").ok();
     dn.unwrap_or("dc=example,dc=com".to_string())

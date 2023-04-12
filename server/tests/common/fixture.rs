@@ -192,7 +192,7 @@ fn create_lldap_command() -> Command {
     let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("cargo bin not found");
     let path = canonicalize("..").expect("canonical path");
     let db_url = env::database_url();
-    cmd.current_dir(path.clone());
+    cmd.current_dir(path);
     cmd.env(env::DB_KEY, db_url);
     cmd
 }
