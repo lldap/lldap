@@ -92,8 +92,10 @@ pub struct Configuration {
     pub verbose: bool,
     #[builder(default = r#"String::from("server_key")"#)]
     pub key_file: String,
+    // We want an Option to see whether there is a value or not, since the value is printed as
+    // "***SECRET***".
     #[builder(default)]
-    pub key_seed: String,
+    pub key_seed: Option<SecUtf8>,
     #[builder(default)]
     pub smtp_options: MailOptions,
     #[builder(default)]
@@ -115,7 +117,11 @@ impl ConfigurationBuilder {
     pub fn build(self) -> Result<Configuration> {
         let server_setup = get_server_setup(
             self.key_file.as_deref().unwrap_or("server_key"),
-            self.key_seed.as_deref().unwrap_or_default(),
+            self.key_seed
+                .as_ref()
+                .and_then(|o| o.as_ref())
+                .map(SecUtf8::unsecure)
+                .unwrap_or_default(),
         )?;
         Ok(self.server_setup(Some(server_setup)).private_build()?)
     }
@@ -219,7 +225,7 @@ impl ConfigOverrider for RunOpts {
         }
 
         if let Some(seed) = self.server_key_seed.as_ref() {
-            config.key_seed = seed.to_string();
+            config.key_seed = Some(SecUtf8::from(seed));
         }
 
         if let Some(port) = self.ldap_port {
@@ -330,7 +336,14 @@ where
     if config.verbose {
         println!("Configuration: {:#?}", &config);
     }
-    config.server_setup = Some(get_server_setup(&config.key_file, &config.key_seed)?);
+    config.server_setup = Some(get_server_setup(
+        &config.key_file,
+        config
+            .key_seed
+            .as_ref()
+            .map(SecUtf8::unsecure)
+            .unwrap_or_default(),
+    )?);
     if config.jwt_secret == SecUtf8::from("secretjwtsecret") {
         println!("WARNING: Default JWT secret used! This is highly unsafe and can allow attackers to log in as admin.");
     }
