@@ -99,7 +99,7 @@ pub struct Configuration {
     #[builder(default = r#"String::from("http://localhost")"#)]
     pub http_url: String,
     #[builder(default = r#"SecUtf8::from("")"#)]
-    pub hipb_api_key: SecUtf8,
+    pub hibp_api_key: SecUtf8,
     #[serde(skip)]
     #[builder(field(private), default = "None")]
     server_setup: Option<ServerSetup>,
@@ -216,8 +216,8 @@ impl ConfigOverrider for RunOpts {
             config.database_url = database_url.to_string();
         }
 
-        if let Some(api_key) = self.hipb_api_key.as_ref() {
-            config.hipb_api_key = SecUtf8::from(api_key.clone());
+        if let Some(api_key) = self.hibp_api_key.as_ref() {
+            config.hibp_api_key = SecUtf8::from(api_key.clone());
         }
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);

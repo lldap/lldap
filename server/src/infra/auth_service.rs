@@ -501,10 +501,10 @@ async fn get_password_hash_list(
         .header("hibp-api-key", api_key.unsecure())
         .send()
         .await
-        .context("Could not get response from HIPB")?
+        .context("Could not get response from HIBP")?
         .text()
         .await?;
-    parse_hash_list(&resp).context("Invalid HIPB response")
+    parse_hash_list(&resp).context("Invalid HIBP response")
 }
 
 async fn check_password_pwned<Backend>(
@@ -536,8 +536,8 @@ where
             "No token or invalid token".to_string(),
         ));
     }
-    if data.hipb_api_key.unsecure().is_empty() {
-        return Err(TcpError::NotImplemented("No HIPB API key".to_string()));
+    if data.hibp_api_key.unsecure().is_empty() {
+        return Err(TcpError::NotImplemented("No HIBP API key".to_string()));
     }
     let hash = request
         .match_info()
@@ -549,7 +549,7 @@ where
             hash
         )));
     }
-    get_password_hash_list(hash, &data.hipb_api_key)
+    get_password_hash_list(hash, &data.hibp_api_key)
         .await
         .map(|hashes| HttpResponse::Ok().json(hashes))
         .map_err(|e| TcpError::InternalServerError(e.to_string()))
