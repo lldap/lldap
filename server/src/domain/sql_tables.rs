@@ -21,7 +21,7 @@ impl From<SchemaVersion> for Value {
     }
 }
 
-pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(3);
+const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(4);
 
 pub async fn init_table(pool: &DbConnection) -> anyhow::Result<()> {
     let version = {
@@ -32,7 +32,7 @@ pub async fn init_table(pool: &DbConnection) -> anyhow::Result<()> {
             SchemaVersion(1)
         }
     };
-    migrate_from_version(pool, version).await?;
+    migrate_from_version(pool, version, LAST_SCHEMA_VERSION).await?;
     Ok(())
 }
 
@@ -100,21 +100,21 @@ mod tests {
         let sql_pool = get_in_memory_db().await;
         sql_pool
             .execute(raw_statement(
-                r#"CREATE TABLE users ( user_id TEXT, display_name TEXT, first_name TEXT NOT NULL, last_name TEXT, avatar BLOB, creation_date TEXT);"#,
+                r#"CREATE TABLE users ( user_id TEXT, display_name TEXT, first_name TEXT NOT NULL, last_name TEXT, avatar BLOB, creation_date TEXT, email TEXT);"#,
             ))
             .await
             .unwrap();
         sql_pool
             .execute(raw_statement(
-                r#"INSERT INTO users (user_id, display_name, first_name, creation_date)
-                       VALUES ("bôb", "", "", "1970-01-01 00:00:00")"#,
+                r#"INSERT INTO users (user_id, display_name, first_name, creation_date, email)
+                       VALUES ("bôb", "", "", "1970-01-01 00:00:00", "bob@bob.com")"#,
             ))
             .await
             .unwrap();
         sql_pool
             .execute(raw_statement(
-                r#"INSERT INTO users (user_id, display_name, first_name, creation_date)
-                       VALUES ("john", "John Doe", "John", "1971-01-01 00:00:00")"#,
+                r#"INSERT INTO users (user_id, display_name, first_name, creation_date, email)
+                       VALUES ("john", "John Doe", "John", "1971-01-01 00:00:00", "bob2@bob.com")"#,
             ))
             .await
             .unwrap();
@@ -202,6 +202,65 @@ mod tests {
             .unwrap(),
             sql_migrations::JustSchemaVersion {
                 version: LAST_SCHEMA_VERSION
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_migration_to_v4() {
+        let sql_pool = get_in_memory_db().await;
+        upgrade_to_v1(&sql_pool).await.unwrap();
+        migrate_from_version(&sql_pool, SchemaVersion(1), SchemaVersion(3))
+            .await
+            .unwrap();
+        sql_pool
+            .execute(raw_statement(
+                r#"INSERT INTO users (user_id, email, display_name, first_name, creation_date, uuid)
+                       VALUES ("bob", "bob@bob.com", "", "", "1970-01-01 00:00:00", "a02eaf13-48a7-30f6-a3d4-040ff7c52b04")"#,
+            ))
+            .await
+            .unwrap();
+        sql_pool
+            .execute(raw_statement(
+                r#"INSERT INTO users (user_id, email, display_name, first_name, creation_date, uuid)
+                       VALUES ("bob2", "bob@bob.com", "", "", "1970-01-01 00:00:00", "986765a5-3f03-389e-b47b-536b2d6e1bec")"#,
+            ))
+            .await
+            .unwrap();
+        migrate_from_version(&sql_pool, SchemaVersion(3), SchemaVersion(4))
+            .await
+            .expect_err("migration should fail");
+        assert_eq!(
+            sql_migrations::JustSchemaVersion::find_by_statement(raw_statement(
+                r#"SELECT version FROM metadata"#
+            ))
+            .one(&sql_pool)
+            .await
+            .unwrap()
+            .unwrap(),
+            sql_migrations::JustSchemaVersion {
+                version: SchemaVersion(3)
+            }
+        );
+        sql_pool
+            .execute(raw_statement(
+                r#"UPDATE users SET email = "new@bob.com" WHERE user_id = "bob2""#,
+            ))
+            .await
+            .unwrap();
+        migrate_from_version(&sql_pool, SchemaVersion(3), SchemaVersion(4))
+            .await
+            .unwrap();
+        assert_eq!(
+            sql_migrations::JustSchemaVersion::find_by_statement(raw_statement(
+                r#"SELECT version FROM metadata"#
+            ))
+            .one(&sql_pool)
+            .await
+            .unwrap()
+            .unwrap(),
+            sql_migrations::JustSchemaVersion {
+                version: SchemaVersion(4)
             }
         );
     }

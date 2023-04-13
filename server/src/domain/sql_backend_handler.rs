@@ -86,7 +86,7 @@ pub mod tests {
         handler
             .create_user(CreateUserRequest {
                 user_id: UserId::new(name),
-                email: "bob@bob.bob".to_string(),
+                email: format!("{}@bob.bob", name),
                 display_name: Some("display ".to_string() + name),
                 first_name: Some("first ".to_string() + name),
                 last_name: Some("last ".to_string() + name),
