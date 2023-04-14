@@ -574,6 +574,7 @@ pub async fn migrate_from_version(
         std::cmp::Ordering::Equal => return Ok(()),
         std::cmp::Ordering::Greater => anyhow::bail!("DB version downgrading is not supported"),
     }
+    info!("Upgrading DB schema from version {}", version.0);
     let migrations = [
         to_sync!(migrate_to_v2),
         to_sync!(migrate_to_v3),
@@ -581,7 +582,7 @@ pub async fn migrate_from_version(
     ];
     for migration in 2..=4 {
         if version < SchemaVersion(migration) && SchemaVersion(migration) <= last_version {
-            info!("Upgrading DB schema from {} to {}", version.0, migration);
+            info!("Upgrading DB schema to version {}", migration);
             migrations[(migration - 2) as usize](pool).await?;
         }
     }
