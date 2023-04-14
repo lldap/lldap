@@ -3,9 +3,12 @@ use crate::domain::{
     types::{GroupId, UserId, Uuid},
 };
 use anyhow::Context;
+use itertools::Itertools;
 use sea_orm::{
-    sea_query::{self, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Index, Query, Table, Value},
-    ConnectionTrait, FromQueryResult, Iden, Statement, TransactionTrait,
+    sea_query::{
+        self, all, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, Query, Table, Value,
+    },
+    ConnectionTrait, FromQueryResult, Iden, Order, Statement, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument, warn};
@@ -462,20 +465,73 @@ async fn migrate_to_v3(pool: &DbConnection) -> anyhow::Result<()> {
 async fn migrate_to_v4(pool: &DbConnection) -> anyhow::Result<()> {
     let builder = pool.get_database_backend();
     // Make emails and UUIDs unique.
+    if let Err(e) = pool
+        .execute(
+            builder.build(
+                Index::create()
+                    .if_not_exists()
+                    .name("unique-user-email")
+                    .table(Users::Table)
+                    .col(Users::Email)
+                    .unique(),
+            ),
+        )
+        .await
+        .context(
+            r#"while enforcing unicity on emails (2 users have the same email).
+
+See https://github.com/lldap/lldap/blob/main/docs/migration_guides/v0.5.md for details.
+
+"#,
+        )
+    {
+        warn!("Found several users with the same email:");
+        for (email, users) in &pool
+            .query_all(
+                builder.build(
+                    Query::select()
+                        .from(Users::Table)
+                        .columns([Users::Email, Users::UserId])
+                        .order_by_columns([(Users::Email, Order::Asc), (Users::UserId, Order::Asc)])
+                        .and_where(
+                            Expr::col(Users::Email).in_subquery(
+                                Query::select()
+                                    .from(Users::Table)
+                                    .column(Users::Email)
+                                    .group_by_col(Users::Email)
+                                    .cond_having(all![Expr::gt(
+                                        Expr::expr(Func::count(Expr::col(Users::Email))),
+                                        1
+                                    )])
+                                    .take(),
+                            ),
+                        ),
+                ),
+            )
+            .await
+            .expect("Could not check duplicate users")
+            .into_iter()
+            .map(|row| {
+                (
+                    row.try_get::<UserId>("", &Users::UserId.to_string())
+                        .unwrap(),
+                    row.try_get::<String>("", &Users::Email.to_string())
+                        .unwrap(),
+                )
+            })
+            .group_by(|(_user, email)| email.to_owned())
+        {
+            warn!("Email: {email}");
+            for (user, _email) in users {
+                warn!("    User: {}", user.as_str());
+            }
+        }
+        return Err(e);
+    }
     pool.execute(
         builder.build(
             Index::create()
-                .name("unique-user-email")
-                .table(Users::Table)
-                .col(Users::Email)
-                .unique(),
-        ),
-    )
-    .await
-    .context("while enforcing unicity on emails (2 users have the same email)")?;
-    pool.execute(
-        builder.build(
-            Index::create()
+                .if_not_exists()
                 .name("unique-user-uuid")
                 .table(Users::Table)
                 .col(Users::Uuid)
@@ -487,6 +543,7 @@ async fn migrate_to_v4(pool: &DbConnection) -> anyhow::Result<()> {
     pool.execute(
         builder.build(
             Index::create()
+                .if_not_exists()
                 .name("unique-group-uuid")
                 .table(Groups::Table)
                 .col(Groups::Uuid)

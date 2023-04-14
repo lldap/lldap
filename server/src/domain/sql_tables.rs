@@ -46,6 +46,7 @@ mod tests {
     use super::*;
     use chrono::prelude::*;
     use sea_orm::{ConnectionTrait, Database, DbBackend, FromQueryResult};
+    use tracing::error;
 
     async fn get_in_memory_db() -> DbConnection {
         let mut sql_opt = sea_orm::ConnectOptions::new("sqlite::memory:".to_owned());
@@ -208,6 +209,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_migration_to_v4() {
+        crate::infra::logging::init_for_tests();
         let sql_pool = get_in_memory_db().await;
         upgrade_to_v1(&sql_pool).await.unwrap();
         migrate_from_version(&sql_pool, SchemaVersion(1), SchemaVersion(3))
@@ -227,9 +229,12 @@ mod tests {
             ))
             .await
             .unwrap();
-        migrate_from_version(&sql_pool, SchemaVersion(3), SchemaVersion(4))
-            .await
-            .expect_err("migration should fail");
+        error!(
+            "{}",
+            migrate_from_version(&sql_pool, SchemaVersion(3), SchemaVersion(4))
+                .await
+                .expect_err("migration should fail")
+        );
         assert_eq!(
             sql_migrations::JustSchemaVersion::find_by_statement(raw_statement(
                 r#"SELECT version FROM metadata"#
