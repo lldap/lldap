@@ -7,6 +7,10 @@ use crate::common::{
     },
 };
 use assert_cmd::prelude::*;
+use nix::{
+    sys::signal::{self, Signal},
+    unistd::Pid,
+};
 use reqwest::blocking::{Client, ClientBuilder};
 use std::collections::{HashMap, HashSet};
 use std::process::{Child as ChildProcess, Command};
@@ -172,6 +176,39 @@ impl Drop for LLDAPFixture {
         for group in groups.keys() {
             self.delete_group(group);
         }
+        let result = signal::kill(
+            Pid::from_raw(self.child.id().try_into().unwrap()),
+            Signal::SIGTERM,
+        );
+        if let Err(err) = result {
+            println!("Failed to send kill signal: {:?}", err);
+            self.child
+                .kill()
+                .map_err(|err| println!("Failed to kill LLDAP: {:?}", err))
+                .ok();
+            return;
+        }
+
+        for _ in 0..10 {
+            let status = self.child.try_wait();
+            if status.is_err() {
+                println!("Failed to get status while waiting for graceful exit");
+                break;
+            }
+            match status.expect("failed to get status") {
+                None => {
+                    println!("LLDAP still running, sleeping for 1 second.");
+                }
+                Some(status) => {
+                    if !status.success() {
+                        println!("LLDAP exited with status {}", status)
+                    }
+                    return;
+                }
+            }
+            thread::sleep(Duration::from_millis(1000));
+        }
+        println!("LLDAP alive after 10 seconds, forcing exit.");
         self.child
             .kill()
             .map_err(|err| println!("Failed to kill LLDAP: {:?}", err))
@@ -190,6 +227,7 @@ pub fn new_id(prefix: Option<&str>) -> String {
 
 fn create_lldap_command() -> Command {
     let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("cargo bin not found");
+    // This gives us the absolute path of the repo base instead of running it in server/
     let path = canonicalize("..").expect("canonical path");
     let db_url = env::database_url();
     cmd.current_dir(path);

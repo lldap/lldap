@@ -121,6 +121,7 @@ features = ["dangerous_configuration"]
 [dev-dependencies]
 assert_cmd = "2.0"
 mockall = "0.11"
+nix = "0.26.2"
 
 [dev-dependencies.graphql_client]
 features = ["graphql_query_derive", "reqwest-rustls"]
