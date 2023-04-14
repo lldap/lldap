@@ -120,4 +120,30 @@ version = "0.20"
 features = ["dangerous_configuration"]
 
 [dev-dependencies]
+assert_cmd = "2.0"
 mockall = "0.11"
+nix = "0.26.2"
+
+[dev-dependencies.graphql_client]
+features = ["graphql_query_derive", "reqwest-rustls"]
+default-features = false
+version = "0.11"
+
+[dev-dependencies.ldap3]
+version = "*"
+default-features = false
+features = ["sync", "tls-rustls"]
+
+[dev-dependencies.reqwest]
+version = "*"
+default-features = false
+features = ["json", "blocking", "rustls-tls"]
+
+[dev-dependencies.serial_test]
+version = "2.0.0"
+default-features = false
+features = ["file_locks"]
+
+[dev-dependencies.uuid]
+version = "*"
+features = ["v4"]
