@@ -1,0 +1,16 @@
+query GetUserDetails($id: String!) {
+  user(userId: $id) {
+    id
+    email
+    displayName
+    firstName
+    lastName
+    avatar
+    creationDate
+    uuid
+    groups {
+      id
+      displayName
+    }
+  }
+}

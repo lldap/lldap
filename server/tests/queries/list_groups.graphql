@@ -1,0 +1,9 @@
+query ListGroups {
+  groups {
+    id
+    displayName
+    users {
+      id
+    }
+  }
+}
