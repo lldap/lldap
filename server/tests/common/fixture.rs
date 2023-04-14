@@ -182,24 +182,28 @@ impl Drop for LLDAPFixture {
         );
         if let Err(err) = result {
             println!("Failed to send kill signal: {:?}", err);
-            self.child
+            let _ = self
+                .child
                 .kill()
-                .map_err(|err| println!("Failed to kill LLDAP: {:?}", err))
-                .ok();
+                .map_err(|err| println!("Failed to kill LLDAP: {:?}", err));
             return;
         }
 
         for _ in 0..10 {
             let status = self.child.try_wait();
-            if status.is_err() {
-                println!("Failed to get status while waiting for graceful exit");
-                break;
-            }
-            match status.expect("failed to get status") {
-                None => {
+            if status.is_err() {}
+            match status {
+                Err(e) => {
+                    println!(
+                        "Failed to get status while waiting for graceful exit: {}",
+                        e
+                    );
+                    break;
+                }
+                Ok(None) => {
                     println!("LLDAP still running, sleeping for 1 second.");
                 }
-                Some(status) => {
+                Ok(Some(status)) => {
                     if !status.success() {
                         println!("LLDAP exited with status {}", status)
                     }
@@ -209,10 +213,10 @@ impl Drop for LLDAPFixture {
             thread::sleep(Duration::from_millis(1000));
         }
         println!("LLDAP alive after 10 seconds, forcing exit.");
-        self.child
+        let _ = self
+            .child
             .kill()
-            .map_err(|err| println!("Failed to kill LLDAP: {:?}", err))
-            .ok();
+            .map_err(|err| println!("Failed to kill LLDAP: {:?}", err));
     }
 }
 
