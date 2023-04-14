@@ -54,8 +54,15 @@ pub struct RunOpts {
 
     /// Path to the file that contains the private server key.
     /// It will be created if it doesn't exist.
+    /// Alternatively, you can set `server_key_seed`. If `server_key_seed` is given,
+    /// `server_key_file` will be ignored.
     #[clap(long, env = "LLDAP_SERVER_KEY_FILE")]
     pub server_key_file: Option<String>,
+
+    /// Seed used to generate the private server key.
+    /// Takes precedence over `server_key_file`.
+    #[clap(long, env = "LLDAP_SERVER_KEY_SEED")]
+    pub server_key_seed: Option<String>,
 
     /// Change ldap host. Default: "0.0.0.0"
     #[clap(long, env = "LLDAP_LDAP_HOST")]
