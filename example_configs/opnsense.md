@@ -36,11 +36,7 @@ It is recommended that you create a separate user account (e.g, `bind_user`) ins
 xxx
 ```
 
-Use the password that you set for the user specified in the User DN field. Your password was likely set via:
-
-- *LLDAP_LDAP_USER_PASS* environment variable
-- `lldap_config.toml`
-- LLDAP Administration GUI
+Enter the password that you set for the user specified in the User DN field.
 
 ### Search Scope
 
