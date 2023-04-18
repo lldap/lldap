@@ -114,4 +114,4 @@ pfSense includes a built-in feature for testing user authentication at `Diagnost
 
 ## More Information
 
-Please read the [pfSense docs]([[https://docs.opnsense.org/manual/how-tos/user-ldap.html](https://docs.netgate.com/pfsense/en/latest/usermanager/ldap.html)](https://docs.netgate.com/pfsense/en/latest/usermanager/ldap.html)) for more information on LDAP configuration and managing access to pfSense.
+Please read the [pfSense docs](https://docs.netgate.com/pfsense/en/latest/usermanager/ldap.html) for more information on LDAP configuration and managing access to pfSense.
