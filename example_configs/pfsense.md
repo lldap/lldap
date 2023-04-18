@@ -98,7 +98,7 @@ Enable the following options on the OPNsense configuration page for your LLDAP s
 - Username Alterations: `Unchecked`
 - Allow unauthenticated bind: `Unchecked`
 
-### Create OPNsense Group
+### Create pfSense Group
 
 Go to `System > User Manager > Groups` and create a new group(s) with the **same exact** name as the LLDAP group(s) used to authenticate users for pfSense.
 
