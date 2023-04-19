@@ -92,7 +92,7 @@ memberof
 
 ### Remaining Server Configuration
 
-Enable the following options on the OPNsense configuration page for your LLDAP server (the same page where you entered the prior configuration):
+Enable the following options on the pfSense configuration page for your LLDAP server (the same page where you entered the prior configuration):
 
 - UTF8 Encodes: `Checked`
 - Username Alterations: `Unchecked`
