@@ -34,7 +34,7 @@ This is the same LDAP Base DN that you set via the *LLDAP_LDAP_BASE_DN* environm
 ou=people
 ```
 
-Note: The `Selecta container` box may not work for selecting containers. You can just enter the `Authentication containers` directly into the text field.
+Note: The `Select a container` box may not work for selecting containers. You can just enter the `Authentication containers` directly into the text field.
 
 ### Extended Query
 
@@ -46,7 +46,7 @@ Enable extended query: `Checked`
 &(objectClass=person)(|(memberof=cn=pfsense_admin,ou=groups,dc=example,dc=com)(memberof=cn=pfsense_guest,ou=groups,dc=example,dc=com))
 ```
 
-This example gives you two groups in LLDAP, one for pfSense admin access and one for guest access. You **must** create these groups in pfSense and give them the correct permissions.
+This example gives you two groups in LLDAP, one for pfSense admin access and one for guest access. You **must** create these exact same groups in both LLDAP and pfSense, then give them the correct permissions in pfSense.
 
 ### Bind Anonymous
 `Unchecked`
@@ -64,7 +64,7 @@ It is recommended that you create a separate read-only user account (e.g, `bind_
 #### Password
 
 ```
-astrongpasswordhere
+LLDAPPasswordForBindUser
 ```
 
 ### User naming attribute
@@ -94,7 +94,7 @@ memberof
 
 Enable the following options on the OPNsense configuration page for your LLDAP server (the same page where you entered the prior configuration):
 
-- UTF8 Encodes: `Unchecked`
+- UTF8 Encodes: `Checked`
 - Username Alterations: `Unchecked`
 - Allow unauthenticated bind: `Unchecked`
 
@@ -110,7 +110,7 @@ Go to `System > User Manager > Settings` page. Add your LLDAP server configurati
 
 ## Testing LLDAP
 
-pfSense includes a built-in feature for testing user authentication at `Diagnostics > Authenication`. Select your LLDAP server configuration in the `Authentication Server` to test logins for your LLDAP users. The groups should show up when tested.
+pfSense includes a built-in feature for testing user authentication at `Diagnostics > Authentication`. Select your LLDAP server configuration in the `Authentication Server` to test logins for your LLDAP users. The groups should show up when tested.
 
 ## More Information
 
