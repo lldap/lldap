@@ -100,7 +100,7 @@ Enable the following options on the pfSense configuration page for your LLDAP se
 
 ### Create pfSense Group
 
-Go to `System > User Manager > Groups` and create a new group(s) with the **same exact** name as the LLDAP group(s) used to authenticate users for pfSense.
+Go to `System > User Manager > Groups` and create a new group(s) with the **same exact** name as the LLDAP group(s) used to authenticate users for pfSense (`pfsense_admin` and `pfsense_guest` in this example).
 
 If you want your LLDAP users to have full administrator access in pfSense, then you need to edit the `Assigned Privileges` for the group and add the `WebCfg - All pages` system privilege.
 
