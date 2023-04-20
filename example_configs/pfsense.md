@@ -98,11 +98,11 @@ Enable the following options on the pfSense configuration page for your LLDAP se
 - Username Alterations: `Unchecked`
 - Allow unauthenticated bind: `Unchecked`
 
-### Create pfSense Group
+### Create pfSense Groups
 
 Go to `System > User Manager > Groups` and create a new group(s) with the **same exact** name as the LLDAP group(s) used to authenticate users for pfSense (`pfsense_admin` and `pfsense_guest` in this example).
 
-If you want your LLDAP users to have full administrator access in pfSense, then you need to edit the `Assigned Privileges` for the group and add the `WebCfg - All pages` system privilege.
+If you want your LLDAP users to have full administrator access in pfSense, then you need to edit the `Assigned Privileges` for the group and add the `WebCfg - All pages` system privilege. If you do not give any permissions to a group, you will be able to log in but only see an empty webUI.
 
 ### Enable LLDAP as an Authentication Option
 
@@ -110,7 +110,7 @@ Go to `System > User Manager > Settings` page. Add your LLDAP server configurati
 
 ## Testing LLDAP
 
-pfSense includes a built-in feature for testing user authentication at `Diagnostics > Authentication`. Select your LLDAP server configuration in the `Authentication Server` to test logins for your LLDAP users. The groups should show up when tested.
+pfSense includes a built-in feature for testing user authentication at `Diagnostics > Authentication`. Select your LLDAP server configuration in the `Authentication Server` to test logins for your LLDAP users. The groups (only the ones you added to pfSense) should show up when tested.
 
 ## More Information
 
