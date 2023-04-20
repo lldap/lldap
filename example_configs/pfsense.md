@@ -46,7 +46,7 @@ Enable extended query: `Checked`
 &(objectClass=person)(|(memberof=cn=pfsense_admin,ou=groups,dc=example,dc=com)(memberof=cn=pfsense_guest,ou=groups,dc=example,dc=com))
 ```
 
-This example gives you two groups in LLDAP, one for pfSense admin access and one for guest access. You **must** create these exact same groups in both LLDAP and pfSense, then give them the correct permissions in pfSense.
+This example gives you two groups in LLDAP, one for pfSense admin access (`pfsense_admin`) and one for guest access (`pfsense_guest`). You **must** create these exact same groups in both LLDAP and pfSense, then give them the correct permissions in pfSense.
 
 ### Bind Anonymous
 `Unchecked`
