@@ -44,6 +44,6 @@ username = "uid"
 # If you want to map your ldap groups to grafana's groups, see: https://grafana.com/docs/grafana/latest/auth/ldap/#group-mappings
 # As a quick example, here is how you would map lldap's admin group to grafana's admin
 # [[servers.group_mappings]]
-# group_dn = "uid=lldap_admin,ou=groups,dc=example,dc=org"
+# group_dn = "cn=lldap_admin,ou=groups,dc=example,dc=org"
 # org_role = "Admin"
 # grafana_admin = true
