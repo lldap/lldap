@@ -7,6 +7,7 @@ Home Assistant configures ldap auth via the [Command Line Auth Provider](https:/
 The [auth script](lldap-ha-auth.sh) attempts to authenticate a user against an LLDAP server, using credentials provided via `username` and `password` environment variables. The first argument must be the URL of your LLDAP server, accessible from Home Assistant. You can provide an additional optional argument to confine allowed logins to a single group. The script will output the user's display name as the `name` variable, if not empty.
 
 1. Copy the [auth script](lldap-ha-auth.sh) to your home assistant instance. In this example, we use `/config/lldap-auth.sh`.
+      - Set the script as executable by running `chmod +x /config/lldap-auth-sh`
 2. Add the following to your configuration.yaml in Home assistant:
 ```yaml
 homeassistant:
