@@ -9,11 +9,11 @@ host_config:
   xmpp.example.org:
     auth_method: [ldap]
     ldap_servers:
-      - 127.0.0.1
+      - 127.0.0.1 #IP or hostname of LLDAP server
     ldap_port: 3890
     ldap_uids:
       - uid
-    ldap_rootdn: "uid=admin,ou=people,dc=example,dc=org"
+    ldap_rootdn: "uid=lldap_readonly,ou=people,dc=example,dc=org"
     ldap_password: "secret"
     ldap_base: "ou=people,dc=example,dc=org"
 ```
