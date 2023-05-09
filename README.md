@@ -257,6 +257,7 @@ folder for help with:
 - [Dex](example_configs/dex_config.yml)
 - [Dokuwiki](example_configs/dokuwiki.md)
 - [Dolibarr](example_configs/dolibarr.md)
+- [Ejabberd](example_configs/ejabberd.md)
 - [Emby](example_configs/emby.md)
 - [Gitea](example_configs/gitea.md)
 - [Grafana](example_configs/grafana_ldap_config.toml)
