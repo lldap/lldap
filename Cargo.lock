@@ -2435,7 +2435,7 @@ dependencies = [
  "ldap3",
  "ldap3_proto",
  "lettre",
- "lldap_auth",
+ "lldap_auth 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log",
  "mockall",
  "nix",
@@ -2485,7 +2485,7 @@ dependencies = [
  "image",
  "indexmap",
  "jwt 0.13.0",
- "lldap_auth",
+ "lldap_auth 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -2519,6 +2519,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "lldap_auth"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c17867a28e09989643401bb7849a494b328416634a335ddf7d3dabc9806ba563"
+dependencies = [
+ "chrono",
+ "curve25519-dalek",
+ "digest 0.9.0",
+ "generic-array",
+ "getrandom 0.2.8",
+ "opaque-ke",
+ "rand 0.8.5",
+ "rust-argon2",
+ "serde",
+ "sha2 0.9.9",
+ "thiserror",
+]
+
+[[package]]
 name = "lldap_migration_tool"
 version = "0.4.2"
 dependencies = [
@@ -2526,7 +2545,7 @@ dependencies = [
  "base64 0.13.1",
  "graphql_client 0.11.0",
  "ldap3",
- "lldap_auth",
+ "lldap_auth 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.5",
  "requestty",
  "reqwest",
@@ -2541,7 +2560,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "lldap_auth",
+ "lldap_auth 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.5",
  "reqwest",
  "serde",
