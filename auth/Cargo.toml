@@ -18,17 +18,17 @@ js = []
 rust-argon2 = "0.8"
 curve25519-dalek = "3"
 digest = "0.9"
-generic-array = "*"
+generic-array = "0.14"
 rand = "0.8"
-serde = "*"
+serde = "1"
 sha2 = "0.9"
-thiserror = "*"
+thiserror = "1"
 
 [dependencies.opaque-ke]
 version = "0.6"
 
 [dependencies.chrono]
-version = "*"
+version = "0.4"
 features = [ "serde" ]
 
 # For WASM targets, use the JS getrandom.

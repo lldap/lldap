@@ -14,7 +14,7 @@ anyhow = "1"
 base64 = "0.13"
 gloo-console = "0.2.3"
 gloo-file = "0.2.3"
-gloo-net = "*"
+gloo-net = "0.2"
 graphql_client = "0.10"
 http = "0.2"
 jwt = "0.13"
@@ -23,9 +23,9 @@ serde = "1"
 serde_json = "1"
 url-escape = "0.1.1"
 validator = "=0.14"
-validator_derive = "*"
+validator_derive = "0.16"
 wasm-bindgen = "0.2"
-wasm-bindgen-futures = "*"
+wasm-bindgen-futures = "0.4"
 yew = "0.19.3"
 yew-router = "0.16"
 
@@ -47,7 +47,7 @@ features = [
 ]
 
 [dependencies.chrono]
-version = "*"
+version = "0.4"
 features = [
   "wasmbind"
 ]

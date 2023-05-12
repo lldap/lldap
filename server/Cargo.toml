@@ -19,45 +19,45 @@ actix-server = "2"
 actix-service = "2"
 actix-web = "4.3"
 actix-web-httpauth = "0.8"
-anyhow = "*"
+anyhow = "1"
 async-trait = "0.1"
 base64 = "0.21"
 bincode = "1.3"
-cron = "*"
+cron = "0.12"
 derive_builder = "0.12"
 figment_file_provider_adapter = "0.1"
-futures = "*"
-futures-util = "*"
+futures = "0.3"
+futures-util = "0.3"
 hmac = "0.12"
-http = "*"
+http = "0.2"
 itertools = "0.10"
 juniper = "0.15"
 jwt = "0.16"
 lber = "0.4.1"
 ldap3_proto = ">=0.3.1"
-log = "*"
+log = "0.4"
 orion = "0.17"
 rand_chacha = "0.3"
 rustls-pemfile = "1"
-serde = "*"
+serde = "1"
 serde_bytes = "0.11"
 serde_json = "1"
 sha2 = "0.10"
-thiserror = "*"
+thiserror = "1"
 time = "0.3"
 tokio-rustls = "0.23"
-tokio-stream = "*"
+tokio-stream = "0.1"
 tokio-util = "0.7"
-tracing = "*"
+tracing = "0.1"
 tracing-actix-web = "0.7"
 tracing-attributes = "^0.1.21"
-tracing-log = "*"
+tracing-log = "0.1"
 urlencoding = "2"
-webpki-roots = "*"
+webpki-roots = "0.23"
 
 [dependencies.chrono]
 features = ["serde"]
-version = "*"
+version = "0.4"
 
 [dependencies.clap]
 features = ["std", "color", "suggestions", "derive", "env"]
@@ -65,7 +65,7 @@ version = "4"
 
 [dependencies.figment]
 features = ["env", "toml"]
-version = "*"
+version = "0.10"
 
 [dependencies.tracing-subscriber]
 version = "0.3"
@@ -88,7 +88,7 @@ version = "0.8"
 
 [dependencies.secstr]
 features = ["serde"]
-version = "*"
+version = "0.5"
 
 [dependencies.tokio]
 features = ["full"]
@@ -96,7 +96,7 @@ version = "1.25"
 
 [dependencies.uuid]
 features = ["v3"]
-version = "*"
+version = "1"
 
 [dependencies.tracing-forest]
 features = ["smallvec", "chrono", "tokio"]
@@ -136,12 +136,12 @@ default-features = false
 version = "0.11"
 
 [dev-dependencies.ldap3]
-version = "*"
+version = "0.11"
 default-features = false
 features = ["sync", "tls-rustls"]
 
 [dev-dependencies.reqwest]
-version = "*"
+version = "0.11"
 default-features = false
 features = ["json", "blocking", "rustls-tls"]
 
@@ -151,5 +151,5 @@ default-features = false
 features = ["file_locks"]
 
 [dev-dependencies.uuid]
-version = "*"
+version = "1"
 features = ["v4"]
