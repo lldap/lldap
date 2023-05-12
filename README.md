@@ -163,7 +163,7 @@ To compile the project, you'll need:
 Then you can compile the server (and the migration tool if you want):
 
 ```shell
-cargo build --release -p lldap -p migration-tool
+cargo build --release -p lldap -p lldap_migration_tool
 ```
 
 The resulting binaries will be in `./target/release/`. Alternatively, you can

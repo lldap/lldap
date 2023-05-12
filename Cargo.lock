@@ -2519,6 +2519,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "lldap_migration_tool"
+version = "0.4.2"
+dependencies = [
+ "anyhow",
+ "base64 0.13.1",
+ "graphql_client 0.11.0",
+ "ldap3",
+ "lldap_auth",
+ "rand 0.8.5",
+ "requestty",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "smallvec",
+]
+
+[[package]]
 name = "lldap_set_password"
 version = "0.1.0"
 dependencies = [
@@ -2611,23 +2628,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5de893c32cde5f383baa4c04c5d6dbdd735cfd4a794b0debdb2bb1b421da5ff4"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "migration-tool"
-version = "0.4.2"
-dependencies = [
- "anyhow",
- "base64 0.13.1",
- "graphql_client 0.11.0",
- "ldap3",
- "lldap_auth",
- "rand 0.8.5",
- "requestty",
- "reqwest",
- "serde",
- "serde_json",
- "smallvec",
 ]
 
 [[package]]
