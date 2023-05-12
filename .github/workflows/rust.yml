@@ -112,3 +112,55 @@ jobs:
           files: lcov.info
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  publish-crates:
+    name: Publish on crates.io
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'release' }}
+    needs: pre_job
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3.5.2
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+            override: true
+      - name: Publish lldap_auth crate
+        uses: katyo/publish-crates@v2
+        with:
+            args: -p lldap_auth
+            dry-run: ${{ github.event_name != 'release' }}
+            check-repo: ${{ github.event_name != 'pull_request' }}
+            registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            ignore-unpublished-changes: ${{ github.event_name != 'release' }}
+      - name: Publish lldap crate
+        uses: katyo/publish-crates@v2
+        with:
+            args: -p lldap
+            dry-run: ${{ github.event_name != 'release' }}
+            check-repo: ${{ github.event_name != 'pull_request' }}
+            registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            ignore-unpublished-changes: ${{ github.event_name != 'release' }}
+      - name: Publish lldap_app crate
+        uses: katyo/publish-crates@v2
+        with:
+            args: -p lldap_app
+            dry-run: ${{ github.event_name != 'release' }}
+            check-repo: ${{ github.event_name != 'pull_request' }}
+            registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            ignore-unpublished-changes: ${{ github.event_name != 'release' }}
+      - name: Publish lldap_migration_tool crate
+        uses: katyo/publish-crates@v2
+        with:
+            args: -p lldap_migration_tool
+            dry-run: ${{ github.event_name != 'release' }}
+            check-repo: ${{ github.event_name != 'pull_request' }}
+            registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            ignore-unpublished-changes: ${{ github.event_name != 'release' }}
+      - name: Publish lldap_set_password crate
+        uses: katyo/publish-crates@v2
+        with:
+            args: -p lldap_set_password
+            dry-run: ${{ github.event_name != 'release' }}
+            check-repo: ${{ github.event_name != 'pull_request' }}
+            registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            ignore-unpublished-changes: ${{ github.event_name != 'release' }}
