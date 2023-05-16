@@ -1307,6 +1307,7 @@ mod tests {
                 GroupRequestFilter::Member(UserId::new("bob")),
                 GroupRequestFilter::DisplayName("rockstars".to_string()),
                 false.into(),
+                GroupRequestFilter::Uuid(uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc")),
                 true.into(),
                 true.into(),
                 true.into(),
@@ -1344,6 +1345,10 @@ mod tests {
                 LdapFilter::Equality(
                     "dn".to_string(),
                     "uid=rockstars,ou=people,dc=example,dc=com".to_string(),
+                ),
+                LdapFilter::Equality(
+                    "uuid".to_string(),
+                    "04ac75e0-2900-3e21-926c-2f732c26b3fc".to_string(),
                 ),
                 LdapFilter::Equality("obJEctclass".to_string(), "groupofUniqueNames".to_string()),
                 LdapFilter::Equality("objectclass".to_string(), "groupOfNames".to_string()),
@@ -1530,6 +1535,10 @@ mod tests {
                         true.into(),
                         true.into(),
                         false.into(),
+                        UserRequestFilter::AttributeEquality(
+                            "first_name".to_owned(),
+                            "firstname".to_owned(),
+                        ),
                         false.into(),
                         UserRequestFilter::UserIdSubString(SubStringFilter {
                             initial: Some("iNIt".to_owned()),
@@ -1537,7 +1546,7 @@ mod tests {
                             final_: Some("finAl".to_owned()),
                         }),
                         UserRequestFilter::SubString(
-                            UserColumn::FirstName,
+                            UserColumn::DisplayName,
                             SubStringFilter {
                                 initial: Some("iNIt".to_owned()),
                                 any: vec!["1".to_owned(), "2aA".to_owned()],
@@ -1570,6 +1579,7 @@ mod tests {
                 LdapFilter::Present("objectClass".to_string()),
                 LdapFilter::Present("uid".to_string()),
                 LdapFilter::Present("unknown".to_string()),
+                LdapFilter::Equality("givenname".to_string(), "firstname".to_string()),
                 LdapFilter::Equality("unknown_attribute".to_string(), "randomValue".to_string()),
                 LdapFilter::Substring(
                     "uid".to_owned(),
@@ -1580,7 +1590,7 @@ mod tests {
                     },
                 ),
                 LdapFilter::Substring(
-                    "firstName".to_owned(),
+                    "displayName".to_owned(),
                     LdapSubstringFilter {
                         initial: Some("iNIt".to_owned()),
                         any: vec!["1".to_owned(), "2aA".to_owned()],
@@ -1594,6 +1604,35 @@ mod tests {
             ldap_handler.do_search_or_dse(&request).await,
             Ok(vec![make_search_success()])
         );
+    }
+
+    #[tokio::test]
+    async fn test_search_unsupported_substring_filter() {
+        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let request = make_user_search_request(
+            LdapFilter::Substring(
+                "uuid".to_owned(),
+                LdapSubstringFilter {
+                    initial: Some("iNIt".to_owned()),
+                    any: vec!["1".to_owned(), "2aA".to_owned()],
+                    final_: Some("finAl".to_owned()),
+                },
+            ),
+            vec!["objectClass"],
+        );
+        ldap_handler.do_search_or_dse(&request).await.unwrap_err();
+        let request = make_user_search_request(
+            LdapFilter::Substring(
+                "givenname".to_owned(),
+                LdapSubstringFilter {
+                    initial: Some("iNIt".to_owned()),
+                    any: vec!["1".to_owned(), "2aA".to_owned()],
+                    final_: Some("finAl".to_owned()),
+                },
+            ),
+            vec!["objectClass"],
+        );
+        ldap_handler.do_search_or_dse(&request).await.unwrap_err();
     }
 
     #[tokio::test]
@@ -1652,7 +1691,7 @@ mod tests {
             .with(
                 eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(
                     vec![UserRequestFilter::Not(Box::new(
-                        UserRequestFilter::Equality(UserColumn::FirstName, "bob".to_string()),
+                        UserRequestFilter::Equality(UserColumn::DisplayName, "bob".to_string()),
                     ))],
                 )]))),
                 eq(false),
@@ -1670,7 +1709,7 @@ mod tests {
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::And(vec![LdapFilter::Or(vec![LdapFilter::Not(Box::new(
-                LdapFilter::Equality("givenname".to_string(), "bob".to_string()),
+                LdapFilter::Equality("displayname".to_string(), "bob".to_string()),
             ))])]),
             vec!["objectclass"],
         );

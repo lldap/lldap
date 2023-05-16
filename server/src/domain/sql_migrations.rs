@@ -1,17 +1,17 @@
 use crate::domain::{
-    sql_tables::{DbConnection, SchemaVersion},
-    types::{GroupId, UserId, Uuid},
+    sql_tables::{DbConnection, SchemaVersion, LAST_SCHEMA_VERSION},
+    types::{AttributeType, GroupId, JpegPhoto, Serialized, UserId, Uuid},
 };
-use anyhow::Context;
 use itertools::Itertools;
 use sea_orm::{
     sea_query::{
         self, all, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, Query, Table, Value,
     },
-    ConnectionTrait, FromQueryResult, Iden, Order, Statement, TransactionTrait,
+    ConnectionTrait, DatabaseTransaction, DbErr, FromQueryResult, Iden, Order, Statement,
+    TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
-use tracing::{info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 #[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum Users {
@@ -43,6 +43,44 @@ pub enum Memberships {
     Table,
     UserId,
     GroupId,
+}
+
+#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum UserAttributeSchema {
+    Table,
+    UserAttributeSchemaName,
+    UserAttributeSchemaType,
+    UserAttributeSchemaIsList,
+    UserAttributeSchemaIsUserVisible,
+    UserAttributeSchemaIsUserEditable,
+    UserAttributeSchemaIsHardcoded,
+}
+
+#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum UserAttributes {
+    Table,
+    UserAttributeUserId,
+    UserAttributeName,
+    UserAttributeValue,
+}
+
+#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum GroupAttributeSchema {
+    Table,
+    GroupAttributeSchemaName,
+    GroupAttributeSchemaType,
+    GroupAttributeSchemaIsList,
+    GroupAttributeSchemaIsGroupVisible,
+    GroupAttributeSchemaIsGroupEditable,
+    GroupAttributeSchemaIsHardcoded,
+}
+
+#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum GroupAttributes {
+    Table,
+    GroupAttributeGroupId,
+    GroupAttributeName,
+    GroupAttributeValue,
 }
 
 // Metadata about the SQL DB.
@@ -337,72 +375,64 @@ pub async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<(), sea_o
 }
 
 async fn replace_column<I: Iden + Copy + 'static, const N: usize>(
-    pool: &DbConnection,
+    transaction: DatabaseTransaction,
     table_name: I,
     column_name: I,
     mut new_column: ColumnDef,
     update_values: [Statement; N],
-) -> anyhow::Result<()> {
+) -> Result<DatabaseTransaction, DbErr> {
     // Update the definition of a column (in a compatible way). Due to Sqlite, this is more complicated:
     //  - rename the column to a temporary name
     //  - create the column with the new definition
     //  - copy the data from the temp column to the new one
     //  - update the new one if there are changes needed
     //  - drop the old one
-    let builder = pool.get_database_backend();
-    pool.transaction::<_, (), sea_orm::DbErr>(move |transaction| {
-        Box::pin(async move {
-            #[derive(Iden)]
-            enum TempTable {
-                TempName,
-            }
-            transaction
-                .execute(
-                    builder.build(
-                        Table::alter()
-                            .table(table_name)
-                            .rename_column(column_name, TempTable::TempName),
-                    ),
-                )
-                .await?;
-            transaction
-                .execute(
-                    builder.build(Table::alter().table(table_name).add_column(&mut new_column)),
-                )
-                .await?;
-            transaction
-                .execute(
-                    builder.build(
-                        Query::update()
-                            .table(table_name)
-                            .value(column_name, Expr::col((table_name, TempTable::TempName))),
-                    ),
-                )
-                .await?;
-            for statement in update_values {
-                transaction.execute(statement).await?;
-            }
-            transaction
-                .execute(
-                    builder.build(
-                        Table::alter()
-                            .table(table_name)
-                            .drop_column(TempTable::TempName),
-                    ),
-                )
-                .await?;
-            Ok(())
-        })
-    })
-    .await?;
-    Ok(())
+    let builder = transaction.get_database_backend();
+    #[derive(Iden)]
+    enum TempTable {
+        TempName,
+    }
+    transaction
+        .execute(
+            builder.build(
+                Table::alter()
+                    .table(table_name)
+                    .rename_column(column_name, TempTable::TempName),
+            ),
+        )
+        .await?;
+    transaction
+        .execute(builder.build(Table::alter().table(table_name).add_column(&mut new_column)))
+        .await?;
+    transaction
+        .execute(
+            builder.build(
+                Query::update()
+                    .table(table_name)
+                    .value(column_name, Expr::col((table_name, TempTable::TempName))),
+            ),
+        )
+        .await?;
+    for statement in update_values {
+        transaction.execute(statement).await?;
+    }
+    transaction
+        .execute(
+            builder.build(
+                Table::alter()
+                    .table(table_name)
+                    .drop_column(TempTable::TempName),
+            ),
+        )
+        .await?;
+    Ok(transaction)
 }
 
-async fn migrate_to_v2(pool: &DbConnection) -> anyhow::Result<()> {
-    let builder = pool.get_database_backend();
+async fn migrate_to_v2(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
     // Allow nulls in DisplayName, and change empty string to null.
-    replace_column(
-        pool,
+    let transaction = replace_column(
+        transaction,
         Users::Table,
         Users::DisplayName,
         ColumnDef::new(Users::DisplayName)
@@ -416,14 +446,14 @@ async fn migrate_to_v2(pool: &DbConnection) -> anyhow::Result<()> {
         )],
     )
     .await?;
-    Ok(())
+    Ok(transaction)
 }
 
-async fn migrate_to_v3(pool: &DbConnection) -> anyhow::Result<()> {
-    let builder = pool.get_database_backend();
+async fn migrate_to_v3(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
     // Allow nulls in First and LastName. Users who created their DB in 0.4.1 have the not null constraint.
-    replace_column(
-        pool,
+    let transaction = replace_column(
+        transaction,
         Users::Table,
         Users::FirstName,
         ColumnDef::new(Users::FirstName).string_len(255).to_owned(),
@@ -435,8 +465,8 @@ async fn migrate_to_v3(pool: &DbConnection) -> anyhow::Result<()> {
         )],
     )
     .await?;
-    replace_column(
-        pool,
+    let transaction = replace_column(
+        transaction,
         Users::Table,
         Users::LastName,
         ColumnDef::new(Users::LastName).string_len(255).to_owned(),
@@ -449,8 +479,8 @@ async fn migrate_to_v3(pool: &DbConnection) -> anyhow::Result<()> {
     )
     .await?;
     // Change Avatar from binary to blob(long), because for MySQL this is 64kb.
-    replace_column(
-        pool,
+    let transaction = replace_column(
+        transaction,
         Users::Table,
         Users::Avatar,
         ColumnDef::new(Users::Avatar)
@@ -459,13 +489,13 @@ async fn migrate_to_v3(pool: &DbConnection) -> anyhow::Result<()> {
         [],
     )
     .await?;
-    Ok(())
+    Ok(transaction)
 }
 
-async fn migrate_to_v4(pool: &DbConnection) -> anyhow::Result<()> {
-    let builder = pool.get_database_backend();
+async fn migrate_to_v4(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
     // Make emails and UUIDs unique.
-    if let Err(e) = pool
+    if let Err(e) = transaction
         .execute(
             builder.build(
                 Index::create()
@@ -477,16 +507,16 @@ async fn migrate_to_v4(pool: &DbConnection) -> anyhow::Result<()> {
             ),
         )
         .await
-        .context(
-            r#"while enforcing unicity on emails (2 users have the same email).
+    {
+        error!(
+            r#"Found several users with the same email.
 
 See https://github.com/lldap/lldap/blob/main/docs/migration_guides/v0.5.md for details.
 
+Conflicting emails:
 "#,
-        )
-    {
-        warn!("Found several users with the same email:");
-        for (email, users) in &pool
+        );
+        for (email, users) in &transaction
             .query_all(
                 builder.build(
                     Query::select()
@@ -528,39 +558,329 @@ See https://github.com/lldap/lldap/blob/main/docs/migration_guides/v0.5.md for d
         }
         return Err(e);
     }
-    pool.execute(
-        builder.build(
-            Index::create()
-                .if_not_exists()
-                .name("unique-user-uuid")
-                .table(Users::Table)
-                .col(Users::Uuid)
-                .unique(),
-        ),
-    )
-    .await
-    .context("while enforcing unicity on user UUIDs (2 users have the same UUID)")?;
-    pool.execute(
-        builder.build(
-            Index::create()
-                .if_not_exists()
-                .name("unique-group-uuid")
-                .table(Groups::Table)
-                .col(Groups::Uuid)
-                .unique(),
-        ),
-    )
-    .await
-    .context("while enforcing unicity on group UUIDs (2 groups have the same UUID)")?;
-    Ok(())
+    transaction
+        .execute(
+            builder.build(
+                Index::create()
+                    .if_not_exists()
+                    .name("unique-user-uuid")
+                    .table(Users::Table)
+                    .col(Users::Uuid)
+                    .unique(),
+            ),
+        )
+        .await?;
+    transaction
+        .execute(
+            builder.build(
+                Index::create()
+                    .if_not_exists()
+                    .name("unique-group-uuid")
+                    .table(Groups::Table)
+                    .col(Groups::Uuid)
+                    .unique(),
+            ),
+        )
+        .await?;
+    Ok(transaction)
+}
+
+async fn migrate_to_v5(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
+    transaction
+        .execute(
+            builder.build(
+                Table::create()
+                    .table(UserAttributeSchema::Table)
+                    .col(
+                        ColumnDef::new(UserAttributeSchema::UserAttributeSchemaName)
+                            .string_len(64)
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(UserAttributeSchema::UserAttributeSchemaType)
+                            .string_len(64)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserAttributeSchema::UserAttributeSchemaIsList)
+                            .boolean()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserAttributeSchema::UserAttributeSchemaIsUserVisible)
+                            .boolean()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserAttributeSchema::UserAttributeSchemaIsUserEditable)
+                            .boolean()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserAttributeSchema::UserAttributeSchemaIsHardcoded)
+                            .boolean()
+                            .not_null(),
+                    ),
+            ),
+        )
+        .await?;
+
+    transaction
+        .execute(
+            builder.build(
+                Table::create()
+                    .table(GroupAttributeSchema::Table)
+                    .col(
+                        ColumnDef::new(GroupAttributeSchema::GroupAttributeSchemaName)
+                            .string_len(64)
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupAttributeSchema::GroupAttributeSchemaType)
+                            .string_len(64)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupAttributeSchema::GroupAttributeSchemaIsList)
+                            .boolean()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupAttributeSchema::GroupAttributeSchemaIsGroupVisible)
+                            .boolean()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupAttributeSchema::GroupAttributeSchemaIsGroupEditable)
+                            .boolean()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupAttributeSchema::GroupAttributeSchemaIsHardcoded)
+                            .boolean()
+                            .not_null(),
+                    ),
+            ),
+        )
+        .await?;
+
+    transaction
+        .execute(
+            builder.build(
+                Table::create()
+                    .table(UserAttributes::Table)
+                    .col(
+                        ColumnDef::new(UserAttributes::UserAttributeUserId)
+                            .string_len(255)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserAttributes::UserAttributeName)
+                            .string_len(64)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserAttributes::UserAttributeValue)
+                            .blob(sea_query::BlobSize::Long)
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("UserAttributeUserIdForeignKey")
+                            .from(UserAttributes::Table, UserAttributes::UserAttributeUserId)
+                            .to(Users::Table, Users::UserId)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("UserAttributeNameForeignKey")
+                            .from(UserAttributes::Table, UserAttributes::UserAttributeName)
+                            .to(
+                                UserAttributeSchema::Table,
+                                UserAttributeSchema::UserAttributeSchemaName,
+                            )
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .primary_key(
+                        Index::create()
+                            .col(UserAttributes::UserAttributeUserId)
+                            .col(UserAttributes::UserAttributeName),
+                    ),
+            ),
+        )
+        .await?;
+
+    transaction
+        .execute(
+            builder.build(
+                Table::create()
+                    .table(GroupAttributes::Table)
+                    .col(
+                        ColumnDef::new(GroupAttributes::GroupAttributeGroupId)
+                            .integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupAttributes::GroupAttributeName)
+                            .string_len(64)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupAttributes::GroupAttributeValue)
+                            .blob(sea_query::BlobSize::Long)
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("GroupAttributeGroupIdForeignKey")
+                            .from(
+                                GroupAttributes::Table,
+                                GroupAttributes::GroupAttributeGroupId,
+                            )
+                            .to(Groups::Table, Groups::GroupId)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("GroupAttributeNameForeignKey")
+                            .from(GroupAttributes::Table, GroupAttributes::GroupAttributeName)
+                            .to(
+                                GroupAttributeSchema::Table,
+                                GroupAttributeSchema::GroupAttributeSchemaName,
+                            )
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .primary_key(
+                        Index::create()
+                            .col(GroupAttributes::GroupAttributeGroupId)
+                            .col(GroupAttributes::GroupAttributeName),
+                    ),
+            ),
+        )
+        .await?;
+
+    transaction
+        .execute(
+            builder.build(
+                Query::insert()
+                    .into_table(UserAttributeSchema::Table)
+                    .columns([
+                        UserAttributeSchema::UserAttributeSchemaName,
+                        UserAttributeSchema::UserAttributeSchemaType,
+                        UserAttributeSchema::UserAttributeSchemaIsList,
+                        UserAttributeSchema::UserAttributeSchemaIsUserVisible,
+                        UserAttributeSchema::UserAttributeSchemaIsUserEditable,
+                        UserAttributeSchema::UserAttributeSchemaIsHardcoded,
+                    ])
+                    .values_panic([
+                        "first_name".into(),
+                        AttributeType::String.into(),
+                        false.into(),
+                        true.into(),
+                        true.into(),
+                        true.into(),
+                    ])
+                    .values_panic([
+                        "last_name".into(),
+                        AttributeType::String.into(),
+                        false.into(),
+                        true.into(),
+                        true.into(),
+                        true.into(),
+                    ])
+                    .values_panic([
+                        "avatar".into(),
+                        AttributeType::JpegPhoto.into(),
+                        false.into(),
+                        true.into(),
+                        true.into(),
+                        true.into(),
+                    ]),
+            ),
+        )
+        .await?;
+
+    {
+        let mut user_statement = Query::insert()
+            .into_table(UserAttributes::Table)
+            .columns([
+                UserAttributes::UserAttributeUserId,
+                UserAttributes::UserAttributeName,
+                UserAttributes::UserAttributeValue,
+            ])
+            .to_owned();
+        #[derive(FromQueryResult)]
+        struct FullUserDetails {
+            user_id: UserId,
+            first_name: Option<String>,
+            last_name: Option<String>,
+            avatar: Option<JpegPhoto>,
+        }
+        let mut any_user = false;
+        for user in FullUserDetails::find_by_statement(builder.build(
+            Query::select().from(Users::Table).columns([
+                Users::UserId,
+                Users::FirstName,
+                Users::LastName,
+                Users::Avatar,
+            ]),
+        ))
+        .all(&transaction)
+        .await?
+        {
+            if let Some(name) = &user.first_name {
+                any_user = true;
+                user_statement.values_panic([
+                    user.user_id.clone().into(),
+                    "first_name".into(),
+                    Serialized::from(name).into(),
+                ]);
+            }
+            if let Some(name) = &user.last_name {
+                any_user = true;
+                user_statement.values_panic([
+                    user.user_id.clone().into(),
+                    "last_name".into(),
+                    Serialized::from(name).into(),
+                ]);
+            }
+            if let Some(avatar) = &user.avatar {
+                any_user = true;
+                user_statement.values_panic([
+                    user.user_id.clone().into(),
+                    "avatar".into(),
+                    Serialized::from(avatar).into(),
+                ]);
+            }
+        }
+
+        if any_user {
+            transaction.execute(builder.build(&user_statement)).await?;
+        }
+    }
+
+    for column in [Users::FirstName, Users::LastName, Users::Avatar] {
+        transaction
+            .execute(builder.build(Table::alter().table(Users::Table).drop_column(column)))
+            .await?;
+    }
+
+    Ok(transaction)
 }
 
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
-        |pool| -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>>>> {
-            Box::pin($l(pool))
-        }
+        move |transaction| -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<DatabaseTransaction, DbErr>>>,
+        > { Box::pin($l(transaction)) }
     };
 }
 
@@ -579,21 +899,26 @@ pub async fn migrate_from_version(
         to_sync!(migrate_to_v2),
         to_sync!(migrate_to_v3),
         to_sync!(migrate_to_v4),
+        to_sync!(migrate_to_v5),
     ];
-    for migration in 2..=4 {
+    assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
+    for migration in 2..=last_version.0 {
         if version < SchemaVersion(migration) && SchemaVersion(migration) <= last_version {
             info!("Upgrading DB schema to version {}", migration);
-            migrations[(migration - 2) as usize](pool).await?;
+            let transaction = pool.begin().await?;
+            let transaction = migrations[(migration - 2) as usize](transaction).await?;
+            let builder = transaction.get_database_backend();
+            transaction
+                .execute(
+                    builder.build(
+                        Query::update()
+                            .table(Metadata::Table)
+                            .value(Metadata::Version, Value::from(migration)),
+                    ),
+                )
+                .await?;
+            transaction.commit().await?;
         }
     }
-    let builder = pool.get_database_backend();
-    pool.execute(
-        builder.build(
-            Query::update()
-                .table(Metadata::Table)
-                .value(Metadata::Version, Value::from(last_version)),
-        ),
-    )
-    .await?;
     Ok(())
 }

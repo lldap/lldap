@@ -6,7 +6,7 @@ use tracing::{debug, instrument, warn};
 use crate::domain::{
     handler::{GroupListerBackendHandler, GroupRequestFilter},
     ldap::error::LdapError,
-    types::{Group, GroupColumn, UserId, Uuid},
+    types::{Group, UserId, Uuid},
 };
 
 use super::{
@@ -140,10 +140,8 @@ fn convert_group_filter(
                     GroupRequestFilter::from(false)
                 })),
                 _ => match map_group_field(field) {
-                    Some(GroupColumn::DisplayName) => {
-                        Ok(GroupRequestFilter::DisplayName(value.to_string()))
-                    }
-                    Some(GroupColumn::Uuid) => Ok(GroupRequestFilter::Uuid(
+                    Some("display_name") => Ok(GroupRequestFilter::DisplayName(value.to_string())),
+                    Some("uuid") => Ok(GroupRequestFilter::Uuid(
                         Uuid::try_from(value.as_str()).map_err(|e| LdapError {
                             code: LdapResultCode::InappropriateMatching,
                             message: format!("Invalid UUID: {:#}", e),
@@ -181,7 +179,7 @@ fn convert_group_filter(
         LdapFilter::Substring(field, substring_filter) => {
             let field = &field.to_ascii_lowercase();
             match map_group_field(field.as_str()) {
-                Some(GroupColumn::DisplayName) => Ok(GroupRequestFilter::DisplayNameSubString(
+                Some("display_name") => Ok(GroupRequestFilter::DisplayNameSubString(
                     substring_filter.clone().into(),
                 )),
                 _ => Err(LdapError {

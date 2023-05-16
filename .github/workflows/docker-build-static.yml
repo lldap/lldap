@@ -350,7 +350,7 @@ jobs:
               curl -L https://raw.githubusercontent.com/lldap/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
               chmod +x ./helper.sh
               ./helper.sh | sqlite3 ./users.db > ./dump.sql
-              sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" -e '1s/^/BEGIN;\n/' -e '$aCOMMIT;' ./dump.sql
+              sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" -e ":a; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),1([^']*\);)$/\1,true\2/; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),0([^']*\);)$/\1,false\2/; ta" -e '1s/^/BEGIN;\n/' -e '$aCOMMIT;' ./dump.sql
 
        - name: Create schema on postgres
          run: |
@@ -358,7 +358,6 @@ jobs:
 
        - name: Copy converted db to postgress and import
          run: |
-              docker ps -a
               docker cp ./dump.sql postgresql:/tmp/dump.sql
               docker exec postgresql bash -c "psql -U lldapuser -d lldap < /tmp/dump.sql"
               rm ./dump.sql
@@ -377,7 +376,6 @@ jobs:
 
        - name: Copy converted db to mariadb and import
          run: |
-              docker ps -a
               docker cp ./dump.sql mariadb:/tmp/dump.sql
               docker exec mariadb bash -c "mariadb -ulldapuser -plldappass -f lldap < /tmp/dump.sql"
               rm ./dump.sql
@@ -395,7 +393,6 @@ jobs:
 
        - name: Copy converted db to mysql and import
          run: |
-              docker ps -a
               docker cp ./dump.sql mysql:/tmp/dump.sql
               docker exec mysql bash -c "mysql -ulldapuser -plldappass -f lldap < /tmp/dump.sql"
               rm ./dump.sql
@@ -434,11 +431,12 @@ jobs:
            LLDAP_http_port: 17173
            LLDAP_JWT_SECRET: somejwtsecret
 
-       - name: Test Dummy User
-         run: |
-              ldapsearch -H ldap://localhost:3891 -LLL -D "uid=dummyuser,ou=people,dc=example,dc=com" -w 'dummypassword' -s "One" -b "ou=people,dc=example,dc=com"
-              ldapsearch -H ldap://localhost:3892 -LLL -D "uid=dummyuser,ou=people,dc=example,dc=com" -w 'dummypassword' -s "One" -b "ou=people,dc=example,dc=com"
-              ldapsearch -H ldap://localhost:3893 -LLL -D "uid=dummyuser,ou=people,dc=example,dc=com" -w 'dummypassword' -s "One" -b "ou=people,dc=example,dc=com"
+       - name: Test Dummy User Postgres
+         run: ldapsearch -H ldap://localhost:3891 -LLL -D "uid=dummyuser,ou=people,dc=example,dc=com" -w 'dummypassword' -s "One" -b "ou=people,dc=example,dc=com"
+       - name: Test Dummy User MariaDB
+         run: ldapsearch -H ldap://localhost:3892 -LLL -D "uid=dummyuser,ou=people,dc=example,dc=com" -w 'dummypassword' -s "One" -b "ou=people,dc=example,dc=com"
+       - name: Test Dummy User MySQL
+         run: ldapsearch -H ldap://localhost:3893 -LLL -D "uid=dummyuser,ou=people,dc=example,dc=com" -w 'dummypassword' -s "One" -b "ou=people,dc=example,dc=com"
 
   build-docker-image:
     needs: [build-ui, build-bin]

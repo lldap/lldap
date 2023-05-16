@@ -9,4 +9,10 @@ pub mod memberships;
 pub mod password_reset_tokens;
 pub mod users;
 
+pub mod user_attribute_schema;
+pub mod user_attributes;
+
+pub mod group_attribute_schema;
+pub mod group_attributes;
+
 pub use prelude::*;

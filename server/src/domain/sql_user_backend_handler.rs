@@ -6,17 +6,31 @@ use crate::domain::{
     },
     model::{self, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
-    types::{GroupDetails, GroupId, User, UserAndGroups, UserId, Uuid},
+    types::{GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId, Uuid},
 };
 use async_trait::async_trait;
 use sea_orm::{
-    entity::IntoActiveValue,
-    sea_query::{Alias, Cond, Expr, Func, IntoColumnRef, IntoCondition, SimpleExpr},
-    ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, QueryOrder,
-    QuerySelect, QueryTrait, Set,
+    sea_query::{
+        query::OnConflict, Alias, Cond, Expr, Func, IntoColumnRef, IntoCondition, SimpleExpr,
+    },
+    ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, IntoActiveValue, ModelTrait,
+    QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use std::collections::HashSet;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
+
+fn attribute_condition(name: String, value: String) -> Cond {
+    Expr::in_subquery(
+        Expr::col(UserColumn::UserId.as_column_ref()),
+        model::UserAttributes::find()
+            .select_only()
+            .column(model::UserAttributesColumn::UserId)
+            .filter(model::UserAttributesColumn::AttributeName.eq(name))
+            .filter(model::UserAttributesColumn::Value.eq(Serialized::from(&value)))
+            .into_query(),
+    )
+    .into_condition()
+}
 
 fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
     use UserRequestFilter::*;
@@ -46,6 +60,7 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
                 ColumnTrait::eq(&s1, s2).into_condition()
             }
         }
+        AttributeEquality(s1, s2) => attribute_condition(s1, s2),
         MemberOf(group) => Expr::col((group_table, GroupColumn::DisplayName))
             .eq(group)
             .into_condition(),
@@ -55,9 +70,11 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
         UserIdSubString(filter) => UserColumn::UserId
             .like(&filter.to_sql_filter())
             .into_condition(),
-        SubString(col, filter) => SimpleExpr::FunctionCall(Func::lower(Expr::col(col)))
-            .like(filter.to_sql_filter())
-            .into_condition(),
+        SubString(col, filter) => {
+            SimpleExpr::FunctionCall(Func::lower(Expr::col(col.as_column_ref())))
+                .like(filter.to_sql_filter())
+                .into_condition()
+        }
     }
 }
 
@@ -78,10 +95,11 @@ impl UserListerBackendHandler for SqlBackendHandler {
     async fn list_users(
         &self,
         filters: Option<UserRequestFilter>,
-        get_groups: bool,
+        // To simplify the query, we always fetch groups. TODO: cleanup.
+        _get_groups: bool,
     ) -> Result<Vec<UserAndGroups>> {
         debug!(?filters);
-        let query = model::User::find()
+        let results = model::User::find()
             .filter(
                 filters
                     .map(|f| {
@@ -98,45 +116,62 @@ impl UserListerBackendHandler for SqlBackendHandler {
                     })
                     .unwrap_or_else(|| SimpleExpr::Value(true.into()).into_condition()),
             )
-            .order_by_asc(UserColumn::UserId);
-        if !get_groups {
-            Ok(query
-                .into_model::<User>()
-                .all(&self.sql_pool)
-                .await?
-                .into_iter()
-                .map(|u| UserAndGroups {
-                    user: u,
-                    groups: None,
-                })
-                .collect())
-        } else {
-            let results = query
-                //find_with_linked?
-                .find_also_linked(model::memberships::UserToGroup)
-                .order_by_asc(SimpleExpr::Column(
-                    (Alias::new("r1"), GroupColumn::GroupId).into_column_ref(),
-                ))
-                .all(&self.sql_pool)
-                .await?;
-            use itertools::Itertools;
-            Ok(results
-                .iter()
-                .group_by(|(u, _)| u)
-                .into_iter()
-                .map(|(user, groups)| {
-                    let groups: Vec<_> = groups
-                        .into_iter()
-                        .flat_map(|(_, g)| g)
-                        .map(|g| GroupDetails::from(g.clone()))
-                        .collect();
-                    UserAndGroups {
-                        user: user.clone().into(),
-                        groups: Some(groups),
-                    }
-                })
-                .collect())
+            .order_by_asc(UserColumn::UserId)
+            //find_with_linked?
+            .find_also_linked(model::memberships::UserToGroup)
+            .order_by_asc(SimpleExpr::Column(
+                (Alias::new("r1"), GroupColumn::GroupId).into_column_ref(),
+            ))
+            .all(&self.sql_pool)
+            .await?;
+        use itertools::Itertools;
+        let mut users: Vec<_> = results
+            .iter()
+            .group_by(|(u, _)| u)
+            .into_iter()
+            .map(|(user, groups)| {
+                let groups: Vec<_> = groups
+                    .into_iter()
+                    .flat_map(|(_, g)| g)
+                    .map(|g| GroupDetails::from(g.clone()))
+                    .collect();
+                UserAndGroups {
+                    user: user.clone().into(),
+                    groups: Some(groups),
+                }
+            })
+            .collect();
+        // At this point, the users don't have attributes, we need to populate it with another query.
+        let user_ids = users
+            .iter()
+            .map(|u| u.user.user_id.clone())
+            .collect::<Vec<_>>();
+        let attributes = model::UserAttributes::find()
+            .filter(model::UserAttributesColumn::UserId.is_in(&user_ids))
+            .order_by_asc(model::UserAttributesColumn::UserId)
+            .all(&self.sql_pool)
+            .await?;
+        let mut attributes_iter = attributes.iter().peekable();
+        for user in users.iter_mut() {
+            attributes_iter
+                .peeking_take_while(|u| u.user_id < user.user.user_id)
+                .for_each(|_| ());
+
+            for model::user_attributes::Model {
+                user_id: _,
+                attribute_name,
+                value,
+            } in attributes_iter.take_while_ref(|u| u.user_id == user.user.user_id)
+            {
+                match attribute_name.as_str() {
+                    "first_name" => user.user.first_name = Some(value.unwrap()),
+                    "last_name" => user.user.last_name = Some(value.unwrap()),
+                    "avatar" => user.user.avatar = Some(value.unwrap()),
+                    _ => warn!("Unknown attribute name: {}", attribute_name),
+                }
+            }
         }
+        Ok(users)
     }
 }
 
@@ -145,11 +180,30 @@ impl UserBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret)]
     async fn get_user_details(&self, user_id: &UserId) -> Result<User> {
         debug!(?user_id);
-        model::User::find_by_id(user_id.to_owned())
-            .into_model::<User>()
-            .one(&self.sql_pool)
-            .await?
-            .ok_or_else(|| DomainError::EntityNotFound(user_id.to_string()))
+        let mut user = User::from(
+            model::User::find_by_id(user_id.to_owned())
+                .one(&self.sql_pool)
+                .await?
+                .ok_or_else(|| DomainError::EntityNotFound(user_id.to_string()))?,
+        );
+        let attributes = model::UserAttributes::find()
+            .filter(model::UserAttributesColumn::UserId.eq(user_id))
+            .all(&self.sql_pool)
+            .await?;
+        for model::user_attributes::Model {
+            user_id: _,
+            attribute_name,
+            value,
+        } in attributes
+        {
+            match attribute_name.as_str() {
+                "first_name" => user.first_name = Some(value.unwrap()),
+                "last_name" => user.last_name = Some(value.unwrap()),
+                "avatar" => user.avatar = Some(value.unwrap()),
+                _ => warn!("Unknown attribute name: {}", attribute_name),
+            }
+        }
+        Ok(user)
     }
 
     #[instrument(skip_all, level = "debug", ret, err)]
@@ -173,17 +227,48 @@ impl UserBackendHandler for SqlBackendHandler {
         let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(request.user_id.as_str(), &now);
         let new_user = model::users::ActiveModel {
-            user_id: Set(request.user_id),
+            user_id: Set(request.user_id.clone()),
             email: Set(request.email),
             display_name: to_value(&request.display_name),
-            first_name: to_value(&request.first_name),
-            last_name: to_value(&request.last_name),
-            avatar: request.avatar.into_active_value(),
             creation_date: ActiveValue::Set(now),
             uuid: ActiveValue::Set(uuid),
             ..Default::default()
         };
-        new_user.insert(&self.sql_pool).await?;
+        let mut new_user_attributes = Vec::new();
+        if let Some(first_name) = request.first_name {
+            new_user_attributes.push(model::user_attributes::ActiveModel {
+                user_id: Set(request.user_id.clone()),
+                attribute_name: Set("first_name".to_owned()),
+                value: Set(Serialized::from(&first_name)),
+            });
+        }
+        if let Some(last_name) = request.last_name {
+            new_user_attributes.push(model::user_attributes::ActiveModel {
+                user_id: Set(request.user_id.clone()),
+                attribute_name: Set("last_name".to_owned()),
+                value: Set(Serialized::from(&last_name)),
+            });
+        }
+        if let Some(avatar) = request.avatar {
+            new_user_attributes.push(model::user_attributes::ActiveModel {
+                user_id: Set(request.user_id),
+                attribute_name: Set("avatar".to_owned()),
+                value: Set(Serialized::from(&avatar)),
+            });
+        }
+        self.sql_pool
+            .transaction::<_, (), DomainError>(|transaction| {
+                Box::pin(async move {
+                    new_user.insert(transaction).await?;
+                    if !new_user_attributes.is_empty() {
+                        model::UserAttributes::insert_many(new_user_attributes)
+                            .exec(transaction)
+                            .await?;
+                    }
+                    Ok(())
+                })
+            })
+            .await?;
         Ok(())
     }
 
@@ -191,15 +276,72 @@ impl UserBackendHandler for SqlBackendHandler {
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
         debug!(user_id = ?request.user_id);
         let update_user = model::users::ActiveModel {
-            user_id: ActiveValue::Set(request.user_id),
+            user_id: ActiveValue::Set(request.user_id.clone()),
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
             display_name: to_value(&request.display_name),
-            first_name: to_value(&request.first_name),
-            last_name: to_value(&request.last_name),
-            avatar: request.avatar.into_active_value(),
             ..Default::default()
         };
-        update_user.update(&self.sql_pool).await?;
+        let mut update_user_attributes = Vec::new();
+        let mut remove_user_attributes = Vec::new();
+        let to_serialized_value = |s: &Option<String>| match s.as_ref().map(|s| s.as_str()) {
+            None => None,
+            Some("") => Some(ActiveValue::NotSet),
+            Some(s) => Some(ActiveValue::Set(Serialized::from(s))),
+        };
+        let mut process_serialized =
+            |value: ActiveValue<Serialized>, attribute_name: &str| match &value {
+                ActiveValue::NotSet => {
+                    remove_user_attributes.push(attribute_name.to_owned());
+                }
+                ActiveValue::Set(_) => {
+                    update_user_attributes.push(model::user_attributes::ActiveModel {
+                        user_id: Set(request.user_id.clone()),
+                        attribute_name: Set(attribute_name.to_owned()),
+                        value,
+                    })
+                }
+                _ => unreachable!(),
+            };
+        if let Some(value) = to_serialized_value(&request.first_name) {
+            process_serialized(value, "first_name");
+        }
+        if let Some(value) = to_serialized_value(&request.last_name) {
+            process_serialized(value, "last_name");
+        }
+        if let Some(avatar) = request.avatar {
+            process_serialized(avatar.into_active_value(), "avatar");
+        }
+        self.sql_pool
+            .transaction::<_, (), DomainError>(|transaction| {
+                Box::pin(async move {
+                    update_user.update(transaction).await?;
+                    if !update_user_attributes.is_empty() {
+                        model::UserAttributes::insert_many(update_user_attributes)
+                            .on_conflict(
+                                OnConflict::columns([
+                                    model::UserAttributesColumn::UserId,
+                                    model::UserAttributesColumn::AttributeName,
+                                ])
+                                .update_column(model::UserAttributesColumn::Value)
+                                .to_owned(),
+                            )
+                            .exec(transaction)
+                            .await?;
+                    }
+                    if !remove_user_attributes.is_empty() {
+                        model::UserAttributes::delete_many()
+                            .filter(model::UserAttributesColumn::UserId.eq(&request.user_id))
+                            .filter(
+                                model::UserAttributesColumn::AttributeName
+                                    .is_in(remove_user_attributes),
+                            )
+                            .exec(transaction)
+                            .await?;
+                    }
+                    Ok(())
+                })
+            })
+            .await?;
         Ok(())
     }
 
@@ -291,8 +433,8 @@ mod tests {
         let fixture = TestFixture::new().await;
         let users = get_user_names(
             &fixture.handler,
-            Some(UserRequestFilter::Equality(
-                UserColumn::FirstName,
+            Some(UserRequestFilter::AttributeEquality(
+                "first_name".to_string(),
                 "first bob".to_string(),
             )),
         )
@@ -312,10 +454,10 @@ mod tests {
                     final_: Some("K".to_owned()),
                 }),
                 UserRequestFilter::SubString(
-                    UserColumn::FirstName,
+                    UserColumn::DisplayName,
                     SubStringFilter {
                         initial: None,
-                        any: vec!["r".to_owned(), "t".to_owned()],
+                        any: vec!["t".to_owned(), "r".to_owned()],
                         final_: None,
                     },
                 ),
@@ -633,8 +775,9 @@ mod tests {
             .handler
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
-                first_name: Some("first_name".to_string()),
+                first_name: None,
                 last_name: Some(String::new()),
+                avatar: Some(JpegPhoto::for_tests()),
                 ..Default::default()
             })
             .await
@@ -646,9 +789,76 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(user.display_name.unwrap(), "display bob");
-        assert_eq!(user.first_name.unwrap(), "first_name");
+        assert_eq!(user.first_name.unwrap(), "first bob");
         assert_eq!(user.last_name, None);
+        assert_eq!(user.avatar, Some(JpegPhoto::for_tests()));
+    }
+
+    #[tokio::test]
+    async fn test_update_user_delete_avatar() {
+        let fixture = TestFixture::new().await;
+
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                avatar: Some(JpegPhoto::for_tests()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("bob"))
+            .await
+            .unwrap();
+        assert_eq!(user.avatar, Some(JpegPhoto::for_tests()));
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                avatar: Some(JpegPhoto::null()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("bob"))
+            .await
+            .unwrap();
         assert_eq!(user.avatar, None);
+    }
+
+    #[tokio::test]
+    async fn test_create_user_all_values() {
+        let fixture = TestFixture::new().await;
+
+        fixture
+            .handler
+            .create_user(CreateUserRequest {
+                user_id: UserId::new("james"),
+                email: "email".to_string(),
+                display_name: Some("display_name".to_string()),
+                first_name: Some("first_name".to_string()),
+                last_name: Some("last_name".to_string()),
+                avatar: Some(JpegPhoto::for_tests()),
+            })
+            .await
+            .unwrap();
+
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("james"))
+            .await
+            .unwrap();
+        assert_eq!(user.email, "email");
+        assert_eq!(user.display_name.unwrap(), "display_name");
+        assert_eq!(user.first_name.unwrap(), "first_name");
+        assert_eq!(user.last_name.unwrap(), "last_name");
+        assert_eq!(user.avatar, Some(JpegPhoto::for_tests()));
     }
 
     #[tokio::test]
@@ -669,5 +879,33 @@ mod tests {
             .await,
             vec!["patrick"]
         );
+    }
+
+    #[tokio::test]
+    async fn test_delete_user_not_found() {
+        let fixture = TestFixture::new().await;
+
+        fixture
+            .handler
+            .delete_user(&UserId::new("not found"))
+            .await
+            .expect_err("Should have failed");
+    }
+
+    #[tokio::test]
+    async fn test_remove_user_from_group_not_found() {
+        let fixture = TestFixture::new().await;
+
+        fixture
+            .handler
+            .remove_user_from_group(&UserId::new("not found"), fixture.groups[0])
+            .await
+            .expect_err("Should have failed");
+
+        fixture
+            .handler
+            .remove_user_from_group(&UserId::new("not found"), GroupId(16242))
+            .await
+            .expect_err("Should have failed");
     }
 }
