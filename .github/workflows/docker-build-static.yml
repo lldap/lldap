@@ -150,6 +150,8 @@ jobs:
           key: lldap-bin-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-bin-${{ matrix.target }}-
+      - name: add musl armv7
+        run: rustup target add armv7-unknown-linux-musleabihf
       - name: Compile ${{ matrix.target }} lldap and tools
         run: cargo build --target=${{ matrix.target }} --release -p lldap -p lldap_migration_tool -p lldap_set_password
       - name: Check path
