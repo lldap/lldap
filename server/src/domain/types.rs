@@ -2,7 +2,8 @@ use base64::Engine;
 use chrono::{NaiveDateTime, TimeZone};
 use sea_orm::{
     entity::IntoActiveValue,
-    sea_query::{value::ValueType, ArrayType, ColumnType, Nullable, ValueTypeErr},
+    sea_query::{value::ValueType, ArrayType, BlobSize, ColumnType, Nullable, ValueTypeErr},
+    strum::{EnumString, IntoStaticStr},
     DbErr, FromQueryResult, QueryResult, TryFromU64, TryGetError, TryGetable, Value,
 };
 use serde::{Deserialize, Serialize};
@@ -103,7 +104,64 @@ macro_rules! uuid {
     };
 }
 
-#[derive(PartialEq, Eq, Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Serialized(Vec<u8>);
+
+impl<'a, T: Serialize + ?Sized> From<&'a T> for Serialized {
+    fn from(t: &'a T) -> Self {
+        Self(bincode::serialize(&t).unwrap())
+    }
+}
+
+impl Serialized {
+    pub fn unwrap<'a, T: Deserialize<'a>>(&'a self) -> T {
+        bincode::deserialize(&self.0).unwrap()
+    }
+
+    pub fn expect<'a, T: Deserialize<'a>>(&'a self, message: &str) -> T {
+        bincode::deserialize(&self.0).expect(message)
+    }
+}
+
+impl From<Serialized> for Value {
+    fn from(ser: Serialized) -> Self {
+        ser.0.into()
+    }
+}
+
+impl TryGetable for Serialized {
+    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
+        Ok(Self(Vec::<u8>::try_get_by(res, index)?))
+    }
+}
+
+impl TryFromU64 for Serialized {
+    fn try_from_u64(_n: u64) -> Result<Self, DbErr> {
+        Err(DbErr::ConvertFromU64(
+            "Serialized cannot be constructed from u64",
+        ))
+    }
+}
+
+impl ValueType for Serialized {
+    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
+        Ok(Self(<Vec<u8> as ValueType>::try_from(v)?))
+    }
+
+    fn type_name() -> String {
+        "Serialized".to_owned()
+    }
+
+    fn array_type() -> ArrayType {
+        ArrayType::Bytes
+    }
+
+    fn column_type() -> ColumnType {
+        ColumnType::Binary(BlobSize::Long)
+    }
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(from = "String")]
 pub struct UserId(String);
 
@@ -238,6 +296,10 @@ impl From<&JpegPhoto> for String {
 }
 
 impl JpegPhoto {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn null() -> Self {
         Self(vec![])
     }
@@ -296,7 +358,7 @@ impl ValueType for JpegPhoto {
     }
 
     fn column_type() -> ColumnType {
-        ColumnType::Binary(sea_orm::sea_query::BlobSize::Long)
+        ColumnType::Binary(BlobSize::Long)
     }
 }
 
@@ -306,13 +368,17 @@ impl Nullable for JpegPhoto {
     }
 }
 
-impl IntoActiveValue<JpegPhoto> for JpegPhoto {
-    fn into_active_value(self) -> sea_orm::ActiveValue<JpegPhoto> {
-        sea_orm::ActiveValue::Set(self)
+impl IntoActiveValue<Serialized> for JpegPhoto {
+    fn into_active_value(self) -> sea_orm::ActiveValue<Serialized> {
+        if self.is_empty() {
+            sea_orm::ActiveValue::NotSet
+        } else {
+            sea_orm::ActiveValue::Set(Serialized::from(&self))
+        }
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, FromQueryResult)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub user_id: UserId,
     pub email: String,
@@ -377,6 +443,51 @@ impl ValueType for GroupId {
 impl TryFromU64 for GroupId {
     fn try_from_u64(n: u64) -> Result<Self, DbErr> {
         Ok(GroupId(i32::try_from_u64(n)?))
+    }
+}
+
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, IntoStaticStr,
+)]
+pub enum AttributeType {
+    String,
+    Integer,
+    JpegPhoto,
+    DateTime,
+}
+
+impl From<AttributeType> for Value {
+    fn from(attribute_type: AttributeType) -> Self {
+        Into::<&'static str>::into(attribute_type).into()
+    }
+}
+
+impl TryGetable for AttributeType {
+    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
+        use std::str::FromStr;
+        Ok(AttributeType::from_str(&String::try_get_by(res, index)?).expect("Invalid enum value"))
+    }
+}
+
+impl ValueType for AttributeType {
+    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
+        use std::str::FromStr;
+        Ok(
+            AttributeType::from_str(&<String as ValueType>::try_from(v)?)
+                .expect("Invalid enum value"),
+        )
+    }
+
+    fn type_name() -> String {
+        "AttributeType".to_owned()
+    }
+
+    fn array_type() -> ArrayType {
+        ArrayType::String
+    }
+
+    fn column_type() -> ColumnType {
+        ColumnType::String(Some(64))
     }
 }
 

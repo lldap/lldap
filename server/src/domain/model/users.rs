@@ -3,7 +3,7 @@
 use sea_orm::{entity::prelude::*, sea_query::BlobSize};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::types::{JpegPhoto, UserId, Uuid};
+use crate::domain::types::{UserId, Uuid};
 
 #[derive(Copy, Clone, Default, Debug, DeriveEntity)]
 pub struct Entity;
@@ -15,9 +15,6 @@ pub struct Model {
     pub user_id: UserId,
     pub email: String,
     pub display_name: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub avatar: Option<JpegPhoto>,
     pub creation_date: chrono::NaiveDateTime,
     pub password_hash: Option<Vec<u8>>,
     pub totp_secret: Option<String>,
@@ -36,9 +33,6 @@ pub enum Column {
     UserId,
     Email,
     DisplayName,
-    FirstName,
-    LastName,
-    Avatar,
     CreationDate,
     PasswordHash,
     TotpSecret,
@@ -54,9 +48,6 @@ impl ColumnTrait for Column {
             Column::UserId => ColumnType::String(Some(255)),
             Column::Email => ColumnType::String(Some(255)),
             Column::DisplayName => ColumnType::String(Some(255)),
-            Column::FirstName => ColumnType::String(Some(255)),
-            Column::LastName => ColumnType::String(Some(255)),
-            Column::Avatar => ColumnType::Binary(BlobSize::Long),
             Column::CreationDate => ColumnType::DateTime,
             Column::PasswordHash => ColumnType::Binary(BlobSize::Medium),
             Column::TotpSecret => ColumnType::String(Some(64)),
@@ -124,11 +115,11 @@ impl From<Model> for crate::domain::types::User {
             user_id: user.user_id,
             email: user.email,
             display_name: user.display_name,
-            first_name: user.first_name,
-            last_name: user.last_name,
+            first_name: None,
+            last_name: None,
             creation_date: user.creation_date,
             uuid: user.uuid,
-            avatar: user.avatar,
+            avatar: None,
         }
     }
 }

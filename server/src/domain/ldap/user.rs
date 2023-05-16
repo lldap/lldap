@@ -7,15 +7,13 @@ use tracing::{debug, instrument, warn};
 use crate::domain::{
     handler::{UserListerBackendHandler, UserRequestFilter},
     ldap::{
-        error::LdapError,
-        utils::{expand_attribute_wildcards, get_user_id_from_distinguished_name},
+        error::{LdapError, LdapResult},
+        utils::{
+            expand_attribute_wildcards, get_group_id_from_distinguished_name,
+            get_user_id_from_distinguished_name, map_user_field, LdapInfo, UserFieldType,
+        },
     },
     types::{GroupDetails, User, UserAndGroups, UserColumn, UserId},
-};
-
-use super::{
-    error::LdapResult,
-    utils::{get_group_id_from_distinguished_name, map_user_field, LdapInfo},
 };
 
 pub fn get_user_attribute(
@@ -154,9 +152,17 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                     UserRequestFilter::from(false)
                 })),
                 _ => match map_user_field(field) {
-                    Some(UserColumn::UserId) => Ok(UserRequestFilter::UserId(UserId::new(value))),
-                    Some(field) => Ok(UserRequestFilter::Equality(field, value.clone())),
-                    None => {
+                    UserFieldType::PrimaryField(UserColumn::UserId) => {
+                        Ok(UserRequestFilter::UserId(UserId::new(value)))
+                    }
+                    UserFieldType::PrimaryField(field) => {
+                        Ok(UserRequestFilter::Equality(field, value.clone()))
+                    }
+                    UserFieldType::Attribute(field) => Ok(UserRequestFilter::AttributeEquality(
+                        field.to_owned(),
+                        value.clone(),
+                    )),
+                    UserFieldType::NoMatch => {
                         if !ldap_info.ignored_user_attributes.contains(field) {
                             warn!(
                                 r#"Ignoring unknown user attribute "{}" in filter.\n\
@@ -176,26 +182,26 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                 field == "objectclass"
                     || field == "dn"
                     || field == "distinguishedname"
-                    || map_user_field(field).is_some(),
+                    || !matches!(map_user_field(field), UserFieldType::NoMatch),
             ))
         }
         LdapFilter::Substring(field, substring_filter) => {
             let field = &field.to_ascii_lowercase();
             match map_user_field(field.as_str()) {
-                Some(UserColumn::UserId) => Ok(UserRequestFilter::UserIdSubString(
-                    substring_filter.clone().into(),
-                )),
-                None
-                | Some(UserColumn::CreationDate)
-                | Some(UserColumn::Avatar)
-                | Some(UserColumn::Uuid) => Err(LdapError {
+                UserFieldType::PrimaryField(UserColumn::UserId) => Ok(
+                    UserRequestFilter::UserIdSubString(substring_filter.clone().into()),
+                ),
+                UserFieldType::NoMatch
+                | UserFieldType::Attribute(_)
+                | UserFieldType::PrimaryField(UserColumn::CreationDate)
+                | UserFieldType::PrimaryField(UserColumn::Uuid) => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
                     message: format!(
                         "Unsupported user attribute for substring filter: {:?}",
                         field
                     ),
                 }),
-                Some(field) => Ok(UserRequestFilter::SubString(
+                UserFieldType::PrimaryField(field) => Ok(UserRequestFilter::SubString(
                     field,
                     substring_filter.clone().into(),
                 )),

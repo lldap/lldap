@@ -7,6 +7,8 @@ pub enum DomainError {
     AuthenticationError(String),
     #[error("Database error: `{0}`")]
     DatabaseError(#[from] sea_orm::DbErr),
+    #[error("Database transaction error: `{0}`")]
+    DatabaseTransactionError(#[from] sea_orm::TransactionError<sea_orm::DbErr>),
     #[error("Authentication protocol error for `{0}`")]
     AuthenticationProtocolError(#[from] lldap_auth::opaque::AuthenticationError),
     #[error("Unknown crypto error: `{0}`")]
@@ -19,6 +21,15 @@ pub enum DomainError {
     EntityNotFound(String),
     #[error("Internal error: `{0}`")]
     InternalError(String),
+}
+
+impl From<sea_orm::TransactionError<DomainError>> for DomainError {
+    fn from(value: sea_orm::TransactionError<DomainError>) -> Self {
+        match value {
+            sea_orm::TransactionError::Connection(e) => e.into(),
+            sea_orm::TransactionError::Transaction(e) => e,
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, DomainError>;

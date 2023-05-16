@@ -1,7 +1,7 @@
 use crate::{
     domain::{
         handler::BackendHandler,
-        ldap::utils::map_user_field,
+        ldap::utils::{map_user_field, UserFieldType},
         types::{GroupDetails, GroupId, UserColumn, UserId},
     },
     infra::{
@@ -61,14 +61,19 @@ impl TryInto<DomainRequestFilter> for RequestFilter {
             return Err("Multiple fields specified in request filter".to_string());
         }
         if let Some(e) = self.eq {
-            if let Some(column) = map_user_field(&e.field) {
-                if column == UserColumn::UserId {
-                    return Ok(DomainRequestFilter::UserId(UserId::new(&e.value)));
+            return match map_user_field(&e.field.to_ascii_lowercase()) {
+                UserFieldType::NoMatch => Err(format!("Unknown request filter: {}", &e.field)),
+                UserFieldType::PrimaryField(UserColumn::UserId) => {
+                    Ok(DomainRequestFilter::UserId(UserId::new(&e.value)))
                 }
-                return Ok(DomainRequestFilter::Equality(column, e.value));
-            } else {
-                return Err(format!("Unknown request filter: {}", &e.field));
-            }
+                UserFieldType::PrimaryField(column) => {
+                    Ok(DomainRequestFilter::Equality(column, e.value))
+                }
+                UserFieldType::Attribute(column) => Ok(DomainRequestFilter::AttributeEquality(
+                    column.to_owned(),
+                    e.value,
+                )),
+            };
         }
         if let Some(c) = self.any {
             return Ok(DomainRequestFilter::Or(
@@ -461,6 +466,10 @@ mod tests {
               {eq: {
                 field: "email"
                 value: "robert@bobbers.on"
+              }},
+              {eq: {
+                field: "firstName"
+                value: "robert"
               }}
             ]}) {
             id
@@ -475,7 +484,11 @@ mod tests {
                     DomainRequestFilter::UserId(UserId::new("bob")),
                     DomainRequestFilter::Equality(
                         UserColumn::Email,
-                        "robert@bobbers.on".to_string(),
+                        "robert@bobbers.on".to_owned(),
+                    ),
+                    DomainRequestFilter::AttributeEquality(
+                        "first_name".to_owned(),
+                        "robert".to_owned(),
                     ),
                 ]))),
                 eq(false),
@@ -485,7 +498,7 @@ mod tests {
                     DomainUserAndGroups {
                         user: DomainUser {
                             user_id: UserId::new("bob"),
-                            email: "bob@bobbers.on".to_string(),
+                            email: "bob@bobbers.on".to_owned(),
                             ..Default::default()
                         },
                         groups: None,
@@ -493,7 +506,7 @@ mod tests {
                     DomainUserAndGroups {
                         user: DomainUser {
                             user_id: UserId::new("robert"),
-                            email: "robert@bobbers.on".to_string(),
+                            email: "robert@bobbers.on".to_owned(),
                             ..Default::default()
                         },
                         groups: None,

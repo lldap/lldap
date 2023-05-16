@@ -53,6 +53,7 @@ pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
                 HttpResponse::Unauthorized()
             }
             DomainError::DatabaseError(_)
+            | DomainError::DatabaseTransactionError(_)
             | DomainError::InternalError(_)
             | DomainError::UnknownCryptoError(_) => HttpResponse::InternalServerError(),
             DomainError::Base64DecodeError(_)

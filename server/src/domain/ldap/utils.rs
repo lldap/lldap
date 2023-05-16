@@ -5,7 +5,7 @@ use tracing::{debug, instrument, warn};
 use crate::domain::{
     handler::SubStringFilter,
     ldap::error::{LdapError, LdapResult},
-    types::{GroupColumn, UserColumn, UserId},
+    types::{UserColumn, UserId},
 };
 
 impl From<LdapSubstringFilter> for SubStringFilter {
@@ -152,31 +152,37 @@ pub fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) 
     true
 }
 
-pub fn map_user_field(field: &str) -> Option<UserColumn> {
-    assert!(field == field.to_ascii_lowercase());
-    Some(match field {
-        "uid" | "user_id" | "id" => UserColumn::UserId,
-        "mail" | "email" => UserColumn::Email,
-        "cn" | "displayname" | "display_name" => UserColumn::DisplayName,
-        "givenname" | "first_name" | "firstname" => UserColumn::FirstName,
-        "sn" | "last_name" | "lastname" => UserColumn::LastName,
-        "avatar" | "jpegphoto" => UserColumn::Avatar,
-        "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => {
-            UserColumn::CreationDate
-        }
-        "entryuuid" | "uuid" => UserColumn::Uuid,
-        _ => return None,
-    })
+pub enum UserFieldType {
+    NoMatch,
+    PrimaryField(UserColumn),
+    Attribute(&'static str),
 }
 
-pub fn map_group_field(field: &str) -> Option<GroupColumn> {
+pub fn map_user_field(field: &str) -> UserFieldType {
+    assert!(field == field.to_ascii_lowercase());
+    match field {
+        "uid" | "user_id" | "id" => UserFieldType::PrimaryField(UserColumn::UserId),
+        "mail" | "email" => UserFieldType::PrimaryField(UserColumn::Email),
+        "cn" | "displayname" | "display_name" => {
+            UserFieldType::PrimaryField(UserColumn::DisplayName)
+        }
+        "givenname" | "first_name" | "firstname" => UserFieldType::Attribute("first_name"),
+        "sn" | "last_name" | "lastname" => UserFieldType::Attribute("last_name"),
+        "avatar" | "jpegphoto" => UserFieldType::Attribute("avatar"),
+        "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => {
+            UserFieldType::PrimaryField(UserColumn::CreationDate)
+        }
+        "entryuuid" | "uuid" => UserFieldType::PrimaryField(UserColumn::Uuid),
+        _ => UserFieldType::NoMatch,
+    }
+}
+
+pub fn map_group_field(field: &str) -> Option<&'static str> {
     assert!(field == field.to_ascii_lowercase());
     Some(match field {
-        "cn" | "displayname" | "uid" | "display_name" => GroupColumn::DisplayName,
-        "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => {
-            GroupColumn::CreationDate
-        }
-        "entryuuid" | "uuid" => GroupColumn::Uuid,
+        "cn" | "displayname" | "uid" | "display_name" => "display_name",
+        "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => "creation_date",
+        "entryuuid" | "uuid" => "uuid",
         _ => return None,
     })
 }
