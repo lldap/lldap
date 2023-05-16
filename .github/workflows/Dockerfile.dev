@@ -1,45 +1,55 @@
 # Keep tracking base image
-FROM rust:1.66-slim-bullseye
+FROM rust:1.71-slim-bookworm
 
 # Set needed env path
-ENV PATH="/opt/aarch64-linux-musl-cross/:/opt/aarch64-linux-musl-cross/bin/:/opt/x86_64-linux-musl-cross/:/opt/x86_64-linux-musl-cross/bin/:$PATH"
+ENV PATH="/opt/armv7l-linux-musleabihf-cross/:/opt/armv7l-linux-musleabihf-cross/bin/:/opt/aarch64-linux-musl-cross/:/opt/aarch64-linux-musl-cross/bin/:/opt/x86_64-linux-musl-cross/:/opt/x86_64-linux-musl-cross/bin/:$PATH"
+
+# Set building env
+ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse \
+    CARGO_NET_GIT_FETCH_WITH_CLI=true \
+    CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER=armv7l-linux-musleabihf-gcc \
+    CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc \
+    CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=x86_64-linux-musl-gcc \
+    CC_armv7_unknown_linux_musleabihf=armv7l-linux-musleabihf-gcc \
+    CC_x86_64_unknown_linux_musl=x86_64-linux-musl-gcc \
+    CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc
 
 ### Install build deps x86_64
 RUN apt update && \
-    apt install -y --no-install-recommends curl git wget build-essential make perl pkg-config curl tar jq musl-tools gzip && \
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
-    apt update && \
-    apt install -y --no-install-recommends nodejs && \
+    apt install -y --no-install-recommends curl git wget make perl pkg-config tar jq gzip && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
 ### Install build deps aarch64 build
-RUN dpkg --add-architecture arm64 && \
-    apt update && \
-    apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross gzip && \
-    apt clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    rustup target add aarch64-unknown-linux-gnu
-
+#RUN dpkg --add-architecture arm64 && \
+#    apt update && \
+#    apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross gzip && \
+#    apt clean && \
+#    rm -rf /var/lib/apt/lists/* 
+    
 ### armhf deps
-RUN dpkg --add-architecture armhf && \
-    apt update && \
-    apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross gzip && \
-    apt clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    rustup target add armv7-unknown-linux-gnueabihf
-
-### Add musl-gcc aarch64 and x86_64
+#RUN dpkg --add-architecture armhf && \
+#    apt update && \
+#    apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross gzip && \
+#    apt clean && \
+#    rm -rf /var/lib/apt/lists/* 
+    
+# Keep this just in case situation
+### Add musl-gcc aarch64, x86_64 and armv7l
 RUN wget -c https://musl.cc/x86_64-linux-musl-cross.tgz && \
     tar zxf ./x86_64-linux-musl-cross.tgz -C /opt && \
     wget -c https://musl.cc/aarch64-linux-musl-cross.tgz && \
     tar zxf ./aarch64-linux-musl-cross.tgz -C /opt && \
+    wget -c http://musl.cc/armv7l-linux-musleabihf-cross.tgz && \
+    tar zxf ./armv7l-linux-musleabihf-cross.tgz -C /opt && \
     rm ./x86_64-linux-musl-cross.tgz && \
-    rm ./aarch64-linux-musl-cross.tgz
+    rm ./aarch64-linux-musl-cross.tgz && \
+    rm ./armv7l-linux-musleabihf-cross.tgz
 
 ### Add musl target
 RUN rustup target add x86_64-unknown-linux-musl && \
-    rustup target add aarch64-unknown-linux-musl
+    rustup target add aarch64-unknown-linux-musl && \
+    rustup target add armv7-unknown-linux-musleabihf
 
 
 CMD ["bash"]
