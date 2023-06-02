@@ -37,7 +37,7 @@ search_base_dns = ["dc=example,dc=org"]
 [servers.attributes]
 member_of = "memberOf"
 email = "mail"
-name = "givenName"
+name = "displayName"
 surname = "sn"
 username = "uid"
 
