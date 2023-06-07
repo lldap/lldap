@@ -271,6 +271,7 @@ folder for help with:
 - [Jitsi Meet](example_configs/jitsi_meet.conf)
 - [KeyCloak](example_configs/keycloak.md)
 - [Matrix](example_configs/matrix_synapse.yml)
+- [Mealie](example_configs/mealie.md)
 - [Nextcloud](example_configs/nextcloud.md)
 - [Nexus](example_configs/nexus.md)
 - [Organizr](example_configs/Organizr.md)
