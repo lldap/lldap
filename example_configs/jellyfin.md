@@ -37,7 +37,7 @@ Otherwise, just use:
 ```
 ### Admin Base DN
 
-The DN to search for your admins. If your admins are also users use:
+The DN to search for your admins.
 ```
 ou=people,dc=example,dc=com
 ```
@@ -49,6 +49,7 @@ that), use:
 ```
 (memberof=cn=media_admin,ou=groups,dc=example,dc=com)
 ```
+Bear in mind that admins must also be a member of the users group if you use one.
 
 Otherwise, you can use LLDAP's admin group:
 ```
