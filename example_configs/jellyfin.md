@@ -37,9 +37,9 @@ Otherwise, just use:
 ```
 ### Admin Base DN
 
-The DN of your admin group. If you have `media_admin` as your group you would use:
+The DN to search for your admins. If your admins are also users use:
 ```
-cn=media_admin,ou=groups,dc=example,dc=com
+ou=people,dc=example,dc=com
 ```
 
 ### Admin Filter
