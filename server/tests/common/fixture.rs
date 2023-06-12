@@ -222,7 +222,7 @@ impl Drop for LLDAPFixture {
 
 pub fn new_id(prefix: Option<&str>) -> String {
     let id = Uuid::new_v4();
-    let id = format!("{}-lldap-test", id.to_simple());
+    let id = format!("{}-lldap-test", id.simple());
     match prefix {
         Some(prefix) => format!("{}{}", prefix, id),
         None => id,
