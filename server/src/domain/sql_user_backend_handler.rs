@@ -1,6 +1,9 @@
-use super::{
+use crate::domain::{
     error::{DomainError, Result},
-    handler::{CreateUserRequest, UpdateUserRequest, UserBackendHandler, UserRequestFilter},
+    handler::{
+        CreateUserRequest, UpdateUserRequest, UserBackendHandler, UserListerBackendHandler,
+        UserRequestFilter,
+    },
     model::{self, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
     types::{GroupDetails, GroupId, User, UserAndGroups, UserId, Uuid},
@@ -70,7 +73,7 @@ fn to_value(opt_name: &Option<String>) -> ActiveValue<Option<String>> {
 }
 
 #[async_trait]
-impl UserBackendHandler for SqlBackendHandler {
+impl UserListerBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, err)]
     async fn list_users(
         &self,
@@ -135,7 +138,10 @@ impl UserBackendHandler for SqlBackendHandler {
                 .collect())
         }
     }
+}
 
+#[async_trait]
+impl UserBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret)]
     async fn get_user_details(&self, user_id: &UserId) -> Result<User> {
         debug!(?user_id);

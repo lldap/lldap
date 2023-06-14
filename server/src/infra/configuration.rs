@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 pub struct MailOptions {
     #[builder(default = "false")]
     pub enable_password_reset: bool,
-    #[builder(default = "None")]
+    #[builder(default)]
     pub from: Option<Mailbox>,
     #[builder(default = "None")]
     pub reply_to: Option<Mailbox>,
@@ -25,11 +25,11 @@ pub struct MailOptions {
     pub server: String,
     #[builder(default = "587")]
     pub port: u16,
-    #[builder(default = r#""admin".to_string()"#)]
+    #[builder(default)]
     pub user: String,
     #[builder(default = r#"SecUtf8::from("")"#)]
     pub password: SecUtf8,
-    #[builder(default = "SmtpEncryption::TLS")]
+    #[builder(default = "SmtpEncryption::Tls")]
     pub smtp_encryption: SmtpEncryption,
     /// Deprecated.
     #[builder(default = "None")]
@@ -78,7 +78,7 @@ pub struct Configuration {
     pub ldap_base_dn: String,
     #[builder(default = r#"UserId::new("admin")"#)]
     pub ldap_user_dn: UserId,
-    #[builder(default = r#"String::default()"#)]
+    #[builder(default)]
     pub ldap_user_email: String,
     #[builder(default = r#"SecUtf8::from("password")"#)]
     pub ldap_user_pass: SecUtf8,
@@ -92,6 +92,10 @@ pub struct Configuration {
     pub verbose: bool,
     #[builder(default = r#"String::from("server_key")"#)]
     pub key_file: String,
+    // We want an Option to see whether there is a value or not, since the value is printed as
+    // "***SECRET***".
+    #[builder(default)]
+    pub key_seed: Option<SecUtf8>,
     #[builder(default)]
     pub smtp_options: MailOptions,
     #[builder(default)]
@@ -111,7 +115,14 @@ impl std::default::Default for Configuration {
 
 impl ConfigurationBuilder {
     pub fn build(self) -> Result<Configuration> {
-        let server_setup = get_server_setup(self.key_file.as_deref().unwrap_or("server_key"))?;
+        let server_setup = get_server_setup(
+            self.key_file.as_deref().unwrap_or("server_key"),
+            self.key_seed
+                .as_ref()
+                .and_then(|o| o.as_ref())
+                .map(SecUtf8::unsecure)
+                .unwrap_or_default(),
+        )?;
         Ok(self.server_setup(Some(server_setup)).private_build()?)
     }
 
@@ -154,10 +165,25 @@ fn write_to_readonly_file(path: &std::path::Path, buffer: &[u8]) -> Result<()> {
     Ok(file.write_all(buffer)?)
 }
 
-fn get_server_setup(file_path: &str) -> Result<ServerSetup> {
+fn get_server_setup(file_path: &str, key_seed: &str) -> Result<ServerSetup> {
     use std::fs::read;
     let path = std::path::Path::new(file_path);
-    if path.exists() {
+    if !key_seed.is_empty() {
+        if file_path != "server_key" || path.exists() {
+            eprintln!("WARNING: A key_seed was given, we will ignore the server_key and generate one from the seed!");
+        } else {
+            println!("Got a key_seed, ignoring key_file");
+        }
+        let hash = |val: &[u8]| -> [u8; 32] {
+            use sha2::{Digest, Sha256};
+            let mut seed_hasher = Sha256::new();
+            seed_hasher.update(val);
+            seed_hasher.finalize().into()
+        };
+        use rand::SeedableRng;
+        let mut rng = rand_chacha::ChaCha20Rng::from_seed(hash(key_seed.as_bytes()));
+        Ok(ServerSetup::new(&mut rng))
+    } else if path.exists() {
         let bytes = read(file_path).context(format!("Could not read key file `{}`", file_path))?;
         Ok(ServerSetup::deserialize(&bytes)?)
     } else {
@@ -198,6 +224,10 @@ impl ConfigOverrider for RunOpts {
             config.key_file = path.to_string();
         }
 
+        if let Some(seed) = self.server_key_seed.as_ref() {
+            config.key_seed = Some(SecUtf8::from(seed));
+        }
+
         if let Some(port) = self.ldap_port {
             config.ldap_port = port;
         }
@@ -208,6 +238,10 @@ impl ConfigOverrider for RunOpts {
 
         if let Some(url) = self.http_url.as_ref() {
             config.http_url = url.to_string();
+        }
+
+        if let Some(database_url) = self.database_url.as_ref() {
+            config.database_url = database_url.to_string();
         }
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);
@@ -272,6 +306,9 @@ impl ConfigOverrider for SmtpOpts {
         if let Some(tls_required) = self.smtp_tls_required {
             config.smtp_options.tls_required = Some(tls_required);
         }
+        if let Some(enable_password_reset) = self.smtp_enable_password_reset {
+            config.smtp_options.enable_password_reset = enable_password_reset;
+        }
     }
 }
 
@@ -299,7 +336,14 @@ where
     if config.verbose {
         println!("Configuration: {:#?}", &config);
     }
-    config.server_setup = Some(get_server_setup(&config.key_file)?);
+    config.server_setup = Some(get_server_setup(
+        &config.key_file,
+        config
+            .key_seed
+            .as_ref()
+            .map(SecUtf8::unsecure)
+            .unwrap_or_default(),
+    )?);
     if config.jwt_secret == SecUtf8::from("secretjwtsecret") {
         println!("WARNING: Default JWT secret used! This is highly unsafe and can allow attackers to log in as admin.");
     }
@@ -310,4 +354,30 @@ where
         println!("DEPRECATED: smtp_options.tls_required field is deprecated, it never did anything. You can replace it with smtp_options.smtp_encryption.");
     }
     Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_generated_server_key() {
+        assert_eq!(
+            bincode::serialize(&get_server_setup("/doesnt/exist", "key seed").unwrap()).unwrap(),
+            [
+                255, 206, 202, 50, 247, 13, 59, 191, 69, 244, 148, 187, 150, 227, 12, 250, 20, 207,
+                211, 151, 147, 33, 107, 132, 2, 252, 121, 94, 97, 6, 97, 232, 163, 168, 86, 246,
+                249, 186, 31, 204, 59, 75, 65, 134, 108, 159, 15, 70, 246, 250, 150, 195, 54, 197,
+                195, 176, 150, 200, 157, 119, 13, 173, 119, 8, 32, 0, 0, 0, 0, 0, 0, 0, 248, 123,
+                35, 91, 194, 51, 52, 57, 191, 210, 68, 227, 107, 166, 232, 37, 195, 244, 100, 84,
+                88, 212, 190, 12, 195, 57, 83, 72, 127, 189, 179, 16, 32, 0, 0, 0, 0, 0, 0, 0, 128,
+                112, 60, 207, 205, 69, 67, 73, 24, 175, 187, 62, 16, 45, 59, 136, 78, 40, 187, 54,
+                159, 94, 116, 33, 133, 119, 231, 43, 199, 164, 141, 7, 32, 0, 0, 0, 0, 0, 0, 0,
+                212, 134, 53, 203, 131, 24, 138, 211, 162, 28, 23, 233, 251, 82, 34, 66, 98, 12,
+                249, 205, 35, 208, 241, 50, 128, 131, 46, 189, 211, 51, 56, 109, 32, 0, 0, 0, 0, 0,
+                0, 0, 84, 20, 147, 25, 50, 5, 243, 203, 216, 180, 175, 121, 159, 96, 123, 183, 146,
+                251, 22, 44, 98, 168, 67, 224, 255, 139, 159, 25, 24, 254, 88, 3
+            ]
+        );
+    }
 }

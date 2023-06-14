@@ -2,16 +2,18 @@ use crate::domain::{
     sql_tables::{DbConnection, SchemaVersion},
     types::{GroupId, UserId, Uuid},
 };
+use anyhow::Context;
+use itertools::Itertools;
 use sea_orm::{
-    sea_query::{self, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Query, Table, Value},
-    ConnectionTrait, FromQueryResult, Iden, Statement, TransactionTrait,
+    sea_query::{
+        self, all, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, Query, Table, Value,
+    },
+    ConnectionTrait, FromQueryResult, Iden, Order, Statement, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument, warn};
 
-use super::sql_tables::LAST_SCHEMA_VERSION;
-
-#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum Users {
     Table,
     UserId,
@@ -27,7 +29,7 @@ pub enum Users {
     Uuid,
 }
 
-#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum Groups {
     Table,
     GroupId,
@@ -36,7 +38,7 @@ pub enum Groups {
     Uuid,
 }
 
-#[derive(Iden)]
+#[derive(Iden, Clone, Copy)]
 pub enum Memberships {
     Table,
     UserId,
@@ -334,85 +336,262 @@ pub async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<(), sea_o
     Ok(())
 }
 
+async fn replace_column<I: Iden + Copy + 'static, const N: usize>(
+    pool: &DbConnection,
+    table_name: I,
+    column_name: I,
+    mut new_column: ColumnDef,
+    update_values: [Statement; N],
+) -> anyhow::Result<()> {
+    // Update the definition of a column (in a compatible way). Due to Sqlite, this is more complicated:
+    //  - rename the column to a temporary name
+    //  - create the column with the new definition
+    //  - copy the data from the temp column to the new one
+    //  - update the new one if there are changes needed
+    //  - drop the old one
+    let builder = pool.get_database_backend();
+    pool.transaction::<_, (), sea_orm::DbErr>(move |transaction| {
+        Box::pin(async move {
+            #[derive(Iden)]
+            enum TempTable {
+                TempName,
+            }
+            transaction
+                .execute(
+                    builder.build(
+                        Table::alter()
+                            .table(table_name)
+                            .rename_column(column_name, TempTable::TempName),
+                    ),
+                )
+                .await?;
+            transaction
+                .execute(
+                    builder.build(Table::alter().table(table_name).add_column(&mut new_column)),
+                )
+                .await?;
+            transaction
+                .execute(
+                    builder.build(
+                        Query::update()
+                            .table(table_name)
+                            .value(column_name, Expr::col((table_name, TempTable::TempName))),
+                    ),
+                )
+                .await?;
+            for statement in update_values {
+                transaction.execute(statement).await?;
+            }
+            transaction
+                .execute(
+                    builder.build(
+                        Table::alter()
+                            .table(table_name)
+                            .drop_column(TempTable::TempName),
+                    ),
+                )
+                .await?;
+            Ok(())
+        })
+    })
+    .await?;
+    Ok(())
+}
+
+async fn migrate_to_v2(pool: &DbConnection) -> anyhow::Result<()> {
+    let builder = pool.get_database_backend();
+    // Allow nulls in DisplayName, and change empty string to null.
+    replace_column(
+        pool,
+        Users::Table,
+        Users::DisplayName,
+        ColumnDef::new(Users::DisplayName)
+            .string_len(255)
+            .to_owned(),
+        [builder.build(
+            Query::update()
+                .table(Users::Table)
+                .value(Users::DisplayName, Option::<String>::None)
+                .cond_where(Expr::col(Users::DisplayName).eq("")),
+        )],
+    )
+    .await?;
+    Ok(())
+}
+
+async fn migrate_to_v3(pool: &DbConnection) -> anyhow::Result<()> {
+    let builder = pool.get_database_backend();
+    // Allow nulls in First and LastName. Users who created their DB in 0.4.1 have the not null constraint.
+    replace_column(
+        pool,
+        Users::Table,
+        Users::FirstName,
+        ColumnDef::new(Users::FirstName).string_len(255).to_owned(),
+        [builder.build(
+            Query::update()
+                .table(Users::Table)
+                .value(Users::FirstName, Option::<String>::None)
+                .cond_where(Expr::col(Users::FirstName).eq("")),
+        )],
+    )
+    .await?;
+    replace_column(
+        pool,
+        Users::Table,
+        Users::LastName,
+        ColumnDef::new(Users::LastName).string_len(255).to_owned(),
+        [builder.build(
+            Query::update()
+                .table(Users::Table)
+                .value(Users::LastName, Option::<String>::None)
+                .cond_where(Expr::col(Users::LastName).eq("")),
+        )],
+    )
+    .await?;
+    // Change Avatar from binary to blob(long), because for MySQL this is 64kb.
+    replace_column(
+        pool,
+        Users::Table,
+        Users::Avatar,
+        ColumnDef::new(Users::Avatar)
+            .blob(sea_query::BlobSize::Long)
+            .to_owned(),
+        [],
+    )
+    .await?;
+    Ok(())
+}
+
+async fn migrate_to_v4(pool: &DbConnection) -> anyhow::Result<()> {
+    let builder = pool.get_database_backend();
+    // Make emails and UUIDs unique.
+    if let Err(e) = pool
+        .execute(
+            builder.build(
+                Index::create()
+                    .if_not_exists()
+                    .name("unique-user-email")
+                    .table(Users::Table)
+                    .col(Users::Email)
+                    .unique(),
+            ),
+        )
+        .await
+        .context(
+            r#"while enforcing unicity on emails (2 users have the same email).
+
+See https://github.com/lldap/lldap/blob/main/docs/migration_guides/v0.5.md for details.
+
+"#,
+        )
+    {
+        warn!("Found several users with the same email:");
+        for (email, users) in &pool
+            .query_all(
+                builder.build(
+                    Query::select()
+                        .from(Users::Table)
+                        .columns([Users::Email, Users::UserId])
+                        .order_by_columns([(Users::Email, Order::Asc), (Users::UserId, Order::Asc)])
+                        .and_where(
+                            Expr::col(Users::Email).in_subquery(
+                                Query::select()
+                                    .from(Users::Table)
+                                    .column(Users::Email)
+                                    .group_by_col(Users::Email)
+                                    .cond_having(all![Expr::gt(
+                                        Expr::expr(Func::count(Expr::col(Users::Email))),
+                                        1
+                                    )])
+                                    .take(),
+                            ),
+                        ),
+                ),
+            )
+            .await
+            .expect("Could not check duplicate users")
+            .into_iter()
+            .map(|row| {
+                (
+                    row.try_get::<UserId>("", &Users::UserId.to_string())
+                        .unwrap(),
+                    row.try_get::<String>("", &Users::Email.to_string())
+                        .unwrap(),
+                )
+            })
+            .group_by(|(_user, email)| email.to_owned())
+        {
+            warn!("Email: {email}");
+            for (user, _email) in users {
+                warn!("    User: {}", user.as_str());
+            }
+        }
+        return Err(e);
+    }
+    pool.execute(
+        builder.build(
+            Index::create()
+                .if_not_exists()
+                .name("unique-user-uuid")
+                .table(Users::Table)
+                .col(Users::Uuid)
+                .unique(),
+        ),
+    )
+    .await
+    .context("while enforcing unicity on user UUIDs (2 users have the same UUID)")?;
+    pool.execute(
+        builder.build(
+            Index::create()
+                .if_not_exists()
+                .name("unique-group-uuid")
+                .table(Groups::Table)
+                .col(Groups::Uuid)
+                .unique(),
+        ),
+    )
+    .await
+    .context("while enforcing unicity on group UUIDs (2 groups have the same UUID)")?;
+    Ok(())
+}
+
+// This is needed to make an array of async functions.
+macro_rules! to_sync {
+    ($l:ident) => {
+        |pool| -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>>>> {
+            Box::pin($l(pool))
+        }
+    };
+}
+
 pub async fn migrate_from_version(
     pool: &DbConnection,
     version: SchemaVersion,
+    last_version: SchemaVersion,
 ) -> anyhow::Result<()> {
-    match version.cmp(&LAST_SCHEMA_VERSION) {
-        std::cmp::Ordering::Less => info!(
-            "Upgrading DB schema from {} to {}",
-            version.0, LAST_SCHEMA_VERSION.0
-        ),
+    match version.cmp(&last_version) {
+        std::cmp::Ordering::Less => (),
         std::cmp::Ordering::Equal => return Ok(()),
         std::cmp::Ordering::Greater => anyhow::bail!("DB version downgrading is not supported"),
     }
-    let builder = pool.get_database_backend();
-    if version < SchemaVersion(2) {
-        // Drop the not_null constraint on display_name. Due to Sqlite, this is more complicated:
-        //  - rename the display_name column to a temporary name
-        //  - create the display_name column without the constraint
-        //  - copy the data from the temp column to the new one
-        //  - update the new one to replace empty strings with null
-        //  - drop the old one
-        pool.transaction::<_, (), sea_orm::DbErr>(|transaction| {
-            Box::pin(async move {
-                #[derive(Iden)]
-                enum TempUsers {
-                    TempDisplayName,
-                }
-                transaction
-                    .execute(
-                        builder.build(
-                            Table::alter()
-                                .table(Users::Table)
-                                .rename_column(Users::DisplayName, TempUsers::TempDisplayName),
-                        ),
-                    )
-                    .await?;
-                transaction
-                    .execute(
-                        builder.build(
-                            Table::alter()
-                                .table(Users::Table)
-                                .add_column(ColumnDef::new(Users::DisplayName).string_len(255)),
-                        ),
-                    )
-                    .await?;
-                transaction
-                    .execute(builder.build(Query::update().table(Users::Table).value(
-                        Users::DisplayName,
-                        Expr::col((Users::Table, TempUsers::TempDisplayName)),
-                    )))
-                    .await?;
-                transaction
-                    .execute(
-                        builder.build(
-                            Query::update()
-                                .table(Users::Table)
-                                .value(Users::DisplayName, Option::<String>::None)
-                                .cond_where(Expr::col(Users::DisplayName).eq("")),
-                        ),
-                    )
-                    .await?;
-                transaction
-                    .execute(
-                        builder.build(
-                            Table::alter()
-                                .table(Users::Table)
-                                .drop_column(TempUsers::TempDisplayName),
-                        ),
-                    )
-                    .await?;
-                Ok(())
-            })
-        })
-        .await?;
+    info!("Upgrading DB schema from version {}", version.0);
+    let migrations = [
+        to_sync!(migrate_to_v2),
+        to_sync!(migrate_to_v3),
+        to_sync!(migrate_to_v4),
+    ];
+    for migration in 2..=4 {
+        if version < SchemaVersion(migration) && SchemaVersion(migration) <= last_version {
+            info!("Upgrading DB schema to version {}", migration);
+            migrations[(migration - 2) as usize](pool).await?;
+        }
     }
+    let builder = pool.get_database_backend();
     pool.execute(
         builder.build(
             Query::update()
                 .table(Metadata::Table)
-                .value(Metadata::Version, Value::from(LAST_SCHEMA_VERSION)),
+                .value(Metadata::Version, Value::from(last_version)),
         ),
     )
     .await?;

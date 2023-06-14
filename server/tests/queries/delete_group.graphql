@@ -1,0 +1,5 @@
+mutation DeleteGroupQuery($groupId: Int!) {
+  deleteGroup(groupId: $groupId) {
+    ok
+  }
+}

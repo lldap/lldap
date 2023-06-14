@@ -1,51 +1,58 @@
 [package]
 authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
+categories = ["authentication", "command-line-utilities"]
+description = "Super-simple and lightweight LDAP server"
 edition = "2021"
+homepage = "https://github.com/lldap/lldap"
+keywords = ["cli", "ldap", "graphql", "server", "authentication"]
+license = "GPL-3.0-only"
 name = "lldap"
-version = "0.4.2-alpha"
+repository = "https://github.com/lldap/lldap"
+version = "0.5.0-alpha"
 
 [dependencies]
-actix = "0.12"
-actix-files = "0.6.0-beta.6"
-actix-http = "=3.0.0-beta.9"
-actix-rt = "2.2.0"
-actix-server = "=2.0.0-beta.5"
-actix-service = "2.0.0"
-actix-web = "=4.0.0-beta.8"
-actix-web-httpauth = "0.6.0-beta.2"
+actix = "0.13"
+actix-files = "0.6"
+actix-http = "3"
+actix-rt = "2"
+actix-server = "2"
+actix-service = "2"
+actix-web = "4.3"
+actix-web-httpauth = "0.8"
 anyhow = "*"
 async-trait = "0.1"
-base64 = "0.13"
+base64 = "0.21"
 bincode = "1.3"
 cron = "*"
-derive_builder = "0.10.2"
+derive_builder = "0.12"
 figment_file_provider_adapter = "0.1"
 futures = "*"
 futures-util = "*"
-hmac = "0.10"
+hmac = "0.12"
 http = "*"
-itertools = "0.10.1"
-juniper = "0.15.10"
-juniper_actix = "0.4.0"
-jwt = "0.13"
+itertools = "0.10"
+juniper = "0.15"
+jwt = "0.16"
+lber = "0.4.1"
 ldap3_proto = ">=0.3.1"
 log = "*"
-orion = "0.16"
-rustls = "0.20"
+orion = "0.17"
+rand_chacha = "0.3"
+rustls-pemfile = "1"
 serde = "*"
+serde_bytes = "0.11"
 serde_json = "1"
-sha2 = "0.9"
+sha2 = "0.10"
 thiserror = "*"
-time = "0.2"
+time = "0.3"
 tokio-rustls = "0.23"
 tokio-stream = "*"
-tokio-util = "0.7.3"
+tokio-util = "0.7"
 tracing = "*"
-tracing-actix-web = "0.4.0-beta.7"
+tracing-actix-web = "0.7"
 tracing-attributes = "^0.1.21"
 tracing-log = "*"
-rustls-pemfile = "1.0.0"
-serde_bytes = "0.11.7"
+urlencoding = "2"
 webpki-roots = "*"
 
 [dependencies.chrono]
@@ -54,7 +61,7 @@ version = "*"
 
 [dependencies.clap]
 features = ["std", "color", "suggestions", "derive", "env"]
-version = "3.1.15"
+version = "4"
 
 [dependencies.figment]
 features = ["env", "toml"]
@@ -85,7 +92,7 @@ version = "*"
 
 [dependencies.tokio]
 features = ["full"]
-version = "1.17"
+version = "1.25"
 
 [dependencies.uuid]
 features = ["v3"]
@@ -97,7 +104,7 @@ version = "^0.1.4"
 
 [dependencies.actix-tls]
 features = ["default", "rustls"]
-version = "=3.0.0-beta.5"
+version = "3"
 
 [dependencies.image]
 features = ["jpeg"]
@@ -114,5 +121,35 @@ version = "0.11"
 default-features = false
 features = ["rustls-tls-webpki-roots"]
 
+[dependencies.rustls]
+version = "0.20"
+features = ["dangerous_configuration"]
+
 [dev-dependencies]
-mockall = "0.9.1"
+assert_cmd = "2.0"
+mockall = "0.11"
+nix = "0.26.2"
+
+[dev-dependencies.graphql_client]
+features = ["graphql_query_derive", "reqwest-rustls"]
+default-features = false
+version = "0.11"
+
+[dev-dependencies.ldap3]
+version = "*"
+default-features = false
+features = ["sync", "tls-rustls"]
+
+[dev-dependencies.reqwest]
+version = "*"
+default-features = false
+features = ["json", "blocking", "rustls-tls"]
+
+[dev-dependencies.serial_test]
+version = "2.0.0"
+default-features = false
+features = ["file_locks"]
+
+[dev-dependencies.uuid]
+version = "*"
+features = ["v4"]

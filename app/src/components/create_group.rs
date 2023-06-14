@@ -3,15 +3,12 @@ use crate::{
     infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{bail, Result};
+use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
 use yew::prelude::*;
-use yew::services::ConsoleService;
 use yew_form_derive::Model;
-use yew_router::{
-    agent::{RouteAgentDispatcher, RouteRequest},
-    route::Route,
-};
+use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -24,7 +21,6 @@ pub struct CreateGroup;
 
 pub struct CreateGroupForm {
     common: CommonComponentParts<Self>,
-    route_dispatcher: RouteAgentDispatcher,
     form: yew_form::Form<CreateGroupModel>,
 }
 
@@ -41,7 +37,11 @@ pub enum Msg {
 }
 
 impl CommonComponent<CreateGroupForm> for CreateGroupForm {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
             Msg::SubmitForm => {
@@ -53,6 +53,7 @@ impl CommonComponent<CreateGroupForm> for CreateGroupForm {
                     name: model.groupname,
                 };
                 self.common.call_graphql::<CreateGroup, _>(
+                    ctx,
                     req,
                     Msg::CreateGroupResponse,
                     "Error trying to create group",
@@ -60,12 +61,11 @@ impl CommonComponent<CreateGroupForm> for CreateGroupForm {
                 Ok(true)
             }
             Msg::CreateGroupResponse(response) => {
-                ConsoleService::log(&format!(
+                log!(&format!(
                     "Created group '{}'",
                     &response?.create_group.display_name
                 ));
-                self.route_dispatcher
-                    .send(RouteRequest::ChangeRoute(Route::from(AppRoute::ListGroups)));
+                ctx.link().history().unwrap().push(AppRoute::ListGroups);
                 Ok(true)
             }
         }
@@ -80,23 +80,19 @@ impl Component for CreateGroupForm {
     type Message = Msg;
     type Properties = ();
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(_: &Context<Self>) -> Self {
         Self {
-            common: CommonComponentParts::<Self>::create(props, link),
-            route_dispatcher: RouteAgentDispatcher::new(),
+            common: CommonComponentParts::<Self>::create(),
             form: yew_form::Form::<CreateGroupModel>::new(CreateGroupModel::default()),
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = ctx.link();
         type Field = yew_form::Field<CreateGroupModel>;
         html! {
           <div class="row justify-content-center">
@@ -113,13 +109,13 @@ impl Component for CreateGroupForm {
                 </label>
                 <div class="col-8">
                   <Field
-                    form=&self.form
+                    form={&self.form}
                     field_name="groupname"
                     class="form-control"
                     class_invalid="is-invalid has-error"
                     class_valid="has-success"
                     autocomplete="groupname"
-                    oninput=self.common.callback(|_| Msg::Update) />
+                    oninput={link.callback(|_| Msg::Update)} />
                   <div class="invalid-feedback">
                     {&self.form.field_message("groupname")}
                   </div>
@@ -129,8 +125,8 @@ impl Component for CreateGroupForm {
                 <button
                   class="btn btn-primary col-auto col-form-label"
                   type="submit"
-                  disabled=self.common.is_task_running()
-                  onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})>
+                  disabled={self.common.is_task_running()}
+                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})}>
                   <i class="bi-save me-2"></i>
                   {"Submit"}
                 </button>

@@ -64,16 +64,18 @@ pub struct Props {
 }
 
 impl CommonComponent<AddUserToGroupComponent> for AddUserToGroupComponent {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
             Msg::GroupListResponse(response) => {
                 self.group_list = Some(response?.groups.into_iter().map(Into::into).collect());
-                self.common.cancel_task();
             }
-            Msg::SubmitAddGroup => return self.submit_add_group(),
+            Msg::SubmitAddGroup => return self.submit_add_group(ctx),
             Msg::AddGroupResponse(response) => {
                 response?;
-                self.common.cancel_task();
                 // Adding the user to the group succeeded, we're not in the process of adding a
                 // group anymore.
                 let group = self
@@ -82,7 +84,7 @@ impl CommonComponent<AddUserToGroupComponent> for AddUserToGroupComponent {
                     .expect("Could not get selected group")
                     .clone();
                 // Remove the group from the dropdown.
-                self.common.on_user_added_to_group.emit(group);
+                ctx.props().on_user_added_to_group.emit(group);
             }
             Msg::SelectionChanged(option_props) => {
                 let was_some = self.selected_group.is_some();
@@ -102,22 +104,24 @@ impl CommonComponent<AddUserToGroupComponent> for AddUserToGroupComponent {
 }
 
 impl AddUserToGroupComponent {
-    fn get_group_list(&mut self) {
+    fn get_group_list(&mut self, ctx: &Context<Self>) {
         self.common.call_graphql::<GetGroupList, _>(
+            ctx,
             get_group_list::Variables,
             Msg::GroupListResponse,
             "Error trying to fetch group list",
         );
     }
 
-    fn submit_add_group(&mut self) -> Result<bool> {
+    fn submit_add_group(&mut self, ctx: &Context<Self>) -> Result<bool> {
         let group_id = match &self.selected_group {
             None => return Ok(false),
             Some(group) => group.id,
         };
         self.common.call_graphql::<AddUserToGroup, _>(
+            ctx,
             add_user_to_group::Variables {
-                user: self.common.username.clone(),
+                user: ctx.props().username.clone(),
                 group: group_id,
             },
             Msg::AddGroupResponse,
@@ -126,8 +130,8 @@ impl AddUserToGroupComponent {
         Ok(true)
     }
 
-    fn get_selectable_group_list(&self, group_list: &[Group]) -> Vec<Group> {
-        let user_groups = self.common.groups.iter().collect::<HashSet<_>>();
+    fn get_selectable_group_list(&self, props: &Props, group_list: &[Group]) -> Vec<Group> {
+        let user_groups = props.groups.iter().collect::<HashSet<_>>();
         group_list
             .iter()
             .filter(|g| !user_groups.contains(g))
@@ -139,41 +143,39 @@ impl AddUserToGroupComponent {
 impl Component for AddUserToGroupComponent {
     type Message = Msg;
     type Properties = Props;
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         let mut res = Self {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             group_list: None,
             selected_group: None,
         };
-        res.get_group_list();
+        res.get_group_list(ctx);
         res
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         CommonComponentParts::<Self>::update_and_report_error(
             self,
+            ctx,
             msg,
-            self.common.on_error.clone(),
+            ctx.props().on_error.clone(),
         )
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = ctx.link();
         if let Some(group_list) = &self.group_list {
-            let to_add_group_list = self.get_selectable_group_list(group_list);
+            let to_add_group_list = self.get_selectable_group_list(ctx.props(), group_list);
             #[allow(unused_braces)]
             let make_select_option = |group: Group| {
                 html_nested! {
-                    <SelectOption value=group.id.to_string() text=group.display_name key=group.id />
+                    <SelectOption value={group.id.to_string()} text={group.display_name} key={group.id} />
                 }
             };
             html! {
             <div class="row">
               <div class="col-sm-3">
-                <Select on_selection_change=self.common.callback(Msg::SelectionChanged)>
+                <Select on_selection_change={link.callback(Msg::SelectionChanged)}>
                   {
                     to_add_group_list
                         .into_iter()
@@ -185,8 +187,8 @@ impl Component for AddUserToGroupComponent {
               <div class="col-sm-3">
                 <button
                   class="btn btn-secondary"
-                  disabled=self.selected_group.is_none() || self.common.is_task_running()
-                  onclick=self.common.callback(|_| Msg::SubmitAddGroup)>
+                  disabled={self.selected_group.is_none() || self.common.is_task_running()}
+                  onclick={link.callback(|_| Msg::SubmitAddGroup)}>
                   <i class="bi-person-plus me-2"></i>
                   {"Add to group"}
                 </button>

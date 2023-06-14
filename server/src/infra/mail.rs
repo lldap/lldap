@@ -27,11 +27,11 @@ async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOpti
                 .body(body),
         )?;
     let mut mailer = match options.smtp_encryption {
-        SmtpEncryption::NONE => {
+        SmtpEncryption::None => {
             AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&options.server)
         }
-        SmtpEncryption::TLS => AsyncSmtpTransport::<Tokio1Executor>::relay(&options.server)?,
-        SmtpEncryption::STARTTLS => {
+        SmtpEncryption::Tls => AsyncSmtpTransport::<Tokio1Executor>::relay(&options.server)?,
+        SmtpEncryption::StartTls => {
             AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&options.server)?
         }
     };

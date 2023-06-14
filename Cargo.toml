@@ -3,11 +3,21 @@ members = [
   "server",
   "auth",
   "app",
-  "migration-tool"
+  "migration-tool",
+  "set-password",
 ]
 
 default-members = ["server"]
 
+[profile.release]
+lto = true
+
+[profile.release.package.lldap_app]
+opt-level = 's'
+
 [patch.crates-io.opaque-ke]
 git = 'https://github.com/nitnelave/opaque-ke/'
 branch = 'zeroize_1.5'
+
+[patch.crates-io.lber]
+git = 'https://github.com/inejge/ldap3/'

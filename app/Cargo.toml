@@ -1,29 +1,36 @@
 [package]
-name = "lldap_app"
-version = "0.4.2-alpha"
 authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
+description = "Frontend for LLDAP"
 edition = "2021"
+homepage = "https://github.com/lldap/lldap"
+license = "GPL-3.0-only"
+name = "lldap_app"
+repository = "https://github.com/lldap/lldap"
+version = "0.5.0-alpha"
 include = ["src/**/*", "queries/**/*", "Cargo.toml", "../schema.graphql"]
 
 [dependencies]
 anyhow = "1"
 base64 = "0.13"
+gloo-console = "0.2.3"
+gloo-file = "0.2.3"
+gloo-net = "*"
 graphql_client = "0.10"
 http = "0.2"
 jwt = "0.13"
 rand = "0.8"
 serde = "1"
 serde_json = "1"
+url-escape = "0.1.1"
 validator = "=0.14"
 validator_derive = "*"
 wasm-bindgen = "0.2"
-yew = "0.18"
-yewtil = "*"
-yew-router = "0.15"
+wasm-bindgen-futures = "*"
+yew = "0.19.3"
+yew-router = "0.16"
 
 # Needed because of https://github.com/tkaitchuck/aHash/issues/95
 indexmap = "=1.6.2"
-url-escape = "0.1.1"
 
 [dependencies.web-sys]
 version = "0.3"
@@ -56,11 +63,11 @@ version = "0.24"
 
 [dependencies.yew_form]
 git = "https://github.com/jfbilodeau/yew_form"
-rev = "67050812695b7a8a90b81b0637e347fc6629daed"
+rev = "4b9fabffb63393ec7626a4477fd36de12a07fac9"
 
 [dependencies.yew_form_derive]
 git = "https://github.com/jfbilodeau/yew_form"
-rev = "67050812695b7a8a90b81b0637e347fc6629daed"
+rev = "4b9fabffb63393ec7626a4477fd36de12a07fac9"
 
 [lib]
 crate-type = ["cdylib"]

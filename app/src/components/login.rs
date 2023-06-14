@@ -1,14 +1,15 @@
 use crate::{
-    components::router::{AppRoute, NavButton},
+    components::router::{AppRoute, Link},
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
     },
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Result};
+use gloo_console::error;
 use lldap_auth::*;
 use validator_derive::Validate;
-use yew::{prelude::*, services::ConsoleService};
+use yew::prelude::*;
 use yew_form::Form;
 use yew_form_derive::Model;
 
@@ -47,7 +48,12 @@ pub enum Msg {
 }
 
 impl CommonComponent<LoginForm> for LoginForm {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
+        use anyhow::Context;
         match msg {
             Msg::Update => Ok(true),
             Msg::Submit => {
@@ -64,9 +70,9 @@ impl CommonComponent<LoginForm> for LoginForm {
                     login_start_request: message,
                 };
                 self.common
-                    .call_backend(HostService::login_start, req, move |r| {
+                    .call_backend(ctx, HostService::login_start(req), move |r| {
                         Msg::AuthenticationStartResponse((state, r))
-                    })?;
+                    });
                 Ok(true)
             }
             Msg::AuthenticationStartResponse((login_start, res)) => {
@@ -77,9 +83,8 @@ impl CommonComponent<LoginForm> for LoginForm {
                         Err(e) => {
                             // Common error, we want to print a full error to the console but only a
                             // simple one to the user.
-                            ConsoleService::error(&format!("Invalid username or password: {}", e));
+                            error!(&format!("Invalid username or password: {}", e));
                             self.common.error = Some(anyhow!("Invalid username or password"));
-                            self.common.cancel_task();
                             return Ok(true);
                         }
                         Ok(l) => l,
@@ -89,24 +94,22 @@ impl CommonComponent<LoginForm> for LoginForm {
                     credential_finalization: login_finish.message,
                 };
                 self.common.call_backend(
-                    HostService::login_finish,
-                    req,
+                    ctx,
+                    HostService::login_finish(req),
                     Msg::AuthenticationFinishResponse,
-                )?;
+                );
                 Ok(false)
             }
             Msg::AuthenticationFinishResponse(user_info) => {
-                self.common.cancel_task();
-                self.common
+                ctx.props()
                     .on_logged_in
                     .emit(user_info.context("Could not log in")?);
                 Ok(true)
             }
             Msg::AuthenticationRefreshResponse(user_info) => {
                 self.refreshing = false;
-                self.common.cancel_task();
                 if let Ok(user_info) = user_info {
-                    self.common.on_logged_in.emit(user_info);
+                    ctx.props().on_logged_in.emit(user_info);
                 }
                 Ok(true)
             }
@@ -122,33 +125,28 @@ impl Component for LoginForm {
     type Message = Msg;
     type Properties = Props;
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         let mut app = LoginForm {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             form: Form::<FormModel>::new(FormModel::default()),
             refreshing: true,
         };
-        if let Err(e) =
-            app.common
-                .call_backend(HostService::refresh, (), Msg::AuthenticationRefreshResponse)
-        {
-            ConsoleService::debug(&format!("Could not refresh auth: {}", e));
-            app.refreshing = false;
-        }
+        app.common.call_backend(
+            ctx,
+            HostService::refresh(),
+            Msg::AuthenticationRefreshResponse,
+        );
         app
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         type Field = yew_form::Field<FormModel>;
-        let password_reset_enabled = self.common.password_reset_enabled;
+        let password_reset_enabled = ctx.props().password_reset_enabled;
+        let link = &ctx.link();
         if self.refreshing {
             html! {
               <div>
@@ -169,11 +167,11 @@ impl Component for LoginForm {
                       class="form-control"
                       class_invalid="is-invalid has-error"
                       class_valid="has-success"
-                      form=&self.form
+                      form={&self.form}
                       field_name="username"
                       placeholder="Username"
                       autocomplete="username"
-                      oninput=self.common.callback(|_| Msg::Update) />
+                      oninput={link.callback(|_| Msg::Update)} />
                   </div>
                   <div class="input-group">
                     <div class="input-group-prepend">
@@ -185,7 +183,7 @@ impl Component for LoginForm {
                       class="form-control"
                       class_invalid="is-invalid has-error"
                       class_valid="has-success"
-                      form=&self.form
+                      form={&self.form}
                       field_name="password"
                       input_type="password"
                       placeholder="Password"
@@ -195,19 +193,19 @@ impl Component for LoginForm {
                     <button
                       type="submit"
                       class="btn btn-primary"
-                      disabled=self.common.is_task_running()
-                      onclick=self.common.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})>
+                      disabled={self.common.is_task_running()}
+                      onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
                       <i class="bi-box-arrow-in-right me-2"/>
                       {"Login"}
                     </button>
                     { if password_reset_enabled {
                       html! {
-                        <NavButton
+                        <Link
                           classes="btn-link btn"
-                          disabled=self.common.is_task_running()
-                          route=AppRoute::StartResetPassword>
+                          disabled={self.common.is_task_running()}
+                          to={AppRoute::StartResetPassword}>
                           {"Forgot your password?"}
-                        </NavButton>
+                        </Link>
                       }
                     } else {
                       html!{}

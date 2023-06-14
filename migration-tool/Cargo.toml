@@ -1,8 +1,12 @@
 [package]
-name = "migration-tool"
-version = "0.4.2-alpha"
-edition = "2021"
 authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
+description = "CLI migration tool to go from OpenLDAP to LLDAP"
+edition = "2021"
+homepage = "https://github.com/lldap/lldap"
+license = "GPL-3.0-only"
+name = "lldap_migration_tool"
+repository = "https://github.com/lldap/lldap"
+version = "0.4.2"
 
 [dependencies]
 anyhow = "*"

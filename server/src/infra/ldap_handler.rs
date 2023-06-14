@@ -12,7 +12,10 @@ use crate::{
         opaque_handler::OpaqueHandler,
         types::{Group, JpegPhoto, UserAndGroups, UserId},
     },
-    infra::auth_service::{Permission, ValidationResults},
+    infra::access_control::{
+        AccessControlledBackendHandler, AdminBackendHandler, UserAndGroupListerBackendHandler,
+        UserReadableBackendHandler, ValidationResults,
+    },
 };
 use anyhow::Result;
 use ldap3_proto::proto::{
@@ -175,15 +178,27 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
     })
 }
 
-pub struct LdapHandler<Backend: BackendHandler + LoginHandler + OpaqueHandler> {
+pub struct LdapHandler<Backend> {
     user_info: Option<ValidationResults>,
-    backend_handler: Backend,
+    backend_handler: AccessControlledBackendHandler<Backend>,
     ldap_info: LdapInfo,
+}
+
+impl<Backend: LoginHandler> LdapHandler<Backend> {
+    pub fn get_login_handler(&self) -> &impl LoginHandler {
+        self.backend_handler.unsafe_get_handler()
+    }
+}
+
+impl<Backend: OpaqueHandler> LdapHandler<Backend> {
+    pub fn get_opaque_handler(&self) -> &impl OpaqueHandler {
+        self.backend_handler.unsafe_get_handler()
+    }
 }
 
 impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
     pub fn new(
-        backend_handler: Backend,
+        backend_handler: AccessControlledBackendHandler<Backend>,
         mut ldap_base_dn: String,
         ignored_user_attributes: Vec<String>,
         ignored_group_attributes: Vec<String>,
@@ -206,6 +221,16 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
+    #[cfg(test)]
+    pub fn new_for_tests(backend_handler: Backend, ldap_base_dn: &str) -> Self {
+        Self::new(
+            AccessControlledBackendHandler::new(backend_handler),
+            ldap_base_dn.to_string(),
+            vec![],
+            vec![],
+        )
+    }
+
     #[instrument(skip_all, level = "debug")]
     pub async fn do_bind(&mut self, request: &LdapBindRequest) -> (LdapResultCode, String) {
         debug!("DN: {}", &request.dn);
@@ -219,7 +244,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         };
         let LdapBindCred::Simple(password) = &request.cred;
         match self
-            .backend_handler
+            .get_login_handler()
             .bind(BindRequest {
                 name: user_id.clone(),
                 password: password.clone(),
@@ -227,25 +252,11 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             .await
         {
             Ok(()) => {
-                let user_groups = self.backend_handler.get_user_groups(&user_id).await;
-                let is_in_group = |name| {
-                    user_groups
-                        .as_ref()
-                        .map(|groups| groups.iter().any(|g| g.display_name == name))
-                        .unwrap_or(false)
-                };
-                self.user_info = Some(ValidationResults {
-                    user: user_id,
-                    permission: if is_in_group("lldap_admin") {
-                        Permission::Admin
-                    } else if is_in_group("lldap_password_manager") {
-                        Permission::PasswordManager
-                    } else if is_in_group("lldap_strict_readonly") {
-                        Permission::Readonly
-                    } else {
-                        Permission::Regular
-                    },
-                });
+                self.user_info = self
+                    .backend_handler
+                    .get_permissions_for_user(user_id)
+                    .await
+                    .ok();
                 debug!("Success!");
                 (LdapResultCode::Success, "".to_string())
             }
@@ -253,7 +264,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
-    async fn change_password(&mut self, user: &UserId, password: &str) -> Result<()> {
+    async fn change_password<B: OpaqueHandler>(
+        &self,
+        backend_handler: &B,
+        user: &UserId,
+        password: &str,
+    ) -> Result<()> {
         use lldap_auth::*;
         let mut rng = rand::rngs::OsRng;
         let registration_start_request =
@@ -262,7 +278,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             username: user.to_string(),
             registration_start_request: registration_start_request.message,
         };
-        let registration_start_response = self.backend_handler.registration_start(req).await?;
+        let registration_start_response = backend_handler.registration_start(req).await?;
         let registration_finish = opaque::client::registration::finish_registration(
             registration_start_request.state,
             registration_start_response.registration_response,
@@ -272,7 +288,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             server_data: registration_start_response.server_data,
             registration_upload: registration_finish.message,
         };
-        self.backend_handler.registration_finish(req).await?;
+        backend_handler.registration_finish(req).await?;
         Ok(())
     }
 
@@ -294,6 +310,8 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     Ok(uid) => {
                         let user_is_admin = self
                             .backend_handler
+                            .get_readable_handler(credentials, &uid)
+                            .expect("Unexpected permission error")
                             .get_user_groups(&uid)
                             .await
                             .map_err(|e| LdapError {
@@ -313,7 +331,10 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                                     &credentials.user, &uid
                                 ),
                             })
-                        } else if let Err(e) = self.change_password(&uid, password).await {
+                        } else if let Err(e) = self
+                            .change_password(self.get_opaque_handler(), &uid, password)
+                            .await
+                        {
                             Err(LdapError {
                                 code: LdapResultCode::Other,
                                 message: format!("Error while changing the password: {:#?}", e),
@@ -351,18 +372,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
-    fn get_user_permission_filter(&self) -> LdapResult<Option<UserId>> {
-        let user_info = self.user_info.as_ref().ok_or_else(|| LdapError {
-            code: LdapResultCode::InsufficentAccessRights,
-            message: "No user currently bound".to_string(),
-        })?;
-        Ok(if user_info.is_admin_or_readonly() {
-            None
-        } else {
-            Some(user_info.user.clone())
-        })
-    }
-
     pub async fn do_search_or_dse(
         &mut self,
         request: &LdapSearchRequest,
@@ -382,22 +391,22 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     async fn do_search_internal(
-        &mut self,
+        &self,
+        backend_handler: &impl UserAndGroupListerBackendHandler,
         request: &LdapSearchRequest,
-        user_filter: &Option<&UserId>,
     ) -> LdapResult<(Option<Vec<UserAndGroups>>, Option<Vec<Group>>)> {
         let dn_parts = parse_distinguished_name(&request.base.to_ascii_lowercase())?;
         let scope = get_search_scope(&self.ldap_info.base_dn, &dn_parts);
         debug!(?request.base, ?scope);
         // Disambiguate the lifetimes.
-        fn cast<'a, T, R, B: 'a>(x: T) -> T
+        fn cast<'a, T, R>(x: T) -> T
         where
-            T: Fn(&'a mut B, &'a LdapFilter) -> R + 'a,
+            T: Fn(&'a LdapFilter) -> R + 'a,
         {
             x
         }
 
-        let get_user_list = cast(|backend_handler: &mut Backend, filter: &LdapFilter| async {
+        let get_user_list = cast(|filter: &LdapFilter| async {
             let need_groups = request
                 .attrs
                 .iter()
@@ -407,47 +416,27 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 filter,
                 need_groups,
                 &request.base,
-                user_filter,
                 backend_handler,
             )
             .await
         });
-        let get_group_list = cast(|backend_handler: &mut Backend, filter: &LdapFilter| async {
-            get_groups_list(
-                &self.ldap_info,
-                filter,
-                &request.base,
-                user_filter,
-                backend_handler,
-            )
-            .await
+        let get_group_list = cast(|filter: &LdapFilter| async {
+            get_groups_list(&self.ldap_info, filter, &request.base, backend_handler).await
         });
         Ok(match scope {
             SearchScope::Global => (
-                Some(get_user_list(&mut self.backend_handler, &request.filter).await?),
-                Some(get_group_list(&mut self.backend_handler, &request.filter).await?),
+                Some(get_user_list(&request.filter).await?),
+                Some(get_group_list(&request.filter).await?),
             ),
-            SearchScope::Users => (
-                Some(get_user_list(&mut self.backend_handler, &request.filter).await?),
-                None,
-            ),
-            SearchScope::Groups => (
-                None,
-                Some(get_group_list(&mut self.backend_handler, &request.filter).await?),
-            ),
+            SearchScope::Users => (Some(get_user_list(&request.filter).await?), None),
+            SearchScope::Groups => (None, Some(get_group_list(&request.filter).await?)),
             SearchScope::User(filter) => {
                 let filter = LdapFilter::And(vec![request.filter.clone(), filter]);
-                (
-                    Some(get_user_list(&mut self.backend_handler, &filter).await?),
-                    None,
-                )
+                (Some(get_user_list(&filter).await?), None)
             }
             SearchScope::Group(filter) => {
                 let filter = LdapFilter::And(vec![request.filter.clone(), filter]);
-                (
-                    None,
-                    Some(get_group_list(&mut self.backend_handler, &filter).await?),
-                )
+                (None, Some(get_group_list(&filter).await?))
             }
             SearchScope::Unknown => {
                 warn!(
@@ -468,10 +457,15 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     #[instrument(skip_all, level = "debug")]
-    pub async fn do_search(&mut self, request: &LdapSearchRequest) -> LdapResult<Vec<LdapOp>> {
-        let user_filter = self.get_user_permission_filter()?;
-        let user_filter = user_filter.as_ref();
-        let (users, groups) = self.do_search_internal(request, &user_filter).await?;
+    pub async fn do_search(&self, request: &LdapSearchRequest) -> LdapResult<Vec<LdapOp>> {
+        let user_info = self.user_info.as_ref().ok_or_else(|| LdapError {
+            code: LdapResultCode::InsufficentAccessRights,
+            message: "No user currently bound".to_string(),
+        })?;
+        let backend_handler = self
+            .backend_handler
+            .get_user_restricted_lister_handler(user_info);
+        let (users, groups) = self.do_search_internal(&backend_handler, request).await?;
 
         let mut results = Vec::new();
         if let Some(users) = users {
@@ -486,7 +480,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 groups,
                 &request.attrs,
                 &self.ldap_info,
-                &user_filter,
+                &backend_handler.user_filter,
             ));
         }
         if results.is_empty() || matches!(results[results.len() - 1], LdapOp::SearchResultEntry(_))
@@ -497,17 +491,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     async fn do_create_user(&self, request: LdapAddRequest) -> LdapResult<Vec<LdapOp>> {
-        if !self
+        let backend_handler = self
             .user_info
             .as_ref()
-            .map(|u| u.is_admin())
-            .unwrap_or(false)
-        {
-            return Err(LdapError {
+            .and_then(|u| self.backend_handler.get_admin_handler(u))
+            .ok_or_else(|| LdapError {
                 code: LdapResultCode::InsufficentAccessRights,
                 message: "Unauthorized write".to_string(),
-            });
-        }
+            })?;
         let user_id = get_user_id_from_distinguished_name(
             &request.dn,
             &self.ldap_info.base_dn,
@@ -552,7 +543,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 .map(Vec::as_slice)
                 .map(decode_attribute_value)
         };
-        self.backend_handler
+        backend_handler
             .create_user(CreateUserRequest {
                 user_id,
                 email: get_attribute("mail")
@@ -693,16 +684,22 @@ mod tests {
             async fn bind(&self, request: BindRequest) -> Result<()>;
         }
         #[async_trait]
-        impl GroupBackendHandler for TestBackendHandler {
+        impl GroupListerBackendHandler for TestBackendHandler {
             async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
+        }
+        #[async_trait]
+        impl GroupBackendHandler for TestBackendHandler {
             async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
             async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
             async fn create_group(&self, group_name: &str) -> Result<GroupId>;
             async fn delete_group(&self, group_id: GroupId) -> Result<()>;
         }
         #[async_trait]
-        impl UserBackendHandler for TestBackendHandler {
+        impl UserListerBackendHandler for TestBackendHandler {
             async fn list_users(&self, filters: Option<UserRequestFilter>, get_groups: bool) -> Result<Vec<UserAndGroups>>;
+        }
+        #[async_trait]
+        impl UserBackendHandler for TestBackendHandler {
             async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
             async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
             async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
@@ -768,8 +765,7 @@ mod tests {
                 });
                 Ok(set)
             });
-        let mut ldap_handler =
-            LdapHandler::new(mock, "dc=Example,dc=com".to_string(), vec![], vec![]);
+        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=Example,dc=com");
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=coM".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
@@ -812,8 +808,7 @@ mod tests {
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
             .return_once(|_| Ok(HashSet::new()));
-        let mut ldap_handler =
-            LdapHandler::new(mock, "dc=eXample,dc=com".to_string(), vec![], vec![]);
+        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=eXample,dc=com");
 
         let request = LdapOp::BindRequest(LdapBindRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
@@ -855,8 +850,7 @@ mod tests {
                 });
                 Ok(set)
             });
-        let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), vec![], vec![]);
+        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=example,dc=com");
 
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
@@ -955,7 +949,7 @@ mod tests {
                     dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![LdapPartialAttribute {
                         atype: "memberOf".to_string(),
-                        vals: vec![b"uid=rockstars,ou=groups,dc=example,dc=com".to_vec()]
+                        vals: vec![b"cn=rockstars,ou=groups,dc=example,dc=com".to_vec()]
                     }],
                 }),
                 make_search_success(),
@@ -997,8 +991,7 @@ mod tests {
     #[tokio::test]
     async fn test_bind_invalid_dn() {
         let mock = MockTestBackendHandler::new();
-        let mut ldap_handler =
-            LdapHandler::new(mock, "dc=example,dc=com".to_string(), vec![], vec![]);
+        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=example,dc=com");
 
         let request = LdapBindRequest {
             dn: "cn=bob,dc=example,dc=com".to_string(),

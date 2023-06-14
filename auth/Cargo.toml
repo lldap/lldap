@@ -1,8 +1,12 @@
 [package]
-name = "lldap_auth"
-version = "0.3.0-alpha.1"
 authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
+description = "Authentication protocol for LLDAP"
 edition = "2021"
+homepage = "https://github.com/lldap/lldap"
+license = "GPL-3.0-only"
+name = "lldap_auth"
+repository = "https://github.com/lldap/lldap"
+version = "0.3.0"
 
 [features]
 default = ["opaque_server", "opaque_client"]

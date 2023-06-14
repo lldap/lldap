@@ -34,7 +34,7 @@ pub enum Msg {
 }
 
 impl CommonComponent<UserTable> for UserTable {
-    fn handle_msg(&mut self, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(&mut self, _: &Context<Self>, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::ListUsersResponse(users) => {
                 self.users = Some(users?.users.into_iter().collect());
@@ -55,8 +55,9 @@ impl CommonComponent<UserTable> for UserTable {
 }
 
 impl UserTable {
-    fn get_users(&mut self, req: Option<RequestFilter>) {
+    fn get_users(&mut self, ctx: &Context<Self>, req: Option<RequestFilter>) {
         self.common.call_graphql::<ListUsersQuery, _>(
+            ctx,
             list_users_query::Variables { filters: req },
             Msg::ListUsersResponse,
             "Error trying to fetch users",
@@ -68,27 +69,23 @@ impl Component for UserTable {
     type Message = Msg;
     type Properties = ();
 
-    fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         let mut table = UserTable {
-            common: CommonComponentParts::<Self>::create(props, link),
+            common: CommonComponentParts::<Self>::create(),
             users: None,
         };
-        table.get_users(None);
+        table.get_users(ctx, None);
         table
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
-        CommonComponentParts::<Self>::update(self, msg)
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        CommonComponentParts::<Self>::update(self, ctx, msg)
     }
 
-    fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.common.change(props)
-    }
-
-    fn view(&self) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
             <div>
-              {self.view_users()}
+              {self.view_users(ctx)}
               {self.view_errors()}
             </div>
         }
@@ -96,7 +93,7 @@ impl Component for UserTable {
 }
 
 impl UserTable {
-    fn view_users(&self) -> Html {
+    fn view_users(&self, ctx: &Context<Self>) -> Html {
         let make_table = |users: &Vec<User>| {
             html! {
                 <div class="table-responsive">
@@ -113,7 +110,7 @@ impl UserTable {
                       </tr>
                     </thead>
                     <tbody>
-                      {users.iter().map(|u| self.view_user(u)).collect::<Vec<_>>()}
+                      {users.iter().map(|u| self.view_user(ctx, u)).collect::<Vec<_>>()}
                     </tbody>
                   </table>
                 </div>
@@ -125,10 +122,11 @@ impl UserTable {
         }
     }
 
-    fn view_user(&self, user: &User) -> Html {
+    fn view_user(&self, ctx: &Context<Self>, user: &User) -> Html {
+        let link = &ctx.link();
         html! {
-          <tr key=user.id.clone()>
-              <td><Link route=AppRoute::UserDetails(user.id.clone())>{&user.id}</Link></td>
+          <tr key={user.id.clone()}>
+              <td><Link to={AppRoute::UserDetails{user_id: user.id.clone()}}>{&user.id}</Link></td>
               <td>{&user.email}</td>
               <td>{&user.display_name}</td>
               <td>{&user.first_name}</td>
@@ -136,9 +134,9 @@ impl UserTable {
               <td>{&user.creation_date.naive_local().date()}</td>
               <td>
                 <DeleteUser
-                  username=user.id.clone()
-                  on_user_deleted=self.common.callback(Msg::OnUserDeleted)
-                  on_error=self.common.callback(Msg::OnError)/>
+                  username={user.id.clone()}
+                  on_user_deleted={link.callback(Msg::OnUserDeleted)}
+                  on_error={link.callback(Msg::OnError)}/>
               </td>
           </tr>
         }

@@ -3,7 +3,11 @@ use crate::{
         handler::{BackendHandler, LoginHandler},
         opaque_handler::OpaqueHandler,
     },
-    infra::{configuration::Configuration, ldap_handler::LdapHandler},
+    infra::{
+        access_control::AccessControlledBackendHandler,
+        configuration::{Configuration, LdapsOptions},
+        ldap_handler::LdapHandler,
+    },
 };
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
@@ -64,7 +68,7 @@ async fn handle_ldap_stream<Stream, Backend>(
 ) -> Result<Stream>
 where
     Backend: BackendHandler + LoginHandler + OpaqueHandler + 'static,
-    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite,
+    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + std::marker::Unpin,
 {
     use tokio_stream::StreamExt;
     let (r, w) = tokio::io::split(stream);
@@ -73,7 +77,7 @@ where
     let mut resp = FramedWrite::new(w, LdapCodec);
 
     let mut session = LdapHandler::new(
-        backend_handler,
+        AccessControlledBackendHandler::new(backend_handler),
         ldap_base_dn,
         ignored_user_attributes,
         ignored_group_attributes,
@@ -91,7 +95,7 @@ where
 }
 
 fn read_private_key(key_file: &str) -> Result<PrivateKey> {
-    use rustls_pemfile::{pkcs8_private_keys, rsa_private_keys};
+    use rustls_pemfile::{ec_private_keys, pkcs8_private_keys, rsa_private_keys};
     use std::{fs::File, io::BufReader};
     pkcs8_private_keys(&mut BufReader::new(File::open(key_file)?))
         .map_err(anyhow::Error::from)
@@ -109,29 +113,36 @@ fn read_private_key(key_file: &str) -> Result<PrivateKey> {
                         .ok_or_else(|| anyhow!("No PKCS1 key"))
                 })
         })
+        .or_else(|_| {
+            ec_private_keys(&mut BufReader::new(File::open(key_file)?))
+                .map_err(anyhow::Error::from)
+                .and_then(|keys| keys.into_iter().next().ok_or_else(|| anyhow!("No EC key")))
+        })
         .with_context(|| {
             format!(
-                "Cannot read either PKCS1 or PKCS8 private key from {}",
+                "Cannot read either PKCS1, PKCS8 or EC private key from {}",
                 key_file
             )
         })
         .map(rustls::PrivateKey)
 }
 
-fn get_tls_acceptor(config: &Configuration) -> Result<RustlsTlsAcceptor> {
-    use rustls::{Certificate, ServerConfig};
-    use rustls_pemfile::certs;
+pub fn read_certificates(
+    ldaps_options: &LdapsOptions,
+) -> Result<(Vec<rustls::Certificate>, rustls::PrivateKey)> {
     use std::{fs::File, io::BufReader};
-    // Load TLS key and cert files
-    let certs = certs(&mut BufReader::new(File::open(
-        &config.ldaps_options.cert_file,
-    )?))?
-    .into_iter()
-    .map(Certificate)
-    .collect::<Vec<_>>();
-    let private_key = read_private_key(&config.ldaps_options.key_file)?;
+    let certs = rustls_pemfile::certs(&mut BufReader::new(File::open(&ldaps_options.cert_file)?))?
+        .into_iter()
+        .map(rustls::Certificate)
+        .collect::<Vec<_>>();
+    let private_key = read_private_key(&ldaps_options.key_file)?;
+    Ok((certs, private_key))
+}
+
+fn get_tls_acceptor(ldaps_options: &LdapsOptions) -> Result<RustlsTlsAcceptor> {
+    let (certs, private_key) = read_certificates(ldaps_options)?;
     let server_config = std::sync::Arc::new(
-        ServerConfig::builder()
+        rustls::ServerConfig::builder()
             .with_safe_defaults()
             .with_no_client_auth()
             .with_single_cert(certs, private_key)?,
@@ -145,7 +156,7 @@ pub fn build_ldap_server<Backend>(
     server_builder: ServerBuilder,
 ) -> Result<ServerBuilder>
 where
-    Backend: BackendHandler + LoginHandler + OpaqueHandler + 'static,
+    Backend: BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
     let context = (
         backend_handler,
@@ -182,7 +193,8 @@ where
     if config.ldaps_options.enabled {
         let tls_context = (
             context_for_tls,
-            get_tls_acceptor(config).context("while setting up the SSL certificate")?,
+            get_tls_acceptor(&config.ldaps_options)
+                .context("while setting up the SSL certificate")?,
         );
         let tls_binder = move || {
             let tls_context = tls_context.clone();

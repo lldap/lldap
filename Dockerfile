@@ -11,7 +11,7 @@ RUN set -x \
         --uid 10001 \
         app \
     # Install required packages
-    && apk add npm openssl-dev musl-dev make perl curl
+    && apk add openssl-dev musl-dev make perl curl gzip
 
 USER app
 WORKDIR /app
@@ -19,7 +19,6 @@ WORKDIR /app
 RUN set -x \
     # Install build tools
     && RUSTFLAGS=-Ctarget-feature=-crt-static cargo install wasm-pack cargo-chef \
-    && npm install rollup \
     && rustup target add wasm32-unknown-unknown
 
 # Prepare the dependency list.
@@ -32,11 +31,12 @@ FROM chef AS builder
 COPY --from=planner /tmp/recipe.json recipe.json
 RUN cargo chef cook --release -p lldap_app --target wasm32-unknown-unknown \
     && cargo chef cook --release -p lldap \
-    && cargo chef cook --release -p migration-tool
+    && cargo chef cook --release -p lldap_migration_tool \
+    && cargo chef cook --release -p lldap_set_password
 
 # Copy the source and build the app and server.
 COPY --chown=app:app . .
-RUN cargo build --release -p lldap -p migration-tool \
+RUN cargo build --release -p lldap -p lldap_migration_tool -p lldap_set_password \
     # Build the frontend.
     && ./app/build.sh
 
@@ -78,7 +78,7 @@ WORKDIR /app
 COPY --from=builder /app/app/index_local.html app/index.html
 COPY --from=builder /app/app/static app/static
 COPY --from=builder /app/app/pkg app/pkg
-COPY --from=builder /app/target/release/lldap /app/target/release/migration-tool ./
+COPY --from=builder /app/target/release/lldap /app/target/release/lldap_migration_tool /app/target/release/lldap_set_password ./
 COPY docker-entrypoint.sh lldap_config.docker_template.toml ./
 
 RUN set -x \

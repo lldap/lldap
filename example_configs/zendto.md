@@ -13,6 +13,6 @@ You setup https://zend.to/ for using LDAP by editing `/opt/zendto/config/prefere
   'authLDAPUsernameAttr'  => 'uid',
   'authLDAPEmailAttr'     => 'mail',
   'authLDAPMemberKey'     => 'memberOf',
-  'authLDAPMemberRole'    => 'uid=zendto,ou=groups,dc=example,dc=com',
+  'authLDAPMemberRole'    => 'cn=zendto,ou=groups,dc=example,dc=com',
 ```
 Every user of the group `zendto` is allowed to login.

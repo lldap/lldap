@@ -37,9 +37,9 @@ Otherwise, just use:
 ```
 ### Admin Base DN
 
-The DN of your admin group. If you have `media_admin` as your group you would use:
+The DN to search for your admins.
 ```
-cn=media_admin,ou=groups,dc=example,dc=com
+ou=people,dc=example,dc=com
 ```
 
 ### Admin Filter
@@ -49,6 +49,7 @@ that), use:
 ```
 (memberof=cn=media_admin,ou=groups,dc=example,dc=com)
 ```
+Bear in mind that admins must also be a member of the users group if you use one.
 
 Otherwise, you can use LLDAP's admin group:
 ```

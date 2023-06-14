@@ -7,7 +7,10 @@ use std::time::Duration;
 
 use crate::{
     domain::{
-        handler::{CreateUserRequest, GroupBackendHandler, GroupRequestFilter, UserBackendHandler},
+        handler::{
+            CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+            UserBackendHandler,
+        },
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
     },
@@ -186,6 +189,38 @@ fn run_healthcheck(opts: RunOpts) -> Result<()> {
     std::process::exit(i32::from(failure))
 }
 
+async fn create_schema(database_url: String) -> Result<()> {
+    let sql_pool = {
+        let mut sql_opt = sea_orm::ConnectOptions::new(database_url.clone());
+        sql_opt
+            .max_connections(1)
+            .sqlx_logging(true)
+            .sqlx_logging_level(log::LevelFilter::Debug);
+        Database::connect(sql_opt).await?
+    };
+    domain::sql_tables::init_table(&sql_pool)
+        .await
+        .context("while creating base tables")?;
+    infra::jwt_sql_tables::init_table(&sql_pool)
+        .await
+        .context("while creating jwt tables")?;
+    Ok(())
+}
+
+fn create_schema_command(opts: RunOpts) -> Result<()> {
+    debug!("CLI: {:#?}", &opts);
+    let config = infra::configuration::init(opts)?;
+    infra::logging::init(&config)?;
+    let database_url = config.database_url;
+
+    actix::run(
+        create_schema(database_url).unwrap_or_else(|e| error!("Could not create schema: {:#}", e)),
+    )?;
+
+    info!("Schema created successfully.");
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli_opts = infra::cli::init();
     match cli_opts.command {
@@ -193,5 +228,6 @@ fn main() -> Result<()> {
         Command::Run(opts) => run_server_command(opts),
         Command::HealthCheck(opts) => run_healthcheck(opts),
         Command::SendTestEmail(opts) => send_test_email_command(opts),
+        Command::CreateSchema(opts) => create_schema_command(opts),
     }
 }
