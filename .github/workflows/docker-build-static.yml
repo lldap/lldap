@@ -186,7 +186,7 @@ jobs:
             MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 1
           options: >-
             --name mariadb
-            --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=2s --health-retries=3
+            --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
         postgresql:
            image: postgres:latest
@@ -281,7 +281,7 @@ jobs:
             MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 1
           options: >-
             --name mariadb
-            --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=2s --health-retries=3
+            --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
 
         mysql:
@@ -295,7 +295,7 @@ jobs:
             MYSQL_ALLOW_EMPTY_PASSWORD: 1
           options: >-
             --name mysql
-            --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=2s --health-retries=3
+            --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
 
     steps:
