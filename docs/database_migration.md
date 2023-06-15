@@ -20,7 +20,7 @@ LLDAP has a command that will connect to a target database and initialize the
 schema. If running with docker, run the following command to use your active
 instance (this has the benefit of ensuring your container has access):
 
-```
+```sh
 docker exec -it <LLDAP container name> /app/lldap create_schema -d <Target database url>
 ```
 
@@ -34,7 +34,7 @@ databases (SQLite in this example) will give an error if LLDAP is in the middle 
 statements. There are various ways to do this, but a simple enough way is filtering a
 whole database dump. This repo contains [a script](/scripts/sqlite_dump_commands.sh) to generate SQLite commands for creating an appropriate dump:
 
-```
+```sh
 ./sqlite_dump_commands.sh | sqlite3 /path/to/lldap/config/users.db > /path/to/dump.sql
 ```
 
@@ -49,8 +49,9 @@ a transaction in case one of the statements fail.
 PostgreSQL uses a different hex string format. The command below should switch SQLite
 format to PostgreSQL format, and wrap it all in a transaction:
 
-```
+```sh
 sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" \
+-e ":a; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),1([^']*\);)$/\1,true\2/; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),0([^']*\);)$/\1,false\2/; ta" \
 -e '1s/^/BEGIN;\n/' \
 -e '$aCOMMIT;' /path/to/dump.sql
 ```
@@ -58,11 +59,11 @@ sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" \
 ### To MySQL
 
 MySQL mostly cooperates, but it gets some errors if you don't escape the `groups` table. It also uses
-backticks to escape table name instead of quotes.  Run the
+backticks to escape table name instead of quotes. Run the
 following command to wrap all table names in backticks for good measure, and wrap the inserts in
 a transaction:
 
-```
+```sh
 sed -i -r -e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' \
 -e '1s/^/START TRANSACTION;\n/' \
 -e '$aCOMMIT;' \
@@ -74,7 +75,7 @@ sed -i -r -e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' \
 While MariaDB is supposed to be identical to MySQL, it doesn't support timezone offsets on DATETIME
 strings. Use the following command to remove those and perform the additional MySQL sanitization:
 
-```
+```sh
 sed -i -r -e "s/([^']'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9})\+00:00'([^'])/\1'\2/g" \
 -e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' \
 -e '1s/^/START TRANSACTION;\n/' \
