@@ -299,6 +299,11 @@ jobs:
 
 
     steps:
+       - name: Checkout scripts
+         uses: actions/checkout@v3.5.3
+         with:
+           sparse-checkout: 'scripts'
+
        - name: Download LLDAP artifacts
          uses: actions/download-artifact@v3
          with:
@@ -347,9 +352,7 @@ jobs:
 
        - name: Export and Converting to Postgress
          run: |
-              curl -L https://raw.githubusercontent.com/lldap/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
-              chmod +x ./helper.sh
-              ./helper.sh | sqlite3 ./users.db > ./dump.sql
+              bash ./scripts/sqlite_dump_commands.sh | sqlite3 ./users.db > ./dump.sql
               sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" -e ":a; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),1([^']*\);)$/\1,true\2/; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),0([^']*\);)$/\1,false\2/; ta" -e '1s/^/BEGIN;\n/' -e '$aCOMMIT;' ./dump.sql
 
        - name: Create schema on postgres
@@ -359,14 +362,13 @@ jobs:
        - name: Copy converted db to postgress and import
          run: |
               docker cp ./dump.sql postgresql:/tmp/dump.sql
-              docker exec postgresql bash -c "psql -U lldapuser -d lldap < /tmp/dump.sql"
+              docker exec postgresql bash -c "psql -U lldapuser -d lldap < /tmp/dump.sql" | tee import.log
               rm ./dump.sql
+              ! grep ERROR import.log > /dev/null
 
        - name: Export and Converting to mariadb
          run: |
-              curl -L https://raw.githubusercontent.com/lldap/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
-              chmod +x ./helper.sh
-              ./helper.sh | sqlite3 ./users.db > ./dump.sql
+              bash ./scripts/sqlite_dump_commands.sh | sqlite3 ./users.db > ./dump.sql
               cp ./dump.sql ./dump-no-sed.sql
               sed -i -r -e "s/([^']'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9})\+00:00'([^'])/\1'\2/g" \-e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' -e '1s/^/START TRANSACTION;\n/' -e '$aCOMMIT;' ./dump.sql
               sed  -i '1 i\SET FOREIGN_KEY_CHECKS = 0;' ./dump.sql
@@ -377,14 +379,13 @@ jobs:
        - name: Copy converted db to mariadb and import
          run: |
               docker cp ./dump.sql mariadb:/tmp/dump.sql
-              docker exec mariadb bash -c "mariadb -ulldapuser -plldappass -f lldap < /tmp/dump.sql"
+              docker exec mariadb bash -c "mariadb -ulldapuser -plldappass -f lldap < /tmp/dump.sql" | tee import.log
               rm ./dump.sql
+              ! grep ERROR import.log > /dev/null
 
        - name: Export and Converting to mysql
          run: |
-              curl -L https://raw.githubusercontent.com/lldap/lldap/main/scripts/sqlite_dump_commands.sh -o helper.sh
-              chmod +x ./helper.sh
-              ./helper.sh | sqlite3 ./users.db > ./dump.sql
+              bash ./scripts/sqlite_dump_commands.sh | sqlite3 ./users.db > ./dump.sql
               sed -i -r -e 's/^INSERT INTO "?([a-zA-Z0-9_]+)"?/INSERT INTO `\1`/' -e '1s/^/START TRANSACTION;\n/' -e '$aCOMMIT;' ./dump.sql
               sed  -i '1 i\SET FOREIGN_KEY_CHECKS = 0;' ./dump.sql
 
@@ -394,8 +395,9 @@ jobs:
        - name: Copy converted db to mysql and import
          run: |
               docker cp ./dump.sql mysql:/tmp/dump.sql
-              docker exec mysql bash -c "mysql -ulldapuser -plldappass -f lldap < /tmp/dump.sql"
+              docker exec mysql bash -c "mysql -ulldapuser -plldappass -f lldap < /tmp/dump.sql" | tee import.log
               rm ./dump.sql
+              ! grep ERROR import.log > /dev/null
 
        - name: Run lldap with postgres DB and healthcheck again
          run: |
