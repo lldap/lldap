@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::types::AttributeType;
+use crate::domain::{handler::AttributeSchema, types::AttributeType};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "group_attribute_schema")]
@@ -37,3 +37,16 @@ impl Related<super::GroupAttributes> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl From<Model> for AttributeSchema {
+    fn from(value: Model) -> Self {
+        Self {
+            name: value.attribute_name,
+            attribute_type: value.attribute_type,
+            is_list: value.is_list,
+            is_visible: value.is_group_visible,
+            is_editable: value.is_group_editable,
+            is_hardcoded: value.is_hardcoded,
+        }
+    }
+}
