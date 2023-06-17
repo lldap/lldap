@@ -709,6 +709,10 @@ mod tests {
             async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
         }
         #[async_trait]
+        impl SchemaBackendHandler for TestBackendHandler {
+            async fn get_schema(&self) -> Result<Schema>;
+        }
+        #[async_trait]
         impl BackendHandler for TestBackendHandler {}
         #[async_trait]
         impl OpaqueHandler for TestBackendHandler {

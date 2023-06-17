@@ -1,7 +1,8 @@
-use super::{
+use crate::domain::{
     error::Result,
     types::{
-        Group, GroupDetails, GroupId, JpegPhoto, User, UserAndGroups, UserColumn, UserId, Uuid,
+        AttributeType, Group, GroupDetails, GroupId, JpegPhoto, User, UserAndGroups, UserColumn,
+        UserId, Uuid,
     },
 };
 use async_trait::async_trait;
@@ -122,6 +123,23 @@ pub struct UpdateGroupRequest {
     pub display_name: Option<String>,
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub struct AttributeSchema {
+    pub name: String,
+    //TODO: pub aliases: Vec<String>,
+    pub attribute_type: AttributeType,
+    pub is_list: bool,
+    pub is_visible: bool,
+    pub is_editable: bool,
+    pub is_hardcoded: bool,
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub struct Schema {
+    pub user_attributes: Vec<AttributeSchema>,
+    pub group_attributes: Vec<AttributeSchema>,
+}
+
 #[async_trait]
 pub trait LoginHandler: Send + Sync {
     async fn bind(&self, request: BindRequest) -> Result<()>;
@@ -161,6 +179,11 @@ pub trait UserBackendHandler {
 }
 
 #[async_trait]
+pub trait SchemaBackendHandler {
+    async fn get_schema(&self) -> Result<Schema>;
+}
+
+#[async_trait]
 pub trait BackendHandler:
     Send
     + Sync
@@ -168,6 +191,7 @@ pub trait BackendHandler:
     + UserBackendHandler
     + UserListerBackendHandler
     + GroupListerBackendHandler
+    + SchemaBackendHandler
 {
 }
 
@@ -201,6 +225,10 @@ mockall::mock! {
         async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>>;
         async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
         async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
+    }
+    #[async_trait]
+    impl SchemaBackendHandler for TestBackendHandler {
+        async fn get_schema(&self) -> Result<Schema>;
     }
     #[async_trait]
     impl BackendHandler for TestBackendHandler {}
