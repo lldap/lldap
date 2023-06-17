@@ -234,7 +234,7 @@ impl Component for CreateUserForm {
                 </div>
               </div>
               <div class="form-group row mb-3">
-                <label for="display-name"
+                <label for="display_name"
                   class="form-label col-4 col-form-label">
                   {"Display name:"}
                 </label>
@@ -253,7 +253,7 @@ impl Component for CreateUserForm {
                 </div>
               </div>
               <div class="form-group row mb-3">
-                <label for="first-name"
+                <label for="first_name"
                   class="form-label col-4 col-form-label">
                   {"First name:"}
                 </label>
@@ -272,7 +272,7 @@ impl Component for CreateUserForm {
                 </div>
               </div>
               <div class="form-group row mb-3">
-                <label for="last-name"
+                <label for="last_name"
                   class="form-label col-4 col-form-label">
                   {"Last name:"}
                 </label>
