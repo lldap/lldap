@@ -17,6 +17,7 @@ async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOpti
         &to, &from, &options.user, &options.server, options.port
     );
     let email = Message::builder()
+        .message_id(Some(format!("<{}@{}>", crate::util::get_uuid(), smtp_from.split('@').collect::<Vec<&str>>()[1])))
         .from(from)
         .reply_to(reply_to)
         .to(to)
