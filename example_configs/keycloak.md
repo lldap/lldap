@@ -62,3 +62,11 @@ Once the groups are synchronized, go to "Manage > Groups" on the left. Click on
 
 Assign the role "admin" to the group. Now you can log in as the LLDAP admin to
 the KeyCloak admin console.
+
+## Fixing duplicate names or missing First Names for users
+
+Since Keycloak and LLDAP use different attributes for different parts of a user's name, you may see duplicated or missing names for users in Keycloak. To fix this, update the attribute mappings:
+
+Go back to "User Federation", edit your LDAP integration and click on the "Mappers" tab.
+
+Find or create the "first name" mapper (it should have type `user-attribute-ldap-mapper`) and ensure the "LDAP Attribute" setting is set to `givenname`. Keycloak may have defaulted to `cn` which LLDAP uses for the "Display Name" of a user.
