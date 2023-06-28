@@ -1,6 +1,8 @@
 use crate::{
     domain::{
-        handler::{BackendHandler, BindRequest, CreateUserRequest, LoginHandler},
+        handler::{
+            BackendHandler, BindRequest, CreateUserRequest, LoginHandler, SchemaBackendHandler,
+        },
         ldap::{
             error::{LdapError, LdapResult},
             group::{convert_groups_to_ldap_op, get_groups_list},
@@ -467,12 +469,17 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             .get_user_restricted_lister_handler(user_info);
         let (users, groups) = self.do_search_internal(&backend_handler, request).await?;
 
+        let schema = backend_handler.get_schema().await.map_err(|e| LdapError {
+            code: LdapResultCode::OperationsError,
+            message: format!("Unable to get schema: {:#}", e),
+        })?;
         let mut results = Vec::new();
         if let Some(users) = users {
             results.extend(convert_users_to_ldap_op(
                 users,
                 &request.attrs,
                 &self.ldap_info,
+                &schema,
             ));
         }
         if let Some(groups) = groups {
@@ -769,6 +776,7 @@ mod tests {
                 });
                 Ok(set)
             });
+        setup_default_schema(&mut mock);
         let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=Example,dc=com");
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=coM".to_string(),
@@ -797,6 +805,44 @@ mod tests {
         mock: MockTestBackendHandler,
     ) -> LdapHandler<MockTestBackendHandler> {
         setup_bound_handler_with_group(mock, "lldap_admin").await
+    }
+
+    fn setup_default_schema(mock: &mut MockTestBackendHandler) {
+        mock.expect_get_schema().returning(|| {
+            Ok(Schema {
+                user_attributes: AttributeList {
+                    attributes: vec![
+                        AttributeSchema {
+                            name: "avatar".to_owned(),
+                            attribute_type: AttributeType::JpegPhoto,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                        },
+                        AttributeSchema {
+                            name: "first_name".to_owned(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                        },
+                        AttributeSchema {
+                            name: "last_name".to_owned(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                        },
+                    ],
+                },
+                group_attributes: AttributeList {
+                    attributes: Vec::new(),
+                },
+            })
+        });
     }
 
     #[tokio::test]
@@ -1083,9 +1129,17 @@ mod tests {
                         user_id: UserId::new("bob_1"),
                         email: "bob@bobmail.bob".to_string(),
                         display_name: Some("Bôb Böbberson".to_string()),
-                        first_name: Some("Bôb".to_string()),
-                        last_name: Some("Böbberson".to_string()),
                         uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
+                        attributes: vec![
+                            AttributeValue {
+                                name: "first_name".to_owned(),
+                                value: Serialized::from("Bôb"),
+                            },
+                            AttributeValue {
+                                name: "last_name".to_owned(),
+                                value: Serialized::from("Böbberson"),
+                            },
+                        ],
                         ..Default::default()
                     },
                     groups: None,
@@ -1095,9 +1149,20 @@ mod tests {
                         user_id: UserId::new("jim"),
                         email: "jim@cricket.jim".to_string(),
                         display_name: Some("Jimminy Cricket".to_string()),
-                        first_name: Some("Jim".to_string()),
-                        last_name: Some("Cricket".to_string()),
-                        avatar: Some(JpegPhoto::for_tests()),
+                        attributes: vec![
+                            AttributeValue {
+                                name: "avatar".to_owned(),
+                                value: Serialized::from(&JpegPhoto::for_tests()),
+                            },
+                            AttributeValue {
+                                name: "first_name".to_owned(),
+                                value: Serialized::from("Jim"),
+                            },
+                            AttributeValue {
+                                name: "last_name".to_owned(),
+                                value: Serialized::from("Cricket"),
+                            },
+                        ],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                         creation_date: Utc
                             .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
@@ -1746,8 +1811,16 @@ mod tests {
                     user_id: UserId::new("bob_1"),
                     email: "bob@bobmail.bob".to_string(),
                     display_name: Some("Bôb Böbberson".to_string()),
-                    first_name: Some("Bôb".to_string()),
-                    last_name: Some("Böbberson".to_string()),
+                    attributes: vec![
+                        AttributeValue {
+                            name: "first_name".to_owned(),
+                            value: Serialized::from("Bôb"),
+                        },
+                        AttributeValue {
+                            name: "last_name".to_owned(),
+                            value: Serialized::from("Böbberson"),
+                        },
+                    ],
                     ..Default::default()
                 },
                 groups: None,
@@ -1820,8 +1893,16 @@ mod tests {
                     user_id: UserId::new("bob_1"),
                     email: "bob@bobmail.bob".to_string(),
                     display_name: Some("Bôb Böbberson".to_string()),
-                    last_name: Some("Böbberson".to_string()),
-                    avatar: Some(JpegPhoto::for_tests()),
+                    attributes: vec![
+                        AttributeValue {
+                            name: "avatar".to_owned(),
+                            value: Serialized::from(&JpegPhoto::for_tests()),
+                        },
+                        AttributeValue {
+                            name: "last_name".to_owned(),
+                            value: Serialized::from("Böbberson"),
+                        },
+                    ],
                     uuid: uuid!("b4ac75e0-2900-3e21-926c-2f732c26b3fc"),
                     ..Default::default()
                 },

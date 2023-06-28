@@ -7,12 +7,18 @@ use crate::domain::{
 use async_trait::async_trait;
 use sea_orm::{EntityTrait, QueryOrder};
 
+use super::handler::AttributeList;
+
 #[async_trait]
 impl SchemaBackendHandler for SqlBackendHandler {
     async fn get_schema(&self) -> Result<Schema> {
         Ok(Schema {
-            user_attributes: self.get_user_attributes().await?,
-            group_attributes: self.get_group_attributes().await?,
+            user_attributes: AttributeList {
+                attributes: self.get_user_attributes().await?,
+            },
+            group_attributes: AttributeList {
+                attributes: self.get_group_attributes().await?,
+            },
         })
     }
 }
@@ -42,7 +48,9 @@ impl SqlBackendHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{sql_backend_handler::tests::*, types::AttributeType};
+    use crate::domain::{
+        handler::AttributeList, sql_backend_handler::tests::*, types::AttributeType,
+    };
 
     #[tokio::test]
     async fn test_default_schema() {
@@ -50,33 +58,37 @@ mod tests {
         assert_eq!(
             fixture.handler.get_schema().await.unwrap(),
             Schema {
-                user_attributes: vec![
-                    AttributeSchema {
-                        name: "avatar".to_owned(),
-                        attribute_type: AttributeType::JpegPhoto,
-                        is_list: false,
-                        is_visible: true,
-                        is_editable: true,
-                        is_hardcoded: true,
-                    },
-                    AttributeSchema {
-                        name: "first_name".to_owned(),
-                        attribute_type: AttributeType::String,
-                        is_list: false,
-                        is_visible: true,
-                        is_editable: true,
-                        is_hardcoded: true,
-                    },
-                    AttributeSchema {
-                        name: "last_name".to_owned(),
-                        attribute_type: AttributeType::String,
-                        is_list: false,
-                        is_visible: true,
-                        is_editable: true,
-                        is_hardcoded: true,
-                    }
-                ],
-                group_attributes: Vec::new()
+                user_attributes: AttributeList {
+                    attributes: vec![
+                        AttributeSchema {
+                            name: "avatar".to_owned(),
+                            attribute_type: AttributeType::JpegPhoto,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                        },
+                        AttributeSchema {
+                            name: "first_name".to_owned(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                        },
+                        AttributeSchema {
+                            name: "last_name".to_owned(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                        }
+                    ]
+                },
+                group_attributes: AttributeList {
+                    attributes: Vec::new()
+                }
             }
         );
     }

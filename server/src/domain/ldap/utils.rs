@@ -1,11 +1,12 @@
+use chrono::{NaiveDateTime, TimeZone};
 use itertools::Itertools;
 use ldap3_proto::{proto::LdapSubstringFilter, LdapResultCode};
 use tracing::{debug, instrument, warn};
 
 use crate::domain::{
-    handler::SubStringFilter,
+    handler::{Schema, SubStringFilter},
     ldap::error::{LdapError, LdapResult},
-    types::{UserColumn, UserId},
+    types::{AttributeType, AttributeValue, JpegPhoto, UserColumn, UserId},
 };
 
 impl From<LdapSubstringFilter> for SubStringFilter {
@@ -192,4 +193,36 @@ pub struct LdapInfo {
     pub base_dn_str: String,
     pub ignored_user_attributes: Vec<String>,
     pub ignored_group_attributes: Vec<String>,
+}
+
+pub fn get_custom_attribute(
+    attributes: &[AttributeValue],
+    attribute_name: &str,
+    schema: &Schema,
+) -> Option<Vec<Vec<u8>>> {
+    schema
+        .user_attributes
+        .get_attribute_type(attribute_name)
+        .and_then(|attribute_type| {
+            attributes
+                .iter()
+                .find(|a| a.name == attribute_name)
+                .map(|attribute| match attribute_type {
+                    (AttributeType::String, false) => {
+                        vec![attribute.value.unwrap::<String>().into_bytes()]
+                    }
+                    (AttributeType::Integer, false) => todo!(),
+                    (AttributeType::JpegPhoto, false) => {
+                        vec![attribute.value.unwrap::<JpegPhoto>().into_bytes()]
+                    }
+                    (AttributeType::DateTime, false) => vec![chrono::Utc
+                        .from_utc_datetime(&attribute.value.unwrap::<NaiveDateTime>())
+                        .to_rfc3339()
+                        .into_bytes()],
+                    (AttributeType::String, true) => todo!(),
+                    (AttributeType::Integer, true) => todo!(),
+                    (AttributeType::JpegPhoto, true) => todo!(),
+                    (AttributeType::DateTime, true) => todo!(),
+                })
+        })
 }

@@ -115,11 +115,9 @@ impl From<Model> for crate::domain::types::User {
             user_id: user.user_id,
             email: user.email,
             display_name: user.display_name,
-            first_name: None,
-            last_name: None,
             creation_date: user.creation_date,
             uuid: user.uuid,
-            avatar: None,
+            attributes: Vec::new(),
         }
     }
 }

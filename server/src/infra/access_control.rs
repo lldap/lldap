@@ -6,8 +6,9 @@ use tracing::info;
 use crate::domain::{
     error::Result,
     handler::{
-        BackendHandler, CreateUserRequest, GroupListerBackendHandler, GroupRequestFilter,
-        UpdateGroupRequest, UpdateUserRequest, UserListerBackendHandler, UserRequestFilter,
+        BackendHandler, CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler,
+        GroupRequestFilter, Schema, SchemaBackendHandler, UpdateGroupRequest, UpdateUserRequest,
+        UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
     },
     types::{Group, GroupDetails, GroupId, User, UserAndGroups, UserId},
 };
@@ -72,6 +73,7 @@ impl ValidationResults {
 pub trait UserReadableBackendHandler {
     async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>>;
+    async fn get_schema(&self) -> Result<Schema>;
 }
 
 #[async_trait]
@@ -106,10 +108,13 @@ pub trait AdminBackendHandler:
 #[async_trait]
 impl<Handler: BackendHandler> UserReadableBackendHandler for Handler {
     async fn get_user_details(&self, user_id: &UserId) -> Result<User> {
-        self.get_user_details(user_id).await
+        <Handler as UserBackendHandler>::get_user_details(self, user_id).await
     }
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>> {
-        self.get_user_groups(user_id).await
+        <Handler as UserBackendHandler>::get_user_groups(self, user_id).await
+    }
+    async fn get_schema(&self) -> Result<Schema> {
+        <Handler as SchemaBackendHandler>::get_schema(self).await
     }
 }
 
@@ -120,44 +125,44 @@ impl<Handler: BackendHandler> ReadonlyBackendHandler for Handler {
         filters: Option<UserRequestFilter>,
         get_groups: bool,
     ) -> Result<Vec<UserAndGroups>> {
-        self.list_users(filters, get_groups).await
+        <Handler as UserListerBackendHandler>::list_users(self, filters, get_groups).await
     }
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
-        self.list_groups(filters).await
+        <Handler as GroupListerBackendHandler>::list_groups(self, filters).await
     }
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails> {
-        self.get_group_details(group_id).await
+        <Handler as GroupBackendHandler>::get_group_details(self, group_id).await
     }
 }
 
 #[async_trait]
 impl<Handler: BackendHandler> UserWriteableBackendHandler for Handler {
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
-        self.update_user(request).await
+        <Handler as UserBackendHandler>::update_user(self, request).await
     }
 }
 #[async_trait]
 impl<Handler: BackendHandler> AdminBackendHandler for Handler {
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
-        self.create_user(request).await
+        <Handler as UserBackendHandler>::create_user(self, request).await
     }
     async fn delete_user(&self, user_id: &UserId) -> Result<()> {
-        self.delete_user(user_id).await
+        <Handler as UserBackendHandler>::delete_user(self, user_id).await
     }
     async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
-        self.add_user_to_group(user_id, group_id).await
+        <Handler as UserBackendHandler>::add_user_to_group(self, user_id, group_id).await
     }
     async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
-        self.remove_user_from_group(user_id, group_id).await
+        <Handler as UserBackendHandler>::remove_user_from_group(self, user_id, group_id).await
     }
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()> {
-        self.update_group(request).await
+        <Handler as GroupBackendHandler>::update_group(self, request).await
     }
     async fn create_group(&self, group_name: &str) -> Result<GroupId> {
-        self.create_group(group_name).await
+        <Handler as GroupBackendHandler>::create_group(self, group_name).await
     }
     async fn delete_group(&self, group_id: GroupId) -> Result<()> {
-        self.delete_group(group_id).await
+        <Handler as GroupBackendHandler>::delete_group(self, group_id).await
     }
 }
 
@@ -260,6 +265,15 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
 pub struct UserRestrictedListerBackendHandler<'a, Handler> {
     handler: &'a Handler,
     pub user_filter: Option<UserId>,
+}
+
+#[async_trait]
+impl<'a, Handler: SchemaBackendHandler + Sync> SchemaBackendHandler
+    for UserRestrictedListerBackendHandler<'a, Handler>
+{
+    async fn get_schema(&self) -> Result<Schema> {
+        self.handler.get_schema().await
+    }
 }
 
 #[async_trait]

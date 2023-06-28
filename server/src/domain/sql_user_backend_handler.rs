@@ -6,7 +6,7 @@ use crate::domain::{
     },
     model::{self, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
-    types::{GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId, Uuid},
+    types::{AttributeValue, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId, Uuid},
 };
 use async_trait::async_trait;
 use sea_orm::{
@@ -17,7 +17,7 @@ use sea_orm::{
     QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use std::collections::HashSet;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument};
 
 fn attribute_condition(name: String, value: String) -> Cond {
     Expr::in_subquery(
@@ -149,27 +149,21 @@ impl UserListerBackendHandler for SqlBackendHandler {
         let attributes = model::UserAttributes::find()
             .filter(model::UserAttributesColumn::UserId.is_in(&user_ids))
             .order_by_asc(model::UserAttributesColumn::UserId)
+            .order_by_asc(model::UserAttributesColumn::AttributeName)
             .all(&self.sql_pool)
             .await?;
-        let mut attributes_iter = attributes.iter().peekable();
+        let mut attributes_iter = attributes.into_iter().peekable();
         for user in users.iter_mut() {
-            attributes_iter
-                .peeking_take_while(|u| u.user_id < user.user.user_id)
-                .for_each(|_| ());
+            assert!(attributes_iter
+                .peek()
+                .map(|u| u.user_id >= user.user.user_id)
+                .unwrap_or(true),
+                "Attributes are not sorted, users are not sorted, or previous user didn't consume all the attributes");
 
-            for model::user_attributes::Model {
-                user_id: _,
-                attribute_name,
-                value,
-            } in attributes_iter.take_while_ref(|u| u.user_id == user.user.user_id)
-            {
-                match attribute_name.as_str() {
-                    "first_name" => user.user.first_name = Some(value.unwrap()),
-                    "last_name" => user.user.last_name = Some(value.unwrap()),
-                    "avatar" => user.user.avatar = Some(value.unwrap()),
-                    _ => warn!("Unknown attribute name: {}", attribute_name),
-                }
-            }
+            user.user.attributes = attributes_iter
+                .take_while_ref(|u| u.user_id == user.user.user_id)
+                .map(AttributeValue::from)
+                .collect();
         }
         Ok(users)
     }
@@ -188,21 +182,10 @@ impl UserBackendHandler for SqlBackendHandler {
         );
         let attributes = model::UserAttributes::find()
             .filter(model::UserAttributesColumn::UserId.eq(user_id))
+            .order_by_asc(model::UserAttributesColumn::AttributeName)
             .all(&self.sql_pool)
             .await?;
-        for model::user_attributes::Model {
-            user_id: _,
-            attribute_name,
-            value,
-        } in attributes
-        {
-            match attribute_name.as_str() {
-                "first_name" => user.first_name = Some(value.unwrap()),
-                "last_name" => user.last_name = Some(value.unwrap()),
-                "avatar" => user.avatar = Some(value.unwrap()),
-                _ => warn!("Unknown attribute name: {}", attribute_name),
-            }
-        }
+        user.attributes = attributes.into_iter().map(AttributeValue::from).collect();
         Ok(user)
     }
 
@@ -762,9 +745,23 @@ mod tests {
             .unwrap();
         assert_eq!(user.email, "email");
         assert_eq!(user.display_name.unwrap(), "display_name");
-        assert_eq!(user.first_name.unwrap(), "first_name");
-        assert_eq!(user.last_name.unwrap(), "last_name");
-        assert_eq!(user.avatar, Some(JpegPhoto::for_tests()));
+        assert_eq!(
+            user.attributes,
+            vec![
+                AttributeValue {
+                    name: "avatar".to_owned(),
+                    value: Serialized::from(&JpegPhoto::for_tests())
+                },
+                AttributeValue {
+                    name: "first_name".to_owned(),
+                    value: Serialized::from("first_name")
+                },
+                AttributeValue {
+                    name: "last_name".to_owned(),
+                    value: Serialized::from("last_name")
+                }
+            ]
+        );
     }
 
     #[tokio::test]
@@ -789,9 +786,19 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(user.display_name.unwrap(), "display bob");
-        assert_eq!(user.first_name.unwrap(), "first bob");
-        assert_eq!(user.last_name, None);
-        assert_eq!(user.avatar, Some(JpegPhoto::for_tests()));
+        assert_eq!(
+            user.attributes,
+            vec![
+                AttributeValue {
+                    name: "avatar".to_owned(),
+                    value: Serialized::from(&JpegPhoto::for_tests())
+                },
+                AttributeValue {
+                    name: "first_name".to_owned(),
+                    value: Serialized::from("first bob")
+                }
+            ]
+        );
     }
 
     #[tokio::test]
@@ -813,7 +820,11 @@ mod tests {
             .get_user_details(&UserId::new("bob"))
             .await
             .unwrap();
-        assert_eq!(user.avatar, Some(JpegPhoto::for_tests()));
+        let avatar = AttributeValue {
+            name: "avatar".to_owned(),
+            value: Serialized::from(&JpegPhoto::for_tests()),
+        };
+        assert!(user.attributes.contains(&avatar));
         fixture
             .handler
             .update_user(UpdateUserRequest {
@@ -829,7 +840,7 @@ mod tests {
             .get_user_details(&UserId::new("bob"))
             .await
             .unwrap();
-        assert_eq!(user.avatar, None);
+        assert!(!user.attributes.contains(&avatar));
     }
 
     #[tokio::test]
@@ -856,9 +867,23 @@ mod tests {
             .unwrap();
         assert_eq!(user.email, "email");
         assert_eq!(user.display_name.unwrap(), "display_name");
-        assert_eq!(user.first_name.unwrap(), "first_name");
-        assert_eq!(user.last_name.unwrap(), "last_name");
-        assert_eq!(user.avatar, Some(JpegPhoto::for_tests()));
+        assert_eq!(
+            user.attributes,
+            vec![
+                AttributeValue {
+                    name: "avatar".to_owned(),
+                    value: Serialized::from(&JpegPhoto::for_tests())
+                },
+                AttributeValue {
+                    name: "first_name".to_owned(),
+                    value: Serialized::from("first_name")
+                },
+                AttributeValue {
+                    name: "last_name".to_owned(),
+                    value: Serialized::from("last_name")
+                }
+            ]
+        );
     }
 
     #[tokio::test]

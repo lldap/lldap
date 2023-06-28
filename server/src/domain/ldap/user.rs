@@ -5,11 +5,11 @@ use ldap3_proto::{
 use tracing::{debug, instrument, warn};
 
 use crate::domain::{
-    handler::{UserListerBackendHandler, UserRequestFilter},
+    handler::{Schema, UserListerBackendHandler, UserRequestFilter},
     ldap::{
         error::{LdapError, LdapResult},
         utils::{
-            expand_attribute_wildcards, get_group_id_from_distinguished_name,
+            expand_attribute_wildcards, get_custom_attribute, get_group_id_from_distinguished_name,
             get_user_id_from_distinguished_name, map_user_field, LdapInfo, UserFieldType,
         },
     },
@@ -22,6 +22,7 @@ pub fn get_user_attribute(
     base_dn_str: &str,
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[String],
+    schema: &Schema,
 ) -> Option<Vec<Vec<u8>>> {
     let attribute = attribute.to_ascii_lowercase();
     let attribute_values = match attribute.as_str() {
@@ -36,9 +37,13 @@ pub fn get_user_attribute(
         "uid" | "user_id" | "id" => vec![user.user_id.to_string().into_bytes()],
         "entryuuid" | "uuid" => vec![user.uuid.to_string().into_bytes()],
         "mail" | "email" => vec![user.email.clone().into_bytes()],
-        "givenname" | "first_name" | "firstname" => vec![user.first_name.clone()?.into_bytes()],
-        "sn" | "last_name" | "lastname" => vec![user.last_name.clone()?.into_bytes()],
-        "jpegphoto" | "avatar" => vec![user.avatar.clone()?.into_bytes()],
+        "givenname" | "first_name" | "firstname" => {
+            get_custom_attribute(&user.attributes, "first_name", schema)?
+        }
+        "sn" | "last_name" | "lastname" => {
+            get_custom_attribute(&user.attributes, "last_name", schema)?
+        }
+        "jpegphoto" | "avatar" => get_custom_attribute(&user.attributes, "avatar", schema)?,
         "memberof" => groups
             .into_iter()
             .flatten()
@@ -98,6 +103,7 @@ fn make_ldap_search_user_result_entry(
     attributes: &[String],
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[String],
+    schema: &Schema,
 ) -> LdapSearchResultEntry {
     let expanded_attributes = expand_user_attribute_wildcards(attributes);
     let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
@@ -106,8 +112,14 @@ fn make_ldap_search_user_result_entry(
         attributes: expanded_attributes
             .iter()
             .filter_map(|a| {
-                let values =
-                    get_user_attribute(&user, a, base_dn_str, groups, ignored_user_attributes)?;
+                let values = get_user_attribute(
+                    &user,
+                    a,
+                    base_dn_str,
+                    groups,
+                    ignored_user_attributes,
+                    schema,
+                )?;
                 Some(LdapPartialAttribute {
                     atype: a.to_string(),
                     vals: values,
@@ -242,6 +254,7 @@ pub fn convert_users_to_ldap_op<'a>(
     users: Vec<UserAndGroups>,
     attributes: &'a [String],
     ldap_info: &'a LdapInfo,
+    schema: &'a Schema,
 ) -> impl Iterator<Item = LdapOp> + 'a {
     users.into_iter().map(move |u| {
         LdapOp::SearchResultEntry(make_ldap_search_user_result_entry(
@@ -250,6 +263,7 @@ pub fn convert_users_to_ldap_op<'a>(
             attributes,
             u.groups.as_deref(),
             &ldap_info.ignored_user_attributes,
+            schema,
         ))
     })
 }
