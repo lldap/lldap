@@ -104,8 +104,41 @@ macro_rules! uuid {
     };
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Serialized(Vec<u8>);
+
+const SERIALIZED_I64_LEN: usize = 8;
+
+impl std::fmt::Debug for Serialized {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Serialized")
+            .field(
+                &self
+                    .convert_to()
+                    .and_then(|s| {
+                        String::from_utf8(s)
+                            .map_err(|_| Box::new(bincode::ErrorKind::InvalidCharEncoding))
+                    })
+                    .or_else(|e| {
+                        if self.0.len() == SERIALIZED_I64_LEN {
+                            self.convert_to::<i64>()
+                                .map(|i| i.to_string())
+                                .map_err(|_| Box::new(bincode::ErrorKind::InvalidCharEncoding))
+                        } else {
+                            Err(e)
+                        }
+                    })
+                    .unwrap_or_else(|_| {
+                        format!("hash: {:#016X}", {
+                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                            std::hash::Hash::hash(&self.0, &mut hasher);
+                            std::hash::Hasher::finish(&hasher)
+                        })
+                    }),
+            )
+            .finish()
+    }
+}
 
 impl<'a, T: Serialize + ?Sized> From<&'a T> for Serialized {
     fn from(t: &'a T) -> Self {
@@ -114,12 +147,16 @@ impl<'a, T: Serialize + ?Sized> From<&'a T> for Serialized {
 }
 
 impl Serialized {
+    fn convert_to<'a, T: Deserialize<'a>>(&'a self) -> bincode::Result<T> {
+        bincode::deserialize(&self.0)
+    }
+
     pub fn unwrap<'a, T: Deserialize<'a>>(&'a self) -> T {
-        bincode::deserialize(&self.0).unwrap()
+        self.convert_to().unwrap()
     }
 
     pub fn expect<'a, T: Deserialize<'a>>(&'a self, message: &str) -> T {
-        bincode::deserialize(&self.0).expect(message)
+        self.convert_to().expect(message)
     }
 }
 
@@ -379,15 +416,19 @@ impl IntoActiveValue<Serialized> for JpegPhoto {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
+pub struct AttributeValue {
+    pub name: String,
+    pub value: Serialized,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub user_id: UserId,
     pub email: String,
     pub display_name: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub avatar: Option<JpegPhoto>,
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
+    pub attributes: Vec<AttributeValue>,
 }
 
 #[cfg(test)]
@@ -398,11 +439,9 @@ impl Default for User {
             user_id: UserId::default(),
             email: String::new(),
             display_name: None,
-            first_name: None,
-            last_name: None,
-            avatar: None,
             creation_date: epoch,
             uuid: Uuid::from_name_and_date("", &epoch),
+            attributes: Vec::new(),
         }
     }
 }
@@ -512,4 +551,39 @@ pub struct GroupDetails {
 pub struct UserAndGroups {
     pub user: User,
     pub groups: Option<Vec<GroupDetails>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_serialized_debug_string() {
+        assert_eq!(
+            &format!("{:?}", Serialized::from("abcd")),
+            "Serialized(\"abcd\")"
+        );
+        assert_eq!(
+            &format!("{:?}", Serialized::from(&1234i64)),
+            "Serialized(\"1234\")"
+        );
+        assert_eq!(
+            &format!("{:?}", Serialized::from(&JpegPhoto::for_tests())),
+            "Serialized(\"hash: 0xB947C77A16F3C3BD\")"
+        );
+    }
+
+    #[test]
+    fn test_serialized_i64_len() {
+        assert_eq!(SERIALIZED_I64_LEN, Serialized::from(&0i64).0.len());
+        assert_eq!(
+            SERIALIZED_I64_LEN,
+            Serialized::from(&i64::max_value()).0.len()
+        );
+        assert_eq!(
+            SERIALIZED_I64_LEN,
+            Serialized::from(&i64::min_value()).0.len()
+        );
+        assert_eq!(SERIALIZED_I64_LEN, Serialized::from(&-1000i64).0.len());
+    }
 }

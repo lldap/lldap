@@ -2,7 +2,7 @@ use crate::{
     domain::{
         handler::BackendHandler,
         ldap::utils::{map_user_field, UserFieldType},
-        types::{GroupDetails, GroupId, UserColumn, UserId},
+        types::{GroupDetails, GroupId, JpegPhoto, UserColumn, UserId},
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
@@ -236,15 +236,29 @@ impl<Handler: BackendHandler> User<Handler> {
     }
 
     fn first_name(&self) -> &str {
-        self.user.first_name.as_deref().unwrap_or("")
+        self.user
+            .attributes
+            .iter()
+            .find(|a| a.name == "first_name")
+            .map(|a| a.value.unwrap())
+            .unwrap_or("")
     }
 
     fn last_name(&self) -> &str {
-        self.user.last_name.as_deref().unwrap_or("")
+        self.user
+            .attributes
+            .iter()
+            .find(|a| a.name == "last_name")
+            .map(|a| a.value.unwrap())
+            .unwrap_or("")
     }
 
     fn avatar(&self) -> Option<String> {
-        self.user.avatar.as_ref().map(String::from)
+        self.user
+            .attributes
+            .iter()
+            .find(|a| a.name == "avatar")
+            .map(|a| String::from(&a.value.unwrap::<JpegPhoto>()))
     }
 
     fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {

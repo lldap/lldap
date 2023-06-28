@@ -135,9 +135,23 @@ pub struct AttributeSchema {
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub struct AttributeList {
+    pub attributes: Vec<AttributeSchema>,
+}
+
+impl AttributeList {
+    pub fn get_attribute_type(&self, name: &str) -> Option<(AttributeType, bool)> {
+        self.attributes
+            .iter()
+            .find(|a| a.name == name)
+            .map(|a| (a.attribute_type, a.is_list))
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct Schema {
-    pub user_attributes: Vec<AttributeSchema>,
-    pub group_attributes: Vec<AttributeSchema>,
+    pub user_attributes: AttributeList,
+    pub group_attributes: AttributeList,
 }
 
 #[async_trait]
@@ -146,12 +160,12 @@ pub trait LoginHandler: Send + Sync {
 }
 
 #[async_trait]
-pub trait GroupListerBackendHandler {
+pub trait GroupListerBackendHandler: SchemaBackendHandler {
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
 }
 
 #[async_trait]
-pub trait GroupBackendHandler {
+pub trait GroupBackendHandler: SchemaBackendHandler {
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
     async fn create_group(&self, group_name: &str) -> Result<GroupId>;
@@ -159,7 +173,7 @@ pub trait GroupBackendHandler {
 }
 
 #[async_trait]
-pub trait UserListerBackendHandler {
+pub trait UserListerBackendHandler: SchemaBackendHandler {
     async fn list_users(
         &self,
         filters: Option<UserRequestFilter>,
@@ -168,7 +182,7 @@ pub trait UserListerBackendHandler {
 }
 
 #[async_trait]
-pub trait UserBackendHandler {
+pub trait UserBackendHandler: SchemaBackendHandler {
     async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
