@@ -200,6 +200,12 @@ pub fn get_custom_attribute(
     attribute_name: &str,
     schema: &Schema,
 ) -> Option<Vec<Vec<u8>>> {
+    let convert_date = |date| {
+        chrono::Utc
+            .from_utc_datetime(&date)
+            .to_rfc3339()
+            .into_bytes()
+    };
     schema
         .user_attributes
         .get_attribute_type(attribute_name)
@@ -211,18 +217,41 @@ pub fn get_custom_attribute(
                     (AttributeType::String, false) => {
                         vec![attribute.value.unwrap::<String>().into_bytes()]
                     }
-                    (AttributeType::Integer, false) => todo!(),
+                    (AttributeType::Integer, false) => {
+                        // LDAP integers are encoded as strings.
+                        vec![attribute.value.unwrap::<i64>().to_string().into_bytes()]
+                    }
                     (AttributeType::JpegPhoto, false) => {
                         vec![attribute.value.unwrap::<JpegPhoto>().into_bytes()]
                     }
-                    (AttributeType::DateTime, false) => vec![chrono::Utc
-                        .from_utc_datetime(&attribute.value.unwrap::<NaiveDateTime>())
-                        .to_rfc3339()
-                        .into_bytes()],
-                    (AttributeType::String, true) => todo!(),
-                    (AttributeType::Integer, true) => todo!(),
-                    (AttributeType::JpegPhoto, true) => todo!(),
-                    (AttributeType::DateTime, true) => todo!(),
+                    (AttributeType::DateTime, false) => {
+                        vec![convert_date(attribute.value.unwrap::<NaiveDateTime>())]
+                    }
+                    (AttributeType::String, true) => attribute
+                        .value
+                        .unwrap::<Vec<String>>()
+                        .into_iter()
+                        .map(String::into_bytes)
+                        .collect(),
+                    (AttributeType::Integer, true) => attribute
+                        .value
+                        .unwrap::<Vec<i64>>()
+                        .into_iter()
+                        .map(|i| i.to_string())
+                        .map(String::into_bytes)
+                        .collect(),
+                    (AttributeType::JpegPhoto, true) => attribute
+                        .value
+                        .unwrap::<Vec<JpegPhoto>>()
+                        .into_iter()
+                        .map(JpegPhoto::into_bytes)
+                        .collect(),
+                    (AttributeType::DateTime, true) => attribute
+                        .value
+                        .unwrap::<Vec<NaiveDateTime>>()
+                        .into_iter()
+                        .map(convert_date)
+                        .collect(),
                 })
         })
 }
