@@ -285,6 +285,7 @@ folder for help with:
 - [Rancher](example_configs/rancher.md)
 - [Seafile](example_configs/seafile.md)
 - [Shaarli](example_configs/shaarli.md)
+- [Squid](example_configs/squid.me)
 - [Syncthing](example_configs/syncthing.md)
 - [Vaultwarden](example_configs/vaultwarden.md)
 - [WeKan](example_configs/wekan.md)
