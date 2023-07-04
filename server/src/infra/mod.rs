@@ -10,6 +10,10 @@ pub mod ldap_handler;
 pub mod ldap_server;
 pub mod logging;
 pub mod mail;
+pub mod schema;
 pub mod sql_backend_handler;
 pub mod tcp_backend_handler;
 pub mod tcp_server;
+
+#[cfg(test)]
+pub mod test_utils;

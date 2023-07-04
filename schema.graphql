@@ -39,6 +39,11 @@ input RequestFilter {
 "DateTime"
 scalar DateTimeUtc
 
+type Schema {
+  userSchema: AttributeList!
+  groupSchema: AttributeList!
+}
+
 "The fields that can be updated for a group."
 input UpdateGroupInput {
   id: Int!
@@ -51,6 +56,7 @@ type Query {
   users(filters: RequestFilter): [User!]!
   groups: [Group!]!
   group(groupId: Int!): Group!
+  schema: Schema!
 }
 
 "The details required to create a user."
@@ -74,6 +80,19 @@ type User {
   uuid: String!
   "The groups to which this user belongs."
   groups: [Group!]!
+}
+
+type AttributeList {
+  attributes: [AttributeSchema!]!
+}
+
+type AttributeSchema {
+  name: String!
+  attributeType: String!
+  isList: Boolean!
+  isVisible: Boolean!
+  isEditable: Boolean!
+  isHardcoded: Boolean!
 }
 
 type Success {
