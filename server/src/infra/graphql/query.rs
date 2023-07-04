@@ -1,12 +1,13 @@
 use crate::{
     domain::{
-        handler::BackendHandler,
+        handler::{BackendHandler, SchemaBackendHandler},
         ldap::utils::{map_user_field, UserFieldType},
         types::{GroupDetails, GroupId, JpegPhoto, UserColumn, UserId},
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
         graphql::api::field_error_callback,
+        schema::PublicSchema,
     },
 };
 use chrono::TimeZone;
@@ -18,6 +19,9 @@ type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
 type DomainUser = crate::domain::types::User;
 type DomainGroup = crate::domain::types::Group;
 type DomainUserAndGroups = crate::domain::types::UserAndGroups;
+type DomainSchema = crate::infra::schema::PublicSchema;
+type DomainAttributeList = crate::domain::handler::AttributeList;
+type DomainAttributeSchema = crate::domain::handler::AttributeSchema;
 use super::api::Context;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
@@ -202,6 +206,19 @@ impl<Handler: BackendHandler> Query<Handler> {
             .await
             .map(Into::into)?)
     }
+
+    async fn schema(context: &Context<Handler>) -> FieldResult<Schema<Handler>> {
+        let span = debug_span!("[GraphQL query] get_schema");
+        let handler = context
+            .handler
+            .get_user_restricted_lister_handler(&context.validation_result);
+        Ok(handler
+            .get_schema()
+            .instrument(span)
+            .await
+            .map(Into::<PublicSchema>::into)
+            .map(Into::into)?)
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -378,11 +395,105 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
     }
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct AttributeSchema<Handler: BackendHandler> {
+    schema: DomainAttributeSchema,
+    _phantom: std::marker::PhantomData<Box<Handler>>,
+}
+
+#[graphql_object(context = Context<Handler>)]
+impl<Handler: BackendHandler> AttributeSchema<Handler> {
+    fn name(&self) -> String {
+        self.schema.name.clone()
+    }
+    fn attribute_type(&self) -> String {
+        let name: &'static str = self.schema.attribute_type.into();
+        name.to_owned()
+    }
+    fn is_list(&self) -> bool {
+        self.schema.is_list
+    }
+    fn is_visible(&self) -> bool {
+        self.schema.is_visible
+    }
+    fn is_editable(&self) -> bool {
+        self.schema.is_editable
+    }
+    fn is_hardcoded(&self) -> bool {
+        self.schema.is_hardcoded
+    }
+}
+
+impl<Handler: BackendHandler> From<DomainAttributeSchema> for AttributeSchema<Handler> {
+    fn from(value: DomainAttributeSchema) -> Self {
+        Self {
+            schema: value,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct AttributeList<Handler: BackendHandler> {
+    schema: DomainAttributeList,
+    _phantom: std::marker::PhantomData<Box<Handler>>,
+}
+
+#[graphql_object(context = Context<Handler>)]
+impl<Handler: BackendHandler> AttributeList<Handler> {
+    fn attributes(&self) -> Vec<AttributeSchema<Handler>> {
+        self.schema
+            .attributes
+            .clone()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+}
+
+impl<Handler: BackendHandler> From<DomainAttributeList> for AttributeList<Handler> {
+    fn from(value: DomainAttributeList) -> Self {
+        Self {
+            schema: value,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct Schema<Handler: BackendHandler> {
+    schema: DomainSchema,
+    _phantom: std::marker::PhantomData<Box<Handler>>,
+}
+
+#[graphql_object(context = Context<Handler>)]
+impl<Handler: BackendHandler> Schema<Handler> {
+    fn user_schema(&self) -> AttributeList<Handler> {
+        self.schema.get_schema().user_attributes.clone().into()
+    }
+    fn group_schema(&self) -> AttributeList<Handler> {
+        self.schema.get_schema().group_attributes.clone().into()
+    }
+}
+
+impl<Handler: BackendHandler> From<DomainSchema> for Schema<Handler> {
+    fn from(value: DomainSchema) -> Self {
+        Self {
+            schema: value,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        domain::handler::MockTestBackendHandler, infra::access_control::ValidationResults,
+        domain::{handler::AttributeList, types::AttributeType},
+        infra::{
+            access_control::{Permission, ValidationResults},
+            test_utils::{setup_default_schema, MockTestBackendHandler},
+        },
     };
     use chrono::TimeZone;
     use juniper::{
@@ -548,6 +659,221 @@ mod tests {
                         },
                     ]
                 }),
+                vec![]
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn get_schema() {
+        const QUERY: &str = r#"{
+          schema {
+            userSchema {
+                attributes {
+                    name
+                    attributeType
+                    isList
+                    isVisible
+                    isEditable
+                    isHardcoded
+                }
+            }
+            groupSchema {
+                attributes {
+                    name
+                    attributeType
+                    isList
+                    isVisible
+                    isEditable
+                    isHardcoded
+                }
+            }
+          }
+        }"#;
+
+        let mut mock = MockTestBackendHandler::new();
+
+        setup_default_schema(&mut mock);
+
+        let context =
+            Context::<MockTestBackendHandler>::new_for_tests(mock, ValidationResults::admin());
+
+        let schema = schema(Query::<MockTestBackendHandler>::new());
+        assert_eq!(
+            execute(QUERY, None, &schema, &Variables::new(), &context).await,
+            Ok((
+                graphql_value!(
+                {
+                    "schema": {
+                        "userSchema": {
+                            "attributes": [
+                                {
+                                    "name": "avatar",
+                                    "attributeType": "JpegPhoto",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": true,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "creation_date",
+                                    "attributeType": "DateTime",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "display_name",
+                                    "attributeType": "String",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": true,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "first_name",
+                                    "attributeType": "String",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": true,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "last_name",
+                                    "attributeType": "String",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": true,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "mail",
+                                    "attributeType": "String",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": true,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "user_id",
+                                    "attributeType": "String",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "uuid",
+                                    "attributeType": "String",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                            ]
+                        },
+                        "groupSchema": {
+                            "attributes": [
+                                {
+                                    "name": "creation_date",
+                                    "attributeType": "DateTime",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "display_name",
+                                    "attributeType": "String",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": true,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "group_id",
+                                    "attributeType": "Integer",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "uuid",
+                                    "attributeType": "String",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                            ]
+                        }
+                    }
+                }),
+                vec![]
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn regular_user_doesnt_see_non_visible_attributes() {
+        const QUERY: &str = r#"{
+          schema {
+            userSchema {
+                attributes {
+                    name
+                }
+            }
+          }
+        }"#;
+
+        let mut mock = MockTestBackendHandler::new();
+
+        mock.expect_get_schema().times(1).return_once(|| {
+            Ok(crate::domain::handler::Schema {
+                user_attributes: AttributeList {
+                    attributes: vec![crate::domain::handler::AttributeSchema {
+                        name: "invisible".to_owned(),
+                        attribute_type: AttributeType::JpegPhoto,
+                        is_list: false,
+                        is_visible: false,
+                        is_editable: true,
+                        is_hardcoded: true,
+                    }],
+                },
+                group_attributes: AttributeList {
+                    attributes: Vec::new(),
+                },
+            })
+        });
+
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("bob"),
+                permission: Permission::Regular,
+            },
+        );
+
+        let schema = schema(Query::<MockTestBackendHandler>::new());
+        assert_eq!(
+            execute(QUERY, None, &schema, &Variables::new(), &context).await,
+            Ok((
+                graphql_value!(
+                {
+                    "schema": {
+                        "userSchema": {
+                            "attributes": [
+                                {"name": "creation_date"},
+                                {"name": "display_name"},
+                                {"name": "mail"},
+                                {"name": "user_id"},
+                                {"name": "uuid"},
+                            ]
+                        }
+                    }
+                } ),
                 vec![]
             ))
         );

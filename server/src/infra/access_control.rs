@@ -6,9 +6,10 @@ use tracing::info;
 use crate::domain::{
     error::Result,
     handler::{
-        BackendHandler, CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler,
-        GroupRequestFilter, Schema, SchemaBackendHandler, UpdateGroupRequest, UpdateUserRequest,
-        UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
+        AttributeSchema, BackendHandler, CreateUserRequest, GroupBackendHandler,
+        GroupListerBackendHandler, GroupRequestFilter, Schema, SchemaBackendHandler,
+        UpdateGroupRequest, UpdateUserRequest, UserBackendHandler, UserListerBackendHandler,
+        UserRequestFilter,
     },
     types::{Group, GroupDetails, GroupId, User, UserAndGroups, UserId},
 };
@@ -73,7 +74,6 @@ impl ValidationResults {
 pub trait UserReadableBackendHandler {
     async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>>;
-    async fn get_schema(&self) -> Result<Schema>;
 }
 
 #[async_trait]
@@ -112,9 +112,6 @@ impl<Handler: BackendHandler> UserReadableBackendHandler for Handler {
     }
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>> {
         <Handler as UserBackendHandler>::get_user_groups(self, user_id).await
-    }
-    async fn get_schema(&self) -> Result<Schema> {
-        <Handler as SchemaBackendHandler>::get_schema(self).await
     }
 }
 
@@ -272,7 +269,15 @@ impl<'a, Handler: SchemaBackendHandler + Sync> SchemaBackendHandler
     for UserRestrictedListerBackendHandler<'a, Handler>
 {
     async fn get_schema(&self) -> Result<Schema> {
-        self.handler.get_schema().await
+        let mut schema = self.handler.get_schema().await?;
+        if self.user_filter.is_some() {
+            let filter_attributes = |attributes: &mut Vec<AttributeSchema>| {
+                attributes.retain(|a| a.is_visible);
+            };
+            filter_attributes(&mut schema.user_attributes.attributes);
+            filter_attributes(&mut schema.group_attributes.attributes);
+        }
+        Ok(schema)
     }
 }
 
