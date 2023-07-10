@@ -2,16 +2,16 @@ use crate::{
     domain::{
         handler::{BackendHandler, SchemaBackendHandler},
         ldap::utils::{map_user_field, UserFieldType},
-        types::{GroupDetails, GroupId, JpegPhoto, UserColumn, UserId},
+        types::{AttributeType, GroupDetails, GroupId, JpegPhoto, UserColumn, UserId},
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
-        graphql::api::field_error_callback,
+        graphql::api::{field_error_callback, Context},
         schema::PublicSchema,
     },
 };
-use chrono::TimeZone;
-use juniper::{graphql_object, FieldResult, GraphQLInputObject};
+use chrono::{NaiveDateTime, TimeZone};
+use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument};
 
@@ -22,7 +22,7 @@ type DomainUserAndGroups = crate::domain::types::UserAndGroups;
 type DomainSchema = crate::infra::schema::PublicSchema;
 type DomainAttributeList = crate::domain::handler::AttributeList;
 type DomainAttributeSchema = crate::domain::handler::AttributeSchema;
-use super::api::Context;
+type DomainAttributeValue = crate::domain::types::AttributeValue;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
 /// A filter for requests, specifying a boolean expression based on field constraints. Only one of
@@ -286,6 +286,15 @@ impl<Handler: BackendHandler> User<Handler> {
         self.user.uuid.as_str()
     }
 
+    fn attributes(&self) -> Vec<AttributeValue<Handler>> {
+        self.user
+            .attributes
+            .clone()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
     /// The groups to which this user belongs.
     async fn groups(&self, context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
         let span = debug_span!("[GraphQL query] user::groups");
@@ -492,11 +501,97 @@ impl<Handler: BackendHandler> From<DomainSchema> for Schema<Handler> {
     }
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct AttributeValue<Handler: BackendHandler> {
+    attribute: DomainAttributeValue,
+    _phantom: std::marker::PhantomData<Box<Handler>>,
+}
+
+#[graphql_object(context = Context<Handler>)]
+impl<Handler: BackendHandler> AttributeValue<Handler> {
+    fn name(&self) -> &str {
+        &self.attribute.name
+    }
+    async fn value(&self, context: &Context<Handler>) -> FieldResult<Vec<String>> {
+        let handler = context
+            .handler
+            .get_user_restricted_lister_handler(&context.validation_result);
+        serialize_attribute(
+            &self.attribute,
+            &PublicSchema::from(handler.get_schema().await?),
+        )
+    }
+}
+
+pub fn serialize_attribute(
+    attribute: &DomainAttributeValue,
+    schema: &DomainSchema,
+) -> FieldResult<Vec<String>> {
+    let convert_date = |date| chrono::Utc.from_utc_datetime(&date).to_rfc3339();
+    schema
+        .get_schema()
+        .user_attributes
+        .get_attribute_type(&attribute.name)
+        .map(|attribute_type| {
+            match attribute_type {
+                (AttributeType::String, false) => {
+                    vec![attribute.value.unwrap::<String>()]
+                }
+                (AttributeType::Integer, false) => {
+                    // LDAP integers are encoded as strings.
+                    vec![attribute.value.unwrap::<i64>().to_string()]
+                }
+                (AttributeType::JpegPhoto, false) => {
+                    vec![String::from(&attribute.value.unwrap::<JpegPhoto>())]
+                }
+                (AttributeType::DateTime, false) => {
+                    vec![convert_date(attribute.value.unwrap::<NaiveDateTime>())]
+                }
+                (AttributeType::String, true) => attribute
+                    .value
+                    .unwrap::<Vec<String>>()
+                    .into_iter()
+                    .collect(),
+                (AttributeType::Integer, true) => attribute
+                    .value
+                    .unwrap::<Vec<i64>>()
+                    .into_iter()
+                    .map(|i| i.to_string())
+                    .collect(),
+                (AttributeType::JpegPhoto, true) => attribute
+                    .value
+                    .unwrap::<Vec<JpegPhoto>>()
+                    .iter()
+                    .map(String::from)
+                    .collect(),
+                (AttributeType::DateTime, true) => attribute
+                    .value
+                    .unwrap::<Vec<NaiveDateTime>>()
+                    .into_iter()
+                    .map(convert_date)
+                    .collect(),
+            }
+        })
+        .ok_or_else(|| FieldError::from(anyhow::anyhow!("Unknown attribute: {}", &attribute.name)))
+}
+
+impl<Handler: BackendHandler> From<DomainAttributeValue> for AttributeValue<Handler> {
+    fn from(value: DomainAttributeValue) -> Self {
+        Self {
+            attribute: value,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        domain::{handler::AttributeList, types::AttributeType},
+        domain::{
+            handler::AttributeList,
+            types::{AttributeType, Serialized},
+        },
         infra::{
             access_control::{Permission, ValidationResults},
             test_utils::{setup_default_schema, MockTestBackendHandler},
@@ -530,6 +625,10 @@ mod tests {
             email
             creationDate
             uuid
+            attributes {
+              name
+              value
+            }
             groups {
               id
               displayName
@@ -540,6 +639,7 @@ mod tests {
         }"#;
 
         let mut mock = MockTestBackendHandler::new();
+        setup_default_schema(&mut mock);
         mock.expect_get_user_details()
             .with(eq(UserId::new("bob")))
             .return_once(|_| {
@@ -548,6 +648,16 @@ mod tests {
                     email: "bob@bobbers.on".to_string(),
                     creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
                     uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                    attributes: vec![
+                        DomainAttributeValue {
+                            name: "first_name".to_owned(),
+                            value: Serialized::from("Bob"),
+                        },
+                        DomainAttributeValue {
+                            name: "last_name".to_owned(),
+                            value: Serialized::from("Bobberson"),
+                        },
+                    ],
                     ..Default::default()
                 })
             });
@@ -582,6 +692,14 @@ mod tests {
                         "email": "bob@bobbers.on",
                         "creationDate": "1970-01-01T00:00:00.042+00:00",
                         "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+                        "attributes": [{
+                            "name": "first_name",
+                            "value": ["Bob"],
+                          },
+                          {
+                            "name": "last_name",
+                            "value": ["Bobberson"],
+                        }],
                         "groups": [{
                             "id": 3,
                             "displayName": "Bobbersons",
