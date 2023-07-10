@@ -1,3 +1,8 @@
+type AttributeValue {
+  name: String!
+  value: [String!]!
+}
+
 input EqualityConstraint {
   field: String!
   value: String!
@@ -78,6 +83,7 @@ type User {
   avatar: String
   creationDate: DateTimeUtc!
   uuid: String!
+  attributes: [AttributeValue!]!
   "The groups to which this user belongs."
   groups: [Group!]!
 }
