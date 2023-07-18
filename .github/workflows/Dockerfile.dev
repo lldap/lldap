@@ -14,27 +14,12 @@ ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse \
     CC_x86_64_unknown_linux_musl=x86_64-linux-musl-gcc \
     CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc
 
-### Install build deps x86_64
+### Install Additional Build Tools
 RUN apt update && \
     apt install -y --no-install-recommends curl git wget make perl pkg-config tar jq gzip && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
-
-### Install build deps aarch64 build
-#RUN dpkg --add-architecture arm64 && \
-#    apt update && \
-#    apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross gzip && \
-#    apt clean && \
-#    rm -rf /var/lib/apt/lists/* 
-    
-### armhf deps
-#RUN dpkg --add-architecture armhf && \
-#    apt update && \
-#    apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-armhf-cross libc6-dev-armhf-cross gzip && \
-#    apt clean && \
-#    rm -rf /var/lib/apt/lists/* 
-    
-# Keep this just in case situation
+     
 ### Add musl-gcc aarch64, x86_64 and armv7l
 RUN wget -c https://musl.cc/x86_64-linux-musl-cross.tgz && \
     tar zxf ./x86_64-linux-musl-cross.tgz -C /opt && \
