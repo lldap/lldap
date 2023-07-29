@@ -210,7 +210,7 @@ pub(crate) async fn register_password(
     let mut rng = rand::rngs::OsRng;
     use registration::*;
     let registration_start =
-        opaque::client::registration::start_registration(password.unsecure(), &mut rng)?;
+        opaque::client::registration::start_registration(password.unsecure().as_bytes(), &mut rng)?;
     let start_response = opaque_handler
         .registration_start(ClientRegistrationStartRequest {
             username: username.to_string(),

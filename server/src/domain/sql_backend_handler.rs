@@ -59,7 +59,7 @@ pub mod tests {
         insert_user_no_password(handler, name).await;
         let mut rng = rand::rngs::OsRng;
         let client_registration_start =
-            opaque::client::registration::start_registration(pass, &mut rng).unwrap();
+            opaque::client::registration::start_registration(pass.as_bytes(), &mut rng).unwrap();
         let response = handler
             .registration_start(registration::ClientRegistrationStartRequest {
                 username: name.to_string(),
