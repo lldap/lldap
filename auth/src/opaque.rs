@@ -77,10 +77,10 @@ pub mod client {
         pub use opaque_ke::ClientRegistrationFinishParameters;
         /// Initiate the registration negotiation.
         pub fn start_registration<R: RngCore + CryptoRng>(
-            password: &str,
+            password: &[u8],
             rng: &mut R,
         ) -> AuthenticationResult<ClientRegistrationStartResult> {
-            Ok(ClientRegistration::start(rng, password.as_bytes())?)
+            Ok(ClientRegistration::start(rng, password)?)
         }
 
         /// Finalize the registration negotiation.

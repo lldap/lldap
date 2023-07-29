@@ -117,7 +117,10 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                     let opaque::client::registration::ClientRegistrationStartResult {
                         state,
                         message,
-                    } = opaque::client::registration::start_registration(&password, &mut rng)?;
+                    } = opaque::client::registration::start_registration(
+                        password.as_bytes(),
+                        &mut rng,
+                    )?;
                     let req = registration::ClientRegistrationStartRequest {
                         username: user_id,
                         registration_start_request: message,

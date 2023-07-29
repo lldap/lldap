@@ -22,9 +22,10 @@ use crate::{
 use anyhow::Result;
 use ldap3_proto::proto::{
     LdapAddRequest, LdapBindCred, LdapBindRequest, LdapBindResponse, LdapCompareRequest,
-    LdapDerefAliases, LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapOp,
-    LdapPartialAttribute, LdapPasswordModifyRequest, LdapResult as LdapResultOp, LdapResultCode,
-    LdapSearchRequest, LdapSearchResultEntry, LdapSearchScope,
+    LdapDerefAliases, LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapModify,
+    LdapModifyRequest, LdapModifyType, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
+    LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
+    LdapSearchScope,
 };
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
@@ -125,6 +126,15 @@ fn make_extended_response(code: LdapResultCode, message: String) -> LdapOp {
         },
         name: None,
         value: None,
+    })
+}
+
+fn make_modify_response(code: LdapResultCode, message: String) -> LdapOp {
+    LdapOp::ModifyResponse(LdapResultOp {
+        code,
+        matcheddn: "".to_string(),
+        message,
+        referral: vec![],
     })
 }
 
@@ -270,7 +280,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         &self,
         backend_handler: &B,
         user: &UserId,
-        password: &str,
+        password: &[u8],
     ) -> Result<()> {
         use lldap_auth::*;
         let mut rng = rand::rngs::OsRng;
@@ -334,7 +344,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                                 ),
                             })
                         } else if let Err(e) = self
-                            .change_password(self.get_opaque_handler(), &uid, password)
+                            .change_password(self.get_opaque_handler(), &uid, password.as_bytes())
                             .await
                         {
                             Err(LdapError {
@@ -372,6 +382,104 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 format!("Unsupported extended operation: {}", &request.name),
             )],
         }
+    }
+
+    async fn handle_modify_change(
+        &mut self,
+        user_id: &UserId,
+        credentials: &ValidationResults,
+        user_is_admin: bool,
+        change: &LdapModify,
+    ) -> LdapResult<()> {
+        if change.modification.atype.to_ascii_lowercase() != "userpassword"
+            || change.operation != LdapModifyType::Replace
+        {
+            return Err(LdapError {
+                code: LdapResultCode::UnwillingToPerform,
+                message: format!(
+                    r#"Unsupported operation: `{:?}` for `{}`"#,
+                    change.operation, change.modification.atype
+                ),
+            });
+        }
+        if !credentials.can_change_password(user_id, user_is_admin) {
+            return Err(LdapError {
+                code: LdapResultCode::InsufficentAccessRights,
+                message: format!(
+                    r#"User `{}` cannot modify the password of user `{}`"#,
+                    &credentials.user, &user_id
+                ),
+            });
+        }
+        if let [value] = &change.modification.vals.as_slice() {
+            self.change_password(self.get_opaque_handler(), user_id, value)
+                .await
+                .map_err(|e| LdapError {
+                    code: LdapResultCode::Other,
+                    message: format!("Error while changing the password: {:#?}", e),
+                })?;
+        } else {
+            return Err(LdapError {
+                code: LdapResultCode::InvalidAttributeSyntax,
+                message: format!(
+                    r#"Wrong number of values for password attribute: {}"#,
+                    change.modification.vals.len()
+                ),
+            });
+        }
+        Ok(())
+    }
+
+    async fn handle_modify_request(
+        &mut self,
+        request: &LdapModifyRequest,
+    ) -> LdapResult<Vec<LdapOp>> {
+        let credentials = self
+            .user_info
+            .as_ref()
+            .ok_or_else(|| LdapError {
+                code: LdapResultCode::InsufficentAccessRights,
+                message: "No user currently bound".to_string(),
+            })?
+            .clone();
+        match get_user_id_from_distinguished_name(
+            &request.dn,
+            &self.ldap_info.base_dn,
+            &self.ldap_info.base_dn_str,
+        ) {
+            Ok(uid) => {
+                let user_is_admin = self
+                    .backend_handler
+                    .get_readable_handler(&credentials, &uid)
+                    .expect("Unexpected permission error")
+                    .get_user_groups(&uid)
+                    .await
+                    .map_err(|e| LdapError {
+                        code: LdapResultCode::OperationsError,
+                        message: format!("Internal error while requesting user's groups: {:#?}", e),
+                    })?
+                    .iter()
+                    .any(|g| g.display_name == "lldap_admin");
+                for change in &request.changes {
+                    self.handle_modify_change(&uid, &credentials, user_is_admin, change)
+                        .await?
+                }
+                Ok(vec![make_modify_response(
+                    LdapResultCode::Success,
+                    String::new(),
+                )])
+            }
+            Err(e) => Err(LdapError {
+                code: LdapResultCode::InvalidDNSyntax,
+                message: format!("Invalid username: {}", e),
+            }),
+        }
+    }
+
+    async fn do_modify_request(&mut self, request: &LdapModifyRequest) -> Vec<LdapOp> {
+        self.handle_modify_request(request)
+            .await
+            .unwrap_or_else(|e: LdapError| vec![make_modify_response(e.code, e.message)])
     }
 
     pub async fn do_search_or_dse(
@@ -650,6 +758,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 // No need to notify on unbind (per rfc4511)
                 return None;
             }
+            LdapOp::ModifyRequest(request) => self.do_modify_request(&request).await,
             LdapOp::ExtendedRequest(request) => self.do_extended_request(&request).await,
             LdapOp::AddRequest(request) => self
                 .do_create_user(request)
@@ -2007,7 +2116,8 @@ mod tests {
         use lldap_auth::*;
         let mut rng = rand::rngs::OsRng;
         let registration_start_request =
-            opaque::client::registration::start_registration("password", &mut rng).unwrap();
+            opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
+                .unwrap();
         let request = registration::ClientRegistrationStartRequest {
             username: "bob".to_string(),
             registration_start_request: registration_start_request.message,
@@ -2046,6 +2156,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_password_change_modify_request() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .returning(|_| Ok(HashSet::new()));
+        use lldap_auth::*;
+        let mut rng = rand::rngs::OsRng;
+        let registration_start_request =
+            opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
+                .unwrap();
+        let request = registration::ClientRegistrationStartRequest {
+            username: "bob".to_string(),
+            registration_start_request: registration_start_request.message,
+        };
+        let start_response = opaque::server::registration::start_registration(
+            &opaque::server::ServerSetup::new(&mut rng),
+            request.registration_start_request,
+            &request.username,
+        )
+        .unwrap();
+        mock.expect_registration_start().times(1).return_once(|_| {
+            Ok(registration::ServerRegistrationStartResponse {
+                server_data: "".to_string(),
+                registration_response: start_response.message,
+            })
+        });
+        mock.expect_registration_finish()
+            .times(1)
+            .return_once(|_| Ok(()));
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = LdapOp::ModifyRequest(LdapModifyRequest {
+            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
+            changes: vec![LdapModify {
+                operation: LdapModifyType::Replace,
+                modification: LdapPartialAttribute {
+                    atype: "userPassword".to_owned(),
+                    vals: vec!["password".as_bytes().to_vec()],
+                },
+            }],
+        });
+        assert_eq!(
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![make_modify_response(
+                LdapResultCode::Success,
+                "".to_string(),
+            )])
+        );
+    }
+
+    #[tokio::test]
     async fn test_password_change_password_manager() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_get_user_groups()
@@ -2054,7 +2214,8 @@ mod tests {
         use lldap_auth::*;
         let mut rng = rand::rngs::OsRng;
         let registration_start_request =
-            opaque::client::registration::start_registration("password", &mut rng).unwrap();
+            opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
+                .unwrap();
         let request = registration::ClientRegistrationStartRequest {
             username: "bob".to_string(),
             registration_start_request: registration_start_request.message,

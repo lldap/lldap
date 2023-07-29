@@ -107,7 +107,7 @@ fn main() -> Result<()> {
 
     let mut rng = rand::rngs::OsRng;
     let registration_start_request =
-        opaque::client::registration::start_registration(&opts.password, &mut rng)
+        opaque::client::registration::start_registration(opts.password.as_bytes(), &mut rng)
             .context("Could not initiate password change")?;
     let start_request = registration::ClientRegistrationStartRequest {
         username: opts.username.to_string(),

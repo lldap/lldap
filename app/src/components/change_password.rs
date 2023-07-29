@@ -128,9 +128,11 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
             Msg::SubmitNewPassword => {
                 let mut rng = rand::rngs::OsRng;
                 let new_password = self.form.model().password;
-                let registration_start_request =
-                    opaque::client::registration::start_registration(&new_password, &mut rng)
-                        .context("Could not initiate password change")?;
+                let registration_start_request = opaque::client::registration::start_registration(
+                    new_password.as_bytes(),
+                    &mut rng,
+                )
+                .context("Could not initiate password change")?;
                 let req = registration::ClientRegistrationStartRequest {
                     username: ctx.props().username.clone(),
                     registration_start_request: registration_start_request.message,
