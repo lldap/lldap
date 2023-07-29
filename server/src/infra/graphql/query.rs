@@ -299,7 +299,14 @@ impl<Handler: BackendHandler> User<Handler> {
             .get_user_groups(&self.user.user_id)
             .instrument(span)
             .await
-            .map(|set| set.into_iter().map(Into::into).collect())?)
+            .map(|set| {
+                let mut groups = set
+                    .into_iter()
+                    .map(Into::into)
+                    .collect::<Vec<Group<Handler>>>();
+                groups.sort_by(|g1, g2| g1.display_name.cmp(&g2.display_name));
+                groups
+            })?)
     }
 }
 
@@ -524,6 +531,7 @@ mod tests {
             uuid
             groups {
               id
+              displayName
               creationDate
               uuid
             }
@@ -549,6 +557,12 @@ mod tests {
             creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
             uuid: crate::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
         });
+        groups.insert(GroupDetails {
+            group_id: GroupId(7),
+            display_name: "Jefferees".to_string(),
+            creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
+            uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+        });
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
             .return_once(|_| Ok(groups));
@@ -569,8 +583,15 @@ mod tests {
                         "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
                         "groups": [{
                             "id": 3,
+                            "displayName": "Bobbersons",
                             "creationDate": "1970-01-01T00:00:00.000000042+00:00",
                             "uuid": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
+                          },
+                          {
+                            "id": 7,
+                            "displayName": "Jefferees",
+                            "creationDate": "1970-01-01T00:00:00.000000012+00:00",
+                            "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
                         }]
                     }
                 }),

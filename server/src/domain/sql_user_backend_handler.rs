@@ -130,11 +130,12 @@ impl UserListerBackendHandler for SqlBackendHandler {
             .group_by(|(u, _)| u)
             .into_iter()
             .map(|(user, groups)| {
-                let groups: Vec<_> = groups
+                let mut groups: Vec<_> = groups
                     .into_iter()
                     .flat_map(|(_, g)| g)
                     .map(|g| GroupDetails::from(g.clone()))
                     .collect();
+                groups.sort_by(|g1, g2| g1.display_name.cmp(&g2.display_name));
                 UserAndGroups {
                     user: user.clone().into(),
                     groups: Some(groups),
