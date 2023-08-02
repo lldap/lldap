@@ -1,6 +1,7 @@
 use anyhow::{bail, ensure, Context, Result};
 use clap::Parser;
 use lldap_auth::{opaque, registration};
+use reqwest::Url;
 use serde::Serialize;
 
 /// Set the password for a user in LLDAP.
@@ -8,7 +9,7 @@ use serde::Serialize;
 pub struct CliOpts {
     /// Base LLDAP url, e.g. "https://lldap/".
     #[clap(short, long)]
-    pub base_url: String,
+    pub base_url: Url,
 
     /// Admin username.
     #[clap(long, default_value = "admin")]
@@ -31,10 +32,16 @@ pub struct CliOpts {
     pub password: String,
 }
 
-fn get_token(base_url: &str, username: &str, password: &str) -> Result<String> {
+fn append_to_url(base_url: &Url, path: &str) -> Url {
+    let mut new_url = base_url.clone();
+    new_url.path_segments_mut().unwrap().extend(path.split('/'));
+    new_url
+}
+
+fn get_token(base_url: &Url, username: &str, password: &str) -> Result<String> {
     let client = reqwest::blocking::Client::new();
     let response = client
-        .post(format!("{base_url}/auth/simple/login"))
+        .post(append_to_url(base_url, "auth/simple/login"))
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(
             serde_json::to_string(&lldap_auth::login::ClientSimpleLoginRequest {
@@ -48,7 +55,7 @@ fn get_token(base_url: &str, username: &str, password: &str) -> Result<String> {
     Ok(serde_json::from_str::<lldap_auth::login::ServerLoginResponse>(&response.text()?)?.token)
 }
 
-fn call_server(url: &str, token: &str, body: impl Serialize) -> Result<String> {
+fn call_server(url: Url, token: &str, body: impl Serialize) -> Result<String> {
     let client = reqwest::blocking::Client::new();
     let request = client
         .post(url)
@@ -60,13 +67,13 @@ fn call_server(url: &str, token: &str, body: impl Serialize) -> Result<String> {
 }
 
 pub fn register_start(
-    base_url: &str,
+    base_url: &Url,
     token: &str,
     request: registration::ClientRegistrationStartRequest,
 ) -> Result<registration::ServerRegistrationStartResponse> {
     let request = Some(request);
     let data = call_server(
-        &format!("{base_url}/auth/opaque/register/start"),
+        append_to_url(base_url, "auth/opaque/register/start"),
         token,
         request,
     )?;
@@ -74,13 +81,13 @@ pub fn register_start(
 }
 
 pub fn register_finish(
-    base_url: &str,
+    base_url: &Url,
     token: &str,
     request: registration::ClientRegistrationFinishRequest,
 ) -> Result<()> {
     let request = Some(request);
     call_server(
-        &format!("{base_url}/auth/opaque/register/finish"),
+        append_to_url(base_url, "auth/opaque/register/finish"),
         token,
         request,
     )
@@ -94,7 +101,7 @@ fn main() -> Result<()> {
         "New password is too short, expected at least 8 characters"
     );
     ensure!(
-        opts.base_url.starts_with("http://") || opts.base_url.starts_with("https://"),
+        opts.base_url.scheme() == "http" || opts.base_url.scheme() == "https",
         "Base URL should start with `http://` or `https://`"
     );
     let token = match (opts.token.as_ref(), opts.admin_password.as_ref()) {
