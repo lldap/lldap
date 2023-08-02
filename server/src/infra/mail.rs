@@ -6,7 +6,13 @@ use lettre::{
 };
 use tracing::debug;
 
-async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOptions) -> Result<()> {
+async fn send_email(
+    to: Mailbox,
+    subject: &str,
+    body: String,
+    options: &MailOptions,
+    server_url: &url::Url,
+) -> Result<()> {
     let from = options
         .from
         .clone()
@@ -17,6 +23,14 @@ async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOpti
         &to, &from, &options.user, &options.server, options.port
     );
     let email = Message::builder()
+        .message_id(Some(format!(
+            "<{}@{}>",
+            uuid::Uuid::new_v1(
+                uuid::Timestamp::now(uuid::NoContext),
+                "lldap!".as_bytes().try_into().unwrap()
+            ),
+            server_url.domain().unwrap_or_default()
+        )))
         .from(from)
         .reply_to(reply_to)
         .to(to)
@@ -58,24 +72,34 @@ pub async fn send_password_reset_email(
     username: &str,
     to: &str,
     token: &str,
-    domain: &str,
+    server_url: &url::Url,
     options: &MailOptions,
 ) -> Result<()> {
     let to = to.parse()?;
+    let mut reset_url = server_url.clone();
+    reset_url
+        .path_segments_mut()
+        .unwrap()
+        .extend(["reset-password", "step2", token]);
     let body = format!(
         "Hello {},
 This email has been sent to you in order to validate your identity.
 If you did not initiate the process your credentials might have been
 compromised. You should reset your password and contact an administrator.
 
-To reset your password please visit the following URL: {}/reset-password/step2/{}
+To reset your password please visit the following URL: {}
 
 Please contact an administrator if you did not initiate the process.",
-        username,
-        domain.trim_end_matches('/'),
-        token
+        username, reset_url
     );
-    send_email(to, "[LLDAP] Password reset requested", body, options).await
+    send_email(
+        to,
+        "[LLDAP] Password reset requested",
+        body,
+        options,
+        server_url,
+    )
+    .await
 }
 
 pub async fn send_test_email(to: Mailbox, options: &MailOptions) -> Result<()> {
@@ -84,6 +108,7 @@ pub async fn send_test_email(to: Mailbox, options: &MailOptions) -> Result<()> {
         "LLDAP test email",
         "The test is successful! You can send emails from LLDAP".to_string(),
         options,
+        &url::Url::parse("http://localhost").unwrap(),
     )
     .await
 }

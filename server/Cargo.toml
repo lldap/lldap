@@ -96,7 +96,7 @@ features = ["full"]
 version = "1.25"
 
 [dependencies.uuid]
-features = ["v3"]
+features = ["v1", "v3"]
 version = "*"
 
 [dependencies.tracing-forest]
@@ -125,6 +125,10 @@ features = ["rustls-tls-webpki-roots"]
 [dependencies.rustls]
 version = "0.20"
 features = ["dangerous_configuration"]
+
+[dependencies.url]
+version = "2"
+features = ["serde"]
 
 [dev-dependencies]
 assert_cmd = "2.0"
