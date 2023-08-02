@@ -639,6 +639,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         let attributes: HashMap<String, Vec<u8>> = request
             .attributes
             .into_iter()
+            .filter(|a| !a.atype.eq_ignore_ascii_case("objectclass"))
             .map(parse_attribute)
             .collect::<LdapResult<_>>()?;
         fn decode_attribute_value(val: &[u8]) -> LdapResult<String> {
@@ -2421,6 +2422,42 @@ mod tests {
         assert_eq!(
             ldap_handler.do_create_user(request).await,
             Err(LdapError{ code: LdapResultCode::InvalidDNSyntax, message: r#"Unexpected DN format. Got "uid=bob,ou=groups,dc=example,dc=com", expected: "uid=id,ou=people,dc=example,dc=com""#.to_string() })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_multiple_object_class() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_create_user()
+            .with(eq(CreateUserRequest {
+                user_id: UserId::new("bob"),
+                email: "".to_owned(),
+                display_name: Some("Bob".to_string()),
+                ..Default::default()
+            }))
+            .times(1)
+            .return_once(|_| Ok(()));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = LdapAddRequest {
+            dn: "uid=bob,ou=people,dc=example,dc=com".to_owned(),
+            attributes: vec![
+                LdapPartialAttribute {
+                    atype: "cn".to_owned(),
+                    vals: vec![b"Bob".to_vec()],
+                },
+                LdapPartialAttribute {
+                    atype: "objectClass".to_owned(),
+                    vals: vec![
+                        b"top".to_vec(),
+                        b"person".to_vec(),
+                        b"inetOrgPerson".to_vec(),
+                    ],
+                },
+            ],
+        };
+        assert_eq!(
+            ldap_handler.do_create_user(request).await,
+            Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
         );
     }
 
