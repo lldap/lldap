@@ -171,7 +171,7 @@ pub struct SmtpOpts {
     #[clap(long, env = "LLDAP_SMTP_OPTIONS__TLS_REQUIRED", hide = true)]
     pub smtp_tls_required: Option<bool>,
 
-    #[clap(long, env = "LLDAP_SMTP_OPTIONS__ENCRYPTION", value_parser = EnumValueParser::<SmtpEncryption>::new(), ignore_case = true)]
+    #[clap(long, env = "LLDAP_SMTP_OPTIONS__SMTP_ENCRYPTION", value_parser = EnumValueParser::<SmtpEncryption>::new(), ignore_case = true)]
     pub smtp_encryption: Option<SmtpEncryption>,
 }
 
