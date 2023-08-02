@@ -1,6 +1,7 @@
 use clap::{builder::EnumValueParser, Parser};
 use lettre::message::Mailbox;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 /// lldap is a lightweight LDAP server
 #[derive(Debug, Parser, Clone)]
@@ -82,7 +83,7 @@ pub struct RunOpts {
 
     /// URL of the server, for password reset links.
     #[clap(long, env = "LLDAP_HTTP_URL")]
-    pub http_url: Option<String>,
+    pub http_url: Option<Url>,
 
     /// Database connection URL
     #[clap(short, long, env = "LLDAP_DATABASE_URL")]

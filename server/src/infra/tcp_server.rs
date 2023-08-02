@@ -87,7 +87,7 @@ fn http_config<Backend>(
     backend_handler: Backend,
     jwt_secret: secstr::SecUtf8,
     jwt_blacklist: HashSet<u64>,
-    server_url: String,
+    server_url: url::Url,
     mail_options: MailOptions,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
@@ -132,7 +132,7 @@ pub(crate) struct AppState<Backend> {
     pub backend_handler: AccessControlledBackendHandler<Backend>,
     pub jwt_key: Hmac<Sha512>,
     pub jwt_blacklist: RwLock<HashSet<u64>>,
-    pub server_url: String,
+    pub server_url: url::Url,
     pub mail_options: MailOptions,
 }
 

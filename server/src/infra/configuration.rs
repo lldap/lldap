@@ -11,6 +11,7 @@ use lettre::message::Mailbox;
 use lldap_auth::opaque::{server::ServerSetup, KeyPair};
 use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 #[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
 #[builder(pattern = "owned")]
@@ -100,8 +101,8 @@ pub struct Configuration {
     pub smtp_options: MailOptions,
     #[builder(default)]
     pub ldaps_options: LdapsOptions,
-    #[builder(default = r#"String::from("http://localhost")"#)]
-    pub http_url: String,
+    #[builder(default = r#"Url::parse("http://localhost").unwrap()"#)]
+    pub http_url: Url,
     #[serde(skip)]
     #[builder(field(private), default = "None")]
     server_setup: Option<ServerSetup>,
@@ -237,7 +238,7 @@ impl ConfigOverrider for RunOpts {
         }
 
         if let Some(url) = self.http_url.as_ref() {
-            config.http_url = url.to_string();
+            config.http_url = url.clone();
         }
 
         if let Some(database_url) = self.database_url.as_ref() {
