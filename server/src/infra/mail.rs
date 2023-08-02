@@ -1,5 +1,5 @@
 use crate::infra::{cli::SmtpEncryption, configuration::MailOptions};
-use anyhow::{Ok, Result};
+use anyhow::{anyhow, Ok, Result};
 use lettre::{
     message::Mailbox, transport::smtp::authentication::Credentials, AsyncSmtpTransport,
     AsyncTransport, Message, Tokio1Executor,
@@ -43,8 +43,15 @@ async fn send_email(to: Mailbox, subject: &str, body: String, options: &MailOpti
         mailer = mailer.credentials(creds)
     }
 
-    mailer.port(options.port).build().send(email).await?;
-    Ok(())
+    if let Err(e) = mailer.port(options.port).build().send(email).await {
+        if e.to_string().contains("CorruptMessage") {
+            Err(anyhow!("CorruptMessage returned by lettre, this usually means the SMTP encryption setting is wrong.").context(e))
+        } else {
+            Err(e.into())
+        }
+    } else {
+        Ok(())
+    }
 }
 
 pub async fn send_password_reset_email(
