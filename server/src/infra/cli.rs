@@ -131,6 +131,7 @@ pub struct LdapsOpts {
 
 #[derive(Clone, Debug, Deserialize, Serialize, clap::ValueEnum)]
 #[serde(rename_all = "UPPERCASE")]
+#[clap(rename_all = "UPPERCASE")]
 pub enum SmtpEncryption {
     None,
     Tls,
