@@ -55,3 +55,9 @@ Otherwise, you can use LLDAP's admin group:
 ```
 (memberof=cn=lldap_admin,ou=groups,dc=example,dc=com)
 ```
+
+## Password change
+To allow changing Passwords via Jellyfin the following things are required
+- The bind user needs to have the group lldap_password_manager (changing passwords of members of the group lldap_admin does not work to prevent privilege escalation)
+- Check `Allow Password Change`
+- `LDAP Password Attribute` Needs to be set to `userPassword`
