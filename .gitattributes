@@ -1,4 +1,4 @@
-example-configs/** linguist-documentation
+example_configs/** linguist-documentation
 docs/** linguist-documentation
 *.md linguist-documentation
 lldap_config.docker_template.toml linguist-documentation
