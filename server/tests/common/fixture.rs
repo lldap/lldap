@@ -236,5 +236,6 @@ fn create_lldap_command() -> Command {
     let db_url = env::database_url();
     cmd.current_dir(path);
     cmd.env(env::DB_KEY, db_url);
+    cmd.env(env::PRIVATE_KEY_SEED, "Random value");
     cmd
 }
