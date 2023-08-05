@@ -56,7 +56,8 @@
 		if (typeof WebAssembly === 'undefined') {
 			const pWASMMsg = document.createElement("p")
 			pWASMMsg.innerHTML = `
-			LLDAP requires WASM, please switch to a compatible browser or enable it.
+			LLDAP requires WASM and JIT for JavaScript, please switch to a 
+			compatible browser or enable it.
 			`
 			document.body.appendChild(pWASMMsg)
 		}
