@@ -52,8 +52,7 @@
 	</noscript>
 
 	<script>
-		/* Detect if the user has WASM support. SEE: 
-		https://stackoverflow.com/a/47880734 */
+		/* Detect if the user has WASM support. */
 		if (typeof WebAssembly === 'undefined') {
 			const pWASMMsg = document.createElement("p")
 			pWASMMsg.innerHTML = `
