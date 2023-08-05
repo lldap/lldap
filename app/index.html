@@ -15,8 +15,8 @@
       src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/js/bootstrap.bundle.min.js"
       integrity="sha384-/bQdsTh/da6pkI1MST/rWKFNjaCP5gBSY4sEBT38Q/9RBh9AH40zEOg7Hlq2THRZ"
       crossorigin="anonymous"></script>
-      <script 
-      src="https://cdn.jsdelivr.net/npm/bootstrap-dark-5@1.1.3/dist/js/darkmode.min.js" 
+      <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap-dark-5@1.1.3/dist/js/darkmode.min.js"
       integrity="sha384-A4SLs39X/aUfwRclRaXvNeXNBTLZdnZdHhhteqbYFS2jZTRD79tKeFeBn7SGXNpi"
       crossorigin="anonymous"></script>
     <link
@@ -43,25 +43,23 @@
 </head>
 
 <body>
-	<noscript>
-		<!--
-			This will be displayed if the user doesn't have JavaScript enabled. 	
-		-->
-		LLDAP requires JavaScript, please switch to a compatible browser or enable 
-		it.
-	</noscript>
+    <noscript>
+        <!-- This will be displayed if the user doesn't have JavaScript enabled. -->
+        LLDAP requires JavaScript, please switch to a compatible browser or
+        enable it.
+    </noscript>
 
-	<script>
-		/* Detect if the user has WASM support. */
-		if (typeof WebAssembly === 'undefined') {
-			const pWASMMsg = document.createElement("p")
-			pWASMMsg.innerHTML = `
-			LLDAP requires WASM and JIT for JavaScript, please switch to a 
-			compatible browser or enable it.
-			`
-			document.body.appendChild(pWASMMsg)
-		}
-	</script>
+    <script>
+        /* Detect if the user has WASM support. */
+        if (typeof WebAssembly === 'undefined') {
+            const pWASMMsg = document.createElement("p")
+            pWASMMsg.innerHTML = `
+            LLDAP requires WASM and JIT for JavaScript, please switch to a
+            compatible browser or enable it.
+            `
+            document.body.appendChild(pWASMMsg)
+        }
+    </script>
 </body>
 
 </html>
