@@ -13,8 +13,8 @@
     <script
       src="/static/bootstrap.bundle.min.js"
       integrity="sha384-/bQdsTh/da6pkI1MST/rWKFNjaCP5gBSY4sEBT38Q/9RBh9AH40zEOg7Hlq2THRZ"></script>
-    <script 
-    src="/static/darkmode.min.js" 
+    <script
+    src="/static/darkmode.min.js"
     integrity="sha384-A4SLs39X/aUfwRclRaXvNeXNBTLZdnZdHhhteqbYFS2jZTRD79tKeFeBn7SGXNpi"></script>
     <link
       rel="stylesheet"
@@ -40,6 +40,23 @@
 </head>
 
 <body>
+    <noscript>
+        <!-- This will be displayed if the user doesn't have JavaScript enabled. -->
+        LLDAP requires JavaScript, please switch to a compatible browser or
+        enable it.
+    </noscript>
+
+    <script>
+        /* Detect if the user has WASM support. */
+        if (typeof WebAssembly === 'undefined') {
+            const pWASMMsg = document.createElement("p")
+            pWASMMsg.innerHTML = `
+            LLDAP requires WASM and JIT for JavaScript, please switch to a
+            compatible browser or enable it.
+            `
+            document.body.appendChild(pWASMMsg)
+        }
+    </script>
 </body>
 
 </html>
