@@ -9,23 +9,28 @@ You can either configure LibreNMS from the webui or from the command line. This 
 ```    
 uid
 ```
-default: uidNumber
 
-This sets 'uid' as the unique ldap attribue for users.
+This sets 'uid' as the unique ldap attribute for users.
 
 ## auth_ldap_groupmemberattr
 
 ```
 member
 ```
-Default: memberUid
 
 ## auth_ldap_groups
 
 ```'
 {"nms_admin": {"level": 10}}'
 ```
-Default: {"admin": {"level": 10}}'
+
+or 
+
+```
+auth_ldap_groups.nms_admin.level: 10
+```
+
+These are both the same.
 
 This example sets the group nms_admin as Admin (level 10).
 Set others to match more groups at different levels.
@@ -35,7 +40,6 @@ Set others to match more groups at different levels.
 ```
 false
 ```
-Default: true
 
 ## auth_ldap_server
 
@@ -48,15 +52,12 @@ Default: true
 ```
 3890
 ```
-Default: 389
 
 ## auth_ldap_suffix
 
 ```
 ,ou=people,dc=example,dc=com
 ```
-
-Default: ,ou=People,dc=example,dc=com`
 
 Not sure if the case of people actually matters.
 Make sure you keep the initial comma.
@@ -66,22 +67,19 @@ Make sure you keep the initial comma.
 ```
 ou=groups,dc=example,dc=com
 ```
-Default: cn=groupname,ou=groups,dc=example,dc=com
 
 ## auth_mechanism
 
 ```
 ldap
 ```
-Default: mysql
-Be careful with this as you will lock yourself out if ldap does not work correctly.
+Be careful with this as you will lock yourself out if ldap does not work correctly. Set back to 'mysql' to turn ldap off.
 
 ### auth_ldap_require_groupmembership
 
 ```
 false
 ```
-Default: true
 
 ## Testing
 
