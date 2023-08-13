@@ -276,6 +276,7 @@ folder for help with:
 - [Jellyfin](example_configs/jellyfin.md)
 - [Jitsi Meet](example_configs/jitsi_meet.conf)
 - [KeyCloak](example_configs/keycloak.md)
+- [LibreNMS](example_configs/librenms.md)
 - [Matrix](example_configs/matrix_synapse.yml)
 - [Mealie](example_configs/mealie.md)
 - [Nextcloud](example_configs/nextcloud.md)
