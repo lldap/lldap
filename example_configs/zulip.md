@@ -27,7 +27,7 @@ SETTING_AUTH_LDAP_BIND_DN: "uid=zulip,ou=people,dc=example,dc=com"
 SECRETS_auth_ldap_bind_password: "superSECURE_Pa55word"
 ```
 
-3) Configure how to searach for existing users  
+3) Configure how to search for existing users  
 Add the following lines to your configuration and change the values according to your setup.
 ```
 SETTING_AUTH_LDAP_USER_SEARCH: >
@@ -40,13 +40,14 @@ SETTING_AUTH_LDAP_USERNAME_ATTR: "uid"
 
 4) Configure the user-data mapping  
 This step is optional, the sample below shows the maximum of available options, you can use all of them or none.
-Add the following lines to your configuration and change the values according to your setup.
+Add the following lines to your configuration and remove the fields you don't want to be synced.
+The field `"full_name": "cn"` is mandatory.
 ```
 SETTING_AUTH_LDAP_USER_ATTR_MAP: >
   {"full_name": "cn","first_name": "givenName","last_name": "sn","avatar": "jpegPhoto"}
 ```
 
-5) Allow which groups are allowed to authenticate  
+5) Configure which groups are allowed to authenticate  
 This step is optional, if you do not specify anything here all users from your lldap server will be able to login.
 Add the following lines to your configuration and change the values according to your setup.
 ```
@@ -84,7 +85,7 @@ Add a single new line to that file like below.
 auth_ldap_bind_password = superSECURE_Pa55word
 ```
 
-3) Configure how to searach for existing users  
+3) Configure how to search for existing users  
 Uncomment the following lines in your configuration and change the values according to your setup.
 ```
 AUTH_LDAP_USER_SEARCH = LDAPSearch("ou=people,dc=example,dc=com", ldap.SCOPE_SUBTREE, "(uid=%(user)s)")
@@ -105,7 +106,7 @@ AUTH_LDAP_USER_ATTR_MAP = {
 }
 ```
 
-5) Allow which groups are allowed to authenticate  
+5) Configure which groups are allowed to authenticate  
 This step is optional, if you do not specify anything here all users from your lldap server will be able to login.
 Add the following lines to your configuration and change the values according to your setup.
 ```
