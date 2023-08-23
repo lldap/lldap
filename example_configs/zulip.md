@@ -77,7 +77,7 @@ The following configuration takes place in the configuration-file `/etc/zulip/se
 Find the line `AUTHENTICATION_BACKENDS` and uncomment `"zproject.backends.ZulipLDAPAuthBackend"`.
 
 2) Configure how to connect with LLDAP  
-The user specified in `SETTING_AUTH_LDAP_BIND_DN` is used to querry data from LLDAP.  
+The user specified in `AUTH_LDAP_BIND_DN` is used to querry data from LLDAP.  
 Zulip is only able to authenticate users and read data via ldap it is not able to write data or change the users password.  
 Because of this limitation we will use the group `lldap_strict_readonly` for this user.  
 Uncomment the following lines in your configuration and change the values according to your setup.
