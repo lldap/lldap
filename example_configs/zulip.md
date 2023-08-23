@@ -20,6 +20,9 @@ The following configuration takes place in the environment section of your compo
 Find the line`ZULIP_AUTH_BACKENDS: "EmailAuthBackend"` and change it to `ZULIP_AUTH_BACKENDS: "ZulipLDAPAuthBackend,EmailAuthBackend"`.
 
 2) Configure how to connect with LLDAP  
+The user specified in `SETTING_AUTH_LDAP_BIND_DN` is used to querry data from LLDAP.  
+Zulip is only able to authenticate users and read data via ldap it is not able to write data or change the users password.  
+Because of this limitation we will use the group `lldap_strict_readonly` for this user.  
 Add the following lines to your configuration and change the values according to your setup.
 ```
 SETTING_AUTH_LDAP_SERVER_URI: "ldap://lldap:3890"
@@ -39,21 +42,22 @@ SETTING_AUTH_LDAP_USERNAME_ATTR: "uid"
 ```
 
 4) Configure the user-data mapping  
-This step is optional, the sample below shows the maximum of available options, you can use all of them or none.
-Add the following lines to your configuration and remove the fields you don't want to be synced.
-The field `"full_name": "cn"` is mandatory.
+This step is optional, the sample below shows the maximum of available options, you can use all of them or none.  
+Add the following lines to your configuration and remove the fields you don't want to be synced.  
+The field `"full_name": "cn"` is mandatory.  
 ```
 SETTING_AUTH_LDAP_USER_ATTR_MAP: >
   {"full_name": "cn","first_name": "givenName","last_name": "sn","avatar": "jpegPhoto"}
 ```
 
 5) Configure which groups are allowed to authenticate  
-This step is optional, if you do not specify anything here all users from your lldap server will be able to login.
-Add the following lines to your configuration and change the values according to your setup.
+This step is optional, if you do not specify anything here all users from your lldap server will be able to login.  
+This example will grant access to all users who are a member of `zulip_users`.  
+Add the following lines to your configuration and change the values according to your setup.  
 ```
 ZULIP_CUSTOM_SETTINGS: "import django_auth_ldap"
 SETTING_AUTH_LDAP_GROUP_TYPE: "django_auth_ldap.config.GroupOfUniqueNamesType(name_attr='cn')"
-SETTING_AUTH_LDAP_REQUIRE_GROUP: "cn=zulip,ou=groups,dc=example,dc=com"
+SETTING_AUTH_LDAP_REQUIRE_GROUP: "cn=zulip_users,ou=groups,dc=example,dc=com"
 SETTING_AUTH_LDAP_GROUP_SEARCH: >
   LDAPSearch("ou=groups,dc=example,dc=com", ldap.SCOPE_SUBTREE, "(objectClass=GroupOfUniqueNames)")
 ```
@@ -73,6 +77,9 @@ The following configuration takes place in the configuration-file `/etc/zulip/se
 Find the line `AUTHENTICATION_BACKENDS` and uncomment `"zproject.backends.ZulipLDAPAuthBackend"`.
 
 2) Configure how to connect with LLDAP  
+The user specified in `SETTING_AUTH_LDAP_BIND_DN` is used to querry data from LLDAP.  
+Zulip is only able to authenticate users and read data via ldap it is not able to write data or change the users password.  
+Because of this limitation we will use the group `lldap_strict_readonly` for this user.  
 Uncomment the following lines in your configuration and change the values according to your setup.
 ```
 AUTH_LDAP_SERVER_URI = "ldap://lldap:3890"
@@ -95,7 +102,7 @@ AUTH_LDAP_USERNAME_ATTR = "uid"
 ```
 
 4) Configure the user-data mapping  
-This step is optional, the sample below shows the maximum of available options, you can use all of them or none.
+This step is optional, the sample below shows the maximum of available options, you can use all of them or none.  
 Find the line `AUTH_LDAP_USER_ATTR_MAP`, then uncomment the values you want to map and change the values according to your setup.
 ```
 AUTH_LDAP_USER_ATTR_MAP = {
@@ -107,12 +114,13 @@ AUTH_LDAP_USER_ATTR_MAP = {
 ```
 
 5) Configure which groups are allowed to authenticate  
-This step is optional, if you do not specify anything here all users from your lldap server will be able to login.
-Add the following lines to your configuration and change the values according to your setup.
+This step is optional, if you do not specify anything here all users from your lldap server will be able to login.  
+This example will grant access to all users who are a member of `zulip_users`.  
+Add the following lines to your configuration and change the values according to your setup.  
 ```
 import django_auth_ldap
 AUTH_LDAP_GROUP_TYPE = "django_auth_ldap.config.GroupOfUniqueNamesType(name_attr='cn')"
-AUTH_LDAP_REQUIRE_GROUP = "cn=zulip,ou=groups,dc=example,dc=com"
+AUTH_LDAP_REQUIRE_GROUP = "cn=zulip_users,ou=groups,dc=example,dc=com"
 AUTH_LDAP_GROUP_SEARCH = LDAPSearch("ou=groups,dc=example,dc=com", ldap.SCOPE_SUBTREE, "(objectClass=GroupOfUniqueNames)")
 ```
 
