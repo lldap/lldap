@@ -296,6 +296,7 @@ folder for help with:
 - [WikiJS](example_configs/wikijs.md)
 - [XBackBone](example_configs/xbackbone_config.php)
 - [Zendto](example_configs/zendto.md)
+- [Zulip](example_configs/zulip.md)
 
 ## Migrating from SQLite
 
