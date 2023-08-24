@@ -69,6 +69,12 @@ Add the following lines to your configuration and change the values according to
 SETTING_NAME_CHANGES_DISABLED: True
 SETTING_AVATAR_CHANGES_DISABLED: True
 ```
+> Important Info  
+> Zulip will not write the user profile back to your ldap server.  
+> If the user changes their profil in Zulip those changes will be overwritten when the next syncronzation with LLDAP is triggerd.  
+> Allow changes to the user profile only if you do not plan to synchronize it with LLDAP regularly.
+
+
 
 ## Installer based configuration
 The following configuration takes place in the configuration-file `/etc/zulip/settings.py`.
@@ -131,3 +137,7 @@ Uncomment the following lines in your configuration and change the values accord
 NAME_CHANGES_DISABLED: True
 AVATAR_CHANGES_DISABLED: True
 ```
+> Important Info  
+> Zulip will not write the user profile back to your ldap server.  
+> If the user changes their profil in Zulip those changes will be overwritten when the next syncronzation with LLDAP is triggerd.  
+> Allow changes to the user profile only if you do not plan to synchronize it with LLDAP regularly.
