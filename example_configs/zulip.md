@@ -5,11 +5,11 @@ Zulip combines the immediacy of real-time chat with an email threading model.
 Their ldap-documentation is here: [zulip.readthedocs.io](https://zulip.readthedocs.io/en/stable/production/authentication-methods.html#ldap-including-active-directory)
 
 Zulip has two installation methods, either by running the recommended installer or by docker/podman compose.
-The way how the service is configured differs depending the installation method, so keep in mind you will only need one of the following examples.
+The way how the service is configured differs depending on the installation method, so keep in mind you will only need one of the following examples.
 
 > Important info  
 > The available/configured userdata will be automatically imported at the first login.  
-> If you want to import that data before the user logs in for the first time or  
+> If you want to import it before the user logs in for the first time or  
 > if you want to keep the data in sync with LLDAP you need to trigger the import by hand (or via cronjob).  
 > `/home/zulip/deployments/current/manage.py sync_ldap_user_data`
 
@@ -51,7 +51,7 @@ SETTING_AUTH_LDAP_USER_ATTR_MAP: >
 ```
 
 5) Configure which groups are allowed to authenticate  
-This step is optional, if you do not specify anything here all users from your lldap server will be able to login.  
+This step is optional, if you do not specify anything here all users from your LLDAP server will be able to login.  
 This example will grant access to all users who are a member of `zulip_users`.  
 Add the following lines to your configuration and change the values according to your setup.  
 ```
@@ -114,7 +114,7 @@ AUTH_LDAP_USER_ATTR_MAP = {
 ```
 
 5) Configure which groups are allowed to authenticate  
-This step is optional, if you do not specify anything here all users from your lldap server will be able to login.  
+This step is optional, if you do not specify anything here all users from your LLDAP server will be able to login.  
 This example will grant access to all users who are a member of `zulip_users`.  
 Add the following lines to your configuration and change the values according to your setup.  
 ```
