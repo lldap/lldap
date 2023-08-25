@@ -128,12 +128,6 @@ jobs:
     container:
       image: lldap/rust-dev:latest
       env:
-        CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
-        CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: x86_64-linux-gnu-gcc
-        CC_armv7_unknown_linux_musleabihf: arm-linux-gnueabihf-gcc
-        CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
-        CC_x86_64_unknown_linux_musl: x86_64-linux-gnu-gcc
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
