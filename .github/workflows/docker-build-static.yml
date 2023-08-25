@@ -30,7 +30,6 @@ env:
 
 # build-ui , create/compile the web
 ### install wasm
-### install rollup
 ### run app/build.sh
 ### upload artifacts
 
@@ -86,7 +85,7 @@ jobs:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.event_name == 'release' }}
     container:
-      image: nitnelave/rust-dev:latest
+      image: lldap/rust-dev:latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3.5.3
@@ -101,8 +100,6 @@ jobs:
           key: lldap-ui-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-ui-
-      - name: Install rollup (nodejs)
-        run: npm install -g rollup
       - name: Add wasm target (rust)
         run: rustup target add wasm32-unknown-unknown
       - name: Install wasm-pack with cargo
