@@ -39,9 +39,12 @@ env:
 # GitHub actions randomly timeout when downloading musl-gcc, using custom dev image   #
 # Look into .github/workflows/Dockerfile.dev for development image details            #
 # Using lldap dev image based on https://hub.docker.com/_/rust and musl-gcc bundled   #
+# lldap/rust-dev:latest                                                               #
 #######################################################################################
 ### Cargo build
-### aarch64 and amd64 is musl based
+### armv7, aarch64 and amd64 is musl based
+
+### This not an issue anymore when using rust 1.71 forward
 ### armv7 is glibc based, musl had issue with time_t when cross compile https://github.com/rust-lang/libc/issues/1848
 
 # build-ui,builds-armhf, build-aarch64, build-amd64 will upload artifacts will be used next job
@@ -50,8 +53,7 @@ env:
 ### will run lldap with postgres, mariadb and sqlite backend, do selfcheck command.
 
 # Build docker image
-### Triplet docker image arch with debian base
-### amd64 & aarch64 with alpine base
+### Triplet docker image arch with debian and alpine base
 # build-docker-image job will fetch artifacts and run Dockerfile.ci then push the image.
 ### Look into .github/workflows/Dockerfile.ci.debian or .github/workflowds/Dockerfile.ci.alpine
 
@@ -590,13 +592,13 @@ jobs:
         run: |
              mv bin/aarch64-unknown-linux-musl-lldap-bin/lldap bin/aarch64-lldap
              mv bin/x86_64-unknown-linux-musl-lldap-bin/lldap bin/amd64-lldap
-             mv bin/armv7-unknown-linux-gnueabihf-lldap-bin/lldap bin/armhf-lldap
+             mv bin/armv7-unknown-linux-musleabihf-lldap-bin/lldap bin/armhf-lldap
              mv bin/aarch64-unknown-linux-musl-lldap_migration_tool-bin/lldap_migration_tool bin/aarch64-lldap_migration_tool
              mv bin/x86_64-unknown-linux-musl-lldap_migration_tool-bin/lldap_migration_tool bin/amd64-lldap_migration_tool
-             mv bin/armv7-unknown-linux-gnueabihf-lldap_migration_tool-bin/lldap_migration_tool bin/armhf-lldap_migration_tool
+             mv bin/armv7-unknown-linux-musleabihf-lldap_migration_tool-bin/lldap_migration_tool bin/armhf-lldap_migration_tool
              mv bin/aarch64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password bin/aarch64-lldap_set_password
              mv bin/x86_64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password bin/amd64-lldap_set_password
-             mv bin/armv7-unknown-linux-gnueabihf-lldap_set_password-bin/lldap_set_password bin/armhf-lldap_set_password
+             mv bin/armv7-unknown-linux-musleabihf-lldap_set_password-bin/lldap_set_password bin/armhf-lldap_set_password
              chmod +x bin/*-lldap
              chmod +x bin/*-lldap_migration_tool
              chmod +x bin/*-lldap_set_password
