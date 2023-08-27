@@ -41,11 +41,8 @@ env:
 # Using lldap dev image based on https://hub.docker.com/_/rust and musl-gcc bundled   #
 # lldap/rust-dev:latest                                                               #
 #######################################################################################
-### Cargo build
+# Cargo build
 ### armv7, aarch64 and amd64 is musl based
-
-### This not an issue anymore when using rust 1.71 forward
-### armv7 is glibc based, musl had issue with time_t when cross compile https://github.com/rust-lang/libc/issues/1848
 
 # build-ui,builds-armhf, build-aarch64, build-amd64 will upload artifacts will be used next job
 
@@ -57,7 +54,7 @@ env:
 # build-docker-image job will fetch artifacts and run Dockerfile.ci then push the image.
 ### Look into .github/workflows/Dockerfile.ci.debian or .github/workflowds/Dockerfile.ci.alpine
 
-# create release artifacts
+# Create release artifacts
 ### Fetch artifacts
 ### Clean up web artifact
 ### Setup folder structure
