@@ -32,9 +32,9 @@ RUN if [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
     ; fi
 
 RUN if [ "${TARGETPLATFORM}" = "linux/arm/v7" ]; then \
-    mv bin/armv7-unknown-linux-gnueabihf-lldap-bin/lldap target/lldap && \
-    mv bin/armv7-unknown-linux-gnueabihf-lldap_migration_tool-bin/lldap_migration_tool target/lldap_migration_tool && \
-    mv bin/armv7-unknown-linux-gnueabihf-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
+    mv bin/armv7-unknown-linux-musleabihf-lldap-bin/lldap target/lldap && \
+    mv bin/armv7-unknown-linux-musleabihf-lldap_migration_tool-bin/lldap_migration_tool target/lldap_migration_tool && \
+    mv bin/armv7-unknown-linux-musleabihf-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
     chmod +x target/lldap && \
     chmod +x target/lldap_migration_tool && \
     chmod +x target/lldap_set_password && \
