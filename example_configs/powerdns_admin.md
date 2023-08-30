@@ -17,7 +17,7 @@
 - LDAP Base DN: `ou=people,dc=example,dc=com`
 - LDAP admin username: `uid=admin,ou=people,dc=example,dc=com`
   - It is recommended that you create a separate user account (e.g, `bind_user`) instead of `admin` for sharing Bind credentials with other services. The `bind_user` should be a member of the `lldap_strict_readonly` group to limit access to your LDAP configuration in LLDAP.
-- LDAP admin password: `password of the user specified above`
+- LDAP admin password: password of the user specified above
 
 ### Filters
 
