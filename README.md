@@ -290,6 +290,7 @@ folder for help with:
 - [Nexus](example_configs/nexus.md)
 - [Organizr](example_configs/Organizr.md)
 - [Portainer](example_configs/portainer.md)
+- [PowerDNS Admin](example_configs/powerdns_admin.md)
 - [Rancher](example_configs/rancher.md)
 - [Seafile](example_configs/seafile.md)
 - [Shaarli](example_configs/shaarli.md)
