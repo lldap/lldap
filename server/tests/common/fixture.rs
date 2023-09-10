@@ -191,7 +191,6 @@ impl Drop for LLDAPFixture {
 
         for _ in 0..10 {
             let status = self.child.try_wait();
-            if status.is_err() {}
             match status {
                 Err(e) => {
                     println!(

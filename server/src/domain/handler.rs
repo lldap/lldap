@@ -211,9 +211,10 @@ pub trait BackendHandler:
 
 #[cfg(test)]
 mod tests {
-    use base64::Engine;
-
     use super::*;
+    use base64::Engine;
+    use pretty_assertions::assert_ne;
+
     #[test]
     fn test_uuid_time() {
         use chrono::prelude::*;

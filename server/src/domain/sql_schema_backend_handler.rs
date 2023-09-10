@@ -51,6 +51,7 @@ mod tests {
     use crate::domain::{
         handler::AttributeList, sql_backend_handler::tests::*, types::AttributeType,
     };
+    use pretty_assertions::assert_eq;
 
     #[tokio::test]
     async fn test_default_schema() {
