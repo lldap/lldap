@@ -198,14 +198,13 @@ fn convert_group_filter(
     }
 }
 
-#[instrument(skip_all, level = "debug")]
+#[instrument(skip_all, level = "debug", fields(ldap_filter))]
 pub async fn get_groups_list<Backend: GroupListerBackendHandler>(
     ldap_info: &LdapInfo,
     ldap_filter: &LdapFilter,
     base: &str,
     backend: &Backend,
 ) -> LdapResult<Vec<Group>> {
-    debug!(?ldap_filter);
     let filters = convert_group_filter(ldap_info, ldap_filter)?;
     debug!(?filters);
     backend

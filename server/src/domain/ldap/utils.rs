@@ -106,7 +106,7 @@ pub fn get_group_id_from_distinguished_name(
     get_id_from_distinguished_name(dn, base_tree, base_dn_str, true)
 }
 
-#[instrument(skip_all, level = "debug")]
+#[instrument(skip(all_attribute_keys), level = "debug")]
 pub fn expand_attribute_wildcards<'a>(
     ldap_attributes: &'a [String],
     all_attribute_keys: &'a [&'static str],
@@ -128,7 +128,7 @@ pub fn expand_attribute_wildcards<'a>(
         .into_iter()
         .unique_by(|a| a.to_ascii_lowercase())
         .collect_vec();
-    debug!(?ldap_attributes, ?resolved_attributes);
+    debug!(?resolved_attributes);
     resolved_attributes
 }
 

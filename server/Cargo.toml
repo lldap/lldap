@@ -101,7 +101,7 @@ version = "*"
 
 [dependencies.tracing-forest]
 features = ["smallvec", "chrono", "tokio"]
-version = "^0.1.4"
+version = "^0.1.6"
 
 [dependencies.actix-tls]
 features = ["default", "rustls"]
