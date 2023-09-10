@@ -69,7 +69,7 @@ where
     Ok(())
 }
 
-#[instrument(skip_all, level = "info", err)]
+#[instrument(level = "info", err)]
 pub async fn check_ldap(port: u16) -> Result<()> {
     check_ldap_endpoint(TcpStream::connect(format!("localhost:{}", port)).await?).await
 }
@@ -126,7 +126,7 @@ fn get_tls_connector(ldaps_options: &LdapsOptions) -> Result<RustlsTlsConnector>
     Ok(std::sync::Arc::new(client_config).into())
 }
 
-#[instrument(skip_all, level = "info", err)]
+#[instrument(skip_all, level = "info", err, fields(port = %ldaps_options.port))]
 pub async fn check_ldaps(ldaps_options: &LdapsOptions) -> Result<()> {
     if !ldaps_options.enabled {
         info!("LDAPS not enabled");
@@ -150,7 +150,7 @@ pub async fn check_ldaps(ldaps_options: &LdapsOptions) -> Result<()> {
     .await
 }
 
-#[instrument(skip_all, level = "info", err)]
+#[instrument(level = "info", err)]
 pub async fn check_api(port: u16) -> Result<()> {
     reqwest::get(format!("http://localhost:{}/health", port))
         .await?

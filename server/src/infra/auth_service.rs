@@ -423,7 +423,7 @@ where
         .unwrap_or_else(error_to_http_response)
 }
 
-#[instrument(skip_all, level = "debug")]
+#[instrument(skip_all, level = "debug", fields(name = %request.name))]
 async fn post_authorize<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<BindRequest>,
@@ -432,7 +432,6 @@ where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
 {
     let name = request.name.clone();
-    debug!(%name);
     data.get_login_handler().bind(request.into_inner()).await?;
     get_login_successful_response(&data, &name).await
 }

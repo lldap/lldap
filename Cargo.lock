@@ -4360,9 +4360,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-forest"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "119324027fc01804d9f83aefb7d80fda2e8fbe7c28e0acc59187cbd751a12915"
+checksum = "ee40835db14ddd1e3ba414292272eddde9dad04d3d4b65509656414d1c42592f"
 dependencies = [
  "chrono",
  "smallvec",

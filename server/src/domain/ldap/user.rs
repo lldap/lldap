@@ -230,7 +230,7 @@ fn expand_user_attribute_wildcards(attributes: &[String]) -> Vec<&str> {
     expand_attribute_wildcards(attributes, ALL_USER_ATTRIBUTE_KEYS)
 }
 
-#[instrument(skip_all, level = "debug")]
+#[instrument(skip_all, level = "debug", fields(ldap_filter, request_groups))]
 pub async fn get_user_list<Backend: UserListerBackendHandler>(
     ldap_info: &LdapInfo,
     ldap_filter: &LdapFilter,
@@ -238,7 +238,6 @@ pub async fn get_user_list<Backend: UserListerBackendHandler>(
     base: &str,
     backend: &Backend,
 ) -> LdapResult<Vec<UserAndGroups>> {
-    debug!(?ldap_filter);
     let filters = convert_user_filter(ldap_info, ldap_filter)?;
     debug!(?filters);
     backend

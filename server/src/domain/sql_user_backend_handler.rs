@@ -17,7 +17,7 @@ use sea_orm::{
     QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use std::collections::HashSet;
-use tracing::{debug, instrument};
+use tracing::instrument;
 
 fn attribute_condition(name: String, value: String) -> Cond {
     Expr::in_subquery(
@@ -91,14 +91,13 @@ fn to_value(opt_name: &Option<String>) -> ActiveValue<Option<String>> {
 
 #[async_trait]
 impl UserListerBackendHandler for SqlBackendHandler {
-    #[instrument(skip_all, level = "debug", ret, err)]
+    #[instrument(skip(self), level = "debug", ret, err)]
     async fn list_users(
         &self,
         filters: Option<UserRequestFilter>,
         // To simplify the query, we always fetch groups. TODO: cleanup.
         _get_groups: bool,
     ) -> Result<Vec<UserAndGroups>> {
-        debug!(?filters);
         let results = model::User::find()
             .filter(
                 filters
@@ -172,9 +171,8 @@ impl UserListerBackendHandler for SqlBackendHandler {
 
 #[async_trait]
 impl UserBackendHandler for SqlBackendHandler {
-    #[instrument(skip_all, level = "debug", ret)]
+    #[instrument(skip_all, level = "debug", ret, fields(user_id = ?user_id.as_str()))]
     async fn get_user_details(&self, user_id: &UserId) -> Result<User> {
-        debug!(?user_id);
         let mut user = User::from(
             model::User::find_by_id(user_id.to_owned())
                 .one(&self.sql_pool)
@@ -190,9 +188,8 @@ impl UserBackendHandler for SqlBackendHandler {
         Ok(user)
     }
 
-    #[instrument(skip_all, level = "debug", ret, err)]
+    #[instrument(skip_all, level = "debug", ret, err, fields(user_id = ?user_id.as_str()))]
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>> {
-        debug!(?user_id);
         let user = model::User::find_by_id(user_id.to_owned())
             .one(&self.sql_pool)
             .await?
@@ -205,9 +202,8 @@ impl UserBackendHandler for SqlBackendHandler {
         ))
     }
 
-    #[instrument(skip_all, level = "debug", err)]
+    #[instrument(skip(self), level = "debug", err, fields(user_id = ?request.user_id.as_str()))]
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
-        debug!(user_id = ?request.user_id);
         let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(request.user_id.as_str(), &now);
         let new_user = model::users::ActiveModel {
@@ -256,9 +252,8 @@ impl UserBackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    #[instrument(skip_all, level = "debug", err)]
+    #[instrument(skip(self), level = "debug", err, fields(user_id = ?request.user_id.as_str()))]
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
-        debug!(user_id = ?request.user_id);
         let update_user = model::users::ActiveModel {
             user_id: ActiveValue::Set(request.user_id.clone()),
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
@@ -329,9 +324,8 @@ impl UserBackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    #[instrument(skip_all, level = "debug", err)]
+    #[instrument(skip_all, level = "debug", err, fields(user_id = ?user_id.as_str()))]
     async fn delete_user(&self, user_id: &UserId) -> Result<()> {
-        debug!(?user_id);
         let res = model::User::delete_by_id(user_id.clone())
             .exec(&self.sql_pool)
             .await?;
@@ -344,9 +338,8 @@ impl UserBackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    #[instrument(skip_all, level = "debug", err)]
+    #[instrument(skip_all, level = "debug", err, fields(user_id = ?user_id.as_str(), group_id))]
     async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
-        debug!(?user_id, ?group_id);
         let new_membership = model::memberships::ActiveModel {
             user_id: ActiveValue::Set(user_id.clone()),
             group_id: ActiveValue::Set(group_id),
@@ -355,9 +348,8 @@ impl UserBackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    #[instrument(skip_all, level = "debug", err)]
+    #[instrument(skip_all, level = "debug", err, fields(user_id = ?user_id.as_str(), group_id))]
     async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
-        debug!(?user_id, ?group_id);
         let res = model::Membership::delete_by_id((user_id.clone(), group_id))
             .exec(&self.sql_pool)
             .await?;
