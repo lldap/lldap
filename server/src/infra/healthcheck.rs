@@ -19,8 +19,8 @@ where
 {
     use tokio_stream::StreamExt;
     let (r, w) = tokio::io::split(stream);
-    let mut requests = FramedRead::new(r, LdapCodec);
-    let mut resp = FramedWrite::new(w, LdapCodec);
+    let mut requests = FramedRead::new(r, LdapCodec::default());
+    let mut resp = FramedWrite::new(w, LdapCodec::default());
 
     resp.send(LdapMsg {
         msgid: 0,
