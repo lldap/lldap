@@ -154,6 +154,7 @@ impl GroupBackendHandler for SqlBackendHandler {
 mod tests {
     use super::*;
     use crate::domain::{handler::SubStringFilter, sql_backend_handler::tests::*, types::UserId};
+    use pretty_assertions::assert_eq;
 
     async fn get_group_ids(
         handler: &SqlBackendHandler,

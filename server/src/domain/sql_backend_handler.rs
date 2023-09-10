@@ -32,6 +32,7 @@ pub mod tests {
         infra::configuration::ConfigurationBuilder,
     };
     use lldap_auth::{opaque, registration};
+    use pretty_assertions::assert_eq;
     use sea_orm::Database;
 
     pub fn get_default_config() -> Configuration {

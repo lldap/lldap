@@ -787,6 +787,7 @@ mod tests {
     use chrono::TimeZone;
     use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope, LdapSubstringFilter};
     use mockall::predicate::eq;
+    use pretty_assertions::assert_eq;
     use std::collections::HashSet;
     use tokio;
 

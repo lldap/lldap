@@ -371,6 +371,7 @@ mod tests {
         sql_backend_handler::tests::*,
         types::{JpegPhoto, UserColumn},
     };
+    use pretty_assertions::{assert_eq, assert_ne};
 
     #[tokio::test]
     async fn test_list_users_no_filter() {

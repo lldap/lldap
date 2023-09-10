@@ -508,6 +508,7 @@ mod tests {
         RootNode, Variables,
     };
     use mockall::predicate::eq;
+    use pretty_assertions::assert_eq;
     use std::collections::HashSet;
 
     fn schema<'q, C, Q>(query_root: Q) -> RootNode<'q, Q, EmptyMutation<C>, EmptySubscription<C>>
