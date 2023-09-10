@@ -34,7 +34,7 @@ features = [ "serde" ]
 # For WASM targets, use the JS getrandom.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]
 version = "0.2"
-features = ["js"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.getrandom]
 version = "0.2"
+features = ["js"]
