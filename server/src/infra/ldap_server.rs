@@ -73,8 +73,8 @@ where
     use tokio_stream::StreamExt;
     let (r, w) = tokio::io::split(stream);
     // Configure the codec etc.
-    let mut requests = FramedRead::new(r, LdapCodec);
-    let mut resp = FramedWrite::new(w, LdapCodec);
+    let mut requests = FramedRead::new(r, LdapCodec::default());
+    let mut resp = FramedWrite::new(w, LdapCodec::default());
 
     let mut session = LdapHandler::new(
         AccessControlledBackendHandler::new(backend_handler),

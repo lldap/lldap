@@ -385,7 +385,7 @@ dependencies = [
  "asn1-rs-derive",
  "asn1-rs-impl",
  "displaydoc 0.2.3",
- "nom 7.1.3",
+ "nom",
  "num-traits",
  "rusticata-macros",
  "thiserror",
@@ -842,7 +842,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ff76b51e4c068c52bfd2866e1567bee7c567ae8f24ada09fd4307019e25eab7"
 dependencies = [
  "chrono",
- "nom 7.1.3",
+ "nom",
  "once_cell",
 ]
 
@@ -1077,7 +1077,7 @@ checksum = "42d4bc9b0db0a0df9ae64634ac5bdefb7afcb534e182275ca0beadbe486701c1"
 dependencies = [
  "asn1-rs",
  "displaydoc 0.2.3",
- "nom 7.1.3",
+ "nom",
  "num-bigint",
  "num-traits",
  "rusticata-macros",
@@ -2267,22 +2267,11 @@ dependencies = [
 
 [[package]]
 name = "lber"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a99b520993b21a6faab32643cf4726573dc18ca4cf2d48cbeb24d248c86c930"
-dependencies = [
- "byteorder",
- "bytes",
- "nom 2.2.1",
-]
-
-[[package]]
-name = "lber"
 version = "0.4.1"
 source = "git+https://github.com/inejge/ldap3/#11a66fd5c3df6ee2bae1237b93ba650a597f7805"
 dependencies = [
  "bytes",
- "nom 7.1.3",
+ "nom",
 ]
 
 [[package]]
@@ -2296,9 +2285,9 @@ dependencies = [
  "futures",
  "futures-util",
  "lazy_static",
- "lber 0.4.1",
+ "lber",
  "log",
- "nom 7.1.3",
+ "nom",
  "percent-encoding",
  "ring",
  "rustls",
@@ -2314,13 +2303,16 @@ dependencies = [
 
 [[package]]
 name = "ldap3_proto"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4162706b6f3b3d58f577990e22e9a0e03e2f9bedc2b8181d8abab2498da32003"
+checksum = "db993ebb4a1acda7ac25fa7e8609cff225a65f1f4a668e378eb252a1a6de433a"
 dependencies = [
+ "base64 0.21.0",
  "bytes",
- "lber 0.3.0",
+ "lber",
+ "nom",
  "peg",
+ "thiserror",
  "tokio-util",
  "tracing",
  "uuid 1.3.1",
@@ -2342,7 +2334,7 @@ dependencies = [
  "httpdate",
  "idna 0.3.0",
  "mime",
- "nom 7.1.3",
+ "nom",
  "once_cell",
  "quoted_printable",
  "rustls",
@@ -2431,7 +2423,7 @@ dependencies = [
  "itertools",
  "juniper",
  "jwt 0.16.0",
- "lber 0.4.1",
+ "lber",
  "ldap3",
  "ldap3_proto",
  "lettre",
@@ -2709,12 +2701,6 @@ dependencies = [
  "pin-utils",
  "static_assertions",
 ]
-
-[[package]]
-name = "nom"
-version = "2.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf51a729ecf40266a2368ad335a5fdde43471f545a967109cd62146ecf8b66ff"
 
 [[package]]
 name = "nom"
@@ -3465,7 +3451,7 @@ version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf0c4a6ece9950b9abdb62b1cfcf2a68b3b67a10ba445b3bb85be2a293d0632"
 dependencies = [
- "nom 7.1.3",
+ "nom",
 ]
 
 [[package]]
@@ -3935,7 +3921,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c12bc9199d1db8234678b7051747c07f517cdcf019262d1847b94ec8b1aee3e"
 dependencies = [
  "itertools",
- "nom 7.1.3",
+ "nom",
  "unicode_categories",
 ]
 
@@ -4885,7 +4871,7 @@ dependencies = [
  "data-encoding",
  "der-parser",
  "lazy_static",
- "nom 7.1.3",
+ "nom",
  "oid-registry",
  "rusticata-macros",
  "thiserror",
