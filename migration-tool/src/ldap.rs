@@ -271,7 +271,7 @@ pub fn get_users(connection: &mut LdapClient) -> Result<Vec<User>, anyhow::Error
             .default(maybe_user_ou.unwrap_or_default())
             .auto_complete(|s, _| {
                 let mut answers = autocomplete_domain_suffix(s, domain);
-                answers.extend(all_ous.clone().into_iter());
+                answers.extend(all_ous.clone());
                 answers
             })
             .build();
@@ -383,7 +383,7 @@ pub fn get_groups(connection: &mut LdapClient) -> Result<Vec<LdapGroup>> {
             .default(maybe_group_ou.unwrap_or_default())
             .auto_complete(|s, _| {
                 let mut answers = autocomplete_domain_suffix(s, domain);
-                answers.extend(all_ous.clone().into_iter());
+                answers.extend(all_ous.clone());
                 answers
             })
             .build();

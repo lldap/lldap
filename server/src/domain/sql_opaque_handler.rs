@@ -15,7 +15,7 @@ use tracing::{debug, instrument};
 
 type SqlOpaqueHandler = SqlBackendHandler;
 
-#[instrument(skip_all, level = "debug", err)]
+#[instrument(skip_all, level = "debug", err, fields(username = %username.as_str()))]
 fn passwords_match(
     password_file_bytes: &[u8],
     clear_password: &str,
@@ -49,7 +49,7 @@ impl SqlBackendHandler {
         )?)
     }
 
-    #[instrument(skip_all, level = "debug", err)]
+    #[instrument(skip(self), level = "debug", err)]
     async fn get_password_file_for_user(&self, user_id: UserId) -> Result<Option<Vec<u8>>> {
         // Fetch the previously registered password file from the DB.
         Ok(model::User::find_by_id(user_id)
@@ -201,7 +201,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
 }
 
 /// Convenience function to set a user's password.
-#[instrument(skip_all, level = "debug", err)]
+#[instrument(skip_all, level = "debug", err, fields(username = %username.as_str()))]
 pub(crate) async fn register_password(
     opaque_handler: &SqlOpaqueHandler,
     username: &UserId,

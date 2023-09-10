@@ -243,9 +243,8 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         )
     }
 
-    #[instrument(skip_all, level = "debug")]
+    #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
     pub async fn do_bind(&mut self, request: &LdapBindRequest) -> (LdapResultCode, String) {
-        debug!("DN: {}", &request.dn);
         let user_id = match get_user_id_from_distinguished_name(
             &request.dn.to_ascii_lowercase(),
             &self.ldap_info.base_dn,
@@ -788,6 +787,7 @@ mod tests {
     use chrono::TimeZone;
     use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope, LdapSubstringFilter};
     use mockall::predicate::eq;
+    use pretty_assertions::assert_eq;
     use std::collections::HashSet;
     use tokio;
 

@@ -13,7 +13,7 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
     QueryTrait,
 };
-use tracing::{debug, instrument};
+use tracing::instrument;
 
 fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
     use GroupRequestFilter::*;
@@ -60,9 +60,8 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
 
 #[async_trait]
 impl GroupListerBackendHandler for SqlBackendHandler {
-    #[instrument(skip_all, level = "debug", ret, err)]
+    #[instrument(skip(self), level = "debug", ret, err)]
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
-        debug!(?filters);
         let results = model::Group::find()
             // The order_by must be before find_with_related otherwise the primary order is by group_id.
             .order_by_asc(GroupColumn::DisplayName)
@@ -100,9 +99,8 @@ impl GroupListerBackendHandler for SqlBackendHandler {
 
 #[async_trait]
 impl GroupBackendHandler for SqlBackendHandler {
-    #[instrument(skip_all, level = "debug", ret, err)]
+    #[instrument(skip(self), level = "debug", ret, err)]
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails> {
-        debug!(?group_id);
         model::Group::find_by_id(group_id)
             .into_model::<GroupDetails>()
             .one(&self.sql_pool)
@@ -110,9 +108,8 @@ impl GroupBackendHandler for SqlBackendHandler {
             .ok_or_else(|| DomainError::EntityNotFound(format!("{:?}", group_id)))
     }
 
-    #[instrument(skip_all, level = "debug", err)]
+    #[instrument(skip(self), level = "debug", err, fields(group_id = ?request.group_id))]
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()> {
-        debug!(?request.group_id);
         let update_group = model::groups::ActiveModel {
             group_id: ActiveValue::Set(request.group_id),
             display_name: request
@@ -125,9 +122,8 @@ impl GroupBackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    #[instrument(skip_all, level = "debug", ret, err)]
+    #[instrument(skip(self), level = "debug", ret, err)]
     async fn create_group(&self, group_name: &str) -> Result<GroupId> {
-        debug!(?group_name);
         let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(group_name, &now);
         let new_group = model::groups::ActiveModel {
@@ -139,9 +135,8 @@ impl GroupBackendHandler for SqlBackendHandler {
         Ok(new_group.insert(&self.sql_pool).await?.group_id)
     }
 
-    #[instrument(skip_all, level = "debug", err)]
+    #[instrument(skip(self), level = "debug", err)]
     async fn delete_group(&self, group_id: GroupId) -> Result<()> {
-        debug!(?group_id);
         let res = model::Group::delete_by_id(group_id)
             .exec(&self.sql_pool)
             .await?;
@@ -159,6 +154,7 @@ impl GroupBackendHandler for SqlBackendHandler {
 mod tests {
     use super::*;
     use crate::domain::{handler::SubStringFilter, sql_backend_handler::tests::*, types::UserId};
+    use pretty_assertions::assert_eq;
 
     async fn get_group_ids(
         handler: &SqlBackendHandler,

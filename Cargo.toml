@@ -9,6 +9,8 @@ members = [
 
 default-members = ["server"]
 
+resolver = "2"
+
 [profile.release]
 lto = true
 

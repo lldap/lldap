@@ -42,6 +42,7 @@ mod tests {
         sql_migrations,
         types::{GroupId, JpegPhoto, Serialized, Uuid},
     };
+    use pretty_assertions::assert_eq;
 
     use super::*;
     use chrono::prelude::*;

@@ -272,7 +272,7 @@ impl ValueType for UserId {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct JpegPhoto(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl From<JpegPhoto> for Value {
@@ -329,6 +329,19 @@ impl TryFrom<String> for JpegPhoto {
 impl From<&JpegPhoto> for String {
     fn from(val: &JpegPhoto) -> Self {
         base64::engine::general_purpose::STANDARD.encode(&val.0)
+    }
+}
+
+impl std::fmt::Debug for JpegPhoto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut encoded = base64::engine::general_purpose::STANDARD.encode(&self.0);
+        if encoded.len() > 100 {
+            encoded.truncate(100);
+            encoded.push_str(" ...");
+        };
+        f.debug_tuple("JpegPhoto")
+            .field(&format!("b64[{}]", encoded))
+            .finish()
     }
 }
 
@@ -556,6 +569,7 @@ pub struct UserAndGroups {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_serialized_debug_string() {
