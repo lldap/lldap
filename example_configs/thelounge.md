@@ -2,7 +2,9 @@
 
 [Main documentation here.](https://thelounge.chat/docs/configuration#ldap-support)
 
-Simple Config:
+## Simple Config:
+
+In this config, The Lounge will use the credentials provided in web ui to authenticate with lldap. It'll allow access if authentication was successful.
 
 ```
       ldap: {
@@ -14,10 +16,14 @@ Simple Config:
     },
 ```
 
-In this config, The Lounge will use the credentials provided in web ui to authenticate with lldap. It'll allow access if authentication was successful and the user is a member of Base DN.
+
+## Advanced Config:
+
+`rootDN` is similar to bind DN in other applications. It is used in combination with `rootPassword` to query lldap. `ldap-viewer` user in `lldap` is a member of the group `lldap_strict_readonly` group. This gives `ldap-viewer` user permission to query `lldap`.
 
 
-Advanced Config:
+With the `filter`, You can limit The Lounge access to users who are a member of the group `thelounge`.
+
 
 ```
       ldap: {
@@ -35,8 +41,3 @@ Advanced Config:
     },
 ```
 
-`rootDN` is similar to bind DN in other applications. It is used in combination with `rootPassword` to query lldap. `ldap-viewer` user in `lldap` is a member of the group `lldap_strict_readonly` group. This gives `ldap-viewer` user permission to query `lldap`.
-
-
-
-With the `filter`, You can limit The Lounge access to users who are a member of the group `thelounge`.
