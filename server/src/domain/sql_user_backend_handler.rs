@@ -98,7 +98,7 @@ impl UserListerBackendHandler for SqlBackendHandler {
         // To simplify the query, we always fetch groups. TODO: cleanup.
         _get_groups: bool,
     ) -> Result<Vec<UserAndGroups>> {
-        let results = model::User::find()
+        let mut users: Vec<_> = model::User::find()
             .filter(
                 filters
                     .map(|f| {
@@ -116,43 +116,28 @@ impl UserListerBackendHandler for SqlBackendHandler {
                     .unwrap_or_else(|| SimpleExpr::Value(true.into()).into_condition()),
             )
             .order_by_asc(UserColumn::UserId)
-            //find_with_linked?
-            .find_also_linked(model::memberships::UserToGroup)
+            .find_with_linked(model::memberships::UserToGroup)
             .order_by_asc(SimpleExpr::Column(
-                (Alias::new("r1"), GroupColumn::GroupId).into_column_ref(),
+                (Alias::new("r1"), GroupColumn::DisplayName).into_column_ref(),
             ))
             .all(&self.sql_pool)
-            .await?;
-        use itertools::Itertools;
-        let mut users: Vec<_> = results
-            .iter()
-            .group_by(|(u, _)| u)
+            .await?
             .into_iter()
-            .map(|(user, groups)| {
-                let mut groups: Vec<_> = groups
-                    .into_iter()
-                    .flat_map(|(_, g)| g)
-                    .map(|g| GroupDetails::from(g.clone()))
-                    .collect();
-                groups.sort_by(|g1, g2| g1.display_name.cmp(&g2.display_name));
-                UserAndGroups {
-                    user: user.clone().into(),
-                    groups: Some(groups),
-                }
+            .map(|(user, groups)| UserAndGroups {
+                user: user.into(),
+                groups: Some(groups.into_iter().map(Into::<GroupDetails>::into).collect()),
             })
             .collect();
         // At this point, the users don't have attributes, we need to populate it with another query.
-        let user_ids = users
-            .iter()
-            .map(|u| u.user.user_id.clone())
-            .collect::<Vec<_>>();
+        let user_ids = users.iter().map(|u| &u.user.user_id);
         let attributes = model::UserAttributes::find()
-            .filter(model::UserAttributesColumn::UserId.is_in(&user_ids))
+            .filter(model::UserAttributesColumn::UserId.is_in(user_ids))
             .order_by_asc(model::UserAttributesColumn::UserId)
             .order_by_asc(model::UserAttributesColumn::AttributeName)
             .all(&self.sql_pool)
             .await?;
         let mut attributes_iter = attributes.into_iter().peekable();
+        use itertools::Itertools; // For take_while_ref
         for user in users.iter_mut() {
             assert!(attributes_iter
                 .peek()
