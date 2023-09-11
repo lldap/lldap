@@ -30,7 +30,6 @@ env:
 
 # build-ui , create/compile the web
 ### install wasm
-### install rollup
 ### run app/build.sh
 ### upload artifacts
 
@@ -40,10 +39,10 @@ env:
 # GitHub actions randomly timeout when downloading musl-gcc, using custom dev image   #
 # Look into .github/workflows/Dockerfile.dev for development image details            #
 # Using lldap dev image based on https://hub.docker.com/_/rust and musl-gcc bundled   #
+# lldap/rust-dev:latest                                                               #
 #######################################################################################
-### Cargo build
-### aarch64 and amd64 is musl based
-### armv7 is glibc based, musl had issue with time_t when cross compile https://github.com/rust-lang/libc/issues/1848
+# Cargo build
+### armv7, aarch64 and amd64 is musl based
 
 # build-ui,builds-armhf, build-aarch64, build-amd64 will upload artifacts will be used next job
 
@@ -51,12 +50,11 @@ env:
 ### will run lldap with postgres, mariadb and sqlite backend, do selfcheck command.
 
 # Build docker image
-### Triplet docker image arch with debian base
-### amd64 & aarch64 with alpine base
+### Triplet docker image arch with debian and alpine base
 # build-docker-image job will fetch artifacts and run Dockerfile.ci then push the image.
 ### Look into .github/workflows/Dockerfile.ci.debian or .github/workflowds/Dockerfile.ci.alpine
 
-# create release artifacts
+# Create release artifacts
 ### Fetch artifacts
 ### Clean up web artifact
 ### Setup folder structure
@@ -86,10 +84,10 @@ jobs:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.event_name == 'release' }}
     container:
-      image: nitnelave/rust-dev:latest
+      image: lldap/rust-dev:latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3.5.3
+        uses: actions/checkout@v4.0.0
       - uses: actions/cache@v3
         with:
           path: |
@@ -101,8 +99,6 @@ jobs:
           key: lldap-ui-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-ui-
-      - name: Install rollup (nodejs)
-        run: npm install -g rollup
       - name: Add wasm target (rust)
         run: rustup target add wasm32-unknown-unknown
       - name: Install wasm-pack with cargo
@@ -125,20 +121,18 @@ jobs:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.event_name == 'release' }}
     strategy:
+      fail-fast: false
       matrix:
-        target: [armv7-unknown-linux-gnueabihf, aarch64-unknown-linux-musl, x86_64-unknown-linux-musl]
+        target: [armv7-unknown-linux-musleabihf, aarch64-unknown-linux-musl, x86_64-unknown-linux-musl]
     container:
-      image: nitnelave/rust-dev:latest
+      image: lldap/rust-dev:latest
       env:
-        CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
-        CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: x86_64-linux-musl-gcc
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3.5.3
+        uses: actions/checkout@v4.0.0
       - uses: actions/cache@v3
         with:
           path: |
@@ -300,7 +294,7 @@ jobs:
 
     steps:
        - name: Checkout scripts
-         uses: actions/checkout@v3.5.3
+         uses: actions/checkout@v4.0.0
          with:
            sparse-checkout: 'scripts'
 
@@ -477,7 +471,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3.5.3
+        uses: actions/checkout@v4.0.0
       - name: Download all artifacts
         uses: actions/download-artifact@v3
         with:
@@ -593,13 +587,13 @@ jobs:
         run: |
              mv bin/aarch64-unknown-linux-musl-lldap-bin/lldap bin/aarch64-lldap
              mv bin/x86_64-unknown-linux-musl-lldap-bin/lldap bin/amd64-lldap
-             mv bin/armv7-unknown-linux-gnueabihf-lldap-bin/lldap bin/armhf-lldap
+             mv bin/armv7-unknown-linux-musleabihf-lldap-bin/lldap bin/armhf-lldap
              mv bin/aarch64-unknown-linux-musl-lldap_migration_tool-bin/lldap_migration_tool bin/aarch64-lldap_migration_tool
              mv bin/x86_64-unknown-linux-musl-lldap_migration_tool-bin/lldap_migration_tool bin/amd64-lldap_migration_tool
-             mv bin/armv7-unknown-linux-gnueabihf-lldap_migration_tool-bin/lldap_migration_tool bin/armhf-lldap_migration_tool
+             mv bin/armv7-unknown-linux-musleabihf-lldap_migration_tool-bin/lldap_migration_tool bin/armhf-lldap_migration_tool
              mv bin/aarch64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password bin/aarch64-lldap_set_password
              mv bin/x86_64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password bin/amd64-lldap_set_password
-             mv bin/armv7-unknown-linux-gnueabihf-lldap_set_password-bin/lldap_set_password bin/armhf-lldap_set_password
+             mv bin/armv7-unknown-linux-musleabihf-lldap_set_password-bin/lldap_set_password bin/armhf-lldap_set_password
              chmod +x bin/*-lldap
              chmod +x bin/*-lldap_migration_tool
              chmod +x bin/*-lldap_set_password

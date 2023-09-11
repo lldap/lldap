@@ -1,25 +1,10 @@
 use super::sql_migrations::{get_schema_version, migrate_from_version, upgrade_to_v1};
-use sea_orm::Value;
+use sea_orm::{DeriveValueType, QueryResult, Value};
 
 pub type DbConnection = sea_orm::DatabaseConnection;
 
-#[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord)]
+#[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord, DeriveValueType)]
 pub struct SchemaVersion(pub i16);
-
-impl sea_orm::TryGetable for SchemaVersion {
-    fn try_get_by<I: sea_orm::ColIdx>(
-        res: &sea_orm::QueryResult,
-        index: I,
-    ) -> Result<Self, sea_orm::TryGetError> {
-        Ok(SchemaVersion(i16::try_get_by(res, index)?))
-    }
-}
-
-impl From<SchemaVersion> for Value {
-    fn from(version: SchemaVersion) -> Self {
-        version.0.into()
-    }
-}
 
 pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(5);
 
@@ -42,6 +27,7 @@ mod tests {
         sql_migrations,
         types::{GroupId, JpegPhoto, Serialized, Uuid},
     };
+    use pretty_assertions::assert_eq;
 
     use super::*;
     use chrono::prelude::*;

@@ -1,7 +1,9 @@
-FROM rust:1.66
+FROM rust:1.72
 
 ARG USERNAME=lldapdev
-ARG USER_UID=1000
+# We need to keep the user as 1001 to match the GitHub runner's UID.
+# See https://github.com/actions/checkout/issues/956.
+ARG USER_UID=1001
 ARG USER_GID=$USER_UID
 
 # Create the user
