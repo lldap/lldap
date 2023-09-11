@@ -102,9 +102,9 @@ impl GroupBackendHandler for SqlBackendHandler {
     #[instrument(skip(self), level = "debug", ret, err)]
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails> {
         model::Group::find_by_id(group_id)
-            .into_model::<GroupDetails>()
             .one(&self.sql_pool)
             .await?
+            .map(Into::<GroupDetails>::into)
             .ok_or_else(|| DomainError::EntityNotFound(format!("{:?}", group_id)))
     }
 

@@ -3,7 +3,7 @@ use chrono::{NaiveDateTime, TimeZone};
 use sea_orm::{
     entity::IntoActiveValue,
     sea_query::{value::ValueType, ArrayType, BlobSize, ColumnType, Nullable, ValueTypeErr},
-    DbErr, FromQueryResult, QueryResult, TryFromU64, TryGetError, TryGetable, Value,
+    DbErr, QueryResult, TryFromU64, TryGetError, TryGetable, Value,
 };
 use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
@@ -552,7 +552,7 @@ pub struct Group {
     pub users: Vec<UserId>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, FromQueryResult)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GroupDetails {
     pub group_id: GroupId,
     pub display_name: String,

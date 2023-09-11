@@ -68,7 +68,7 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
             .eq(group_id)
             .into_condition(),
         UserIdSubString(filter) => UserColumn::UserId
-            .like(&filter.to_sql_filter())
+            .like(filter.to_sql_filter())
             .into_condition(),
         SubString(col, filter) => {
             SimpleExpr::FunctionCall(Func::lower(Expr::col(col.as_column_ref())))
@@ -196,9 +196,10 @@ impl UserBackendHandler for SqlBackendHandler {
             .ok_or_else(|| DomainError::EntityNotFound(user_id.to_string()))?;
         Ok(HashSet::from_iter(
             user.find_linked(model::memberships::UserToGroup)
-                .into_model::<GroupDetails>()
                 .all(&self.sql_pool)
-                .await?,
+                .await?
+                .into_iter()
+                .map(Into::<GroupDetails>::into),
         ))
     }
 
