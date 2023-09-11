@@ -26,7 +26,7 @@ Advanced Config:
         tlsOptions: {},
         primaryKey: "uid",
         searchDN: {
-            rootDN: "uid=ldap-editor,ou=people,dc=example,dc=com",
+            rootDN: "uid=ldap-viewer,ou=people,dc=example,dc=com",
             rootPassword: ""
             filter: "(memberOf=cn=thelounge,ou=groups,dc=example,dc=com)",
             base: "dc=example,dc=com",
@@ -35,6 +35,8 @@ Advanced Config:
     },
 ```
 
-`rootDN` is similar to bind DN in other applications. It is used in combination with `rootPassword` to query lldap. `ldap-editor` user in `lldap` is a member of `lldap_password_manager` and `lldap_strict_readonly` groups. This gives `ldap-editor` user permission to query `lldap` and the permission to change passwords.
+`rootDN` is similar to bind DN in other applications. It is used in combination with `rootPassword` to query lldap. `ldap-viewer` user in `lldap` is a member of the group `lldap_strict_readonly` group. This gives `ldap-viewer` user permission to query `lldap`.
 
-With the `filter`, You can limit The Lounge access to users who are a member of the group `thelounge`. 
+
+
+With the `filter`, You can limit The Lounge access to users who are a member of the group `thelounge`.
