@@ -7,13 +7,13 @@ use sea_orm::{
     sea_query::{
         self, all, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, Query, Table, Value,
     },
-    ConnectionTrait, DatabaseTransaction, DbErr, FromQueryResult, Iden, Order, Statement,
-    TransactionTrait,
+    ConnectionTrait, DatabaseTransaction, DbErr, DeriveIden, FromQueryResult, Iden, Order,
+    Statement, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, instrument, warn};
 
-#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum Users {
     Table,
     UserId,
@@ -29,7 +29,7 @@ pub enum Users {
     Uuid,
 }
 
-#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum Groups {
     Table,
     GroupId,
@@ -38,14 +38,14 @@ pub enum Groups {
     Uuid,
 }
 
-#[derive(Iden, Clone, Copy)]
+#[derive(DeriveIden, Clone, Copy)]
 pub enum Memberships {
     Table,
     UserId,
     GroupId,
 }
 
-#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum UserAttributeSchema {
     Table,
     UserAttributeSchemaName,
@@ -56,7 +56,7 @@ pub enum UserAttributeSchema {
     UserAttributeSchemaIsHardcoded,
 }
 
-#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum UserAttributes {
     Table,
     UserAttributeUserId,
@@ -64,7 +64,7 @@ pub enum UserAttributes {
     UserAttributeValue,
 }
 
-#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum GroupAttributeSchema {
     Table,
     GroupAttributeSchemaName,
@@ -75,7 +75,7 @@ pub enum GroupAttributeSchema {
     GroupAttributeSchemaIsHardcoded,
 }
 
-#[derive(Iden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum GroupAttributes {
     Table,
     GroupAttributeGroupId,
@@ -84,7 +84,7 @@ pub enum GroupAttributes {
 }
 
 // Metadata about the SQL DB.
-#[derive(Iden)]
+#[derive(DeriveIden)]
 pub enum Metadata {
     Table,
     // Which version of the schema we're at.
@@ -388,7 +388,7 @@ async fn replace_column<I: Iden + Copy + 'static, const N: usize>(
     //  - update the new one if there are changes needed
     //  - drop the old one
     let builder = transaction.get_database_backend();
-    #[derive(Iden)]
+    #[derive(DeriveIden)]
     enum TempTable {
         TempName,
     }

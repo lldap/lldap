@@ -3,10 +3,10 @@ use chrono::{NaiveDateTime, TimeZone};
 use sea_orm::{
     entity::IntoActiveValue,
     sea_query::{value::ValueType, ArrayType, BlobSize, ColumnType, Nullable, ValueTypeErr},
-    strum::{EnumString, IntoStaticStr},
     DbErr, FromQueryResult, QueryResult, TryFromU64, TryGetError, TryGetable, Value,
 };
 use serde::{Deserialize, Serialize};
+use strum::{EnumString, IntoStaticStr};
 
 pub use super::model::{GroupColumn, UserColumn};
 
