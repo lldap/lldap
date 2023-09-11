@@ -43,7 +43,6 @@ serde = "*"
 serde_bytes = "0.11"
 serde_json = "1"
 sha2 = "0.10"
-strum = "0.24"
 thiserror = "*"
 time = "0.3"
 tokio-rustls = "0.23"
@@ -91,6 +90,10 @@ version = "0.8"
 features = ["serde"]
 version = "*"
 
+[dependencies.strum]
+features = ["derive"]
+version = "0.25"
+
 [dependencies.tokio]
 features = ["full"]
 version = "1.25"
@@ -113,7 +116,7 @@ default-features = false
 version = "0.24"
 
 [dependencies.sea-orm]
-version= "0.11"
+version= "0.12"
 default-features = false
 features = ["macros", "with-chrono", "with-uuid", "sqlx-all", "runtime-actix-rustls"]
 

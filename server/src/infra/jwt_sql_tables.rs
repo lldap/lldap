@@ -1,12 +1,12 @@
 use sea_orm::{
-    sea_query::{self, ColumnDef, ForeignKey, ForeignKeyAction, Iden, Table},
-    ConnectionTrait,
+    sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Table},
+    ConnectionTrait, DeriveIden,
 };
 
 pub use crate::domain::{sql_migrations::Users, sql_tables::DbConnection};
 
 /// Contains the refresh tokens for a given user.
-#[derive(Iden)]
+#[derive(DeriveIden)]
 pub enum JwtRefreshStorage {
     Table,
     RefreshTokenHash,
@@ -15,7 +15,7 @@ pub enum JwtRefreshStorage {
 }
 
 /// Contains the blacklisted JWT that haven't expired yet.
-#[derive(Iden)]
+#[derive(DeriveIden)]
 pub enum JwtStorage {
     Table,
     JwtHash,
@@ -25,7 +25,7 @@ pub enum JwtStorage {
 }
 
 /// Contains the temporary tokens to reset the password, sent by email.
-#[derive(Iden)]
+#[derive(DeriveIden)]
 pub enum PasswordResetTokens {
     Table,
     Token,
