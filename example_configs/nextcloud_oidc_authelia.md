@@ -70,7 +70,7 @@ _The first two can be any string you'd like to identify the connection with. The
 
 * *_Do not_* use commas in the Nextcloud Social Login app scope! This caused many issues for me.
 * Be sure you update your Authelia `configuration.yml`. Specifically, the line: `redirect_uris`. The new URL should be 
-`https://auth.example.com/index.php/apps/sociallogin/custom_oidc/Authelia`. 
+`https://nextcloud.example.com/apps/sociallogin/custom_oidc/Authelia`, in some cases the URL also contains the index.php file and has to look like this `https://nextcloud.example.com/index.php/apps/sociallogin/custom_oidc/Authelia`. Check if your nextcloud has index.php in it's URL because if it has this won't work without and if it hasn't the link with index.php won't work.
     * The final field in the URL (Authelia) needs to be the same value you used in the Social Login "Internal Name" field. 
 * If you've setup LLDAP correctly in nextcloud, the last dropdown for _Default Group_ should show you the `nextcloud_users` group you setup in LLDAP. 
 
