@@ -291,6 +291,7 @@ folder for help with:
 - [Organizr](example_configs/Organizr.md)
 - [Portainer](example_configs/portainer.md)
 - [PowerDNS Admin](example_configs/powerdns_admin.md)
+- [Proxmox VE](example_configs/proxmox.md)
 - [Rancher](example_configs/rancher.md)
 - [Seafile](example_configs/seafile.md)
 - [Shaarli](example_configs/shaarli.md)
