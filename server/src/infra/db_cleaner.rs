@@ -48,7 +48,6 @@ impl Scheduler {
 
     #[instrument(skip_all)]
     async fn cleanup_db(sql_pool: DbConnection) {
-        info!("Cleaning DB");
         if let Err(e) = model::JwtRefreshStorage::delete_many()
             .filter(JwtRefreshStorageColumn::ExpiryDate.lt(chrono::Utc::now().naive_utc()))
             .exec(&sql_pool)
@@ -70,7 +69,6 @@ impl Scheduler {
         {
             error!("DB error while cleaning up password reset tokens: {}", e);
         };
-        info!("DB cleaned!");
     }
 
     fn duration_until_next(&self) -> Duration {

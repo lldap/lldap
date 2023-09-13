@@ -3,15 +3,16 @@ use chrono::{NaiveDateTime, TimeZone};
 use sea_orm::{
     entity::IntoActiveValue,
     sea_query::{value::ValueType, ArrayType, BlobSize, ColumnType, Nullable, ValueTypeErr},
-    strum::{EnumString, IntoStaticStr},
-    DbErr, FromQueryResult, QueryResult, TryFromU64, TryGetError, TryGetable, Value,
+    DbErr, DeriveValueType, QueryResult, TryFromU64, TryGetError, TryGetable, Value,
 };
 use serde::{Deserialize, Serialize};
+use strum::{EnumString, IntoStaticStr};
 
 pub use super::model::{GroupColumn, UserColumn};
 
-#[derive(PartialEq, Hash, Eq, Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(PartialEq, Hash, Eq, Clone, Debug, Default, Serialize, Deserialize, DeriveValueType)]
 #[serde(try_from = "&str")]
+#[sea_orm(column_type = "String(Some(36))")]
 pub struct Uuid(String);
 
 impl Uuid {
@@ -54,48 +55,6 @@ impl std::string::ToString for Uuid {
     }
 }
 
-impl TryGetable for Uuid {
-    fn try_get_by<I: sea_orm::ColIdx>(
-        res: &QueryResult,
-        index: I,
-    ) -> std::result::Result<Self, TryGetError> {
-        Ok(Uuid(String::try_get_by(res, index)?))
-    }
-}
-
-impl ValueType for Uuid {
-    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
-        <Self as std::convert::TryFrom<_>>::try_from(
-            <std::string::String as sea_orm::sea_query::ValueType>::try_from(v)?.as_str(),
-        )
-        .map_err(|_| ValueTypeErr {})
-    }
-
-    fn type_name() -> String {
-        "Uuid".to_owned()
-    }
-
-    fn array_type() -> ArrayType {
-        ArrayType::String
-    }
-
-    fn column_type() -> ColumnType {
-        ColumnType::String(Some(36))
-    }
-}
-
-impl From<Uuid> for Value {
-    fn from(uuid: Uuid) -> Self {
-        uuid.as_str().into()
-    }
-}
-
-impl From<&Uuid> for Value {
-    fn from(uuid: &Uuid) -> Self {
-        uuid.as_str().into()
-    }
-}
-
 #[cfg(test)]
 #[macro_export]
 macro_rules! uuid {
@@ -104,7 +63,8 @@ macro_rules! uuid {
     };
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, DeriveValueType)]
+#[sea_orm(column_type = "Binary(BlobSize::Long)", array_type = "Bytes")]
 pub struct Serialized(Vec<u8>);
 
 const SERIALIZED_I64_LEN: usize = 8;
@@ -160,45 +120,9 @@ impl Serialized {
     }
 }
 
-impl From<Serialized> for Value {
-    fn from(ser: Serialized) -> Self {
-        ser.0.into()
-    }
-}
-
-impl TryGetable for Serialized {
-    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
-        Ok(Self(Vec::<u8>::try_get_by(res, index)?))
-    }
-}
-
-impl TryFromU64 for Serialized {
-    fn try_from_u64(_n: u64) -> Result<Self, DbErr> {
-        Err(DbErr::ConvertFromU64(
-            "Serialized cannot be constructed from u64",
-        ))
-    }
-}
-
-impl ValueType for Serialized {
-    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
-        Ok(Self(<Vec<u8> as ValueType>::try_from(v)?))
-    }
-
-    fn type_name() -> String {
-        "Serialized".to_owned()
-    }
-
-    fn array_type() -> ArrayType {
-        ArrayType::Bytes
-    }
-
-    fn column_type() -> ColumnType {
-        ColumnType::Binary(BlobSize::Long)
-    }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(
+    PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default, Serialize, Deserialize, DeriveValueType,
+)]
 #[serde(from = "String")]
 pub struct UserId(String);
 
@@ -228,21 +152,9 @@ impl From<String> for UserId {
     }
 }
 
-impl From<UserId> for Value {
-    fn from(user_id: UserId) -> Self {
-        user_id.into_string().into()
-    }
-}
-
 impl From<&UserId> for Value {
     fn from(user_id: &UserId) -> Self {
         user_id.as_str().into()
-    }
-}
-
-impl TryGetable for UserId {
-    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
-        Ok(UserId::new(&String::try_get_by(res, index)?))
     }
 }
 
@@ -254,32 +166,9 @@ impl TryFromU64 for UserId {
     }
 }
 
-impl ValueType for UserId {
-    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
-        Ok(UserId::new(<String as ValueType>::try_from(v)?.as_str()))
-    }
-
-    fn type_name() -> String {
-        "UserId".to_owned()
-    }
-
-    fn array_type() -> ArrayType {
-        ArrayType::String
-    }
-
-    fn column_type() -> ColumnType {
-        ColumnType::String(Some(255))
-    }
-}
-
-#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Serialize, Deserialize, DeriveValueType)]
+#[sea_orm(column_type = "Binary(BlobSize::Long)", array_type = "Bytes")]
 pub struct JpegPhoto(#[serde(with = "serde_bytes")] Vec<u8>);
-
-impl From<JpegPhoto> for Value {
-    fn from(photo: JpegPhoto) -> Self {
-        photo.0.into()
-    }
-}
 
 impl From<&JpegPhoto> for Value {
     fn from(photo: &JpegPhoto) -> Self {
@@ -332,6 +221,19 @@ impl From<&JpegPhoto> for String {
     }
 }
 
+impl std::fmt::Debug for JpegPhoto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut encoded = base64::engine::general_purpose::STANDARD.encode(&self.0);
+        if encoded.len() > 100 {
+            encoded.truncate(100);
+            encoded.push_str(" ...");
+        };
+        f.debug_tuple("JpegPhoto")
+            .field(&format!("b64[{}]", encoded))
+            .finish()
+    }
+}
+
 impl JpegPhoto {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
@@ -362,40 +264,6 @@ impl JpegPhoto {
         )
         .unwrap();
         Self(bytes)
-    }
-}
-
-impl TryGetable for JpegPhoto {
-    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
-        <Self as std::convert::TryFrom<Vec<_>>>::try_from(Vec::<u8>::try_get_by(res, index)?)
-            .map_err(|e| {
-                TryGetError::DbErr(DbErr::TryIntoErr {
-                    from: "[u8]",
-                    into: "JpegPhoto",
-                    source: e.into(),
-                })
-            })
-    }
-}
-
-impl ValueType for JpegPhoto {
-    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
-        <Self as std::convert::TryFrom<_>>::try_from(
-            <Vec<u8> as sea_orm::sea_query::ValueType>::try_from(v)?.as_slice(),
-        )
-        .map_err(|_| ValueTypeErr {})
-    }
-
-    fn type_name() -> String {
-        "JpegPhoto".to_owned()
-    }
-
-    fn array_type() -> ArrayType {
-        ArrayType::Bytes
-    }
-
-    fn column_type() -> ColumnType {
-        ColumnType::Binary(BlobSize::Long)
     }
 }
 
@@ -446,38 +314,8 @@ impl Default for User {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, DeriveValueType)]
 pub struct GroupId(pub i32);
-
-impl From<GroupId> for Value {
-    fn from(group_id: GroupId) -> Self {
-        group_id.0.into()
-    }
-}
-
-impl TryGetable for GroupId {
-    fn try_get_by<I: sea_orm::ColIdx>(res: &QueryResult, index: I) -> Result<Self, TryGetError> {
-        Ok(GroupId(i32::try_get_by(res, index)?))
-    }
-}
-
-impl ValueType for GroupId {
-    fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
-        Ok(GroupId(<i32 as ValueType>::try_from(v)?))
-    }
-
-    fn type_name() -> String {
-        "GroupId".to_owned()
-    }
-
-    fn array_type() -> ArrayType {
-        ArrayType::Int
-    }
-
-    fn column_type() -> ColumnType {
-        ColumnType::Integer
-    }
-}
 
 impl TryFromU64 for GroupId {
     fn try_from_u64(n: u64) -> Result<Self, DbErr> {
@@ -539,7 +377,7 @@ pub struct Group {
     pub users: Vec<UserId>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, FromQueryResult)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GroupDetails {
     pub group_id: GroupId,
     pub display_name: String,
@@ -556,6 +394,7 @@ pub struct UserAndGroups {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_serialized_debug_string() {

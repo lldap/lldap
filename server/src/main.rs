@@ -9,7 +9,7 @@ use crate::{
     domain::{
         handler::{
             CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
-            UserBackendHandler,
+            UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
         },
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
@@ -89,8 +89,19 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     ensure_group_exists(&backend_handler, "lldap_admin").await?;
     ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
     ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;
-    if let Err(e) = backend_handler.get_user_details(&config.ldap_user_dn).await {
-        warn!("Could not get admin user, trying to create it: {:#}", e);
+    let admin_present = if let Ok(admins) = backend_handler
+        .list_users(
+            Some(UserRequestFilter::MemberOf("lldap_admin".to_owned())),
+            false,
+        )
+        .await
+    {
+        !admins.is_empty()
+    } else {
+        false
+    };
+    if !admin_present {
+        warn!("Could not find an admin user, trying to create the user \"admin\" with the config-provided password");
         create_admin_user(&backend_handler, &config)
             .await
             .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))

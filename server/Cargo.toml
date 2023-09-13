@@ -34,7 +34,7 @@ itertools = "0.10"
 juniper = "0.15"
 jwt = "0.16"
 lber = "0.4.1"
-ldap3_proto = ">=0.3.1"
+ldap3_proto = "^0.4"
 log = "*"
 orion = "0.17"
 rand_chacha = "0.3"
@@ -43,7 +43,6 @@ serde = "*"
 serde_bytes = "0.11"
 serde_json = "1"
 sha2 = "0.10"
-strum = "0.24"
 thiserror = "*"
 time = "0.3"
 tokio-rustls = "0.23"
@@ -91,6 +90,10 @@ version = "0.8"
 features = ["serde"]
 version = "*"
 
+[dependencies.strum]
+features = ["derive"]
+version = "0.25"
+
 [dependencies.tokio]
 features = ["full"]
 version = "1.25"
@@ -101,7 +104,7 @@ version = "*"
 
 [dependencies.tracing-forest]
 features = ["smallvec", "chrono", "tokio"]
-version = "^0.1.4"
+version = "^0.1.6"
 
 [dependencies.actix-tls]
 features = ["default", "rustls"]
@@ -113,7 +116,7 @@ default-features = false
 version = "0.24"
 
 [dependencies.sea-orm]
-version= "0.11"
+version= "0.12"
 default-features = false
 features = ["macros", "with-chrono", "with-uuid", "sqlx-all", "runtime-actix-rustls"]
 
@@ -134,6 +137,7 @@ features = ["serde"]
 assert_cmd = "2.0"
 mockall = "0.11.4"
 nix = "0.26.2"
+pretty_assertions = "1"
 
 [dev-dependencies.graphql_client]
 features = ["graphql_query_derive", "reqwest-rustls"]

@@ -3,8 +3,8 @@ use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
     Error,
 };
-use tracing::{error, info, Span};
-use tracing_actix_web::{root_span, RootSpanBuilder};
+use tracing::{debug, error, Span};
+use tracing_actix_web::RootSpanBuilder;
 use tracing_subscriber::{filter::EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// We will define a custom root span builder to capture additional fields, specific
@@ -13,11 +13,11 @@ pub struct CustomRootSpanBuilder;
 
 impl RootSpanBuilder for CustomRootSpanBuilder {
     fn on_request_start(request: &ServiceRequest) -> Span {
-        let span = root_span!(request);
-        span.in_scope(|| {
-            info!(uri = %request.uri());
-        });
-        span
+        tracing::debug_span!(
+            "HTTP request",
+            method = request.method().to_string(),
+            uri = request.uri().to_string()
+        )
     }
 
     fn on_request_end<B>(_: Span, outcome: &Result<ServiceResponse<B>, Error>) {
@@ -26,7 +26,7 @@ impl RootSpanBuilder for CustomRootSpanBuilder {
                 if let Some(error) = response.response().error() {
                     error!(?error);
                 } else {
-                    info!(status_code = &response.response().status().as_u16());
+                    debug!(status_code = &response.response().status().as_u16());
                 }
             }
             Err(error) => error!(?error),
