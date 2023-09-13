@@ -15,7 +15,7 @@ Proxmox Virtual Environment is a hyper-converged infrastructure open-source soft
 - User Attribute Name: `uid`
 - Server: Your LLDAP hostname or IP
 - Port: `3890`
-- SSL: Leave unchecked unless you're using SSL
+- SSL: Leave unchecked unless you're using LDAPS
 - Comment: This field will be exposed as the "name" in the login page
 
 ## Sync Options
@@ -27,7 +27,7 @@ Proxmox Virtual Environment is a hyper-converged infrastructure open-source soft
 - Groupname attr: `cn`
 - User Filter: `(&(objectClass=person)(|(memberof=cn=proxmox_user,ou=groups,dc=example,dc=com)(memberof=cn=proxmox_admin,ou=groups,dc=example,dc=com)))`
   - This filter will only copy users that are members of the `proxmox_user` or `proxmox_admin` groups. If you want to enable all users in lldap, this filter can be used: `(objectClass=person)`
-- Group Filter: `(&(objectClass=groupofnames)(|(cn=proxmox_user)(cn=proxmox_admin)))`
+- Group Filter: `(&(objectClass=groupofuniquenames)(|(cn=proxmox_user)(cn=proxmox_admin)))`
   - This filter will only copy the `proxmox_user` or `proxmox_admin` groups explicitly. If you want to sync all groups, this filter can be used: `(objectClass=groupofnames)`
 - Default Sync Options:
   - Scope: `Users and Groups`
