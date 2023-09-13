@@ -5,7 +5,7 @@ use crate::domain::{
     },
     model::{self, GroupColumn, MembershipColumn},
     sql_backend_handler::SqlBackendHandler,
-    types::{Group, GroupDetails, GroupId, Uuid},
+    types::{AttributeValue, Group, GroupDetails, GroupId, Uuid},
 };
 use async_trait::async_trait;
 use sea_orm::{
@@ -63,8 +63,7 @@ impl GroupListerBackendHandler for SqlBackendHandler {
     #[instrument(skip(self), level = "debug", ret, err)]
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
         let results = model::Group::find()
-            // The order_by must be before find_with_related otherwise the primary order is by group_id.
-            .order_by_asc(GroupColumn::DisplayName)
+            .order_by_asc(GroupColumn::GroupId)
             .find_with_related(model::Membership)
             .filter(
                 filters
@@ -84,7 +83,7 @@ impl GroupListerBackendHandler for SqlBackendHandler {
             )
             .all(&self.sql_pool)
             .await?;
-        Ok(results
+        let mut groups: Vec<_> = results
             .into_iter()
             .map(|(group, users)| {
                 let users: Vec<_> = users.into_iter().map(|u| u.user_id).collect();
@@ -93,7 +92,30 @@ impl GroupListerBackendHandler for SqlBackendHandler {
                     ..group.into()
                 }
             })
-            .collect())
+            .collect();
+        let group_ids = groups.iter().map(|u| &u.id);
+        let attributes = model::GroupAttributes::find()
+            .filter(model::GroupAttributesColumn::GroupId.is_in(group_ids))
+            .order_by_asc(model::GroupAttributesColumn::GroupId)
+            .order_by_asc(model::GroupAttributesColumn::AttributeName)
+            .all(&self.sql_pool)
+            .await?;
+        let mut attributes_iter = attributes.into_iter().peekable();
+        use itertools::Itertools; // For take_while_ref
+        for group in groups.iter_mut() {
+            assert!(attributes_iter
+                .peek()
+                .map(|u| u.group_id >= group.id)
+                .unwrap_or(true),
+                "Attributes are not sorted, groups are not sorted, or previous group didn't consume all the attributes");
+
+            group.attributes = attributes_iter
+                .take_while_ref(|u| u.group_id == group.id)
+                .map(AttributeValue::from)
+                .collect();
+        }
+        groups.sort_by(|g1, g2| g1.display_name.cmp(&g2.display_name));
+        Ok(groups)
     }
 }
 
@@ -101,11 +123,18 @@ impl GroupListerBackendHandler for SqlBackendHandler {
 impl GroupBackendHandler for SqlBackendHandler {
     #[instrument(skip(self), level = "debug", ret, err)]
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails> {
-        model::Group::find_by_id(group_id)
+        let mut group_details = model::Group::find_by_id(group_id)
             .one(&self.sql_pool)
             .await?
             .map(Into::<GroupDetails>::into)
-            .ok_or_else(|| DomainError::EntityNotFound(format!("{:?}", group_id)))
+            .ok_or_else(|| DomainError::EntityNotFound(format!("{:?}", group_id)))?;
+        let attributes = model::GroupAttributes::find()
+            .filter(model::GroupAttributesColumn::GroupId.eq(group_details.group_id))
+            .order_by_asc(model::GroupAttributesColumn::AttributeName)
+            .all(&self.sql_pool)
+            .await?;
+        group_details.attributes = attributes.into_iter().map(AttributeValue::from).collect();
+        Ok(group_details)
     }
 
     #[instrument(skip(self), level = "debug", err, fields(group_id = ?request.group_id))]

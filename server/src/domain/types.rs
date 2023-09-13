@@ -63,7 +63,7 @@ macro_rules! uuid {
     };
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, DeriveValueType)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, DeriveValueType)]
 #[sea_orm(column_type = "Binary(BlobSize::Long)", array_type = "Bytes")]
 pub struct Serialized(Vec<u8>);
 
@@ -283,7 +283,7 @@ impl IntoActiveValue<Serialized> for JpegPhoto {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AttributeValue {
     pub name: String,
     pub value: Serialized,
@@ -314,12 +314,30 @@ impl Default for User {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, DeriveValueType)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    DeriveValueType,
+)]
 pub struct GroupId(pub i32);
 
 impl TryFromU64 for GroupId {
     fn try_from_u64(n: u64) -> Result<Self, DbErr> {
         Ok(GroupId(i32::try_from_u64(n)?))
+    }
+}
+
+impl From<&GroupId> for Value {
+    fn from(id: &GroupId) -> Self {
+        (*id).into()
     }
 }
 
@@ -375,6 +393,7 @@ pub struct Group {
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
     pub users: Vec<UserId>,
+    pub attributes: Vec<AttributeValue>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -383,6 +402,7 @@ pub struct GroupDetails {
     pub display_name: String,
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
+    pub attributes: Vec<AttributeValue>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -24,6 +24,8 @@ type Group {
   displayName: String!
   creationDate: DateTimeUtc!
   uuid: String!
+  "User-defined attributes."
+  attributes: [AttributeValue!]!
   "The groups to which this user belongs."
   users: [User!]!
 }
@@ -83,6 +85,7 @@ type User {
   avatar: String
   creationDate: DateTimeUtc!
   uuid: String!
+  "User-defined attributes."
   attributes: [AttributeValue!]!
   "The groups to which this user belongs."
   groups: [Group!]!

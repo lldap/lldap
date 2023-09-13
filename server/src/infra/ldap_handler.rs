@@ -856,6 +856,7 @@ mod tests {
                     display_name: group,
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                    attributes: Vec::new(),
                 });
                 Ok(set)
             });
@@ -942,6 +943,7 @@ mod tests {
                     display_name: "lldap_admin".to_string(),
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                    attributes: Vec::new(),
                 });
                 Ok(set)
             });
@@ -1028,6 +1030,7 @@ mod tests {
                         display_name: "rockstars".to_string(),
                         creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                         uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                        attributes: Vec::new(),
                     }]),
                 }])
             });
@@ -1344,6 +1347,7 @@ mod tests {
                         creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                         users: vec![UserId::new("bob"), UserId::new("john")],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                        attributes: Vec::new(),
                     },
                     Group {
                         id: GroupId(3),
@@ -1351,6 +1355,7 @@ mod tests {
                         creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                         users: vec![UserId::new("john")],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                        attributes: Vec::new(),
                     },
                 ])
             });
@@ -1442,6 +1447,7 @@ mod tests {
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                    attributes: Vec::new(),
                 }])
             });
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
@@ -1512,6 +1518,7 @@ mod tests {
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                    attributes: Vec::new(),
                 }])
             });
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
@@ -1881,6 +1888,7 @@ mod tests {
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![UserId::new("bob"), UserId::new("john")],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                    attributes: Vec::new(),
                 }])
             });
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
@@ -1963,6 +1971,7 @@ mod tests {
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![UserId::new("bob"), UserId::new("john")],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                    attributes: Vec::new(),
                 }])
             });
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
@@ -2344,6 +2353,7 @@ mod tests {
             display_name: "lldap_admin".to_string(),
             creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
             uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+            attributes: Vec::new(),
         });
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
@@ -2571,6 +2581,7 @@ mod tests {
                 creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                 users: vec![UserId::new("bob")],
                 uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                attributes: Vec::new(),
             }])
         });
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
@@ -2664,6 +2675,7 @@ mod tests {
                 creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                 users: vec![UserId::new("bob")],
                 uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                attributes: Vec::new(),
             }])
         });
         let mut ldap_handler = setup_bound_admin_handler(mock).await;

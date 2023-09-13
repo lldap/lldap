@@ -286,7 +286,8 @@ impl<Handler: BackendHandler> User<Handler> {
         self.user.uuid.as_str()
     }
 
-    fn attributes(&self) -> Vec<AttributeValue<Handler>> {
+    /// User-defined attributes.
+    fn attributes(&self) -> Vec<AttributeValue<Handler, SchemaUserAttributeExtractor>> {
         self.user
             .attributes
             .clone()
@@ -344,6 +345,7 @@ pub struct Group<Handler: BackendHandler> {
     display_name: String,
     creation_date: chrono::NaiveDateTime,
     uuid: String,
+    attributes: Vec<DomainAttributeValue>,
     members: Option<Vec<String>>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
@@ -362,6 +364,16 @@ impl<Handler: BackendHandler> Group<Handler> {
     fn uuid(&self) -> String {
         self.uuid.clone()
     }
+
+    /// User-defined attributes.
+    fn attributes(&self) -> Vec<AttributeValue<Handler, SchemaGroupAttributeExtractor>> {
+        self.attributes
+            .clone()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
     /// The groups to which this user belongs.
     async fn users(&self, context: &Context<Handler>) -> FieldResult<Vec<User<Handler>>> {
         let span = debug_span!("[GraphQL query] group::users");
@@ -392,6 +404,7 @@ impl<Handler: BackendHandler> From<GroupDetails> for Group<Handler> {
             display_name: group_details.display_name,
             creation_date: group_details.creation_date,
             uuid: group_details.uuid.into_string(),
+            attributes: group_details.attributes,
             members: None,
             _phantom: std::marker::PhantomData,
         }
@@ -405,6 +418,7 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
             display_name: group.display_name,
             creation_date: group.creation_date,
             uuid: group.uuid.into_string(),
+            attributes: group.attributes,
             members: Some(group.users.into_iter().map(UserId::into_string).collect()),
             _phantom: std::marker::PhantomData,
         }
@@ -501,14 +515,37 @@ impl<Handler: BackendHandler> From<DomainSchema> for Schema<Handler> {
     }
 }
 
+trait SchemaAttributeExtractor: std::marker::Send {
+    fn get_attributes(schema: &DomainSchema) -> &DomainAttributeList;
+}
+
+struct SchemaUserAttributeExtractor;
+
+impl SchemaAttributeExtractor for SchemaUserAttributeExtractor {
+    fn get_attributes(schema: &DomainSchema) -> &DomainAttributeList {
+        &schema.get_schema().user_attributes
+    }
+}
+
+struct SchemaGroupAttributeExtractor;
+
+impl SchemaAttributeExtractor for SchemaGroupAttributeExtractor {
+    fn get_attributes(schema: &DomainSchema) -> &DomainAttributeList {
+        &schema.get_schema().group_attributes
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct AttributeValue<Handler: BackendHandler> {
+pub struct AttributeValue<Handler: BackendHandler, Extractor> {
     attribute: DomainAttributeValue,
     _phantom: std::marker::PhantomData<Box<Handler>>,
+    _phantom_extractor: std::marker::PhantomData<Extractor>,
 }
 
 #[graphql_object(context = Context<Handler>)]
-impl<Handler: BackendHandler> AttributeValue<Handler> {
+impl<Handler: BackendHandler, Extractor: SchemaAttributeExtractor>
+    AttributeValue<Handler, Extractor>
+{
     fn name(&self) -> &str {
         &self.attribute.name
     }
@@ -518,19 +555,17 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
             .get_user_restricted_lister_handler(&context.validation_result);
         serialize_attribute(
             &self.attribute,
-            &PublicSchema::from(handler.get_schema().await?),
+            Extractor::get_attributes(&PublicSchema::from(handler.get_schema().await?)),
         )
     }
 }
 
 pub fn serialize_attribute(
     attribute: &DomainAttributeValue,
-    schema: &DomainSchema,
+    attributes: &DomainAttributeList,
 ) -> FieldResult<Vec<String>> {
     let convert_date = |date| chrono::Utc.from_utc_datetime(&date).to_rfc3339();
-    schema
-        .get_schema()
-        .user_attributes
+    attributes
         .get_attribute_type(&attribute.name)
         .map(|attribute_type| {
             match attribute_type {
@@ -575,11 +610,14 @@ pub fn serialize_attribute(
         .ok_or_else(|| FieldError::from(anyhow::anyhow!("Unknown attribute: {}", &attribute.name)))
 }
 
-impl<Handler: BackendHandler> From<DomainAttributeValue> for AttributeValue<Handler> {
+impl<Handler: BackendHandler, Extractor> From<DomainAttributeValue>
+    for AttributeValue<Handler, Extractor>
+{
     fn from(value: DomainAttributeValue) -> Self {
         Self {
             attribute: value,
             _phantom: std::marker::PhantomData,
+            _phantom_extractor: std::marker::PhantomData,
         }
     }
 }
@@ -634,12 +672,49 @@ mod tests {
               displayName
               creationDate
               uuid
+              attributes {
+                name
+                value
+              }
             }
           }
         }"#;
 
         let mut mock = MockTestBackendHandler::new();
-        setup_default_schema(&mut mock);
+        mock.expect_get_schema().returning(|| {
+            Ok(crate::domain::handler::Schema {
+                user_attributes: DomainAttributeList {
+                    attributes: vec![
+                        DomainAttributeSchema {
+                            name: "first_name".to_owned(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                        },
+                        DomainAttributeSchema {
+                            name: "last_name".to_owned(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                        },
+                    ],
+                },
+                group_attributes: DomainAttributeList {
+                    attributes: vec![DomainAttributeSchema {
+                        name: "club_name".to_owned(),
+                        attribute_type: AttributeType::String,
+                        is_list: false,
+                        is_visible: true,
+                        is_editable: true,
+                        is_hardcoded: false,
+                    }],
+                },
+            })
+        });
         mock.expect_get_user_details()
             .with(eq(UserId::new("bob")))
             .return_once(|_| {
@@ -667,12 +742,17 @@ mod tests {
             display_name: "Bobbersons".to_string(),
             creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
             uuid: crate::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+            attributes: vec![DomainAttributeValue {
+                name: "club_name".to_owned(),
+                value: Serialized::from("Gang of Four"),
+            }],
         });
         groups.insert(GroupDetails {
             group_id: GroupId(7),
             display_name: "Jefferees".to_string(),
             creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
             uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+            attributes: Vec::new(),
         });
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
@@ -704,13 +784,19 @@ mod tests {
                             "id": 3,
                             "displayName": "Bobbersons",
                             "creationDate": "1970-01-01T00:00:00.000000042+00:00",
-                            "uuid": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
+                            "uuid": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+                            "attributes": [{
+                                "name": "club_name",
+                                "value": ["Gang of Four"],
+                              },
+                            ],
                           },
                           {
                             "id": 7,
                             "displayName": "Jefferees",
                             "creationDate": "1970-01-01T00:00:00.000000012+00:00",
-                            "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
+                            "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+                            "attributes": [],
                         }]
                     }
                 }),
