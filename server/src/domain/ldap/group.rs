@@ -6,13 +6,14 @@ use tracing::{debug, instrument, warn};
 use crate::domain::{
     handler::{GroupListerBackendHandler, GroupRequestFilter},
     ldap::error::LdapError,
+    schema::{PublicSchema, SchemaGroupAttributeExtractor},
     types::{Group, UserId, Uuid},
 };
 
 use super::{
     error::LdapResult,
     utils::{
-        expand_attribute_wildcards, get_group_id_from_distinguished_name,
+        expand_attribute_wildcards, get_custom_attribute, get_group_id_from_distinguished_name,
         get_user_id_from_distinguished_name, map_group_field, LdapInfo,
     },
 };
@@ -23,6 +24,7 @@ pub fn get_group_attribute(
     attribute: &str,
     user_filter: &Option<UserId>,
     ignored_group_attributes: &[String],
+    schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
     let attribute = attribute.to_ascii_lowercase();
     let attribute_values = match attribute.as_str() {
@@ -46,13 +48,20 @@ pub fn get_group_attribute(
                 attribute
             )
         }
-        _ => {
+        attr => {
             if !ignored_group_attributes.contains(&attribute) {
-                warn!(
-                    r#"Ignoring unrecognized group attribute: {}\n\
+                match get_custom_attribute::<SchemaGroupAttributeExtractor>(
+                    &group.attributes,
+                    attr,
+                    schema,
+                ) {
+                    Some(v) => return Some(v),
+                    None => warn!(
+                        r#"Ignoring unrecognized group attribute: {}\n\
                       To disable this warning, add it to "ignored_group_attributes" in the config."#,
-                    attribute
-                );
+                        attribute
+                    ),
+                };
             }
             return None;
         }
@@ -83,6 +92,7 @@ fn make_ldap_search_group_result_entry(
     attributes: &[String],
     user_filter: &Option<UserId>,
     ignored_group_attributes: &[String],
+    schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
     let expanded_attributes = expand_group_attribute_wildcards(attributes);
 
@@ -97,6 +107,7 @@ fn make_ldap_search_group_result_entry(
                     a,
                     user_filter,
                     ignored_group_attributes,
+                    schema,
                 )?;
                 Some(LdapPartialAttribute {
                     atype: a.to_string(),
@@ -221,6 +232,7 @@ pub fn convert_groups_to_ldap_op<'a>(
     attributes: &'a [String],
     ldap_info: &'a LdapInfo,
     user_filter: &'a Option<UserId>,
+    schema: &'a PublicSchema,
 ) -> impl Iterator<Item = LdapOp> + 'a {
     groups.into_iter().map(move |g| {
         LdapOp::SearchResultEntry(make_ldap_search_group_result_entry(
@@ -229,6 +241,7 @@ pub fn convert_groups_to_ldap_op<'a>(
             attributes,
             user_filter,
             &ldap_info.ignored_group_attributes,
+            schema,
         ))
     })
 }
