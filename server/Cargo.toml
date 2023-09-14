@@ -100,7 +100,7 @@ version = "1.25"
 
 [dependencies.uuid]
 features = ["v1", "v3"]
-version = "*"
+version = "1"
 
 [dependencies.tracing-forest]
 features = ["smallvec", "chrono", "tokio"]
@@ -160,5 +160,5 @@ default-features = false
 features = ["file_locks"]
 
 [dev-dependencies.uuid]
-version = "*"
+version = "1"
 features = ["v4"]
