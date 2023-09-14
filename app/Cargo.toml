@@ -6,7 +6,7 @@ homepage = "https://github.com/lldap/lldap"
 license = "GPL-3.0-only"
 name = "lldap_app"
 repository = "https://github.com/lldap/lldap"
-version = "0.5.0-alpha"
+version = "0.5.0"
 include = ["src/**/*", "queries/**/*", "Cargo.toml", "../schema.graphql"]
 
 [dependencies]
