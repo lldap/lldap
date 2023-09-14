@@ -2,12 +2,15 @@ use crate::{
     domain::{
         handler::{BackendHandler, SchemaBackendHandler},
         ldap::utils::{map_user_field, UserFieldType},
+        schema::{
+            PublicSchema, SchemaAttributeExtractor, SchemaGroupAttributeExtractor,
+            SchemaUserAttributeExtractor,
+        },
         types::{AttributeType, GroupDetails, GroupId, JpegPhoto, UserColumn, UserId},
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
         graphql::api::{field_error_callback, Context},
-        schema::PublicSchema,
     },
 };
 use chrono::{NaiveDateTime, TimeZone};
@@ -19,7 +22,6 @@ type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
 type DomainUser = crate::domain::types::User;
 type DomainGroup = crate::domain::types::Group;
 type DomainUserAndGroups = crate::domain::types::UserAndGroups;
-type DomainSchema = crate::infra::schema::PublicSchema;
 type DomainAttributeList = crate::domain::handler::AttributeList;
 type DomainAttributeSchema = crate::domain::handler::AttributeSchema;
 type DomainAttributeValue = crate::domain::types::AttributeValue;
@@ -492,7 +494,7 @@ impl<Handler: BackendHandler> From<DomainAttributeList> for AttributeList<Handle
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Schema<Handler: BackendHandler> {
-    schema: DomainSchema,
+    schema: PublicSchema,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
 
@@ -506,32 +508,12 @@ impl<Handler: BackendHandler> Schema<Handler> {
     }
 }
 
-impl<Handler: BackendHandler> From<DomainSchema> for Schema<Handler> {
-    fn from(value: DomainSchema) -> Self {
+impl<Handler: BackendHandler> From<PublicSchema> for Schema<Handler> {
+    fn from(value: PublicSchema) -> Self {
         Self {
             schema: value,
             _phantom: std::marker::PhantomData,
         }
-    }
-}
-
-trait SchemaAttributeExtractor: std::marker::Send {
-    fn get_attributes(schema: &DomainSchema) -> &DomainAttributeList;
-}
-
-struct SchemaUserAttributeExtractor;
-
-impl SchemaAttributeExtractor for SchemaUserAttributeExtractor {
-    fn get_attributes(schema: &DomainSchema) -> &DomainAttributeList {
-        &schema.get_schema().user_attributes
-    }
-}
-
-struct SchemaGroupAttributeExtractor;
-
-impl SchemaAttributeExtractor for SchemaGroupAttributeExtractor {
-    fn get_attributes(schema: &DomainSchema) -> &DomainAttributeList {
-        &schema.get_schema().group_attributes
     }
 }
 

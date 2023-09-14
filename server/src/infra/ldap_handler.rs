@@ -12,6 +12,7 @@ use crate::{
             },
         },
         opaque_handler::OpaqueHandler,
+        schema::PublicSchema,
         types::{Group, JpegPhoto, UserAndGroups, UserId},
     },
     infra::access_control::{
@@ -611,10 +612,11 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             .get_user_restricted_lister_handler(user_info);
         let search_results = self.do_search_internal(&backend_handler, request).await?;
 
-        let schema = backend_handler.get_schema().await.map_err(|e| LdapError {
-            code: LdapResultCode::OperationsError,
-            message: format!("Unable to get schema: {:#}", e),
-        })?;
+        let schema =
+            PublicSchema::from(backend_handler.get_schema().await.map_err(|e| LdapError {
+                code: LdapResultCode::OperationsError,
+                message: format!("Unable to get schema: {:#}", e),
+            })?);
         let mut results = match search_results {
             InternalSearchResults::UsersAndGroups(users, groups) => {
                 convert_users_to_ldap_op(users, &request.attrs, &self.ldap_info, &schema)
@@ -623,6 +625,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         &request.attrs,
                         &self.ldap_info,
                         &backend_handler.user_filter,
+                        &schema,
                     ))
                     .collect()
             }
@@ -2721,6 +2724,100 @@ mod tests {
                 }),
                 make_search_success()
             ])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_custom_attribute_read() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users().times(1).return_once(|_, _| {
+            Ok(vec![UserAndGroups {
+                user: User {
+                    user_id: UserId::new("test"),
+                    attributes: vec![AttributeValue {
+                        name: "nickname".to_owned(),
+                        value: Serialized::from("Bob the Builder"),
+                    }],
+                    ..Default::default()
+                },
+                groups: None,
+            }])
+        });
+        mock.expect_list_groups().times(1).return_once(|_| {
+            Ok(vec![Group {
+                id: GroupId(1),
+                display_name: "group".to_string(),
+                creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                users: vec![UserId::new("bob")],
+                uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                attributes: vec![AttributeValue {
+                    name: "club_name".to_owned(),
+                    value: Serialized::from("Breakfast Club"),
+                }],
+            }])
+        });
+        mock.expect_get_schema().returning(|| {
+            Ok(crate::domain::handler::Schema {
+                user_attributes: AttributeList {
+                    attributes: vec![AttributeSchema {
+                        name: "nickname".to_owned(),
+                        attribute_type: AttributeType::String,
+                        is_list: false,
+                        is_visible: true,
+                        is_editable: true,
+                        is_hardcoded: false,
+                    }],
+                },
+                group_attributes: AttributeList {
+                    attributes: vec![AttributeSchema {
+                        name: "club_name".to_owned(),
+                        attribute_type: AttributeType::String,
+                        is_list: false,
+                        is_visible: true,
+                        is_editable: true,
+                        is_hardcoded: false,
+                    }],
+                },
+            })
+        });
+        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+
+        let request = make_search_request(
+            "dc=example,dc=com",
+            LdapFilter::And(vec![]),
+            vec!["uid", "nickname", "club_name"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![
+                        LdapPartialAttribute {
+                            atype: "uid".to_owned(),
+                            vals: vec![b"test".to_vec()],
+                        },
+                        LdapPartialAttribute {
+                            atype: "nickname".to_owned(),
+                            vals: vec![b"Bob the Builder".to_vec()],
+                        },
+                    ],
+                }),
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=group,ou=groups,dc=example,dc=com".to_owned(),
+                    attributes: vec![
+                        LdapPartialAttribute {
+                            atype: "uid".to_owned(),
+                            vals: vec![b"group".to_vec()],
+                        },
+                        LdapPartialAttribute {
+                            atype: "club_name".to_owned(),
+                            vals: vec![b"Breakfast Club".to_vec()],
+                        },
+                    ],
+                }),
+                make_search_success()
+            ]),
         );
     }
 }

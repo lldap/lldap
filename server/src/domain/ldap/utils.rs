@@ -4,8 +4,9 @@ use ldap3_proto::{proto::LdapSubstringFilter, LdapResultCode};
 use tracing::{debug, instrument, warn};
 
 use crate::domain::{
-    handler::{Schema, SubStringFilter},
+    handler::SubStringFilter,
     ldap::error::{LdapError, LdapResult},
+    schema::{PublicSchema, SchemaAttributeExtractor},
     types::{AttributeType, AttributeValue, JpegPhoto, UserColumn, UserId},
 };
 
@@ -195,10 +196,10 @@ pub struct LdapInfo {
     pub ignored_group_attributes: Vec<String>,
 }
 
-pub fn get_custom_attribute(
+pub fn get_custom_attribute<Extractor: SchemaAttributeExtractor>(
     attributes: &[AttributeValue],
     attribute_name: &str,
-    schema: &Schema,
+    schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
     let convert_date = |date| {
         chrono::Utc
@@ -206,8 +207,7 @@ pub fn get_custom_attribute(
             .to_rfc3339()
             .into_bytes()
     };
-    schema
-        .user_attributes
+    Extractor::get_attributes(schema)
         .get_attribute_type(attribute_name)
         .and_then(|attribute_type| {
             attributes
