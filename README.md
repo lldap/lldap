@@ -5,9 +5,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nitnelave/lldap/actions/workflows/rust.yml?query=branch%3Amain">
+  <a href="https://github.com/lldap/lldap/actions/workflows/rust.yml?query=branch%3Amain">
     <img
-      src="https://github.com/nitnelave/lldap/actions/workflows/rust.yml/badge.svg"
+      src="https://github.com/lldap/lldap/actions/workflows/rust.yml/badge.svg"
       alt="Build"/>
   </a>
   <a href="https://discord.gg/h5PEdRMNyP">
@@ -61,7 +61,7 @@ many backends, from KeyCloak to Authelia to Nextcloud and
 [more](#compatible-services)!
 
 <img
-  src="https://raw.githubusercontent.com/nitnelave/lldap/master/screenshot.png"
+  src="https://raw.githubusercontent.com/lldap/lldap/master/screenshot.png"
   alt="Screenshot of the user list page"
   width="50%"
   align="right"
@@ -94,7 +94,7 @@ MySQL/MariaDB or PostgreSQL.
 
 ### With Docker
 
-The image is available at `nitnelave/lldap`. You should persist the `/data`
+The image is available at `lldap/lldap`. You should persist the `/data`
 folder, which contains your configuration, the database and the private key
 file.
 
@@ -127,7 +127,7 @@ volumes:
 
 services:
   lldap:
-    image: nitnelave/lldap:stable
+    image: lldap/lldap:stable
     ports:
       # For LDAP
       - "3890:3890"
