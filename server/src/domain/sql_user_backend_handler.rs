@@ -312,7 +312,7 @@ impl UserBackendHandler for SqlBackendHandler {
         }
         if let Some(avatar) = request.avatar {
             new_user_attributes.push(model::user_attributes::ActiveModel {
-                user_id: Set(request.user_id),
+                user_id: Set(request.user_id.clone()),
                 attribute_name: Set("avatar".to_owned()),
                 value: Set(Serialized::from(&avatar)),
             });
@@ -320,6 +320,26 @@ impl UserBackendHandler for SqlBackendHandler {
         self.sql_pool
             .transaction::<_, (), DomainError>(|transaction| {
                 Box::pin(async move {
+                    let schema = Self::get_schema_with_transaction(transaction).await?;
+                    for attribute in request.attributes {
+                        if schema
+                            .user_attributes
+                            .get_attribute_type(&attribute.name)
+                            .is_some()
+                        {
+                            new_user_attributes.push(model::user_attributes::ActiveModel {
+                                user_id: Set(request.user_id.clone()),
+                                attribute_name: Set(attribute.name),
+                                value: Set(attribute.value),
+                            });
+                        } else {
+                            return Err(DomainError::InternalError(format!(
+                                "Attribute name {} doesn't exist in the schema,
+                                    yet was attempted to be inserted in the database",
+                                &attribute.name
+                            )));
+                        }
+                    }
                     new_user.insert(transaction).await?;
                     if !new_user_attributes.is_empty() {
                         model::UserAttributes::insert_many(new_user_attributes)
@@ -982,9 +1002,13 @@ mod tests {
                 user_id: UserId::new("james"),
                 email: "email".to_string(),
                 display_name: Some("display_name".to_string()),
-                first_name: Some("first_name".to_string()),
+                first_name: None,
                 last_name: Some("last_name".to_string()),
                 avatar: Some(JpegPhoto::for_tests()),
+                attributes: vec![AttributeValue {
+                    name: "first_name".to_owned(),
+                    value: Serialized::from("First Name"),
+                }],
             })
             .await
             .unwrap();
@@ -1005,7 +1029,7 @@ mod tests {
                 },
                 AttributeValue {
                     name: "first_name".to_owned(),
-                    value: Serialized::from("first_name")
+                    value: Serialized::from("First Name")
                 },
                 AttributeValue {
                     name: "last_name".to_owned(),

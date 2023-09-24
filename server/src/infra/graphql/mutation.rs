@@ -104,6 +104,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 first_name: user.first_name,
                 last_name: user.last_name,
                 avatar,
+                ..Default::default()
             })
             .instrument(span.clone())
             .await?;

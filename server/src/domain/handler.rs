@@ -104,6 +104,7 @@ pub struct CreateUserRequest {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,
+    pub attributes: Vec<AttributeValue>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
