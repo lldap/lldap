@@ -711,6 +711,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         code: LdapResultCode::ConstraintViolation,
                         message: format!("Invalid JPEG photo: {:#?}", e),
                     })?,
+                ..Default::default()
             })
             .await
             .map_err(|e| LdapError {
