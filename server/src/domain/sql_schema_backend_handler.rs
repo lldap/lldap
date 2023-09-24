@@ -1,43 +1,56 @@
 use crate::domain::{
-    error::Result,
-    handler::{AttributeSchema, Schema, SchemaBackendHandler},
+    error::{DomainError, Result},
+    handler::{AttributeList, AttributeSchema, Schema, SchemaBackendHandler},
     model,
     sql_backend_handler::SqlBackendHandler,
 };
 use async_trait::async_trait;
-use sea_orm::{EntityTrait, QueryOrder};
-
-use super::handler::AttributeList;
+use sea_orm::{DatabaseTransaction, EntityTrait, QueryOrder, TransactionTrait};
 
 #[async_trait]
 impl SchemaBackendHandler for SqlBackendHandler {
     async fn get_schema(&self) -> Result<Schema> {
-        Ok(Schema {
-            user_attributes: AttributeList {
-                attributes: self.get_user_attributes().await?,
-            },
-            group_attributes: AttributeList {
-                attributes: self.get_group_attributes().await?,
-            },
-        })
+        Ok(self
+            .sql_pool
+            .transaction::<_, Schema, DomainError>(|transaction| {
+                Box::pin(async move { Self::get_schema_with_transaction(transaction).await })
+            })
+            .await?)
     }
 }
 
 impl SqlBackendHandler {
-    async fn get_user_attributes(&self) -> Result<Vec<AttributeSchema>> {
+    pub(crate) async fn get_schema_with_transaction(
+        transaction: &DatabaseTransaction,
+    ) -> Result<Schema> {
+        Ok(Schema {
+            user_attributes: AttributeList {
+                attributes: Self::get_user_attributes(transaction).await?,
+            },
+            group_attributes: AttributeList {
+                attributes: Self::get_group_attributes(transaction).await?,
+            },
+        })
+    }
+
+    async fn get_user_attributes(
+        transaction: &DatabaseTransaction,
+    ) -> Result<Vec<AttributeSchema>> {
         Ok(model::UserAttributeSchema::find()
             .order_by_asc(model::UserAttributeSchemaColumn::AttributeName)
-            .all(&self.sql_pool)
+            .all(transaction)
             .await?
             .into_iter()
             .map(|m| m.into())
             .collect())
     }
 
-    async fn get_group_attributes(&self) -> Result<Vec<AttributeSchema>> {
+    async fn get_group_attributes(
+        transaction: &DatabaseTransaction,
+    ) -> Result<Vec<AttributeSchema>> {
         Ok(model::GroupAttributeSchema::find()
             .order_by_asc(model::GroupAttributeSchemaColumn::AttributeName)
-            .all(&self.sql_pool)
+            .all(transaction)
             .await?
             .into_iter()
             .map(|m| m.into())
