@@ -1,8 +1,8 @@
 use crate::domain::{
     error::Result,
     types::{
-        AttributeType, Group, GroupDetails, GroupId, JpegPhoto, User, UserAndGroups, UserColumn,
-        UserId, Uuid,
+        AttributeType, AttributeValue, Group, GroupDetails, GroupId, JpegPhoto, User,
+        UserAndGroups, UserColumn, UserId, Uuid,
     },
 };
 use async_trait::async_trait;
@@ -115,6 +115,8 @@ pub struct UpdateUserRequest {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,
+    pub delete_attributes: Vec<String>,
+    pub insert_attributes: Vec<AttributeValue>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
