@@ -6,10 +6,10 @@ use tracing::info;
 use crate::domain::{
     error::Result,
     handler::{
-        AttributeSchema, BackendHandler, CreateUserRequest, GroupBackendHandler,
-        GroupListerBackendHandler, GroupRequestFilter, Schema, SchemaBackendHandler,
-        UpdateGroupRequest, UpdateUserRequest, UserBackendHandler, UserListerBackendHandler,
-        UserRequestFilter,
+        AttributeSchema, BackendHandler, CreateUserRequest,
+        GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+        ReadSchemaBackendHandler, Schema, UpdateGroupRequest, UpdateUserRequest,
+        UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
     },
     types::{Group, GroupDetails, GroupId, User, UserAndGroups, UserId},
 };
@@ -265,7 +265,7 @@ pub struct UserRestrictedListerBackendHandler<'a, Handler> {
 }
 
 #[async_trait]
-impl<'a, Handler: SchemaBackendHandler + Sync> SchemaBackendHandler
+impl<'a, Handler: ReadSchemaBackendHandler + Sync> ReadSchemaBackendHandler
     for UserRestrictedListerBackendHandler<'a, Handler>
 {
     async fn get_schema(&self) -> Result<Schema> {

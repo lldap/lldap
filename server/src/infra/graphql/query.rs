@@ -1,6 +1,6 @@
 use crate::{
     domain::{
-        handler::{BackendHandler, SchemaBackendHandler},
+        handler::{BackendHandler, ReadSchemaBackendHandler},
         ldap::utils::{map_user_field, UserFieldType},
         schema::{
             PublicSchema, SchemaAttributeExtractor, SchemaGroupAttributeExtractor,

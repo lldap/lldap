@@ -1,7 +1,7 @@
 use crate::{
     domain::{
         handler::{
-            BackendHandler, BindRequest, CreateUserRequest, LoginHandler, SchemaBackendHandler,
+            BackendHandler, BindRequest, CreateUserRequest, LoginHandler, ReadSchemaBackendHandler,
         },
         ldap::{
             error::{LdapError, LdapResult},
