@@ -1,6 +1,9 @@
 use crate::{
     domain::{
-        handler::{BackendHandler, CreateUserRequest, UpdateGroupRequest, UpdateUserRequest},
+        handler::{
+            BackendHandler, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
+            UpdateUserRequest,
+        },
         types::{GroupId, JpegPhoto, UserId},
     },
     infra::{
@@ -8,15 +11,13 @@ use crate::{
             AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
             UserWriteableBackendHandler,
         },
-        graphql::api::field_error_callback,
+        graphql::api::{field_error_callback, Context},
     },
 };
 use anyhow::Context as AnyhowContext;
 use base64::Engine;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
 use tracing::{debug, debug_span, Instrument};
-
-use super::api::Context;
 
 #[derive(PartialEq, Eq, Debug)]
 /// The top-level GraphQL mutation type.
@@ -126,7 +127,11 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized group creation"))?;
-        let group_id = handler.create_group(&name).await?;
+        let request = CreateGroupRequest {
+            display_name: name,
+            ..Default::default()
+        };
+        let group_id = handler.create_group(request).await?;
         Ok(handler
             .get_group_details(group_id)
             .instrument(span)
@@ -188,6 +193,8 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .update_group(UpdateGroupRequest {
                 group_id: GroupId(group.id),
                 display_name: group.display_name,
+                delete_attributes: Vec::new(),
+                insert_attributes: Vec::new(),
             })
             .instrument(span)
             .await?;

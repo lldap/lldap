@@ -205,7 +205,7 @@ impl SqlBackendHandler {
                 process_serialized(ActiveValue::Set(attribute.value), &attribute.name);
             } else {
                 return Err(DomainError::InternalError(format!(
-                    "Attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
+                    "User attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
                     &attribute.name
                 )));
             }
@@ -219,7 +219,7 @@ impl SqlBackendHandler {
                 remove_user_attributes.push(attribute);
             } else {
                 return Err(DomainError::InternalError(format!(
-                    "Attribute name {} doesn't exist in the schema, yet was attempted to be removed from the database",
+                    "User attribute name {} doesn't exist in the schema, yet was attempted to be removed from the database",
                     attribute
                 )));
             }
@@ -334,7 +334,7 @@ impl UserBackendHandler for SqlBackendHandler {
                             });
                         } else {
                             return Err(DomainError::InternalError(format!(
-                                "Attribute name {} doesn't exist in the schema,
+                                "Attribute name {} doesn't exist in the user schema,
                                     yet was attempted to be inserted in the database",
                                 &attribute.name
                             )));

@@ -23,7 +23,7 @@ pub mod tests {
     use crate::{
         domain::{
             handler::{
-                CreateUserRequest, GroupBackendHandler, UserBackendHandler,
+                CreateGroupRequest, CreateUserRequest, GroupBackendHandler, UserBackendHandler,
                 UserListerBackendHandler, UserRequestFilter,
             },
             sql_tables::init_table,
@@ -98,7 +98,13 @@ pub mod tests {
     }
 
     pub async fn insert_group(handler: &SqlBackendHandler, name: &str) -> GroupId {
-        handler.create_group(name).await.unwrap()
+        handler
+            .create_group(CreateGroupRequest {
+                display_name: name.to_owned(),
+                ..Default::default()
+            })
+            .await
+            .unwrap()
     }
 
     pub async fn insert_membership(handler: &SqlBackendHandler, group_id: GroupId, user_id: &str) {

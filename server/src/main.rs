@@ -8,8 +8,8 @@ use std::time::Duration;
 use crate::{
     domain::{
         handler::{
-            CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
-            UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
+            CreateGroupRequest, CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler,
+            GroupRequestFilter, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
         },
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
@@ -63,7 +63,10 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
     {
         warn!("Could not find {} group, trying to create it", group_name);
         handler
-            .create_group(group_name)
+            .create_group(CreateGroupRequest {
+                display_name: group_name.to_owned(),
+                ..Default::default()
+            })
             .await
             .context(format!("while creating {} group", group_name))?;
     }
