@@ -6,7 +6,7 @@ use tracing::info;
 use crate::domain::{
     error::Result,
     handler::{
-        AttributeSchema, BackendHandler, CreateUserRequest,
+        AttributeSchema, BackendHandler, CreateGroupRequest, CreateUserRequest,
         GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
         ReadSchemaBackendHandler, Schema, UpdateGroupRequest, UpdateUserRequest,
         UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
@@ -101,7 +101,7 @@ pub trait AdminBackendHandler:
     async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
     async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
-    async fn create_group(&self, group_name: &str) -> Result<GroupId>;
+    async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId>;
     async fn delete_group(&self, group_id: GroupId) -> Result<()>;
 }
 
@@ -155,8 +155,8 @@ impl<Handler: BackendHandler> AdminBackendHandler for Handler {
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()> {
         <Handler as GroupBackendHandler>::update_group(self, request).await
     }
-    async fn create_group(&self, group_name: &str) -> Result<GroupId> {
-        <Handler as GroupBackendHandler>::create_group(self, group_name).await
+    async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId> {
+        <Handler as GroupBackendHandler>::create_group(self, request).await
     }
     async fn delete_group(&self, group_id: GroupId) -> Result<()> {
         <Handler as GroupBackendHandler>::delete_group(self, group_id).await

@@ -20,7 +20,7 @@ mockall::mock! {
     impl GroupBackendHandler for TestBackendHandler {
         async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
         async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
-        async fn create_group(&self, group_name: &str) -> Result<GroupId>;
+        async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId>;
         async fn delete_group(&self, group_id: GroupId) -> Result<()>;
     }
     #[async_trait]

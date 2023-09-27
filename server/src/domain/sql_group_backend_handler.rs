@@ -1,7 +1,8 @@
 use crate::domain::{
     error::{DomainError, Result},
     handler::{
-        GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter, UpdateGroupRequest,
+        CreateGroupRequest, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+        UpdateGroupRequest,
     },
     model::{self, GroupColumn, MembershipColumn},
     sql_backend_handler::SqlBackendHandler,
@@ -9,9 +10,9 @@ use crate::domain::{
 };
 use async_trait::async_trait;
 use sea_orm::{
-    sea_query::{Alias, Cond, Expr, Func, IntoCondition, SimpleExpr},
-    ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-    QueryTrait,
+    sea_query::{Alias, Cond, Expr, Func, IntoCondition, OnConflict, SimpleExpr},
+    ActiveModelTrait, ColumnTrait, DatabaseTransaction, EntityTrait, QueryFilter, QueryOrder,
+    QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use tracing::instrument;
 
@@ -139,29 +140,61 @@ impl GroupBackendHandler for SqlBackendHandler {
 
     #[instrument(skip(self), level = "debug", err, fields(group_id = ?request.group_id))]
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()> {
-        let update_group = model::groups::ActiveModel {
-            group_id: ActiveValue::Set(request.group_id),
-            display_name: request
-                .display_name
-                .map(ActiveValue::Set)
-                .unwrap_or_default(),
-            ..Default::default()
-        };
-        update_group.update(&self.sql_pool).await?;
-        Ok(())
+        Ok(self
+            .sql_pool
+            .transaction::<_, (), DomainError>(|transaction| {
+                Box::pin(
+                    async move { Self::update_group_with_transaction(request, transaction).await },
+                )
+            })
+            .await?)
     }
 
     #[instrument(skip(self), level = "debug", ret, err)]
-    async fn create_group(&self, group_name: &str) -> Result<GroupId> {
+    async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId> {
         let now = chrono::Utc::now().naive_utc();
-        let uuid = Uuid::from_name_and_date(group_name, &now);
+        let uuid = Uuid::from_name_and_date(&request.display_name, &now);
         let new_group = model::groups::ActiveModel {
-            display_name: ActiveValue::Set(group_name.to_owned()),
-            creation_date: ActiveValue::Set(now),
-            uuid: ActiveValue::Set(uuid),
+            display_name: Set(request.display_name),
+            creation_date: Set(now),
+            uuid: Set(uuid),
             ..Default::default()
         };
-        Ok(new_group.insert(&self.sql_pool).await?.group_id)
+        Ok(self
+            .sql_pool
+            .transaction::<_, GroupId, DomainError>(|transaction| {
+                Box::pin(async move {
+                    let schema = Self::get_schema_with_transaction(transaction).await?;
+                    let group_id = new_group.insert(transaction).await?.group_id;
+                    let mut new_group_attributes = Vec::new();
+                    for attribute in request.attributes {
+                        if schema
+                            .group_attributes
+                            .get_attribute_type(&attribute.name)
+                            .is_some()
+                        {
+                            new_group_attributes.push(model::group_attributes::ActiveModel {
+                                group_id: Set(group_id),
+                                attribute_name: Set(attribute.name),
+                                value: Set(attribute.value),
+                            });
+                        } else {
+                            return Err(DomainError::InternalError(format!(
+                                "Attribute name {} doesn't exist in the group schema,
+                                    yet was attempted to be inserted in the database",
+                                &attribute.name
+                            )));
+                        }
+                    }
+                    if !new_group_attributes.is_empty() {
+                        model::GroupAttributes::insert_many(new_group_attributes)
+                            .exec(transaction)
+                            .await?;
+                    }
+                    Ok(group_id)
+                })
+            })
+            .await?)
     }
 
     #[instrument(skip(self), level = "debug", err)]
@@ -179,10 +212,84 @@ impl GroupBackendHandler for SqlBackendHandler {
     }
 }
 
+impl SqlBackendHandler {
+    async fn update_group_with_transaction(
+        request: UpdateGroupRequest,
+        transaction: &DatabaseTransaction,
+    ) -> Result<()> {
+        let update_group = model::groups::ActiveModel {
+            group_id: Set(request.group_id),
+            display_name: request.display_name.map(Set).unwrap_or_default(),
+            ..Default::default()
+        };
+        update_group.update(transaction).await?;
+        let mut update_group_attributes = Vec::new();
+        let mut remove_group_attributes = Vec::new();
+        let schema = Self::get_schema_with_transaction(transaction).await?;
+        for attribute in request.insert_attributes {
+            if schema
+                .group_attributes
+                .get_attribute_type(&attribute.name)
+                .is_some()
+            {
+                update_group_attributes.push(model::group_attributes::ActiveModel {
+                    group_id: Set(request.group_id),
+                    attribute_name: Set(attribute.name.to_owned()),
+                    value: Set(attribute.value),
+                });
+            } else {
+                return Err(DomainError::InternalError(format!(
+                    "Group attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
+                    &attribute.name
+                )));
+            }
+        }
+        for attribute in request.delete_attributes {
+            if schema
+                .group_attributes
+                .get_attribute_type(&attribute)
+                .is_some()
+            {
+                remove_group_attributes.push(attribute);
+            } else {
+                return Err(DomainError::InternalError(format!(
+                    "Group attribute name {} doesn't exist in the schema, yet was attempted to be removed from the database",
+                    attribute
+                )));
+            }
+        }
+        if !remove_group_attributes.is_empty() {
+            model::GroupAttributes::delete_many()
+                .filter(model::GroupAttributesColumn::GroupId.eq(request.group_id))
+                .filter(model::GroupAttributesColumn::AttributeName.is_in(remove_group_attributes))
+                .exec(transaction)
+                .await?;
+        }
+        if !update_group_attributes.is_empty() {
+            model::GroupAttributes::insert_many(update_group_attributes)
+                .on_conflict(
+                    OnConflict::columns([
+                        model::GroupAttributesColumn::GroupId,
+                        model::GroupAttributesColumn::AttributeName,
+                    ])
+                    .update_column(model::GroupAttributesColumn::Value)
+                    .to_owned(),
+                )
+                .exec(transaction)
+                .await?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{handler::SubStringFilter, sql_backend_handler::tests::*, types::UserId};
+    use crate::domain::{
+        handler::{CreateAttributeRequest, SchemaBackendHandler, SubStringFilter},
+        sql_backend_handler::tests::*,
+        types::{AttributeType, Serialized, UserId},
+    };
     use pretty_assertions::assert_eq;
 
     async fn get_group_ids(
@@ -304,6 +411,8 @@ mod tests {
             .update_group(UpdateGroupRequest {
                 group_id: fixture.groups[0],
                 display_name: Some("Awesomest Group".to_owned()),
+                delete_attributes: Vec::new(),
+                insert_attributes: Vec::new(),
             })
             .await
             .unwrap();
@@ -331,5 +440,94 @@ mod tests {
             get_group_ids(&fixture.handler, None).await,
             vec![fixture.groups[2], fixture.groups[1]]
         );
+    }
+
+    #[tokio::test]
+    async fn test_create_group() {
+        let fixture = TestFixture::new().await;
+        assert_eq!(
+            get_group_ids(&fixture.handler, None).await,
+            vec![fixture.groups[0], fixture.groups[2], fixture.groups[1]]
+        );
+        fixture
+            .handler
+            .add_group_attribute(CreateAttributeRequest {
+                name: "new_attribute".to_owned(),
+                attribute_type: AttributeType::String,
+                is_list: false,
+                is_visible: true,
+                is_editable: true,
+            })
+            .await
+            .unwrap();
+        let new_group_id = fixture
+            .handler
+            .create_group(CreateGroupRequest {
+                display_name: "New Group".to_owned(),
+                attributes: vec![AttributeValue {
+                    name: "new_attribute".to_owned(),
+                    value: Serialized::from("value"),
+                }],
+            })
+            .await
+            .unwrap();
+        let group_details = fixture
+            .handler
+            .get_group_details(new_group_id)
+            .await
+            .unwrap();
+        assert_eq!(&group_details.display_name, "New Group");
+        assert_eq!(
+            group_details.attributes,
+            vec![AttributeValue {
+                name: "new_attribute".to_owned(),
+                value: Serialized::from("value"),
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_set_group_attributes() {
+        let fixture = TestFixture::new().await;
+        fixture
+            .handler
+            .add_group_attribute(CreateAttributeRequest {
+                name: "new_attribute".to_owned(),
+                attribute_type: AttributeType::Integer,
+                is_list: false,
+                is_visible: true,
+                is_editable: true,
+            })
+            .await
+            .unwrap();
+        let group_id = fixture.groups[0];
+        let attributes = vec![AttributeValue {
+            name: "new_attribute".to_owned(),
+            value: Serialized::from(&42i64),
+        }];
+        fixture
+            .handler
+            .update_group(UpdateGroupRequest {
+                group_id,
+                display_name: None,
+                delete_attributes: Vec::new(),
+                insert_attributes: attributes.clone(),
+            })
+            .await
+            .unwrap();
+        let details = fixture.handler.get_group_details(group_id).await.unwrap();
+        assert_eq!(details.attributes, attributes);
+        fixture
+            .handler
+            .update_group(UpdateGroupRequest {
+                group_id,
+                display_name: None,
+                delete_attributes: vec!["new_attribute".to_owned()],
+                insert_attributes: Vec::new(),
+            })
+            .await
+            .unwrap();
+        let details = fixture.handler.get_group_details(group_id).await.unwrap();
+        assert_eq!(details.attributes, Vec::new());
     }
 }

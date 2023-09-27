@@ -120,10 +120,18 @@ pub struct UpdateUserRequest {
     pub insert_attributes: Vec<AttributeValue>,
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
+pub struct CreateGroupRequest {
+    pub display_name: String,
+    pub attributes: Vec<AttributeValue>,
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct UpdateGroupRequest {
     pub group_id: GroupId,
     pub display_name: Option<String>,
+    pub delete_attributes: Vec<String>,
+    pub insert_attributes: Vec<AttributeValue>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
@@ -180,7 +188,7 @@ pub trait GroupListerBackendHandler: ReadSchemaBackendHandler {
 pub trait GroupBackendHandler: ReadSchemaBackendHandler {
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
-    async fn create_group(&self, group_name: &str) -> Result<GroupId>;
+    async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId>;
     async fn delete_group(&self, group_id: GroupId) -> Result<()>;
 }
 
