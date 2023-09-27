@@ -38,7 +38,7 @@ mockall::mock! {
         async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
     }
     #[async_trait]
-    impl SchemaBackendHandler for TestBackendHandler {
+    impl ReadSchemaBackendHandler for TestBackendHandler {
         async fn get_schema(&self) -> Result<Schema>;
     }
     #[async_trait]

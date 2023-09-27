@@ -163,12 +163,12 @@ pub trait LoginHandler: Send + Sync {
 }
 
 #[async_trait]
-pub trait GroupListerBackendHandler: SchemaBackendHandler {
+pub trait GroupListerBackendHandler: ReadSchemaBackendHandler {
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
 }
 
 #[async_trait]
-pub trait GroupBackendHandler: SchemaBackendHandler {
+pub trait GroupBackendHandler: ReadSchemaBackendHandler {
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
     async fn create_group(&self, group_name: &str) -> Result<GroupId>;
@@ -176,7 +176,7 @@ pub trait GroupBackendHandler: SchemaBackendHandler {
 }
 
 #[async_trait]
-pub trait UserListerBackendHandler: SchemaBackendHandler {
+pub trait UserListerBackendHandler: ReadSchemaBackendHandler {
     async fn list_users(
         &self,
         filters: Option<UserRequestFilter>,
@@ -185,7 +185,7 @@ pub trait UserListerBackendHandler: SchemaBackendHandler {
 }
 
 #[async_trait]
-pub trait UserBackendHandler: SchemaBackendHandler {
+pub trait UserBackendHandler: ReadSchemaBackendHandler {
     async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
@@ -196,7 +196,7 @@ pub trait UserBackendHandler: SchemaBackendHandler {
 }
 
 #[async_trait]
-pub trait SchemaBackendHandler {
+pub trait ReadSchemaBackendHandler {
     async fn get_schema(&self) -> Result<Schema>;
 }
 
@@ -208,7 +208,7 @@ pub trait BackendHandler:
     + UserBackendHandler
     + UserListerBackendHandler
     + GroupListerBackendHandler
-    + SchemaBackendHandler
+    + ReadSchemaBackendHandler
 {
 }
 

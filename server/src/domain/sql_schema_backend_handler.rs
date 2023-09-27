@@ -1,6 +1,6 @@
 use crate::domain::{
     error::{DomainError, Result},
-    handler::{AttributeList, AttributeSchema, Schema, SchemaBackendHandler},
+    handler::{AttributeList, AttributeSchema, ReadSchemaBackendHandler, Schema},
     model,
     sql_backend_handler::SqlBackendHandler,
 };
@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use sea_orm::{DatabaseTransaction, EntityTrait, QueryOrder, TransactionTrait};
 
 #[async_trait]
-impl SchemaBackendHandler for SqlBackendHandler {
+impl ReadSchemaBackendHandler for SqlBackendHandler {
     async fn get_schema(&self) -> Result<Schema> {
         Ok(self
             .sql_pool
