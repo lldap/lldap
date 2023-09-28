@@ -138,6 +138,15 @@ pub struct AttributeSchema {
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub struct CreateAttributeRequest {
+    pub name: String,
+    pub attribute_type: AttributeType,
+    pub is_list: bool,
+    pub is_visible: bool,
+    pub is_editable: bool,
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct AttributeList {
     pub attributes: Vec<AttributeSchema>,
 }
@@ -198,6 +207,15 @@ pub trait UserBackendHandler: ReadSchemaBackendHandler {
 #[async_trait]
 pub trait ReadSchemaBackendHandler {
     async fn get_schema(&self) -> Result<Schema>;
+}
+
+#[async_trait]
+pub trait SchemaBackendHandler: ReadSchemaBackendHandler {
+    async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+    async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+    // Note: It's up to the caller to make sure that the attribute is not hardcoded.
+    async fn delete_user_attribute(&self, name: &str) -> Result<()>;
+    async fn delete_group_attribute(&self, name: &str) -> Result<()>;
 }
 
 #[async_trait]
