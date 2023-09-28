@@ -30,6 +30,10 @@ pub struct CliOpts {
     /// New password for the user.
     #[clap(short, long)]
     pub password: String,
+
+    /// Should minimum password length be bypassed?
+    #[clap(long)]
+    pub bypass_password_policy: bool,
 }
 
 fn append_to_url(base_url: &Url, path: &str) -> Url {
@@ -96,6 +100,12 @@ pub fn register_finish(
 
 fn main() -> Result<()> {
     let opts = CliOpts::parse();
+    if opts.bypass_password_policy != true {
+        ensure!(
+            opts.password.len() >= 8,
+            "New password is too short, expected at least 8 characters"
+        );
+    }
     ensure!(
         opts.base_url.scheme() == "http" || opts.base_url.scheme() == "https",
         "Base URL should start with `http://` or `https://`"
