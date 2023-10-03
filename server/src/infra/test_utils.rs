@@ -42,6 +42,13 @@ mockall::mock! {
         async fn get_schema(&self) -> Result<Schema>;
     }
     #[async_trait]
+    impl SchemaBackendHandler for TestBackendHandler {
+        async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+        async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+        async fn delete_user_attribute(&self, name: &str) -> Result<()>;
+        async fn delete_group_attribute(&self, name: &str) -> Result<()>;
+    }
+    #[async_trait]
     impl BackendHandler for TestBackendHandler {}
     #[async_trait]
     impl OpaqueHandler for TestBackendHandler {

@@ -235,6 +235,7 @@ pub trait BackendHandler:
     + UserListerBackendHandler
     + GroupListerBackendHandler
     + ReadSchemaBackendHandler
+    + SchemaBackendHandler
 {
 }
 

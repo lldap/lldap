@@ -1,10 +1,10 @@
 use crate::{
     domain::{
         handler::{
-            BackendHandler, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
-            UpdateUserRequest,
+            BackendHandler, CreateAttributeRequest, CreateGroupRequest, CreateUserRequest,
+            UpdateGroupRequest, UpdateUserRequest,
         },
-        types::{GroupId, JpegPhoto, UserId},
+        types::{AttributeType, GroupId, JpegPhoto, UserId},
     },
     infra::{
         access_control::{
@@ -281,6 +281,110 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         }
         handler
             .delete_group(GroupId(group_id))
+            .instrument(span)
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn add_user_attribute(
+        context: &Context<Handler>,
+        name: String,
+        attribute_type: AttributeType,
+        is_list: bool,
+        is_visible: bool,
+        is_editable: bool,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] add_user_attribute");
+        span.in_scope(|| {
+            debug!(?name, ?attribute_type, is_list, is_visible, is_editable);
+        });
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized attribute creation",
+            ))?;
+        handler
+            .add_user_attribute(CreateAttributeRequest {
+                name,
+                attribute_type,
+                is_list,
+                is_visible,
+                is_editable,
+            })
+            .instrument(span)
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn add_group_attribute(
+        context: &Context<Handler>,
+        name: String,
+        attribute_type: AttributeType,
+        is_list: bool,
+        is_visible: bool,
+        is_editable: bool,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] add_group_attribute");
+        span.in_scope(|| {
+            debug!(?name, ?attribute_type, is_list, is_visible, is_editable);
+        });
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized attribute creation",
+            ))?;
+        handler
+            .add_group_attribute(CreateAttributeRequest {
+                name,
+                attribute_type,
+                is_list,
+                is_visible,
+                is_editable,
+            })
+            .instrument(span)
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn delete_user_attribute(
+        context: &Context<Handler>,
+        name: String,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] delete_user_attribute");
+        span.in_scope(|| {
+            debug!(?name);
+        });
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized attribute deletion",
+            ))?;
+        handler
+            .delete_user_attribute(&name)
+            .instrument(span)
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn delete_group_attribute(
+        context: &Context<Handler>,
+        name: String,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] delete_group_attribute");
+        span.in_scope(|| {
+            debug!(?name);
+        });
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized attribute deletion",
+            ))?;
+        handler
+            .delete_group_attribute(&name)
             .instrument(span)
             .await?;
         Ok(Success::new())
