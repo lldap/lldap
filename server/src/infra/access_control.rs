@@ -6,10 +6,10 @@ use tracing::info;
 use crate::domain::{
     error::Result,
     handler::{
-        AttributeSchema, BackendHandler, CreateGroupRequest, CreateUserRequest,
-        GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
-        ReadSchemaBackendHandler, Schema, UpdateGroupRequest, UpdateUserRequest,
-        UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
+        AttributeSchema, BackendHandler, CreateAttributeRequest, CreateGroupRequest,
+        CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+        ReadSchemaBackendHandler, Schema, SchemaBackendHandler, UpdateGroupRequest,
+        UpdateUserRequest, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
     },
     types::{Group, GroupDetails, GroupId, User, UserAndGroups, UserId},
 };
@@ -94,7 +94,10 @@ pub trait UserWriteableBackendHandler: UserReadableBackendHandler {
 
 #[async_trait]
 pub trait AdminBackendHandler:
-    UserWriteableBackendHandler + ReadonlyBackendHandler + UserWriteableBackendHandler
+    UserWriteableBackendHandler
+    + ReadonlyBackendHandler
+    + UserWriteableBackendHandler
+    + SchemaBackendHandler
 {
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
     async fn delete_user(&self, user_id: &UserId) -> Result<()>;
@@ -103,6 +106,10 @@ pub trait AdminBackendHandler:
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
     async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId>;
     async fn delete_group(&self, group_id: GroupId) -> Result<()>;
+    async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+    async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+    async fn delete_user_attribute(&self, name: &str) -> Result<()>;
+    async fn delete_group_attribute(&self, name: &str) -> Result<()>;
 }
 
 #[async_trait]
@@ -160,6 +167,18 @@ impl<Handler: BackendHandler> AdminBackendHandler for Handler {
     }
     async fn delete_group(&self, group_id: GroupId) -> Result<()> {
         <Handler as GroupBackendHandler>::delete_group(self, group_id).await
+    }
+    async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()> {
+        <Handler as SchemaBackendHandler>::add_user_attribute(self, request).await
+    }
+    async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()> {
+        <Handler as SchemaBackendHandler>::add_group_attribute(self, request).await
+    }
+    async fn delete_user_attribute(&self, name: &str) -> Result<()> {
+        <Handler as SchemaBackendHandler>::delete_user_attribute(self, name).await
+    }
+    async fn delete_group_attribute(&self, name: &str) -> Result<()> {
+        <Handler as SchemaBackendHandler>::delete_group_attribute(self, name).await
     }
 }
 

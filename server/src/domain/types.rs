@@ -342,7 +342,17 @@ impl From<&GroupId> for Value {
 }
 
 #[derive(
-    Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, IntoStaticStr,
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    EnumString,
+    IntoStaticStr,
+    juniper::GraphQLEnum,
 )]
 pub enum AttributeType {
     String,

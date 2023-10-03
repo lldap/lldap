@@ -438,9 +438,8 @@ impl<Handler: BackendHandler> AttributeSchema<Handler> {
     fn name(&self) -> String {
         self.schema.name.clone()
     }
-    fn attribute_type(&self) -> String {
-        let name: &'static str = self.schema.attribute_type.into();
-        name.to_owned()
+    fn attribute_type(&self) -> AttributeType {
+        self.schema.attribute_type
     }
     fn is_list(&self) -> bool {
         self.schema.is_list
@@ -917,7 +916,7 @@ mod tests {
                             "attributes": [
                                 {
                                     "name": "avatar",
-                                    "attributeType": "JpegPhoto",
+                                    "attributeType": "JPEG_PHOTO",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -925,7 +924,7 @@ mod tests {
                                 },
                                 {
                                     "name": "creation_date",
-                                    "attributeType": "DateTime",
+                                    "attributeType": "DATE_TIME",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -933,7 +932,7 @@ mod tests {
                                 },
                                 {
                                     "name": "display_name",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -941,7 +940,7 @@ mod tests {
                                 },
                                 {
                                     "name": "first_name",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -949,7 +948,7 @@ mod tests {
                                 },
                                 {
                                     "name": "last_name",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -957,7 +956,7 @@ mod tests {
                                 },
                                 {
                                     "name": "mail",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -965,7 +964,7 @@ mod tests {
                                 },
                                 {
                                     "name": "user_id",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -973,7 +972,7 @@ mod tests {
                                 },
                                 {
                                     "name": "uuid",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -985,7 +984,7 @@ mod tests {
                             "attributes": [
                                 {
                                     "name": "creation_date",
-                                    "attributeType": "DateTime",
+                                    "attributeType": "DATE_TIME",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -993,7 +992,7 @@ mod tests {
                                 },
                                 {
                                     "name": "display_name",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -1001,7 +1000,7 @@ mod tests {
                                 },
                                 {
                                     "name": "group_id",
-                                    "attributeType": "Integer",
+                                    "attributeType": "INTEGER",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -1009,7 +1008,7 @@ mod tests {
                                 },
                                 {
                                     "name": "uuid",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,

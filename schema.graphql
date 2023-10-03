@@ -3,11 +3,6 @@ type AttributeValue {
   value: [String!]!
 }
 
-input EqualityConstraint {
-  field: String!
-  value: String!
-}
-
 type Mutation {
   createUser(user: CreateUserInput!): User!
   createGroup(name: String!): Group!
@@ -17,6 +12,10 @@ type Mutation {
   removeUserFromGroup(userId: String!, groupId: Int!): Success!
   deleteUser(userId: String!): Success!
   deleteGroup(groupId: Int!): Success!
+  addUserAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
+  addGroupAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
+  deleteUserAttribute(name: String!): Success!
+  deleteGroupAttribute(name: String!): Success!
 }
 
 type Group {
@@ -46,17 +45,6 @@ input RequestFilter {
 "DateTime"
 scalar DateTimeUtc
 
-type Schema {
-  userSchema: AttributeList!
-  groupSchema: AttributeList!
-}
-
-"The fields that can be updated for a group."
-input UpdateGroupInput {
-  id: Int!
-  displayName: String
-}
-
 type Query {
   apiVersion: String!
   user(userId: String!): User!
@@ -74,6 +62,41 @@ input CreateUserInput {
   firstName: String
   lastName: String
   avatar: String
+}
+
+type AttributeSchema {
+  name: String!
+  attributeType: AttributeType!
+  isList: Boolean!
+  isVisible: Boolean!
+  isEditable: Boolean!
+  isHardcoded: Boolean!
+}
+
+"The fields that can be updated for a user."
+input UpdateUserInput {
+  id: String!
+  email: String
+  displayName: String
+  firstName: String
+  lastName: String
+  avatar: String
+}
+
+input EqualityConstraint {
+  field: String!
+  value: String!
+}
+
+type Schema {
+  userSchema: AttributeList!
+  groupSchema: AttributeList!
+}
+
+"The fields that can be updated for a group."
+input UpdateGroupInput {
+  id: Int!
+  displayName: String
 }
 
 type User {
@@ -95,27 +118,15 @@ type AttributeList {
   attributes: [AttributeSchema!]!
 }
 
-type AttributeSchema {
-  name: String!
-  attributeType: String!
-  isList: Boolean!
-  isVisible: Boolean!
-  isEditable: Boolean!
-  isHardcoded: Boolean!
+enum AttributeType {
+  STRING
+  INTEGER
+  JPEG_PHOTO
+  DATE_TIME
 }
 
 type Success {
   ok: Boolean!
-}
-
-"The fields that can be updated for a user."
-input UpdateUserInput {
-  id: String!
-  email: String
-  displayName: String
-  firstName: String
-  lastName: String
-  avatar: String
 }
 
 schema {
