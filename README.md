@@ -265,6 +265,7 @@ folder for help with:
 
 - [Airsonic Advanced](example_configs/airsonic-advanced.md)
 - [Apache Guacamole](example_configs/apacheguacamole.md)
+- [Apereo CAS Server](example_configs/apereo_cas_server.md)
 - [Authelia](example_configs/authelia_config.yml)
 - [Authentik](example_configs/authentik.md)
 - [Bookstack](example_configs/bookstack.env.example)
