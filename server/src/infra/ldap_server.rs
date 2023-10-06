@@ -13,7 +13,7 @@ use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{fn_service, ServiceFactoryExt};
 use anyhow::{anyhow, Context, Result};
-use ldap3_proto::{proto::LdapMsg, LdapCodec};
+use ldap3_proto::{proto::LdapControl, proto::LdapMsg, proto::LdapOp, LdapCodec};
 use rustls::PrivateKey;
 use tokio_rustls::TlsAcceptor as RustlsTlsAcceptor;
 use tokio_util::codec::{FramedRead, FramedWrite};
@@ -39,12 +39,21 @@ where
             if result.is_empty() {
                 debug!("No response");
             }
+            let results: i64 = result.len().try_into().unwrap();
             for response in result.into_iter() {
                 debug!(?response);
+                let controls = if matches!(response, LdapOp::SearchResultDone(_)) {
+                    vec![LdapControl::SimplePagedResults {
+                        size: results - 1, // Avoid counting SearchResultDone as a result
+                        cookie: vec![],
+                    }]
+                } else {
+                    vec![]
+                };
                 resp.send(LdapMsg {
                     msgid: msg.msgid,
                     op: response,
-                    ctrl: vec![],
+                    ctrl: controls,
                 })
                 .await
                 .context("while sending a response: {:#}")?
