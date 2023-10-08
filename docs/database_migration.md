@@ -108,3 +108,22 @@ to point to your new database (the same value used when generating schema). Rest
 LLDAP and check the logs to ensure there were no errors.
 
 #### More details/examples can be seen in the CI process [here](https://raw.githubusercontent.com/nitnelave/lldap/main/.github/workflows/docker-build-static.yml), look for the job `lldap-database-migration-test`
+
+## Possible Issues
+
+### PostgreSQL Primary Keys
+
+It is possible that after the migration, the next auto increment primary key in PostgreSQL will not be set to the correct value.
+This can result in errors such as the following, which occurs when creating a new group.
+
+```
+Errors: [createGroup:2:3: Database error: `Query Error: error returned from database: duplicate key value violates unique constraint "groups_pkey"`]
+```
+
+To fix this, first determine the largest primary key currently used.
+
+`select max(group_id) from groups;`
+
+Then set the next primary key using 
+
+`SELECT setval(pg_get_serial_sequence('groups', 'group_id'), <one more than the current largest primary key>);`
