@@ -53,6 +53,7 @@ format to PostgreSQL format, and wrap it all in a transaction:
 sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" \
 -e ":a; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),1([^']*\);)$/\1,true\2/; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),0([^']*\);)$/\1,false\2/; ta" \
 -e '1s/^/BEGIN;\n/' \
+-e '$aSELECT setval(pg_get_serial_sequence('\''groups'\'', '\''group_id'\''), COALESCE((SELECT MAX(group_id) FROM groups), 1));' \
 -e '$aCOMMIT;' /path/to/dump.sql
 ```
 
@@ -108,22 +109,3 @@ to point to your new database (the same value used when generating schema). Rest
 LLDAP and check the logs to ensure there were no errors.
 
 #### More details/examples can be seen in the CI process [here](https://raw.githubusercontent.com/nitnelave/lldap/main/.github/workflows/docker-build-static.yml), look for the job `lldap-database-migration-test`
-
-## Possible Issues
-
-### PostgreSQL Primary Keys
-
-It is possible that after the migration, the next auto increment primary key in PostgreSQL will not be set to the correct value.
-This can result in errors such as the following, which occurs when creating a new group.
-
-```
-Errors: [createGroup:2:3: Database error: `Query Error: error returned from database: duplicate key value violates unique constraint "groups_pkey"`]
-```
-
-To fix this, first determine the largest primary key currently used.
-
-`select max(group_id) from groups;`
-
-Then set the next primary key using 
-
-`SELECT setval(pg_get_serial_sequence('groups', 'group_id'), <one more than the current largest primary key>);`
