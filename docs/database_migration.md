@@ -108,4 +108,4 @@ Modify your `database_url` in `lldap_config.toml` (or `LLDAP_DATABASE_URL` in th
 to point to your new database (the same value used when generating schema). Restart
 LLDAP and check the logs to ensure there were no errors.
 
-#### More details/examples can be seen in the CI process [here](https://raw.githubusercontent.com/nitnelave/lldap/main/.github/workflows/docker-build-static.yml), look for the job `lldap-database-migration-test`
+#### More details/examples can be seen in the CI process [here](https://raw.githubusercontent.com/lldap/lldap/main/.github/workflows/docker-build-static.yml), look for the job `lldap-database-migration-test`

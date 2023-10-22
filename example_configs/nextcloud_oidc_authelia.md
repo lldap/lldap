@@ -2,7 +2,7 @@
 
 If you're here, there are some assumptions being made about access and capabilities you have on your system:
 1. You have Authelia up and running, understand its functionality, and have read through the documentation. 
-2. You have [LLDAP](https://github.com/nitnelave/lldap) up and running. 
+2. You have [LLDAP](https://github.com/lldap/lldap) up and running. 
 3. You have Nextcloud and LLDAP communicating and without any config errors. See the [example config for Nextcloud](nextcloud.md)
 
 ## Authelia
@@ -87,4 +87,4 @@ If this is set to *true* then the user flow will _skip_ the login page and autom
 ### Conclusion
 And that's it! Assuming all the settings that worked for me, work for you, you should be able to login using OpenID Connect via Authelia. If you find any errors, it's a good idea to keep a document of all your settings from Authelia/Nextcloud/LLDAP etc so that you can easily reference and ensure everything lines up.
 
-If you have any issues, please create a [discussion](https://github.com/nitnelave/lldap/discussions) or join the [Discord](https://discord.gg/h5PEdRMNyP).
+If you have any issues, please create a [discussion](https://github.com/lldap/lldap/discussions) or join the [Discord](https://discord.gg/h5PEdRMNyP).
