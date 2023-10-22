@@ -23,10 +23,7 @@ struct JsFile {
 
 impl ToString for JsFile {
     fn to_string(&self) -> String {
-        self.file
-            .as_ref()
-            .map(File::name)
-            .unwrap_or_else(String::new)
+        self.file.as_ref().map(File::name).unwrap_or_default()
     }
 }
 
