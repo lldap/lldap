@@ -108,6 +108,7 @@ impl LLDAPFixture {
                     display_name: None,
                     first_name: None,
                     last_name: None,
+                    attributes: None,
                 },
             },
         )

@@ -11,6 +11,7 @@ use crate::domain::{
         ReadSchemaBackendHandler, Schema, SchemaBackendHandler, UpdateGroupRequest,
         UpdateUserRequest, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
     },
+    schema::PublicSchema,
     types::{Group, GroupDetails, GroupId, User, UserAndGroups, UserId},
 };
 
@@ -71,9 +72,10 @@ impl ValidationResults {
 }
 
 #[async_trait]
-pub trait UserReadableBackendHandler {
+pub trait UserReadableBackendHandler: ReadSchemaBackendHandler {
     async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>>;
+    async fn get_schema(&self) -> Result<PublicSchema>;
 }
 
 #[async_trait]
@@ -119,6 +121,11 @@ impl<Handler: BackendHandler> UserReadableBackendHandler for Handler {
     }
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>> {
         <Handler as UserBackendHandler>::get_user_groups(self, user_id).await
+    }
+    async fn get_schema(&self) -> Result<PublicSchema> {
+        Ok(PublicSchema::from(
+            <Handler as ReadSchemaBackendHandler>::get_schema(self).await?,
+        ))
     }
 }
 

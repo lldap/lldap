@@ -205,13 +205,11 @@ impl TryFrom<Vec<u8>> for JpegPhoto {
     }
 }
 
-impl TryFrom<String> for JpegPhoto {
+impl TryFrom<&str> for JpegPhoto {
     type Error = anyhow::Error;
-    fn try_from(string: String) -> anyhow::Result<Self> {
+    fn try_from(string: &str) -> anyhow::Result<Self> {
         // The String format is in base64.
-        <Self as TryFrom<_>>::try_from(
-            base64::engine::general_purpose::STANDARD.decode(string.as_str())?,
-        )
+        <Self as TryFrom<_>>::try_from(base64::engine::general_purpose::STANDARD.decode(string)?)
     }
 }
 

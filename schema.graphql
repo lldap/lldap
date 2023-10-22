@@ -6,6 +6,7 @@ type AttributeValue {
 type Mutation {
   createUser(user: CreateUserInput!): User!
   createGroup(name: String!): Group!
+  createGroupWithDetails(request: CreateGroupInput!): Group!
   updateUser(user: UpdateUserInput!): Success!
   updateGroup(group: UpdateGroupInput!): Success!
   addUserToGroup(userId: String!, groupId: Int!): Success!
@@ -61,7 +62,8 @@ input CreateUserInput {
   displayName: String
   firstName: String
   lastName: String
-  avatar: String
+  "Base64 encoded JpegPhoto." avatar: String
+  "User-defined attributes." attributes: [AttributeValueInput!]
 }
 
 type AttributeSchema {
@@ -80,7 +82,15 @@ input UpdateUserInput {
   displayName: String
   firstName: String
   lastName: String
-  avatar: String
+  "Base64 encoded JpegPhoto." avatar: String
+  """
+    Attribute names to remove.
+    They are processed before insertions.
+  """ removeAttributes: [String!]
+  """
+    Inserts or updates the given attributes.
+    For lists, the entire list must be provided.
+  """ insertAttributes: [AttributeValueInput!]
 }
 
 input EqualityConstraint {
@@ -95,8 +105,36 @@ type Schema {
 
 "The fields that can be updated for a group."
 input UpdateGroupInput {
-  id: Int!
-  displayName: String
+  "The group ID." id: Int!
+  "The new display name." displayName: String
+  """
+    Attribute names to remove.
+    They are processed before insertions.
+  """ removeAttributes: [String!]
+  """
+    Inserts or updates the given attributes.
+    For lists, the entire list must be provided.
+  """ insertAttributes: [AttributeValueInput!]
+}
+
+input AttributeValueInput {
+  """
+    The name of the attribute. It must be present in the schema, and the type informs how
+    to interpret the values.
+  """ name: String!
+  """
+    The values of the attribute.
+    If the attribute is not a list, the vector must contain exactly one element.
+    Integers (signed 64 bits) are represented as strings.
+    Dates are represented as strings in RFC3339 format, e.g. "2019-10-12T07:20:50.52Z".
+    JpegPhotos are represented as base64 encoded strings. They must be valid JPEGs.
+  """ value: [String!]!
+}
+
+"The details required to create a group."
+input CreateGroupInput {
+  displayName: String!
+  "User-defined attributes." attributes: [AttributeValueInput!]
 }
 
 type User {
