@@ -194,6 +194,7 @@ impl TryFrom<ResultEntry> for User {
                 first_name,
                 last_name,
                 avatar: avatar.map(base64::encode),
+                attributes: None,
             },
             password,
             entry.dn,
