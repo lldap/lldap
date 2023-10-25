@@ -488,7 +488,7 @@ jobs:
 
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v2
-      - uses: docker/setup-buildx-action@v2
+      - uses: docker/setup-buildx-action@v3
 
       - name: Docker ${{ matrix.container }} meta
         id: meta
