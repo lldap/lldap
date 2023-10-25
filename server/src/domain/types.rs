@@ -63,7 +63,7 @@ macro_rules! uuid {
     };
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, DeriveValueType)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, DeriveValueType)]
 #[sea_orm(column_type = "Binary(BlobSize::Long)", array_type = "Bytes")]
 pub struct Serialized(Vec<u8>);
 
@@ -205,13 +205,11 @@ impl TryFrom<Vec<u8>> for JpegPhoto {
     }
 }
 
-impl TryFrom<String> for JpegPhoto {
+impl TryFrom<&str> for JpegPhoto {
     type Error = anyhow::Error;
-    fn try_from(string: String) -> anyhow::Result<Self> {
+    fn try_from(string: &str) -> anyhow::Result<Self> {
         // The String format is in base64.
-        <Self as TryFrom<_>>::try_from(
-            base64::engine::general_purpose::STANDARD.decode(string.as_str())?,
-        )
+        <Self as TryFrom<_>>::try_from(base64::engine::general_purpose::STANDARD.decode(string)?)
     }
 }
 
@@ -283,7 +281,7 @@ impl IntoActiveValue<Serialized> for JpegPhoto {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AttributeValue {
     pub name: String,
     pub value: Serialized,
@@ -314,7 +312,19 @@ impl Default for User {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, DeriveValueType)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    DeriveValueType,
+)]
 pub struct GroupId(pub i32);
 
 impl TryFromU64 for GroupId {
@@ -323,8 +333,24 @@ impl TryFromU64 for GroupId {
     }
 }
 
+impl From<&GroupId> for Value {
+    fn from(id: &GroupId) -> Self {
+        (*id).into()
+    }
+}
+
 #[derive(
-    Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, IntoStaticStr,
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    EnumString,
+    IntoStaticStr,
+    juniper::GraphQLEnum,
 )]
 pub enum AttributeType {
     String,
@@ -375,6 +401,7 @@ pub struct Group {
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
     pub users: Vec<UserId>,
+    pub attributes: Vec<AttributeValue>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -383,6 +410,7 @@ pub struct GroupDetails {
     pub display_name: String,
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
+    pub attributes: Vec<AttributeValue>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

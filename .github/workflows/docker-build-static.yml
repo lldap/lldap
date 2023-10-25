@@ -456,6 +456,8 @@ jobs:
                   type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
                   type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') }},suffix=
                   type=raw,value=latest,enable={{ is_default_branch }},suffix=
+                  type=raw,value={{ date 'YYYY-MM-DD' }},enable={{ is_default_branch }}
+                  type=raw,value={{ date 'YYYY-MM-DD' }},enable={{ is_default_branch }},suffix=
           - container: debian
             platforms: linux/amd64,linux/arm64,linux/arm/v7
             tags: |
@@ -465,6 +467,7 @@ jobs:
                   type=semver,pattern=v{{major}}.{{minor}}
                   type=raw,value=latest,enable={{ is_default_branch }}
                   type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+                  type=raw,value={{ date 'YYYY-MM-DD' }},enable={{ is_default_branch }}
 
     permissions:
       contents: read
@@ -504,12 +507,15 @@ jobs:
           # latest-alpine
           # stable
           # stable-alpine
+          # YYYY-MM-DD
+          # YYYY-MM-DD-alpine
           #################
           # vX-debian
           # vX.Y-debian
           # vX.Y.Z-debian
           # latest-debian
           # stable-debian
+          # YYYY-MM-DD-debian
           #################
           # Check matrix for tag list definition
           flavor: |

@@ -5,7 +5,7 @@ use ldap3_proto::{
 use tracing::{debug, instrument, warn};
 
 use crate::domain::{
-    handler::{Schema, UserListerBackendHandler, UserRequestFilter},
+    handler::{UserListerBackendHandler, UserRequestFilter},
     ldap::{
         error::{LdapError, LdapResult},
         utils::{
@@ -13,6 +13,7 @@ use crate::domain::{
             get_user_id_from_distinguished_name, map_user_field, LdapInfo, UserFieldType,
         },
     },
+    schema::{PublicSchema, SchemaUserAttributeExtractor},
     types::{GroupDetails, User, UserAndGroups, UserColumn, UserId},
 };
 
@@ -22,7 +23,7 @@ pub fn get_user_attribute(
     base_dn_str: &str,
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[String],
-    schema: &Schema,
+    schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
     let attribute = attribute.to_ascii_lowercase();
     let attribute_values = match attribute.as_str() {
@@ -37,13 +38,21 @@ pub fn get_user_attribute(
         "uid" | "user_id" | "id" => vec![user.user_id.to_string().into_bytes()],
         "entryuuid" | "uuid" => vec![user.uuid.to_string().into_bytes()],
         "mail" | "email" => vec![user.email.clone().into_bytes()],
-        "givenname" | "first_name" | "firstname" => {
-            get_custom_attribute(&user.attributes, "first_name", schema)?
-        }
-        "sn" | "last_name" | "lastname" => {
-            get_custom_attribute(&user.attributes, "last_name", schema)?
-        }
-        "jpegphoto" | "avatar" => get_custom_attribute(&user.attributes, "avatar", schema)?,
+        "givenname" | "first_name" | "firstname" => get_custom_attribute::<
+            SchemaUserAttributeExtractor,
+        >(
+            &user.attributes, "first_name", schema
+        )?,
+        "sn" | "last_name" | "lastname" => get_custom_attribute::<SchemaUserAttributeExtractor>(
+            &user.attributes,
+            "last_name",
+            schema,
+        )?,
+        "jpegphoto" | "avatar" => get_custom_attribute::<SchemaUserAttributeExtractor>(
+            &user.attributes,
+            "avatar",
+            schema,
+        )?,
         "memberof" => groups
             .into_iter()
             .flatten()
@@ -67,13 +76,20 @@ pub fn get_user_attribute(
                 attribute
             )
         }
-        _ => {
+        attr => {
             if !ignored_user_attributes.contains(&attribute) {
-                warn!(
-                    r#"Ignoring unrecognized group attribute: {}\n\
+                match get_custom_attribute::<SchemaUserAttributeExtractor>(
+                    &user.attributes,
+                    attr,
+                    schema,
+                ) {
+                    Some(v) => return Some(v),
+                    None => warn!(
+                        r#"Ignoring unrecognized group attribute: {}\n\
                       To disable this warning, add it to "ignored_user_attributes" in the config."#,
-                    attribute
-                );
+                        attr
+                    ),
+                };
             }
             return None;
         }
@@ -103,7 +119,7 @@ fn make_ldap_search_user_result_entry(
     attributes: &[String],
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[String],
-    schema: &Schema,
+    schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
     let expanded_attributes = expand_user_attribute_wildcards(attributes);
     let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
@@ -253,7 +269,7 @@ pub fn convert_users_to_ldap_op<'a>(
     users: Vec<UserAndGroups>,
     attributes: &'a [String],
     ldap_info: &'a LdapInfo,
-    schema: &'a Schema,
+    schema: &'a PublicSchema,
 ) -> impl Iterator<Item = LdapOp> + 'a {
     users.into_iter().map(move |u| {
         LdapOp::SearchResultEntry(make_ldap_search_user_result_entry(

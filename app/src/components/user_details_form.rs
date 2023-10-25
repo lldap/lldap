@@ -23,10 +23,7 @@ struct JsFile {
 
 impl ToString for JsFile {
     fn to_string(&self) -> String {
-        self.file
-            .as_ref()
-            .map(File::name)
-            .unwrap_or_else(String::new)
+        self.file.as_ref().map(File::name).unwrap_or_default()
     }
 }
 
@@ -391,6 +388,8 @@ impl UserDetailsForm {
             firstName: None,
             lastName: None,
             avatar: None,
+            removeAttributes: None,
+            insertAttributes: None,
         };
         let default_user_input = user_input.clone();
         let model = self.form.model();

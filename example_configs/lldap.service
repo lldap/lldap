@@ -1,6 +1,6 @@
 [Unit]
 Description=Nitnelave LLDAP
-Documentation=https://github.com/nitnelave/lldap
+Documentation=https://github.com/lldap/lldap
 
 # Only sqlite
 After=network.target

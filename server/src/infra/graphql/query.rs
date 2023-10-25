@@ -1,17 +1,20 @@
 use crate::{
     domain::{
-        handler::{BackendHandler, SchemaBackendHandler},
+        handler::{BackendHandler, ReadSchemaBackendHandler},
         ldap::utils::{map_user_field, UserFieldType},
-        types::{GroupDetails, GroupId, JpegPhoto, UserColumn, UserId},
+        schema::{
+            PublicSchema, SchemaAttributeExtractor, SchemaGroupAttributeExtractor,
+            SchemaUserAttributeExtractor,
+        },
+        types::{AttributeType, GroupDetails, GroupId, JpegPhoto, UserColumn, UserId},
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
-        graphql::api::field_error_callback,
-        schema::PublicSchema,
+        graphql::api::{field_error_callback, Context},
     },
 };
-use chrono::TimeZone;
-use juniper::{graphql_object, FieldResult, GraphQLInputObject};
+use chrono::{NaiveDateTime, TimeZone};
+use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument};
 
@@ -19,10 +22,9 @@ type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
 type DomainUser = crate::domain::types::User;
 type DomainGroup = crate::domain::types::Group;
 type DomainUserAndGroups = crate::domain::types::UserAndGroups;
-type DomainSchema = crate::infra::schema::PublicSchema;
 type DomainAttributeList = crate::domain::handler::AttributeList;
 type DomainAttributeSchema = crate::domain::handler::AttributeSchema;
-use super::api::Context;
+type DomainAttributeValue = crate::domain::types::AttributeValue;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
 /// A filter for requests, specifying a boolean expression based on field constraints. Only one of
@@ -286,6 +288,16 @@ impl<Handler: BackendHandler> User<Handler> {
         self.user.uuid.as_str()
     }
 
+    /// User-defined attributes.
+    fn attributes(&self) -> Vec<AttributeValue<Handler, SchemaUserAttributeExtractor>> {
+        self.user
+            .attributes
+            .clone()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
     /// The groups to which this user belongs.
     async fn groups(&self, context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
         let span = debug_span!("[GraphQL query] user::groups");
@@ -335,6 +347,7 @@ pub struct Group<Handler: BackendHandler> {
     display_name: String,
     creation_date: chrono::NaiveDateTime,
     uuid: String,
+    attributes: Vec<DomainAttributeValue>,
     members: Option<Vec<String>>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
@@ -353,6 +366,16 @@ impl<Handler: BackendHandler> Group<Handler> {
     fn uuid(&self) -> String {
         self.uuid.clone()
     }
+
+    /// User-defined attributes.
+    fn attributes(&self) -> Vec<AttributeValue<Handler, SchemaGroupAttributeExtractor>> {
+        self.attributes
+            .clone()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
     /// The groups to which this user belongs.
     async fn users(&self, context: &Context<Handler>) -> FieldResult<Vec<User<Handler>>> {
         let span = debug_span!("[GraphQL query] group::users");
@@ -383,6 +406,7 @@ impl<Handler: BackendHandler> From<GroupDetails> for Group<Handler> {
             display_name: group_details.display_name,
             creation_date: group_details.creation_date,
             uuid: group_details.uuid.into_string(),
+            attributes: group_details.attributes,
             members: None,
             _phantom: std::marker::PhantomData,
         }
@@ -396,6 +420,7 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
             display_name: group.display_name,
             creation_date: group.creation_date,
             uuid: group.uuid.into_string(),
+            attributes: group.attributes,
             members: Some(group.users.into_iter().map(UserId::into_string).collect()),
             _phantom: std::marker::PhantomData,
         }
@@ -413,9 +438,8 @@ impl<Handler: BackendHandler> AttributeSchema<Handler> {
     fn name(&self) -> String {
         self.schema.name.clone()
     }
-    fn attribute_type(&self) -> String {
-        let name: &'static str = self.schema.attribute_type.into();
-        name.to_owned()
+    fn attribute_type(&self) -> AttributeType {
+        self.schema.attribute_type
     }
     fn is_list(&self) -> bool {
         self.schema.is_list
@@ -469,7 +493,7 @@ impl<Handler: BackendHandler> From<DomainAttributeList> for AttributeList<Handle
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Schema<Handler: BackendHandler> {
-    schema: DomainSchema,
+    schema: PublicSchema,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
 
@@ -483,11 +507,98 @@ impl<Handler: BackendHandler> Schema<Handler> {
     }
 }
 
-impl<Handler: BackendHandler> From<DomainSchema> for Schema<Handler> {
-    fn from(value: DomainSchema) -> Self {
+impl<Handler: BackendHandler> From<PublicSchema> for Schema<Handler> {
+    fn from(value: PublicSchema) -> Self {
         Self {
             schema: value,
             _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct AttributeValue<Handler: BackendHandler, Extractor> {
+    attribute: DomainAttributeValue,
+    _phantom: std::marker::PhantomData<Box<Handler>>,
+    _phantom_extractor: std::marker::PhantomData<Extractor>,
+}
+
+#[graphql_object(context = Context<Handler>)]
+impl<Handler: BackendHandler, Extractor: SchemaAttributeExtractor>
+    AttributeValue<Handler, Extractor>
+{
+    fn name(&self) -> &str {
+        &self.attribute.name
+    }
+    async fn value(&self, context: &Context<Handler>) -> FieldResult<Vec<String>> {
+        let handler = context
+            .handler
+            .get_user_restricted_lister_handler(&context.validation_result);
+        serialize_attribute(
+            &self.attribute,
+            Extractor::get_attributes(&PublicSchema::from(handler.get_schema().await?)),
+        )
+    }
+}
+
+pub fn serialize_attribute(
+    attribute: &DomainAttributeValue,
+    attributes: &DomainAttributeList,
+) -> FieldResult<Vec<String>> {
+    let convert_date = |date| chrono::Utc.from_utc_datetime(&date).to_rfc3339();
+    attributes
+        .get_attribute_type(&attribute.name)
+        .map(|attribute_type| {
+            match attribute_type {
+                (AttributeType::String, false) => {
+                    vec![attribute.value.unwrap::<String>()]
+                }
+                (AttributeType::Integer, false) => {
+                    // LDAP integers are encoded as strings.
+                    vec![attribute.value.unwrap::<i64>().to_string()]
+                }
+                (AttributeType::JpegPhoto, false) => {
+                    vec![String::from(&attribute.value.unwrap::<JpegPhoto>())]
+                }
+                (AttributeType::DateTime, false) => {
+                    vec![convert_date(attribute.value.unwrap::<NaiveDateTime>())]
+                }
+                (AttributeType::String, true) => attribute
+                    .value
+                    .unwrap::<Vec<String>>()
+                    .into_iter()
+                    .collect(),
+                (AttributeType::Integer, true) => attribute
+                    .value
+                    .unwrap::<Vec<i64>>()
+                    .into_iter()
+                    .map(|i| i.to_string())
+                    .collect(),
+                (AttributeType::JpegPhoto, true) => attribute
+                    .value
+                    .unwrap::<Vec<JpegPhoto>>()
+                    .iter()
+                    .map(String::from)
+                    .collect(),
+                (AttributeType::DateTime, true) => attribute
+                    .value
+                    .unwrap::<Vec<NaiveDateTime>>()
+                    .into_iter()
+                    .map(convert_date)
+                    .collect(),
+            }
+        })
+        .ok_or_else(|| FieldError::from(anyhow::anyhow!("Unknown attribute: {}", &attribute.name)))
+}
+
+impl<Handler: BackendHandler, Extractor> From<DomainAttributeValue>
+    for AttributeValue<Handler, Extractor>
+{
+    fn from(value: DomainAttributeValue) -> Self {
+        Self {
+            attribute: value,
+            _phantom: std::marker::PhantomData,
+            _phantom_extractor: std::marker::PhantomData,
         }
     }
 }
@@ -496,7 +607,10 @@ impl<Handler: BackendHandler> From<DomainSchema> for Schema<Handler> {
 mod tests {
     use super::*;
     use crate::{
-        domain::{handler::AttributeList, types::AttributeType},
+        domain::{
+            handler::AttributeList,
+            types::{AttributeType, Serialized},
+        },
         infra::{
             access_control::{Permission, ValidationResults},
             test_utils::{setup_default_schema, MockTestBackendHandler},
@@ -530,16 +644,58 @@ mod tests {
             email
             creationDate
             uuid
+            attributes {
+              name
+              value
+            }
             groups {
               id
               displayName
               creationDate
               uuid
+              attributes {
+                name
+                value
+              }
             }
           }
         }"#;
 
         let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().returning(|| {
+            Ok(crate::domain::handler::Schema {
+                user_attributes: DomainAttributeList {
+                    attributes: vec![
+                        DomainAttributeSchema {
+                            name: "first_name".to_owned(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                        },
+                        DomainAttributeSchema {
+                            name: "last_name".to_owned(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                        },
+                    ],
+                },
+                group_attributes: DomainAttributeList {
+                    attributes: vec![DomainAttributeSchema {
+                        name: "club_name".to_owned(),
+                        attribute_type: AttributeType::String,
+                        is_list: false,
+                        is_visible: true,
+                        is_editable: true,
+                        is_hardcoded: false,
+                    }],
+                },
+            })
+        });
         mock.expect_get_user_details()
             .with(eq(UserId::new("bob")))
             .return_once(|_| {
@@ -548,6 +704,16 @@ mod tests {
                     email: "bob@bobbers.on".to_string(),
                     creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
                     uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                    attributes: vec![
+                        DomainAttributeValue {
+                            name: "first_name".to_owned(),
+                            value: Serialized::from("Bob"),
+                        },
+                        DomainAttributeValue {
+                            name: "last_name".to_owned(),
+                            value: Serialized::from("Bobberson"),
+                        },
+                    ],
                     ..Default::default()
                 })
             });
@@ -557,12 +723,17 @@ mod tests {
             display_name: "Bobbersons".to_string(),
             creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
             uuid: crate::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+            attributes: vec![DomainAttributeValue {
+                name: "club_name".to_owned(),
+                value: Serialized::from("Gang of Four"),
+            }],
         });
         groups.insert(GroupDetails {
             group_id: GroupId(7),
             display_name: "Jefferees".to_string(),
             creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
             uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+            attributes: Vec::new(),
         });
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
@@ -582,17 +753,31 @@ mod tests {
                         "email": "bob@bobbers.on",
                         "creationDate": "1970-01-01T00:00:00.042+00:00",
                         "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+                        "attributes": [{
+                            "name": "first_name",
+                            "value": ["Bob"],
+                          },
+                          {
+                            "name": "last_name",
+                            "value": ["Bobberson"],
+                        }],
                         "groups": [{
                             "id": 3,
                             "displayName": "Bobbersons",
                             "creationDate": "1970-01-01T00:00:00.000000042+00:00",
-                            "uuid": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
+                            "uuid": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+                            "attributes": [{
+                                "name": "club_name",
+                                "value": ["Gang of Four"],
+                              },
+                            ],
                           },
                           {
                             "id": 7,
                             "displayName": "Jefferees",
                             "creationDate": "1970-01-01T00:00:00.000000012+00:00",
-                            "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"
+                            "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+                            "attributes": [],
                         }]
                     }
                 }),
@@ -731,7 +916,7 @@ mod tests {
                             "attributes": [
                                 {
                                     "name": "avatar",
-                                    "attributeType": "JpegPhoto",
+                                    "attributeType": "JPEG_PHOTO",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -739,7 +924,7 @@ mod tests {
                                 },
                                 {
                                     "name": "creation_date",
-                                    "attributeType": "DateTime",
+                                    "attributeType": "DATE_TIME",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -747,7 +932,7 @@ mod tests {
                                 },
                                 {
                                     "name": "display_name",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -755,7 +940,7 @@ mod tests {
                                 },
                                 {
                                     "name": "first_name",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -763,7 +948,7 @@ mod tests {
                                 },
                                 {
                                     "name": "last_name",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -771,7 +956,7 @@ mod tests {
                                 },
                                 {
                                     "name": "mail",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -779,7 +964,7 @@ mod tests {
                                 },
                                 {
                                     "name": "user_id",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -787,7 +972,7 @@ mod tests {
                                 },
                                 {
                                     "name": "uuid",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -799,7 +984,7 @@ mod tests {
                             "attributes": [
                                 {
                                     "name": "creation_date",
-                                    "attributeType": "DateTime",
+                                    "attributeType": "DATE_TIME",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -807,7 +992,7 @@ mod tests {
                                 },
                                 {
                                     "name": "display_name",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -815,7 +1000,7 @@ mod tests {
                                 },
                                 {
                                     "name": "group_id",
-                                    "attributeType": "Integer",
+                                    "attributeType": "INTEGER",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -823,7 +1008,7 @@ mod tests {
                                 },
                                 {
                                     "name": "uuid",
-                                    "attributeType": "String",
+                                    "attributeType": "STRING",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,

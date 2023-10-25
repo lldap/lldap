@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] 2023-09-14
+
+### Breaking
+
+ - Emails and UUIDs are now enforced to be unique.
+   - If you have several users with the same email, you'll have to disambiguate
+     them. You can do that by either issuing SQL commands directly
+     (`UPDATE users SET email = 'x@x' WHERE user_id = 'bob';`), or by reverting
+     to a 0.4.x version of LLDAP and editing the user through the web UI.
+     An error will prevent LLDAP 0.5+ from starting otherwise.
+   - This was done to prevent account takeover for systems that allow to
+     login via email.
+
+### Added
+
+ - The server private key can be set as a seed from an env variable (#504).
+   - This is especially useful when you have multiple containers, they don't
+     need to share a writeable folder.
+ - Added support for changing the password through a plain LDAP Modify
+   operation (as opposed to an extended operation), to allow Jellyfin
+   to change password (#620).
+ - Allow creating a user with multiple objectClass (#612).
+ - Emails now have a message ID (#608).
+ - Added a warning for browsers that have WASM/JS disabled (#639).
+ - Added support for querying OUs in LDAP (#669).
+ - Added a button to clear the avatar in the UI (#358).
+
+
+### Changed
+
+ - Groups are now sorted by name in the web UI (#623).
+ - ARM build now uses musl (#584).
+ - Improved logging.
+ - Default admin user is only created if there are no admins (#563).
+   - That allows you to remove the default admin, making it harder to
+     bruteforce.
+
+### Fixed
+
+ - Fixed URL parsing with a trailing slash in the password setting utility
+   (#597).
+
+In addition to all that, there was significant progress towards #67,
+user-defined attributes. That complex feature will unblock integration with many
+systems, including PAM authentication.
+
+### New services
+
+ - Ejabberd
+ - Ergo
+ - LibreNMS
+ - Mealie
+ - MinIO
+ - OpnSense
+ - PfSense
+ - PowerDnsAdmin
+ - Proxmox
+ - Squid
+ - Tandoor recipes
+ - TheLounge
+ - Zabbix-web
+ - Zulip
+
 ## [0.4.3] 2023-04-11
 
 The repository has changed from `nitnelave/lldap` to `lldap/lldap`, both on GitHub

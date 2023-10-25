@@ -20,7 +20,7 @@ mockall::mock! {
     impl GroupBackendHandler for TestBackendHandler {
         async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
         async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
-        async fn create_group(&self, group_name: &str) -> Result<GroupId>;
+        async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId>;
         async fn delete_group(&self, group_id: GroupId) -> Result<()>;
     }
     #[async_trait]
@@ -38,8 +38,15 @@ mockall::mock! {
         async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
     }
     #[async_trait]
-    impl SchemaBackendHandler for TestBackendHandler {
+    impl ReadSchemaBackendHandler for TestBackendHandler {
         async fn get_schema(&self) -> Result<Schema>;
+    }
+    #[async_trait]
+    impl SchemaBackendHandler for TestBackendHandler {
+        async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+        async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+        async fn delete_user_attribute(&self, name: &str) -> Result<()>;
+        async fn delete_group_attribute(&self, name: &str) -> Result<()>;
     }
     #[async_trait]
     impl BackendHandler for TestBackendHandler {}

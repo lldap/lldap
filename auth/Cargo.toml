@@ -6,7 +6,7 @@ homepage = "https://github.com/lldap/lldap"
 license = "GPL-3.0-only"
 name = "lldap_auth"
 repository = "https://github.com/lldap/lldap"
-version = "0.3.0"
+version = "0.4.0"
 
 [features]
 default = ["opaque_server", "opaque_client"]
@@ -18,7 +18,7 @@ js = []
 rust-argon2 = "0.8"
 curve25519-dalek = "3"
 digest = "0.9"
-generic-array = "*"
+generic-array = "0.14"
 rand = "0.8"
 serde = "*"
 sha2 = "0.9"

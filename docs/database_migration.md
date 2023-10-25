@@ -53,6 +53,7 @@ format to PostgreSQL format, and wrap it all in a transaction:
 sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" \
 -e ":a; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),1([^']*\);)$/\1,true\2/; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),0([^']*\);)$/\1,false\2/; ta" \
 -e '1s/^/BEGIN;\n/' \
+-e '$aSELECT setval(pg_get_serial_sequence('\''groups'\'', '\''group_id'\''), COALESCE((SELECT MAX(group_id) FROM groups), 1));' \
 -e '$aCOMMIT;' /path/to/dump.sql
 ```
 
@@ -107,4 +108,4 @@ Modify your `database_url` in `lldap_config.toml` (or `LLDAP_DATABASE_URL` in th
 to point to your new database (the same value used when generating schema). Restart
 LLDAP and check the logs to ensure there were no errors.
 
-#### More details/examples can be seen in the CI process [here](https://raw.githubusercontent.com/nitnelave/lldap/main/.github/workflows/docker-build-static.yml), look for the job `lldap-database-migration-test`
+#### More details/examples can be seen in the CI process [here](https://raw.githubusercontent.com/lldap/lldap/main/.github/workflows/docker-build-static.yml), look for the job `lldap-database-migration-test`

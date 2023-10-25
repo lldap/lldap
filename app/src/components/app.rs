@@ -355,7 +355,7 @@ impl App {
               <span>{format!("LLDAP version {}", env!("CARGO_PKG_VERSION"))}</span>
             </div>
             <div>
-              <a href="https://github.com/nitnelave/lldap" class="me-4 text-reset">
+              <a href="https://github.com/lldap/lldap" class="me-4 text-reset">
                 <i class="bi-github"></i>
               </a>
               <a href="https://discord.gg/h5PEdRMNyP" class="me-4 text-reset">
@@ -366,7 +366,7 @@ impl App {
               </a>
             </div>
             <div>
-              <span>{"License "}<a href="https://github.com/nitnelave/lldap/blob/main/LICENSE" class="link-secondary">{"GNU GPL"}</a></span>
+              <span>{"License "}<a href="https://github.com/lldap/lldap/blob/main/LICENSE" class="link-secondary">{"GNU GPL"}</a></span>
             </div>
           </footer>
         }

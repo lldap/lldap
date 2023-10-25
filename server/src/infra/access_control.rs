@@ -6,11 +6,12 @@ use tracing::info;
 use crate::domain::{
     error::Result,
     handler::{
-        AttributeSchema, BackendHandler, CreateUserRequest, GroupBackendHandler,
-        GroupListerBackendHandler, GroupRequestFilter, Schema, SchemaBackendHandler,
-        UpdateGroupRequest, UpdateUserRequest, UserBackendHandler, UserListerBackendHandler,
-        UserRequestFilter,
+        AttributeSchema, BackendHandler, CreateAttributeRequest, CreateGroupRequest,
+        CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+        ReadSchemaBackendHandler, Schema, SchemaBackendHandler, UpdateGroupRequest,
+        UpdateUserRequest, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
     },
+    schema::PublicSchema,
     types::{Group, GroupDetails, GroupId, User, UserAndGroups, UserId},
 };
 
@@ -71,9 +72,10 @@ impl ValidationResults {
 }
 
 #[async_trait]
-pub trait UserReadableBackendHandler {
+pub trait UserReadableBackendHandler: ReadSchemaBackendHandler {
     async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>>;
+    async fn get_schema(&self) -> Result<PublicSchema>;
 }
 
 #[async_trait]
@@ -94,15 +96,22 @@ pub trait UserWriteableBackendHandler: UserReadableBackendHandler {
 
 #[async_trait]
 pub trait AdminBackendHandler:
-    UserWriteableBackendHandler + ReadonlyBackendHandler + UserWriteableBackendHandler
+    UserWriteableBackendHandler
+    + ReadonlyBackendHandler
+    + UserWriteableBackendHandler
+    + SchemaBackendHandler
 {
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
     async fn delete_user(&self, user_id: &UserId) -> Result<()>;
     async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
     async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
-    async fn create_group(&self, group_name: &str) -> Result<GroupId>;
+    async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId>;
     async fn delete_group(&self, group_id: GroupId) -> Result<()>;
+    async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+    async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+    async fn delete_user_attribute(&self, name: &str) -> Result<()>;
+    async fn delete_group_attribute(&self, name: &str) -> Result<()>;
 }
 
 #[async_trait]
@@ -112,6 +121,11 @@ impl<Handler: BackendHandler> UserReadableBackendHandler for Handler {
     }
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>> {
         <Handler as UserBackendHandler>::get_user_groups(self, user_id).await
+    }
+    async fn get_schema(&self) -> Result<PublicSchema> {
+        Ok(PublicSchema::from(
+            <Handler as ReadSchemaBackendHandler>::get_schema(self).await?,
+        ))
     }
 }
 
@@ -155,11 +169,23 @@ impl<Handler: BackendHandler> AdminBackendHandler for Handler {
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()> {
         <Handler as GroupBackendHandler>::update_group(self, request).await
     }
-    async fn create_group(&self, group_name: &str) -> Result<GroupId> {
-        <Handler as GroupBackendHandler>::create_group(self, group_name).await
+    async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId> {
+        <Handler as GroupBackendHandler>::create_group(self, request).await
     }
     async fn delete_group(&self, group_id: GroupId) -> Result<()> {
         <Handler as GroupBackendHandler>::delete_group(self, group_id).await
+    }
+    async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()> {
+        <Handler as SchemaBackendHandler>::add_user_attribute(self, request).await
+    }
+    async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()> {
+        <Handler as SchemaBackendHandler>::add_group_attribute(self, request).await
+    }
+    async fn delete_user_attribute(&self, name: &str) -> Result<()> {
+        <Handler as SchemaBackendHandler>::delete_user_attribute(self, name).await
+    }
+    async fn delete_group_attribute(&self, name: &str) -> Result<()> {
+        <Handler as SchemaBackendHandler>::delete_group_attribute(self, name).await
     }
 }
 
@@ -265,7 +291,7 @@ pub struct UserRestrictedListerBackendHandler<'a, Handler> {
 }
 
 #[async_trait]
-impl<'a, Handler: SchemaBackendHandler + Sync> SchemaBackendHandler
+impl<'a, Handler: ReadSchemaBackendHandler + Sync> ReadSchemaBackendHandler
     for UserRestrictedListerBackendHandler<'a, Handler>
 {
     async fn get_schema(&self) -> Result<Schema> {

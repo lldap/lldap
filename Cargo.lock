@@ -2453,7 +2453,7 @@ checksum = "f051f77a7c8e6957c0696eac88f26b0117e54f52d3fc682ab19397a8812846a4"
 
 [[package]]
 name = "lldap"
-version = "0.5.0-alpha"
+version = "0.5.1-alpha"
 dependencies = [
  "actix",
  "actix-files",
@@ -2528,7 +2528,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_app"
-version = "0.5.0-alpha"
+version = "0.5.1-alpha"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -2559,7 +2559,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_auth"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "curve25519-dalek",
@@ -4893,9 +4893,9 @@ dependencies = [
 
 [[package]]
 name = "webpki"
-version = "0.22.1"
+version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0e74f82d49d545ad128049b7e88f6576df2da6b02e9ce565c6f533be576957e"
+checksum = "07ecc0cd7cac091bf682ec5efa18b1cff79d617b84181f38b3951dbe135f607f"
 dependencies = [
  "ring",
  "untrusted",

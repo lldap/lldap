@@ -13,8 +13,8 @@ use sea_orm::{
     sea_query::{
         query::OnConflict, Alias, Cond, Expr, Func, IntoColumnRef, IntoCondition, SimpleExpr,
     },
-    ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, IntoActiveValue, ModelTrait,
-    QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
+    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseTransaction, EntityTrait, IntoActiveValue,
+    ModelTrait, QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use std::collections::HashSet;
 use tracing::instrument;
@@ -154,6 +154,101 @@ impl UserListerBackendHandler for SqlBackendHandler {
     }
 }
 
+impl SqlBackendHandler {
+    async fn update_user_with_transaction(
+        transaction: &DatabaseTransaction,
+        request: UpdateUserRequest,
+    ) -> Result<()> {
+        let update_user = model::users::ActiveModel {
+            user_id: ActiveValue::Set(request.user_id.clone()),
+            email: request.email.map(ActiveValue::Set).unwrap_or_default(),
+            display_name: to_value(&request.display_name),
+            ..Default::default()
+        };
+        let to_serialized_value = |s: &Option<String>| match s.as_ref().map(|s| s.as_str()) {
+            None => None,
+            Some("") => Some(ActiveValue::NotSet),
+            Some(s) => Some(ActiveValue::Set(Serialized::from(s))),
+        };
+        let mut update_user_attributes = Vec::new();
+        let mut remove_user_attributes = Vec::new();
+        let mut process_serialized =
+            |value: ActiveValue<Serialized>, attribute_name: &str| match &value {
+                ActiveValue::NotSet => {
+                    remove_user_attributes.push(attribute_name.to_owned());
+                }
+                ActiveValue::Set(_) => {
+                    update_user_attributes.push(model::user_attributes::ActiveModel {
+                        user_id: Set(request.user_id.clone()),
+                        attribute_name: Set(attribute_name.to_owned()),
+                        value,
+                    })
+                }
+                _ => unreachable!(),
+            };
+        if let Some(value) = to_serialized_value(&request.first_name) {
+            process_serialized(value, "first_name");
+        }
+        if let Some(value) = to_serialized_value(&request.last_name) {
+            process_serialized(value, "last_name");
+        }
+        if let Some(avatar) = request.avatar {
+            process_serialized(avatar.into_active_value(), "avatar");
+        }
+        let schema = Self::get_schema_with_transaction(transaction).await?;
+        for attribute in request.insert_attributes {
+            if schema
+                .user_attributes
+                .get_attribute_type(&attribute.name)
+                .is_some()
+            {
+                process_serialized(ActiveValue::Set(attribute.value), &attribute.name);
+            } else {
+                return Err(DomainError::InternalError(format!(
+                    "User attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
+                    &attribute.name
+                )));
+            }
+        }
+        for attribute in request.delete_attributes {
+            if schema
+                .user_attributes
+                .get_attribute_type(&attribute)
+                .is_some()
+            {
+                remove_user_attributes.push(attribute);
+            } else {
+                return Err(DomainError::InternalError(format!(
+                    "User attribute name {} doesn't exist in the schema, yet was attempted to be removed from the database",
+                    attribute
+                )));
+            }
+        }
+        update_user.update(transaction).await?;
+        if !remove_user_attributes.is_empty() {
+            model::UserAttributes::delete_many()
+                .filter(model::UserAttributesColumn::UserId.eq(&request.user_id))
+                .filter(model::UserAttributesColumn::AttributeName.is_in(remove_user_attributes))
+                .exec(transaction)
+                .await?;
+        }
+        if !update_user_attributes.is_empty() {
+            model::UserAttributes::insert_many(update_user_attributes)
+                .on_conflict(
+                    OnConflict::columns([
+                        model::UserAttributesColumn::UserId,
+                        model::UserAttributesColumn::AttributeName,
+                    ])
+                    .update_column(model::UserAttributesColumn::Value)
+                    .to_owned(),
+                )
+                .exec(transaction)
+                .await?;
+        }
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl UserBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", ret, fields(user_id = ?user_id.as_str()))]
@@ -217,7 +312,7 @@ impl UserBackendHandler for SqlBackendHandler {
         }
         if let Some(avatar) = request.avatar {
             new_user_attributes.push(model::user_attributes::ActiveModel {
-                user_id: Set(request.user_id),
+                user_id: Set(request.user_id.clone()),
                 attribute_name: Set("avatar".to_owned()),
                 value: Set(Serialized::from(&avatar)),
             });
@@ -225,6 +320,26 @@ impl UserBackendHandler for SqlBackendHandler {
         self.sql_pool
             .transaction::<_, (), DomainError>(|transaction| {
                 Box::pin(async move {
+                    let schema = Self::get_schema_with_transaction(transaction).await?;
+                    for attribute in request.attributes {
+                        if schema
+                            .user_attributes
+                            .get_attribute_type(&attribute.name)
+                            .is_some()
+                        {
+                            new_user_attributes.push(model::user_attributes::ActiveModel {
+                                user_id: Set(request.user_id.clone()),
+                                attribute_name: Set(attribute.name),
+                                value: Set(attribute.value),
+                            });
+                        } else {
+                            return Err(DomainError::InternalError(format!(
+                                "Attribute name {} doesn't exist in the user schema,
+                                    yet was attempted to be inserted in the database",
+                                &attribute.name
+                            )));
+                        }
+                    }
                     new_user.insert(transaction).await?;
                     if !new_user_attributes.is_empty() {
                         model::UserAttributes::insert_many(new_user_attributes)
@@ -240,71 +355,11 @@ impl UserBackendHandler for SqlBackendHandler {
 
     #[instrument(skip(self), level = "debug", err, fields(user_id = ?request.user_id.as_str()))]
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
-        let update_user = model::users::ActiveModel {
-            user_id: ActiveValue::Set(request.user_id.clone()),
-            email: request.email.map(ActiveValue::Set).unwrap_or_default(),
-            display_name: to_value(&request.display_name),
-            ..Default::default()
-        };
-        let mut update_user_attributes = Vec::new();
-        let mut remove_user_attributes = Vec::new();
-        let to_serialized_value = |s: &Option<String>| match s.as_ref().map(|s| s.as_str()) {
-            None => None,
-            Some("") => Some(ActiveValue::NotSet),
-            Some(s) => Some(ActiveValue::Set(Serialized::from(s))),
-        };
-        let mut process_serialized =
-            |value: ActiveValue<Serialized>, attribute_name: &str| match &value {
-                ActiveValue::NotSet => {
-                    remove_user_attributes.push(attribute_name.to_owned());
-                }
-                ActiveValue::Set(_) => {
-                    update_user_attributes.push(model::user_attributes::ActiveModel {
-                        user_id: Set(request.user_id.clone()),
-                        attribute_name: Set(attribute_name.to_owned()),
-                        value,
-                    })
-                }
-                _ => unreachable!(),
-            };
-        if let Some(value) = to_serialized_value(&request.first_name) {
-            process_serialized(value, "first_name");
-        }
-        if let Some(value) = to_serialized_value(&request.last_name) {
-            process_serialized(value, "last_name");
-        }
-        if let Some(avatar) = request.avatar {
-            process_serialized(avatar.into_active_value(), "avatar");
-        }
         self.sql_pool
             .transaction::<_, (), DomainError>(|transaction| {
-                Box::pin(async move {
-                    update_user.update(transaction).await?;
-                    if !update_user_attributes.is_empty() {
-                        model::UserAttributes::insert_many(update_user_attributes)
-                            .on_conflict(
-                                OnConflict::columns([
-                                    model::UserAttributesColumn::UserId,
-                                    model::UserAttributesColumn::AttributeName,
-                                ])
-                                .update_column(model::UserAttributesColumn::Value)
-                                .to_owned(),
-                            )
-                            .exec(transaction)
-                            .await?;
-                    }
-                    if !remove_user_attributes.is_empty() {
-                        model::UserAttributes::delete_many()
-                            .filter(model::UserAttributesColumn::UserId.eq(&request.user_id))
-                            .filter(
-                                model::UserAttributesColumn::AttributeName
-                                    .is_in(remove_user_attributes),
-                            )
-                            .exec(transaction)
-                            .await?;
-                    }
-                    Ok(())
-                })
+                Box::pin(
+                    async move { Self::update_user_with_transaction(transaction, request).await },
+                )
             })
             .await?;
         Ok(())
@@ -714,6 +769,8 @@ mod tests {
                 first_name: Some("first_name".to_string()),
                 last_name: Some("last_name".to_string()),
                 avatar: Some(JpegPhoto::for_tests()),
+                delete_attributes: Vec::new(),
+                insert_attributes: Vec::new(),
             })
             .await
             .unwrap();
@@ -782,6 +839,118 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_update_user_insert_attribute() {
+        let fixture = TestFixture::new().await;
+
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                first_name: None,
+                last_name: None,
+                avatar: None,
+                insert_attributes: vec![AttributeValue {
+                    name: "first_name".to_owned(),
+                    value: Serialized::from("new first"),
+                }],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("bob"))
+            .await
+            .unwrap();
+        assert_eq!(
+            user.attributes,
+            vec![
+                AttributeValue {
+                    name: "first_name".to_owned(),
+                    value: Serialized::from("new first")
+                },
+                AttributeValue {
+                    name: "last_name".to_owned(),
+                    value: Serialized::from("last bob")
+                }
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_user_delete_attribute() {
+        let fixture = TestFixture::new().await;
+
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                first_name: None,
+                last_name: None,
+                avatar: None,
+                delete_attributes: vec!["first_name".to_owned()],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("bob"))
+            .await
+            .unwrap();
+        assert_eq!(
+            user.attributes,
+            vec![AttributeValue {
+                name: "last_name".to_owned(),
+                value: Serialized::from("last bob")
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_user_replace_attribute() {
+        let fixture = TestFixture::new().await;
+
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                first_name: None,
+                last_name: None,
+                avatar: None,
+                delete_attributes: vec!["first_name".to_owned()],
+                insert_attributes: vec![AttributeValue {
+                    name: "first_name".to_owned(),
+                    value: Serialized::from("new first"),
+                }],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("bob"))
+            .await
+            .unwrap();
+        assert_eq!(
+            user.attributes,
+            vec![
+                AttributeValue {
+                    name: "first_name".to_owned(),
+                    value: Serialized::from("new first")
+                },
+                AttributeValue {
+                    name: "last_name".to_owned(),
+                    value: Serialized::from("last bob")
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn test_update_user_delete_avatar() {
         let fixture = TestFixture::new().await;
 
@@ -833,9 +1002,13 @@ mod tests {
                 user_id: UserId::new("james"),
                 email: "email".to_string(),
                 display_name: Some("display_name".to_string()),
-                first_name: Some("first_name".to_string()),
+                first_name: None,
                 last_name: Some("last_name".to_string()),
                 avatar: Some(JpegPhoto::for_tests()),
+                attributes: vec![AttributeValue {
+                    name: "first_name".to_owned(),
+                    value: Serialized::from("First Name"),
+                }],
             })
             .await
             .unwrap();
@@ -856,7 +1029,7 @@ mod tests {
                 },
                 AttributeValue {
                     name: "first_name".to_owned(),
-                    value: Serialized::from("first_name")
+                    value: Serialized::from("First Name")
                 },
                 AttributeValue {
                     name: "last_name".to_owned(),

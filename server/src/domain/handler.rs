@@ -1,8 +1,8 @@
 use crate::domain::{
     error::Result,
     types::{
-        AttributeType, Group, GroupDetails, GroupId, JpegPhoto, User, UserAndGroups, UserColumn,
-        UserId, Uuid,
+        AttributeType, AttributeValue, Group, GroupDetails, GroupId, JpegPhoto, User,
+        UserAndGroups, UserColumn, UserId, Uuid,
     },
 };
 use async_trait::async_trait;
@@ -104,6 +104,7 @@ pub struct CreateUserRequest {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,
+    pub attributes: Vec<AttributeValue>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
@@ -115,12 +116,22 @@ pub struct UpdateUserRequest {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,
+    pub delete_attributes: Vec<String>,
+    pub insert_attributes: Vec<AttributeValue>,
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
+pub struct CreateGroupRequest {
+    pub display_name: String,
+    pub attributes: Vec<AttributeValue>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct UpdateGroupRequest {
     pub group_id: GroupId,
     pub display_name: Option<String>,
+    pub delete_attributes: Vec<String>,
+    pub insert_attributes: Vec<AttributeValue>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
@@ -132,6 +143,15 @@ pub struct AttributeSchema {
     pub is_visible: bool,
     pub is_editable: bool,
     pub is_hardcoded: bool,
+}
+
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub struct CreateAttributeRequest {
+    pub name: String,
+    pub attribute_type: AttributeType,
+    pub is_list: bool,
+    pub is_visible: bool,
+    pub is_editable: bool,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
@@ -160,20 +180,20 @@ pub trait LoginHandler: Send + Sync {
 }
 
 #[async_trait]
-pub trait GroupListerBackendHandler: SchemaBackendHandler {
+pub trait GroupListerBackendHandler: ReadSchemaBackendHandler {
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>>;
 }
 
 #[async_trait]
-pub trait GroupBackendHandler: SchemaBackendHandler {
+pub trait GroupBackendHandler: ReadSchemaBackendHandler {
     async fn get_group_details(&self, group_id: GroupId) -> Result<GroupDetails>;
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()>;
-    async fn create_group(&self, group_name: &str) -> Result<GroupId>;
+    async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId>;
     async fn delete_group(&self, group_id: GroupId) -> Result<()>;
 }
 
 #[async_trait]
-pub trait UserListerBackendHandler: SchemaBackendHandler {
+pub trait UserListerBackendHandler: ReadSchemaBackendHandler {
     async fn list_users(
         &self,
         filters: Option<UserRequestFilter>,
@@ -182,7 +202,7 @@ pub trait UserListerBackendHandler: SchemaBackendHandler {
 }
 
 #[async_trait]
-pub trait UserBackendHandler: SchemaBackendHandler {
+pub trait UserBackendHandler: ReadSchemaBackendHandler {
     async fn get_user_details(&self, user_id: &UserId) -> Result<User>;
     async fn create_user(&self, request: CreateUserRequest) -> Result<()>;
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
@@ -193,8 +213,17 @@ pub trait UserBackendHandler: SchemaBackendHandler {
 }
 
 #[async_trait]
-pub trait SchemaBackendHandler {
+pub trait ReadSchemaBackendHandler {
     async fn get_schema(&self) -> Result<Schema>;
+}
+
+#[async_trait]
+pub trait SchemaBackendHandler: ReadSchemaBackendHandler {
+    async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+    async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
+    // Note: It's up to the caller to make sure that the attribute is not hardcoded.
+    async fn delete_user_attribute(&self, name: &str) -> Result<()>;
+    async fn delete_group_attribute(&self, name: &str) -> Result<()>;
 }
 
 #[async_trait]
@@ -205,6 +234,7 @@ pub trait BackendHandler:
     + UserBackendHandler
     + UserListerBackendHandler
     + GroupListerBackendHandler
+    + ReadSchemaBackendHandler
     + SchemaBackendHandler
 {
 }

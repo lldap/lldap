@@ -37,6 +37,7 @@ impl From<Model> for crate::domain::types::Group {
             creation_date: group.creation_date,
             uuid: group.uuid,
             users: vec![],
+            attributes: Vec::new(),
         }
     }
 }
@@ -48,6 +49,7 @@ impl From<Model> for crate::domain::types::GroupDetails {
             display_name: group.display_name,
             creation_date: group.creation_date,
             uuid: group.uuid,
+            attributes: Vec::new(),
         }
     }
 }
