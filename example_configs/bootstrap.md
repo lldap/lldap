@@ -95,7 +95,75 @@ Fields description:
 
 ```
 
-## Deploy example
+## Usage example
+
+### Manually
+
+The script can be run manually in the terminal for initial bootstrapping your lldap instance.
+You only should ensure that [required packages](#required-packages) are installed
+and [environment variables](#environment-variables) configured properly.
+
+```bash
+export LLDAP_URL=http://localhost:8080
+export LLDAP_ADMIN_USERNAME=admin
+export LLDAP_ADMIN_PASSWORD=changeme
+export USER_CONFIGS_DIR="$(realpath ./configs/user)"
+export GROUP_CONFIGS_DIR="$(realpath ./configs/group)"
+export LLDAP_SET_PASSWORD_PATH="$(realpath ./lldap_set_password)"
+export DO_CLEANUP=false
+./bootstrap.sh
+```
+
+### Docker compose
+
+Let's suppose you have the next file structure:
+
+```text
+./
+├─ docker-compose.yaml
+└─ bootstrap
+   ├─ bootstrap.sh
+   └─ user-configs
+   │  ├─ user-1.json
+   │  ├─ ...
+   │  └─ user-n.json
+   └─ group-configs
+      ├─ group-1.json
+      ├─ ...
+      └─ group-n.json
+   
+```
+
+You should mount `bootstrap` dir to lldap container and set the corresponding `env` variables:
+
+```yaml
+version: "3"
+
+services:
+  lldap:
+    image: lldap/lldap:v0.5.0
+    volumes:
+      - ./bootstrap:/bootstrap
+    ports:
+      - "3890:3890" # For LDAP
+      - "17170:17170" # For the web front-end
+    environment:
+      # envs required for lldap
+      - LLDAP_LDAP_USER_EMAIL=admin@example.com
+      - LLDAP_LDAP_USER_PASS=changeme
+      - LLDAP_LDAP_BASE_DN=dc=example,dc=com
+      
+      # envs required for bootstrap.sh
+      - LLDAP_URL=http://localhost:17170
+      - LLDAP_ADMIN_USERNAME=admin
+      - LLDAP_ADMIN_PASSWORD=changeme # same as LLDAP_LDAP_USER_PASS
+      - USER_CONFIGS_DIR=/bootstrap/user-configs
+      - GROUP_CONFIGS_DIR=/bootstrap/group-configs
+      - DO_CLEANUP=false
+```
+
+Then, to bootstrap your lldap just run `docker compose exec lldap /bootstrap/bootstrap.sh`.
+If config files were changed, re-run the `bootstrap.sh` with the same command.
 
 ### Kubernetes job
 
@@ -104,7 +172,9 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: lldap-bootstrap
-  annotations:
+  # Next annotations are required if the job managed by Argo CD,
+  # so Argo CD can relaunch the job on every app sync action
+  annotations: 
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
