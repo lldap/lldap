@@ -12,16 +12,33 @@ LLDAP_SET_PASSWORD_PATH="${LLDAP_SET_PASSWORD_PATH:-/app/lldap_set_password}"
 DO_CLEANUP="${DO_CLEANUP:-false}"
 
 check_install_dependencies() {
-  local command=''
-  for command in 'curl' 'jq' 'jo'; do
-    if ! hash "$command" 2>/dev/null; then
-      apk add "$command"
+  local commands=('curl' 'jq' 'jo')
+  local commands_not_found='false'
+
+  if ! hash "${commands[@]}" 2>/dev/null; then
+    if hash 'apk' 2>/dev/null && [[ $EUID -eq 0 ]]; then
+      apk add "${commands[@]}"
+    elif hash 'apt' 2>/dev/null && [[ $EUID -eq 0 ]]; then
+      apt update -yqq
+      apt install -yqq "${commands[@]}"
+    else
+      local command=''
+      for command in "${commands[@]}"; do
+        if ! hash "$command" 2>/dev/null; then
+          printf 'Command not found "%s"\n' "$command"
+        fi
+      done
+      commands_not_found='true'
     fi
-  done
+  fi
+
+  if [[ "$commands_not_found" == 'true' ]]; then
+    return 1
+  fi
 }
 
 required_env_vars_check() {
-  local env_var_not_specified=false
+  local env_var_not_specified='false'
   local dual_env_vars_list=(
     'LLDAP_URL'
     'LLDAP_ADMIN_USERNAME'
@@ -33,14 +50,18 @@ required_env_vars_check() {
     local dual_env_var_file_name="${dual_env_var_name}_FILE"
 
     if [[ -z "${!dual_env_var_name}" ]] && [[ -z "${!dual_env_var_file_name}" ]]; then
-      printf 'Please specify "%s" or "%s" variable!' "$dual_env_var_name" "$dual_env_var_file_name" >&2
-      env_var_not_specified=true
+      printf 'Please specify "%s" or "%s" variable!\n' "$dual_env_var_name" "$dual_env_var_file_name" >&2
+      env_var_not_specified='true'
     else
       if [[ -n "${!dual_env_var_file_name}" ]]; then
         declare -g "$dual_env_var_name"="$(cat "${!dual_env_var_file_name}")"
       fi
     fi
   done
+
+  if [[ "$env_var_not_specified" == 'true' ]]; then
+    return 1
+  fi
 }
 
 auth() {
@@ -74,7 +95,7 @@ get_group_array() {
   get_group_list | jq --raw-output '.data.groups[].displayName'
 }
 
-is_group_exists() {
+group_exists() {
   get_group_list | jq --raw-output --arg displayName "$1" '.data.groups | any(.[]; contains({"displayName": $displayName}))'
 }
 
@@ -85,7 +106,7 @@ get_group_id() {
 create_group() {
   local group_name="$1"
 
-  if [[ $(is_group_exists "$group_name") == true ]]; then
+  if [[ $(group_exists "$group_name") == 'true' ]]; then
     printf 'Group "%s" (%s) already exists\n' "$group_name" "$(get_group_id "$group_name")"
     return
   fi
@@ -106,8 +127,8 @@ create_group() {
 delete_group() {
   local group_name="$1" id=''
 
-  if [[ $(is_group_exists "$group_name") != true ]]; then
-    printf 'Group "%s" is not exists\n' "$group_name"
+  if [[ $(group_exists "$group_name") == 'false' ]]; then
+    printf '[WARNING] Group "%s" does not exist\n' "$group_name"
     return
   fi
 
@@ -129,8 +150,8 @@ delete_group() {
 add_user_to_group() {
   local user_id="$1" group_name="$2" group_id=''
 
-  if [[ $(is_group_exists "$group_name") != true ]]; then
-    printf '[WARNING] Group "%s" is not exists\n' "$group_name"
+  if [[ $(group_exists "$group_name") == 'false' ]]; then
+    printf '[WARNING] Group "%s" does not exist\n' "$group_name"
     return
   fi
 
@@ -152,8 +173,8 @@ add_user_to_group() {
 remove_user_from_group() {
   local user_id="$1" group_name="$2" group_id=''
 
-  if [[ $(is_group_exists "$group_name") != true ]]; then
-    printf '[WARNING] Group "%s" is not exists\n' "$group_name"
+  if [[ $(group_exists "$group_name") == 'false' ]]; then
+    printf '[WARNING] Group "%s" does not exist\n' "$group_name"
     return
   fi
 
@@ -178,7 +199,7 @@ get_users_list() {
   make_query <(printf '%s' "$query") <(jo -- filters=null)
 }
 
-is_user_exists() {
+user_exists() {
   get_users_list | jq --raw-output --arg id "$1" '.data.users | any(.[]; contains({"id": $id}))'
 }
 
@@ -193,7 +214,7 @@ get_user_details() {
 delete_user() {
   local id="$1"
 
-  if [[ $(is_user_exists "$id") != true ]]; then
+  if [[ $(user_exists "$id") == 'false' ]]; then
     printf 'User "%s" is not exists\n' "$id"
     return
   fi
@@ -234,7 +255,7 @@ __common_user_mutation_query() {
 
   local temp_avatar_file=''
 
-  if [[ "$gravatar_avatar" == true ]]; then
+  if [[ "$gravatar_avatar" == 'true' ]]; then
     avatar_url="https://gravatar.com/avatar/$(printf '%s' "$email" | sha256sum | cut -d ' ' -f 1)?size=512"
   fi
 
@@ -242,7 +263,7 @@ __common_user_mutation_query() {
     temp_avatar_file="${TMP_AVATAR_DIR}/$(printf '%s' "$avatar_url" | md5sum | cut -d ' ' -f 1)"
 
     if ! [[ -f "$temp_avatar_file" ]]; then
-      if [[ "$weserv_avatar" == true ]]; then
+      if [[ "$weserv_avatar" == 'true' ]]; then
         avatar_url="https://wsrv.nl/?url=$avatar_url&output=jpg"
       fi
       curl --silent --location --output "$temp_avatar_file" "$avatar_url"
@@ -263,7 +284,7 @@ __common_user_mutation_query() {
 create_user() {
   local id="$1"
 
-  if [[ $(is_user_exists "$id") == true ]]; then
+  if [[ $(user_exists "$id") == 'true' ]]; then
     printf 'User "%s" already exists\n' "$id"
     return
   fi
@@ -284,7 +305,7 @@ create_user() {
 update_user() {
   local id="$1"
 
-  if [[ $(is_user_exists "$id") != true ]]; then
+  if [[ $(user_exists "$id") == 'false' ]]; then
     printf 'User "%s" is not exists\n' "$id"
     return
   fi
@@ -305,7 +326,7 @@ update_user() {
 create_update_user() {
   local id="$1"
 
-  if [[ $(is_user_exists "$id") != true ]]; then
+  if [[ $(user_exists "$id") == 'false' ]]; then
     create_user "$@"
   else
     update_user "$@"
@@ -342,7 +363,7 @@ main() {
   else
     local group_name=''
     while read -r group_name; do
-      if [[ "$DO_CLEANUP" == true ]]; then
+      if [[ "$DO_CLEANUP" == 'true' ]]; then
         delete_group "$group_name"
       else
         printf '[WARNING] Group "%s" is not declared in config files\n' "$group_name"
@@ -384,7 +405,7 @@ main() {
 
     local user_group_name=''
     while read -r user_group_name; do
-      if [[ "$DO_CLEANUP" == true ]]; then
+      if [[ "$DO_CLEANUP" == 'true' ]]; then
         remove_user_from_group "$id" "$user_group_name"
       else
         printf '[WARNING] User "%s" is not declared as member of the "%s" group in the config files\n' "$id" "$user_group_name"
@@ -401,7 +422,7 @@ main() {
   else
     local id=''
     while read -r id; do
-      if [[ "$DO_CLEANUP" == true ]]; then
+      if [[ "$DO_CLEANUP" == 'true' ]]; then
         delete_user "$id"
       else
         printf '[WARNING] User "%s" is not declared in config files\n' "$id"

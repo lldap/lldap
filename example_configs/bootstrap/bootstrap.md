@@ -14,11 +14,12 @@ The script can:
 * maintain the desired state described in JSON config files
 
 
-![](images/bootstrap-example-log-1.jpeg)
+![](bootstrap-example-log-1.jpeg)
 
 ## Required packages
 
-> These packages are present in Alpine Linux repos and will be installed automatically by script if the corresponding commands can't be found
+> The script will automatically install the required packages for alpine and debian-based distributions
+> when run by root, or you can install them by yourself.
 
 - curl
 - [jq](https://github.com/jqlang/jq)
@@ -99,9 +100,9 @@ Fields description:
 
 ### Manually
 
-The script can be run manually in the terminal for initial bootstrapping your lldap instance.
-You only should ensure that [required packages](#required-packages) are installed
-and [environment variables](#environment-variables) configured properly.
+The script can be run manually in the terminal for initial bootstrapping of your lldap instance.
+You should make sure that the [required packages](#required-packages) are installed
+and the [environment variables](#environment-variables) are configured properly.
 
 ```bash
 export LLDAP_URL=http://localhost:8080
@@ -183,7 +184,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: lldap-bootstrap
-          image: nitnelave/lldap:v0.5.0
+          image: lldap/lldap:v0.5.0
 
           command:
             - /bootstrap/bootstrap.sh
