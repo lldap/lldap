@@ -2,7 +2,17 @@
 
 bootstrap.sh allows managing your lldap in a git-ops, declarative way using JSON config files.
 
-The script can create, update and delete users and groups to maintain the desired state.
+The script can:
+
+* create, update users
+  * set/update all lldap built-in user attributes
+  * add/remove users to/from corresponding groups
+  * set/update user avatar from file, link or from gravatar by user email
+  * set/update user password
+* create groups
+* delete redundant users and groups (when `DO_CLEANUP` env var is true)
+* maintain the desired state described in JSON config files
+
 
 ![](images/bootstrap-example-log-1.jpeg)
 
@@ -26,8 +36,8 @@ The script can create, update and delete users and groups to maintain the desire
 
 ## Config files
 
-Config files can be as one JSON file with nested JSON top-level values as several JSON files.
 There are two types of config files: [group](#group-config-file-example) and [user](#user-config-file-example) configs.
+Each config file can be as one JSON file with nested JSON top-level values as several JSON files.
 
 ### Group config file example
 
