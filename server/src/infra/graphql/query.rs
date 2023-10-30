@@ -41,70 +41,51 @@ pub struct RequestFilter {
 impl TryInto<DomainRequestFilter> for RequestFilter {
     type Error = String;
     fn try_into(self) -> Result<DomainRequestFilter, Self::Error> {
-        let mut field_count = 0;
-        if self.any.is_some() {
-            field_count += 1;
-        }
-        if self.all.is_some() {
-            field_count += 1;
-        }
-        if self.not.is_some() {
-            field_count += 1;
-        }
-        if self.eq.is_some() {
-            field_count += 1;
-        }
-        if self.member_of.is_some() {
-            field_count += 1;
-        }
-        if self.member_of_id.is_some() {
-            field_count += 1;
-        }
-        if field_count == 0 {
-            return Err("No field specified in request filter".to_string());
-        }
-        if field_count > 1 {
-            return Err("Multiple fields specified in request filter".to_string());
-        }
-        if let Some(e) = self.eq {
-            return match map_user_field(&e.field.to_ascii_lowercase()) {
-                UserFieldType::NoMatch => Err(format!("Unknown request filter: {}", &e.field)),
-                UserFieldType::PrimaryField(UserColumn::UserId) => {
-                    Ok(DomainRequestFilter::UserId(UserId::new(&e.value)))
+        match (
+            self.eq,
+            self.any,
+            self.all,
+            self.not,
+            self.member_of,
+            self.member_of_id,
+        ) {
+            (Some(eq), None, None, None, None, None) => {
+                match map_user_field(&eq.field.to_ascii_lowercase()) {
+                    UserFieldType::NoMatch => Err(format!("Unknown request filter: {}", &eq.field)),
+                    UserFieldType::PrimaryField(UserColumn::UserId) => {
+                        Ok(DomainRequestFilter::UserId(UserId::new(&eq.value)))
+                    }
+                    UserFieldType::PrimaryField(column) => {
+                        Ok(DomainRequestFilter::Equality(column, eq.value))
+                    }
+                    UserFieldType::Attribute(column) => Ok(DomainRequestFilter::AttributeEquality(
+                        column.to_owned(),
+                        eq.value,
+                    )),
                 }
-                UserFieldType::PrimaryField(column) => {
-                    Ok(DomainRequestFilter::Equality(column, e.value))
-                }
-                UserFieldType::Attribute(column) => Ok(DomainRequestFilter::AttributeEquality(
-                    column.to_owned(),
-                    e.value,
-                )),
-            };
-        }
-        if let Some(c) = self.any {
-            return Ok(DomainRequestFilter::Or(
-                c.into_iter()
+            }
+            (None, Some(any), None, None, None, None) => Ok(DomainRequestFilter::Or(
+                any.into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<Vec<_>, String>>()?,
-            ));
-        }
-        if let Some(c) = self.all {
-            return Ok(DomainRequestFilter::And(
-                c.into_iter()
+            )),
+            (None, None, Some(all), None, None, None) => Ok(DomainRequestFilter::And(
+                all.into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<Vec<_>, String>>()?,
-            ));
+            )),
+            (None, None, None, Some(not), None, None) => {
+                Ok(DomainRequestFilter::Not(Box::new((*not).try_into()?)))
+            }
+            (None, None, None, None, Some(group), None) => Ok(DomainRequestFilter::MemberOf(group)),
+            (None, None, None, None, None, Some(group_id)) => {
+                Ok(DomainRequestFilter::MemberOfId(GroupId(group_id)))
+            }
+            (None, None, None, None, None, None) => {
+                Err("No field specified in request filter".to_string())
+            }
+            _ => Err("Multiple fields specified in request filter".to_string()),
         }
-        if let Some(c) = self.not {
-            return Ok(DomainRequestFilter::Not(Box::new((*c).try_into()?)));
-        }
-        if let Some(group) = self.member_of {
-            return Ok(DomainRequestFilter::MemberOf(group));
-        }
-        if let Some(group_id) = self.member_of_id {
-            return Ok(DomainRequestFilter::MemberOfId(GroupId(group_id)));
-        }
-        unreachable!();
     }
 }
 
