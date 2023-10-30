@@ -6,6 +6,7 @@ use crate::domain::{
     types::UserId,
 };
 use async_trait::async_trait;
+use chrono::NaiveDateTime;
 use sea_orm::{
     sea_query::{Cond, Expr},
     ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QuerySelect,
@@ -60,6 +61,25 @@ impl TcpBackendHandler for SqlBackendHandler {
         .into_active_model();
         new_token.insert(&self.sql_pool).await?;
         Ok((refresh_token, duration))
+    }
+
+    #[instrument(skip_all, level = "debug")]
+    async fn register_jwt(
+        &self,
+        user: &UserId,
+        jwt_hash: u64,
+        expiry_date: NaiveDateTime,
+    ) -> Result<()> {
+        debug!(?user, ?jwt_hash);
+        let new_token = model::jwt_storage::Model {
+            jwt_hash: jwt_hash as i64,
+            user_id: user.clone(),
+            blacklisted: false,
+            expiry_date,
+        }
+        .into_active_model();
+        new_token.insert(&self.sql_pool).await?;
+        Ok(())
     }
 
     #[instrument(skip_all, level = "debug")]
