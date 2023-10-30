@@ -6,6 +6,7 @@ LDAP configuration is in ```/dokuwiki/conf/local.protected.php```:
 <?php
 $conf['useacl']         = 1;           //enable ACL
 $conf['authtype']       = 'authldap';  //enable this Auth plugin
+$conf['superuser'] = 'admin';
 $conf['plugin']['authldap']['server']      = 'ldap://lldap_server:3890'; #IP of your lldap
 $conf['plugin']['authldap']['usertree']    = 'ou=people,dc=example,dc=com';
 $conf['plugin']['authldap']['grouptree']   = 'ou=groups, dc=example, dc=com';
