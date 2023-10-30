@@ -347,7 +347,7 @@ jobs:
        - name: Export and Converting to Postgress
          run: |
               bash ./scripts/sqlite_dump_commands.sh | sqlite3 ./users.db > ./dump.sql
-              sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" -e ":a; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),1([^']*\);)$/\1,true\2/; s/(INSERT INTO user_attribute_schema\(.*\) VALUES\(.*),0([^']*\);)$/\1,false\2/; ta" -e '1s/^/BEGIN;\n/' -e '$aCOMMIT;' ./dump.sql
+              sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" -e ":a; s/(INSERT INTO (user_attribute_schema|jwt_storage)\(.*\) VALUES\(.*),1([^']*\);)$/\1,true\3/; s/(INSERT INTO (user_attribute_schema|jwt_storage)\(.*\) VALUES\(.*),0([^']*\);)$/\1,false\3/; ta" -e '1s/^/BEGIN;\n/' -e '$aCOMMIT;' ./dump.sql
 
        - name: Create schema on postgres
          run: |
