@@ -37,7 +37,7 @@ check_install_dependencies() {
   fi
 }
 
-required_env_vars_check() {
+check_required_env_vars() {
   local env_var_not_specified='false'
   local dual_env_vars_list=(
     'LLDAP_URL'
@@ -60,6 +60,21 @@ required_env_vars_check() {
   done
 
   if [[ "$env_var_not_specified" == 'true' ]]; then
+    return 1
+  fi
+}
+
+check_configs_validity() {
+  local config_file='' config_invalid='false'
+  for config_file in "$@"; do
+    local error=''
+    if ! error="$(jq '.' -- "$config_file" 2>&1 >/dev/null)"; then
+      printf '%s: %s\n' "$config_file" "$error"
+      config_invalid='true'
+    fi
+  done
+
+  if [[ "$config_invalid" == 'true' ]]; then
     return 1
   fi
 }
@@ -96,7 +111,11 @@ get_group_array() {
 }
 
 group_exists() {
-  get_group_list | jq --raw-output --arg displayName "$1" '.data.groups | any(.[]; contains({"displayName": $displayName}))'
+  if [[ "$(get_group_list | jq --raw-output --arg displayName "$1" '.data.groups | any(.[]; contains({"displayName": $displayName}))')" == 'true' ]]; then
+    return 0
+  else
+    return 1
+  fi
 }
 
 get_group_id() {
@@ -106,7 +125,7 @@ get_group_id() {
 create_group() {
   local group_name="$1"
 
-  if [[ $(group_exists "$group_name") == 'true' ]]; then
+  if group_exists "$group_name"; then
     printf 'Group "%s" (%s) already exists\n' "$group_name" "$(get_group_id "$group_name")"
     return
   fi
@@ -127,7 +146,7 @@ create_group() {
 delete_group() {
   local group_name="$1" id=''
 
-  if [[ $(group_exists "$group_name") == 'false' ]]; then
+  if ! group_exists "$group_name"; then
     printf '[WARNING] Group "%s" does not exist\n' "$group_name"
     return
   fi
@@ -150,7 +169,7 @@ delete_group() {
 add_user_to_group() {
   local user_id="$1" group_name="$2" group_id=''
 
-  if [[ $(group_exists "$group_name") == 'false' ]]; then
+  if ! group_exists "$group_name"; then
     printf '[WARNING] Group "%s" does not exist\n' "$group_name"
     return
   fi
@@ -173,7 +192,7 @@ add_user_to_group() {
 remove_user_from_group() {
   local user_id="$1" group_name="$2" group_id=''
 
-  if [[ $(group_exists "$group_name") == 'false' ]]; then
+  if ! group_exists "$group_name"; then
     printf '[WARNING] Group "%s" does not exist\n' "$group_name"
     return
   fi
@@ -200,7 +219,11 @@ get_users_list() {
 }
 
 user_exists() {
-  get_users_list | jq --raw-output --arg id "$1" '.data.users | any(.[]; contains({"id": $id}))'
+  if [[ "$(get_users_list | jq --raw-output --arg id "$1" '.data.users | any(.[]; contains({"id": $id}))')" == 'true' ]]; then
+    return 0
+  else
+    return 1
+  fi
 }
 
 get_user_details() {
@@ -214,7 +237,7 @@ get_user_details() {
 delete_user() {
   local id="$1"
 
-  if [[ $(user_exists "$id") == 'false' ]]; then
+  if ! user_exists "$id"; then
     printf 'User "%s" is not exists\n' "$id"
     return
   fi
@@ -284,7 +307,7 @@ __common_user_mutation_query() {
 create_user() {
   local id="$1"
 
-  if [[ $(user_exists "$id") == 'true' ]]; then
+  if user_exists "$id"; then
     printf 'User "%s" already exists\n' "$id"
     return
   fi
@@ -305,7 +328,7 @@ create_user() {
 update_user() {
   local id="$1"
 
-  if [[ $(user_exists "$id") == 'false' ]]; then
+  if ! user_exists "$id"; then
     printf 'User "%s" is not exists\n' "$id"
     return
   fi
@@ -326,16 +349,23 @@ update_user() {
 create_update_user() {
   local id="$1"
 
-  if [[ $(user_exists "$id") == 'false' ]]; then
-    create_user "$@"
-  else
+  if user_exists "$id"; then
     update_user "$@"
+  else
+    create_user "$@"
   fi
 }
 
 main() {
   check_install_dependencies
-  required_env_vars_check
+  check_required_env_vars
+
+  local user_config_files=("${USER_CONFIGS_DIR}"/*.json)
+  local group_config_files=("${GROUP_CONFIGS_DIR}"/*.json)
+
+  if ! check_configs_validity "${group_config_files[@]}" "${user_config_files[@]}"; then
+    exit 1
+  fi
 
   until curl --silent -o /dev/null "$LLDAP_URL"; do
     printf 'Waiting lldap to start...\n'
@@ -354,7 +384,7 @@ main() {
     group_name="$(printf '%s' "$group_config" | jq --raw-output '.name')"
     create_group "$group_name"
     redundant_groups="$(printf '%s' "$redundant_groups" | jq --compact-output --arg name "$group_name" '. - [$name]')"
-  done < <(jq --compact-output '.' -- "${GROUP_CONFIGS_DIR}"/*.json)
+  done < <(jq --compact-output '.' -- "${group_config_files[@]}")
   printf -- '--- groups ---\n'
 
   printf -- '\n--- redundant groups ---\n'
@@ -412,7 +442,7 @@ main() {
       fi
     done < <(printf '%s' "$redundant_user_groups" | jq --raw-output '.[]')
     printf -- '--- %s ---\n' "$id"
-  done < <(jq --compact-output '.' -- "${USER_CONFIGS_DIR}"/*.json)
+  done < <(jq --compact-output '.' -- "${user_config_files[@]}")
 
   rm -r "$TMP_AVATAR_DIR"
 
