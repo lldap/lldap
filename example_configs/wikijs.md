@@ -49,7 +49,7 @@ mail
 ```
 ### Display Name Field Mapping
 ```
-givenname
+cn
 ```
 ### Avatar Picture Field Mapping
 ```
