@@ -162,6 +162,10 @@ front-end.
 
 See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for Kubernetes
 
+You can bootstrap your lldap instance (users, groups)
+using [bootstrap.sh](example_configs/bootstrap/bootstrap.md#kubernetes-job).
+It Can be run by Argo CD for managing users in git-opt way, or like one shot job.
+
 ### From source
 
 #### Backend
