@@ -285,6 +285,7 @@ folder for help with:
 - [Grafana](example_configs/grafana_ldap_config.toml)
 - [Hedgedoc](example_configs/hedgedoc.md)
 - [Jellyfin](example_configs/jellyfin.md)
+- [Jenkins](example_configs/jenkins.md)
 - [Jitsi Meet](example_configs/jitsi_meet.conf)
 - [KeyCloak](example_configs/keycloak.md)
 - [LibreNMS](example_configs/librenms.md)
