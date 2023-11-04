@@ -4,12 +4,12 @@
 
 To setup LLDAP for Jenkins navigate to Dashboard/Manage Jenkins/Security. 
 
-*Note: Jenkins LDAP plugin have to be installed!</br>*
-*Note: "dc=example,dc=com" is basic setup, but it has to match your lldap dc.*
+*Note: Jenkins LDAP plugin has to be installed!</br>*
+*Note: "dc=example,dc=com" is default configuration, you should replace it with your base DN.*
 
 1) Set **Security Realm** to **LDAP**
 2) Click Add Server
-3) Setup config fiels as stated below
+3) Setup config fields as stated below
 
 ## Config fields
 
@@ -21,7 +21,9 @@ ldap://example.com:3890
 ### Advanced Server Configuration Dropdown
 
 #### root DN
-Leave empty
+```
+dc=example,dc=com
+```
 
 #### Allow blank rootDN
 ```
@@ -30,7 +32,7 @@ true
 
 #### User search base
 ```
-ou=people,dc=example,dc=com
+ou=people
 ```
 
 #### User search filter
@@ -40,7 +42,7 @@ uid={0}
 
 #### Group search base
 ```
-ou=groups,dc=example,dc=com
+ou=groups
 ```
 
 #### Group search filter
@@ -54,7 +56,7 @@ Select Search for LDAP groups containing user and leave Group membership filter 
 #### Manager DN
 Leave here your admin account
 ```
-cn=admin,ou=people,dc=example,dc=com
+cn=admin,ou=people
 ```
 #### Manager Password
 Leave it as is
@@ -72,7 +74,7 @@ mail
 
 ### Tips & Tricks
 - Always use Test LDAP settings so you won't get locked out. It works without password.
-- If you want to setup your permissions, go to Authorization setting and select Matrix-based security. Add group/user (it has to exist in LLDAP) and you can set him permissions. Note that Overall Read forbids users to read jenkins and execute actions. Administer gives full rights.
+- If you want to setup your permissions, go to Authorization setting and select Matrix-based security. Add group/user (it has to exist in LLDAP) and you can grant him permissions. Note that Overall Read forbids users to read jenkins and execute actions. Administer gives full rights.
 
 ### Useful links:
 https://plugins.jenkins.io/ldap/</br>
