@@ -160,10 +160,12 @@ pub struct AttributeList {
 }
 
 impl AttributeList {
+    pub fn get_attribute_schema(&self, name: &str) -> Option<&AttributeSchema> {
+        self.attributes.iter().find(|a| a.name == name)
+    }
+
     pub fn get_attribute_type(&self, name: &str) -> Option<(AttributeType, bool)> {
-        self.attributes
-            .iter()
-            .find(|a| a.name == name)
+        self.get_attribute_schema(name)
             .map(|a| (a.attribute_type, a.is_list))
     }
 }

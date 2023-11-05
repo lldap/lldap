@@ -144,7 +144,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .attributes
             .unwrap_or_default()
             .into_iter()
-            .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr))
+            .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, true))
             .collect::<Result<Vec<_>, _>>()?;
         handler
             .create_user(CreateUserRequest {
@@ -206,6 +206,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         let handler = context
             .get_writeable_handler(&user_id)
             .ok_or_else(field_error_callback(&span, "Unauthorized user update"))?;
+        let is_admin = context.validation_result.is_admin();
         let avatar = user
             .avatar
             .map(|bytes| base64::engine::general_purpose::STANDARD.decode(bytes))
@@ -219,7 +220,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .insert_attributes
             .unwrap_or_default()
             .into_iter()
-            .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr))
+            .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
             .collect::<Result<Vec<_>, _>>()?;
         handler
             .update_user(UpdateUserRequest {
@@ -257,7 +258,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .insert_attributes
             .unwrap_or_default()
             .into_iter()
-            .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr))
+            .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr, true))
             .collect::<Result<Vec<_>, _>>()?;
         handler
             .update_group(UpdateGroupRequest {
@@ -474,7 +475,7 @@ async fn create_group_with_details<Handler: BackendHandler>(
         .attributes
         .unwrap_or_default()
         .into_iter()
-        .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr))
+        .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr, true))
         .collect::<Result<Vec<_>, _>>()?;
     let request = CreateGroupRequest {
         display_name: request.display_name,
@@ -491,11 +492,19 @@ async fn create_group_with_details<Handler: BackendHandler>(
 fn deserialize_attribute(
     attribute_schema: &AttributeList,
     attribute: AttributeValue,
+    is_admin: bool,
 ) -> FieldResult<DomainAttributeValue> {
-    let attribute_type = attribute_schema
-        .get_attribute_type(&attribute.name)
+    let attribute_schema = attribute_schema
+        .get_attribute_schema(&attribute.name)
         .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", attribute.name))?;
-    if !attribute_type.1 && attribute.value.len() != 1 {
+    if !is_admin && !attribute_schema.is_editable {
+        return Err(anyhow!(
+            "Permission denied: Attribute {} is not editable by regular users",
+            attribute.name
+        )
+        .into());
+    }
+    if !attribute_schema.is_list && attribute.value.len() != 1 {
         return Err(anyhow!(
             "Attribute {} is not a list, but multiple values were provided",
             attribute.name
@@ -515,7 +524,7 @@ fn deserialize_attribute(
     let parse_photo = |value: &String| -> FieldResult<JpegPhoto> {
         Ok(JpegPhoto::try_from(value.as_str()).context("Provided image is not a valid JPEG")?)
     };
-    let deserialized_values = match attribute_type {
+    let deserialized_values = match (attribute_schema.attribute_type, attribute_schema.is_list) {
         (AttributeType::String, false) => Serialized::from(&attribute.value[0]),
         (AttributeType::String, true) => Serialized::from(&attribute.value),
         (AttributeType::Integer, false) => Serialized::from(&parse_int(&attribute.value[0])?),
