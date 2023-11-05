@@ -433,6 +433,15 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 &span,
                 "Unauthorized attribute deletion",
             ))?;
+        let schema = handler.get_schema().await?;
+        let attribute_schema = schema
+            .get_schema()
+            .user_attributes
+            .get_attribute_schema(&name)
+            .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", name))?;
+        if attribute_schema.is_hardcoded {
+            return Err(anyhow!("Permission denied: Attribute {} cannot be deleted", name).into());
+        }
         handler
             .delete_user_attribute(&name)
             .instrument(span)
@@ -454,6 +463,15 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 &span,
                 "Unauthorized attribute deletion",
             ))?;
+        let schema = handler.get_schema().await?;
+        let attribute_schema = schema
+            .get_schema()
+            .group_attributes
+            .get_attribute_schema(&name)
+            .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", name))?;
+        if attribute_schema.is_hardcoded {
+            return Err(anyhow!("Permission denied: Attribute {} cannot be deleted", name).into());
+        }
         handler
             .delete_group_attribute(&name)
             .instrument(span)
