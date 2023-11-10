@@ -1,7 +1,9 @@
 # Configuration for Seafile
-Seafile's LDAP interface requires a unique, immutable user identifier in the format of `username@domain`. Since LLDAP does not provide an attribute like `userPrincipalName`, the only attribute that somewhat qualifies is therefore `mail`. However, using `mail` as the user identifier results in the issue that Seafile will treat you as an entirely new user if you change your email address through LLDAP. If this is not an issue for you, you can configure LLDAP as an authentication source in Seafile directly. A better but more elaborate way to use Seafile with LLDAP is by using Authelia as an intermediary. This document will guide you through both setups.
+Seafile can be bridged to LLDAP directly, or by using Authelia as an intermediary. This document will guide you through both setups.
 
-## Configuring Seafile to use LLDAP directly
+## Configuring Seafile (prior to v11.0) to use LLDAP directly
+Seafile's LDAP interface requires a unique, immutable user identifier in the format of `username@domain`. Since LLDAP does not provide an attribute like `userPrincipalName`, the only attribute that somewhat qualifies is therefore `mail`. However, using `mail` as the user identifier results in the issue that Seafile will treat you as an entirely new user if you change your email address through LLDAP. **Note that this isn't true starting Seafile v11.0 and ulterior versions.**
+
 Add the following to your `seafile/conf/ccnet.conf` file:
 ```
 [LDAP]
@@ -22,6 +24,34 @@ If you only want members of a specific group to be able to log in, add the follo
 FILTER = memberOf=cn=seafile_user,ou=groups,dc=example,dc=com
 ```
 * Replace `seafile_user` with the name of your group.
+
+## Configuring Seafile v11.0+ to use LLDAP directly
+Starting Seafile v11.0 :
+- CCNET doesn't exist anymore
+- More flexibility is given to authenticate in seafile : ID binding can now be different from user email, so LLDAP UID can be used.
+
+Add the following to your `seafile/conf/seahub_settings.py` :
+```
+ENABLE_LDAP = True
+LDAP_SERVER_URL = 'ldap://192.168.1.100:3890'
+LDAP_BASE_DN = 'ou=people,dc=example,dc=com'
+LDAP_ADMIN_DN = 'uid=admin,ou=people,dc=example,dc=com'
+LDAP_ADMIN_PASSWORD = 'CHANGE_ME'
+LDAP_PROVIDER = 'ldap'
+LDAP_LOGIN_ATTR = 'uid'
+LDAP_CONTACT_EMAIL_ATTR = 'mail'
+LDAP_USER_ROLE_ATTR = ''
+LDAP_USER_FIRST_NAME_ATTR = 'cn'
+LDAP_USER_LAST_NAME_ATTR = 'sn'
+LDAP_USER_NAME_REVERSE = False
+```
+
+* Replace `192.168.1.100:3890` with your LLDAP server's ip/hostname and port.
+* Replace every instance of `dc=example,dc=com` with your configured domain.
+
+After restarting the Seafile server, users should be able to log in with their UID and password.
+
+Note : There is currently no ldap binding for users' avatar. [If interested, do mention it to the developers to give more credit to the feature](https://forum.seafile.com/t/feature-request-avatar-picture-from-ldap/3350/6).
 
 ## Configuring Seafile to use LLDAP with Authelia as an intermediary
 Authelia is an open-source authentication and authorization server that can use LLDAP as a backend and act as an OpenID Connect Provider. We're going to assume that you have already set up Authelia and configured it with LLDAP.
