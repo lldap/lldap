@@ -167,7 +167,7 @@ using [bootstrap.sh](example_configs/bootstrap/bootstrap.md#kubernetes-job).
 It can be run by Argo CD for managing users in git-opt way, or as a one-shot job.
 
 ### From a package repository
-** Do not open issues in this repository for problems with third-party
+**Do not open issues in this repository for problems with third-party
 pre-built packages. Report issues downstream.**
 
 Depending on the distribution you use, it might be possible to install lldap
@@ -180,14 +180,16 @@ Arch Linux offers unofficial support through the [Arch User Repository
 (AUR)](https://wiki.archlinux.org/title/Arch_User_Repository).
 Available package descriptions in AUR are:
 
-- `[lldap](https://aur.archlinux.org/packages/lldap-bin)` -  Builds the latest stable version.
-- `[lldap-bin](https://aur.archlinux.org/packages/lldap-bin)` - Uses the latest
+- [lldap](https://aur.archlinux.org/packages/lldap-bin) -  Builds the latest stable version.
+- [lldap-bin](https://aur.archlinux.org/packages/lldap-bin) - Uses the latest
   pre-compiled binaries from the [releases in this repository](https://github.com/lldap/lldap/releases).
   This package is recommended if you want to run lldap on a system with
-  limited CPU and RAM capacity.
-- `[lldap-git](https://aur.archlinux.org/packages/lldap-git)` - Builds the latest main branch code.
+  limited resources.
+- [lldap-git](https://aur.archlinux.org/packages/lldap-git) - Builds the
+  latest main branch code.
 
-The package descriptions can be used [to create and install packages].
+The package descriptions can be used
+[to create and install packages](https://wiki.archlinux.org/title/Arch_User_Repository#Getting_started).
 Each package places lldap's configuration file at `/etc/lldap.toml` and offers
 [systemd service](https://wiki.archlinux.org/title/systemd#Using_units)
 `lldap.service` to (auto-)start and stop lldap.
