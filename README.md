@@ -37,6 +37,7 @@
 - [Installation](#installation)
   - [With Docker](#with-docker)
   - [With Kubernetes](#with-kubernetes)
+  - [From a package repository](#from-a-package-repository)
   - [From source](#from-source)
     - [Backend](#backend)
     - [Frontend](#frontend)
@@ -180,7 +181,7 @@ Arch Linux offers unofficial support through the [Arch User Repository
 (AUR)](https://wiki.archlinux.org/title/Arch_User_Repository).
 Available package descriptions in AUR are:
 
-- [lldap](https://aur.archlinux.org/packages/lldap-bin) -  Builds the latest stable version.
+- [lldap](https://aur.archlinux.org/packages/lldap) -  Builds the latest stable version.
 - [lldap-bin](https://aur.archlinux.org/packages/lldap-bin) - Uses the latest
   pre-compiled binaries from the [releases in this repository](https://github.com/lldap/lldap/releases).
   This package is recommended if you want to run lldap on a system with
