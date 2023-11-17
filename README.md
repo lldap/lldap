@@ -37,6 +37,7 @@
 - [Installation](#installation)
   - [With Docker](#with-docker)
   - [With Kubernetes](#with-kubernetes)
+  - [From a package repository](#from-a-package-repository)
   - [From source](#from-source)
     - [Backend](#backend)
     - [Frontend](#frontend)
@@ -165,6 +166,34 @@ See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for K
 You can bootstrap your lldap instance (users, groups)
 using [bootstrap.sh](example_configs/bootstrap/bootstrap.md#kubernetes-job).
 It can be run by Argo CD for managing users in git-opt way, or as a one-shot job.
+
+### From a package repository
+**Do not open issues in this repository for problems with third-party
+pre-built packages. Report issues downstream.**
+
+Depending on the distribution you use, it might be possible to install lldap
+from a package repository, officially supported by the distribution or
+community contributed.
+
+#### Arch Linux
+
+Arch Linux offers unofficial support through the [Arch User Repository
+(AUR)](https://wiki.archlinux.org/title/Arch_User_Repository).
+Available package descriptions in AUR are:
+
+- [lldap](https://aur.archlinux.org/packages/lldap) -  Builds the latest stable version.
+- [lldap-bin](https://aur.archlinux.org/packages/lldap-bin) - Uses the latest
+  pre-compiled binaries from the [releases in this repository](https://github.com/lldap/lldap/releases).
+  This package is recommended if you want to run lldap on a system with
+  limited resources.
+- [lldap-git](https://aur.archlinux.org/packages/lldap-git) - Builds the
+  latest main branch code.
+
+The package descriptions can be used
+[to create and install packages](https://wiki.archlinux.org/title/Arch_User_Repository#Getting_started).
+Each package places lldap's configuration file at `/etc/lldap.toml` and offers
+[systemd service](https://wiki.archlinux.org/title/systemd#Using_units)
+`lldap.service` to (auto-)start and stop lldap.
 
 ### From source
 
