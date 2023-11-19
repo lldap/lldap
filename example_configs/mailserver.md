@@ -1,10 +1,8 @@
 # Mailserver Docker
 
-[Docker-mailserver](https://docker-mailserver.github.io/docker-mailserver/latest/) is a Production-ready fullstack but simple mail server (SMTP, IMAP, LDAP, Antispam, Antivirus, etc.) running inside a container.
+[Docker-mailserver](https://docker-mailserver.github.io/docker-mailserver/latest/) is a Production-ready full-stack but simple mail server (SMTP, IMAP, LDAP, Antispam, Antivirus, etc.) running inside a container.
 
-To integrate with LLDAP, make sure you fill in the attributes correctly
-
-Exemple starting [docker-compose](https://github.com/docker-mailserver/docker-mailserver/blob/master/compose.yaml)
+To integrate with LLDAP, ensure you correctly adjust the docker-mailserver container environment configuration.
 
 ## Compose File Sample
 ```yaml
@@ -23,6 +21,7 @@ services:
       - LLDAP_JWT_SECRET=yourjwt
       - LLDAP_LDAP_USER_PASS=adminpassword
       - LLDAP_LDAP_BASE_DN=dc=example,dc=com
+
   mailserver:
     image: ghcr.io/docker-mailserver/docker-mailserver:latest
     container_name: mailserver
@@ -64,7 +63,6 @@ services:
       - LDAP_QUERY_FILTER_ALIAS=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
       - LDAP_QUERY_FILTER_DOMAIN=((mail=*@%s))
       # <<< Postfix LDAP Integration
-
       # >>> Dovecot LDAP Integration
       - DOVECOT_AUTH_BIND=yes
       - DOVECOT_USER_FILTER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
@@ -73,6 +71,7 @@ services:
     cap_add:
       - SYS_PTRACE
       - NET_ADMIN # For Fail2Ban to work
+
   roundcubemail:
     image: roundcube/roundcubemail:latest
     container_name: roundcubemail
