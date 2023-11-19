@@ -2,7 +2,7 @@
 
 [Docker-mailserver](https://docker-mailserver.github.io/docker-mailserver/latest/) is a Production-ready full-stack but simple mail server (SMTP, IMAP, LDAP, Antispam, Antivirus, etc.) running inside a container.
 
-To integrate with LLDAP, ensure you correctly adjust the docker-mailserver container environment configuration.
+To integrate with LLDAP, ensure you correctly adjust the `docker-mailserver` container environment values.
 
 ## Compose File Sample
 ```yaml
