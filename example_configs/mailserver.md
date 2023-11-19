@@ -6,37 +6,12 @@ To integrate with LLDAP, make sure you fill in the attributes correctly
 
 Exemple starting [docker-compose](https://github.com/docker-mailserver/docker-mailserver/blob/master/compose.yaml)
 
-Most important part :
-```yaml
-      # >>> Postfix LDAP Integration
-      - ACCOUNT_PROVISIONER=LDAP
-      - LDAP_SERVER_HOST=lldap:3890
-      - LDAP_SEARCH_BASE=dc=d3n,dc=com
-      - LDAP_BIND_DN=uid=admin,ou=people,dc=d3n,dc=com
-      - LDAP_BIND_PW=admin123$*
-      - LDAP_QUERY_FILTER_USER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
-      - LDAP_QUERY_FILTER_GROUP=(&(objectClass=groupOfUniqueNames)(|(uid=%s)(cn=%s)))
-      - LDAP_QUERY_FILTER_ALIAS=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
-      - LDAP_QUERY_FILTER_DOMAIN=(|(mail=*@%s)(mailAlias=*@%s)(mailGroupMember=*@%s))
-      # <<< Postfix LDAP Integration
-
-      # >>> Dovecot LDAP Integration
-      - DOVECOT_AUTH_BIND=yes
-      - DOVECOT_USER_FILTER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
-      - DOVECOT_USER_ATTRS==uid=5000,=gid=5000,=home=/var/mail/%Ln,=mail=maildir:~/Maildir
-```
-
-Optional to create a bridge network
-```shell
-docker network create my_bridge 
-```
-
-## Final Version 
+## Compose File Sample
 ```yaml
 version: "3.9"
 services:
   lldap:
-    image: nitnelave/lldap:stable
+    image: lldap/lldap:stable
     ports:
       - "3890:3890"
       - "17170:17170"
@@ -45,13 +20,13 @@ services:
     environment:
       - VERBOSE=true
       - TZ=Etc/UTC
-      - LLDAP_JWT_SECRET=94721b2ada4bf1ba6462f5eb341ff08372392dbf76
-      - LLDAP_LDAP_USER_PASS=admin123$*
-      - LLDAP_LDAP_BASE_DN=dc=d3n,dc=com
+      - LLDAP_JWT_SECRET=yourjwt
+      - LLDAP_LDAP_USER_PASS=adminpassword
+      - LLDAP_LDAP_BASE_DN=dc=example,dc=com
   mailserver:
     image: ghcr.io/docker-mailserver/docker-mailserver:latest
     container_name: mailserver
-    hostname: mail.d3n.com
+    hostname: mail.example.com
     ports:
       - "25:25"    # SMTP  (explicit TLS => STARTTLS)
       - "143:143"  # IMAP4 (explicit TLS => STARTTLS)
@@ -81,20 +56,19 @@ services:
       # >>> Postfix LDAP Integration
       - ACCOUNT_PROVISIONER=LDAP
       - LDAP_SERVER_HOST=lldap:3890
-      - LDAP_SEARCH_BASE=dc=d3n,dc=com
-      - LDAP_BIND_DN=uid=admin,ou=people,dc=d3n,dc=com
-      - LDAP_BIND_PW=admin123$*
+      - LDAP_SEARCH_BASE=dc=example,dc=com
+      - LDAP_BIND_DN=uid=admin,ou=people,dc=example,dc=com
+      - LDAP_BIND_PW=adminpassword
       - LDAP_QUERY_FILTER_USER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
-      - LDAP_QUERY_FILTER_GROUP=(&(objectClass=groupOfUniqueNames)(|(uid=%s)(cn=%s)))
+      - LDAP_QUERY_FILTER_GROUP=(&(objectClass=groupOfUniqueNames)(uid=%s))
       - LDAP_QUERY_FILTER_ALIAS=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
-      - LDAP_QUERY_FILTER_DOMAIN=(|(mail=*@%s)(mailAlias=*@%s)(mailGroupMember=*@%s))
+      - LDAP_QUERY_FILTER_DOMAIN=((mail=*@%s))
       # <<< Postfix LDAP Integration
 
       # >>> Dovecot LDAP Integration
       - DOVECOT_AUTH_BIND=yes
       - DOVECOT_USER_FILTER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
       - DOVECOT_USER_ATTRS==uid=5000,=gid=5000,=home=/var/mail/%Ln,=mail=maildir:~/Maildir
-      # <<< Dovecot LDAP Integration
       - POSTMASTER_ADDRESS=postmaster@d3n.com
     cap_add:
       - SYS_PTRACE
@@ -113,10 +87,6 @@ services:
       - ROUNDCUBEMAIL_DEFAULT_HOST=mailserver # IMAP
       - ROUNDCUBEMAIL_SMTP_SERVER=mailserver # SMTP
 
-networks:
-  default:
-    external: true
-    name: my_bridge
 volumes:
   mailserver-data:
   mailserver-config:
