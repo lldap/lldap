@@ -1,0 +1,16 @@
+<!-- Append at the end of the <entry> sections in traccar.xml -->
+<entry key='ldap.enable'>true</entry>
+<!-- Important: the LDAP port must be specified in both ldap.url and ldap.port -->
+<entry key='ldap.url'>ldap://lldap:3890</entry>
+<entry key='ldap.port'>3890</entry>
+<entry key='ldap.user'>UID=admin,OU=people,DC=domain,DC=com</entry>
+<entry key='ldap.password'>BIND_USER_PASSWORD_HERE</entry>
+<entry key='ldap.force'>true</entry>
+<entry key='ldap.base'>OU=people,DC=domain,DC=com</entry>
+<entry key='ldap.idAttribute'>uid</entry>
+<entry key='ldap.nameAttribute'>cn</entry>
+<entry key='ldap.mailAttribute'>mail</entry>
+<!-- Only allow users belonging to group 'traccar' to login -->
+<entry key='ldap.searchFilter'>(&amp;(|(uid=:login)(mail=:login))(memberOf=cn=traccar,ou=groups,dc=domain,dc=com))</entry>
+<!-- Make new users administrators if they belong to group 'lldap_admin' -->
+<entry key='ldap.adminFilter'>(&amp;(|(uid=:login)(mail=:login))(memberOf=cn=lldap_admin,ou=groups,dc=domain,dc=com))</entry>
