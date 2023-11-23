@@ -56,7 +56,7 @@ Select Search for LDAP groups containing user and leave Group membership filter 
 #### Manager DN
 Leave here your admin account
 ```
-cn=admin,ou=people
+cn=admin,ou=people,dc=example,dc=com
 ```
 #### Manager Password
 Leave it as is
