@@ -166,6 +166,34 @@ delete_group() {
   fi
 }
 
+get_user_details() {
+  local id="$1"
+
+  # shellcheck disable=SC2016
+  local query='{"query":"query GetUserDetails($id: String!) {user(userId: $id) {id email displayName firstName lastName creationDate uuid groups {id displayName}}}","operationName":"GetUserDetails"}'
+  make_query <(printf '%s' "$query") <(jo -- id="$id")
+}
+
+user_in_group() {
+  local user_id="$1" group_name="$2"
+
+  if ! group_exists "$group_name"; then
+    printf '[WARNING] Group "%s" does not exist\n' "$group_name"
+    return
+  fi
+
+  if ! user_exists "$user_id"; then
+    printf 'User "%s" is not exists\n' "$user_id"
+    return
+  fi
+
+  if [[ "$(get_user_details "$user_id" | jq --raw-output --arg displayName "$group_name" '.data.user.groups | any(.[]; contains({"displayName": $displayName}))')" == 'true' ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
 add_user_to_group() {
   local user_id="$1" group_name="$2" group_id=''
 
@@ -175,6 +203,11 @@ add_user_to_group() {
   fi
 
   group_id="$(get_group_id "$group_name")"
+
+  if user_in_group "$user_id" "$group_name"; then
+    printf 'User "%s" already in group "%s" (%s)\n' "$user_id" "$group_name" "$group_id"
+    return
+  fi
 
   # shellcheck disable=SC2016
   local query='{"query":"mutation AddUserToGroup($user: String!, $group: Int!) {addUserToGroup(userId: $user, groupId: $group) {ok}}","operationName":"AddUserToGroup"}'
@@ -224,14 +257,6 @@ user_exists() {
   else
     return 1
   fi
-}
-
-get_user_details() {
-  local id="$1"
-
-  # shellcheck disable=SC2016
-  local query='{"query":"query GetUserDetails($id: String!) {user(userId: $id) {id email displayName firstName lastName creationDate uuid groups {id displayName}}}","operationName":"GetUserDetails"}'
-  make_query <(printf '%s' "$query") <(jo -- id="$id")
 }
 
 delete_user() {
