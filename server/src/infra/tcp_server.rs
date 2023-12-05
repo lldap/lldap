@@ -12,7 +12,7 @@ use crate::{
         tcp_backend_handler::*,
     },
 };
-use actix_files::{Files, NamedFile};
+use actix_files::Files;
 use actix_http::{header, HttpServiceBuilder};
 use actix_server::ServerBuilder;
 use actix_service::map_config;
@@ -21,13 +21,22 @@ use anyhow::{Context, Result};
 use hmac::Hmac;
 use sha2::Sha512;
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::sync::RwLock;
 use tracing::info;
 
-async fn index() -> actix_web::Result<NamedFile> {
-    let path = PathBuf::from(r"app/index.html");
-    Ok(NamedFile::open(path)?)
+async fn index<Backend>(data: web::Data<AppState<Backend>>) -> actix_web::Result<impl Responder> {
+    let mut file = std::fs::read_to_string(r"./app/index.html")?;
+
+    if data.server_url.path() != "/" {
+        file = file.replace(
+            "<base href=\"/\">",
+            format!("<base href=\"{}/\">", data.server_url.path()).as_str(),
+        );
+    }
+
+    Ok(file
+        .customize()
+        .insert_header((header::CONTENT_TYPE, "text/html; charset=utf-8")))
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -66,6 +75,20 @@ pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
         TcpError::UnauthorizedError(_) => HttpResponse::Unauthorized(),
     }
     .body(error.to_string())
+}
+
+async fn main_js_handler<Backend>(
+    data: web::Data<AppState<Backend>>,
+) -> actix_web::Result<impl Responder> {
+    let mut file = std::fs::read_to_string(r"./app/static/main.js")?;
+
+    if data.server_url.path() != "/" {
+        file = file.replace("/pkg/", format!("{}/pkg/", data.server_url.path()).as_str());
+    }
+
+    Ok(file
+        .customize()
+        .insert_header((header::CONTENT_TYPE, "text/javascript")))
 }
 
 async fn wasm_handler() -> actix_web::Result<impl Responder> {
@@ -118,6 +141,7 @@ fn http_config<Backend>(
         web::resource("/pkg/lldap_app_bg.wasm.gz").route(web::route().to(wasm_handler_compressed)),
     )
     .service(web::resource("/pkg/lldap_app_bg.wasm").route(web::route().to(wasm_handler)))
+    .service(web::resource("/static/main.js").route(web::route().to(main_js_handler::<Backend>)))
     // Serve the /pkg path with the compiled WASM app.
     .service(Files::new("/pkg", "./app/pkg"))
     // Serve static files
@@ -125,7 +149,7 @@ fn http_config<Backend>(
     // Serve static fonts
     .service(Files::new("/static/fonts", "./app/static/fonts"))
     // Default to serve index.html for unknown routes, to support routing.
-    .default_service(web::route().guard(guard::Get()).to(index));
+    .default_service(web::route().guard(guard::Get()).to(index::<Backend>));
 }
 
 pub(crate) struct AppState<Backend> {

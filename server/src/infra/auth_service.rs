@@ -112,13 +112,17 @@ where
             "Invalid refresh token".to_string(),
         )));
     }
+    let mut path = data.server_url.path().to_string();
+    if !path.ends_with('/') {
+        path.push('/');
+    };
     let groups = data.get_readonly_handler().get_user_groups(&user).await?;
     let token = create_jwt(data.get_tcp_handler(), jwt_key, &user, groups).await;
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", token.as_str())
                 .max_age(1.days())
-                .path("/")
+                .path(&path)
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -239,12 +243,16 @@ where
         .await;
     let groups = HashSet::new();
     let token = create_jwt(data.get_tcp_handler(), &data.jwt_key, &user_id, groups).await;
+    let mut path = data.server_url.path().to_string();
+    if !path.ends_with('/') {
+        path.push('/');
+    };
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", token.as_str())
                 .max_age(5.minutes())
                 // Cookie is only valid to reset the password.
-                .path("/auth")
+                .path(format!("{}auth", path))
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -284,11 +292,15 @@ where
     for jwt_hash in new_blacklisted_jwt_hashes {
         jwt_blacklist.insert(jwt_hash);
     }
+    let mut path = data.server_url.path().to_string();
+    if !path.ends_with('/') {
+        path.push('/');
+    };
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", "")
                 .max_age(0.days())
-                .path("/")
+                .path(&path)
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -296,7 +308,7 @@ where
         .cookie(
             Cookie::build("refresh_token", "")
                 .max_age(0.days())
-                .path("/auth")
+                .path(format!("{}auth", path))
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -351,12 +363,15 @@ where
     let (refresh_token, max_age) = data.get_tcp_handler().create_refresh_token(name).await?;
     let token = create_jwt(data.get_tcp_handler(), &data.jwt_key, name, groups).await;
     let refresh_token_plus_name = refresh_token + "+" + name.as_str();
-
+    let mut path = data.server_url.path().to_string();
+    if !path.ends_with('/') {
+        path.push('/');
+    };
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", token.as_str())
                 .max_age(1.days())
-                .path("/")
+                .path(&path)
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -364,7 +379,7 @@ where
         .cookie(
             Cookie::build("refresh_token", refresh_token_plus_name.clone())
                 .max_age(max_age.num_days().days())
-                .path("/auth")
+                .path(format!("{}auth", path))
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
