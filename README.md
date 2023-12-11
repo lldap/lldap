@@ -316,6 +316,7 @@ folder for help with:
 - [Jellyfin](example_configs/jellyfin.md)
 - [Jenkins](example_configs/jenkins.md)
 - [Jitsi Meet](example_configs/jitsi_meet.conf)
+- [Kasm](example_configs/kasm.md)
 - [KeyCloak](example_configs/keycloak.md)
 - [LibreNMS](example_configs/librenms.md)
 - [Mastodon](example_configs/mastodon.env.example)
