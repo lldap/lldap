@@ -111,7 +111,7 @@ get_group_array() {
 }
 
 group_exists() {
-  if [[ "$(get_group_list | jq --raw-output --arg displayName "$1" '.data.groups | any(.[]; contains({"displayName": $displayName}))')" == 'true' ]]; then
+  if [[ "$(get_group_list | jq --raw-output --arg displayName "$1" '.data.groups | any(.[]; select(.displayName == $displayName))')" == 'true' ]]; then
     return 0
   else
     return 1
@@ -187,7 +187,7 @@ user_in_group() {
     return
   fi
 
-  if [[ "$(get_user_details "$user_id" | jq --raw-output --arg displayName "$group_name" '.data.user.groups | any(.[]; contains({"displayName": $displayName}))')" == 'true' ]]; then
+  if [[ "$(get_user_details "$user_id" | jq --raw-output --arg displayName "$group_name" '.data.user.groups | any(.[]; select(.displayName == $displayName))')" == 'true' ]]; then
     return 0
   else
     return 1
