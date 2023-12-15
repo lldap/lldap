@@ -6,7 +6,10 @@ use crate::domain::{
     },
     model::{self, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
-    types::{AttributeValue, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId, Uuid},
+    types::{
+        AttributeName, AttributeValue, GroupDetails, GroupId, Serialized, User, UserAndGroups,
+        UserId, Uuid,
+    },
 };
 use async_trait::async_trait;
 use sea_orm::{
@@ -19,7 +22,7 @@ use sea_orm::{
 use std::collections::HashSet;
 use tracing::instrument;
 
-fn attribute_condition(name: String, value: String) -> Cond {
+fn attribute_condition(name: AttributeName, value: String) -> Cond {
     Expr::in_subquery(
         Expr::col(UserColumn::UserId.as_column_ref()),
         model::UserAttributes::find()
@@ -53,14 +56,17 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
         Or(fs) => get_repeated_filter(fs, Cond::any(), false),
         Not(f) => get_user_filter_expr(*f).not(),
         UserId(user_id) => ColumnTrait::eq(&UserColumn::UserId, user_id).into_condition(),
-        Equality(s1, s2) => {
-            if s1 == UserColumn::UserId {
+        Equality(column, value) => {
+            if column == UserColumn::UserId {
                 panic!("User id should be wrapped")
+            } else if column == UserColumn::Email {
+                ColumnTrait::eq(&UserColumn::LowercaseEmail, value.as_str().to_lowercase())
+                    .into_condition()
             } else {
-                ColumnTrait::eq(&s1, s2).into_condition()
+                ColumnTrait::eq(&column, value).into_condition()
             }
         }
-        AttributeEquality(s1, s2) => attribute_condition(s1, s2),
+        AttributeEquality(column, value) => attribute_condition(column, value),
         MemberOf(group) => Expr::col((group_table, GroupColumn::DisplayName))
             .eq(group)
             .into_condition(),
@@ -159,9 +165,11 @@ impl SqlBackendHandler {
         transaction: &DatabaseTransaction,
         request: UpdateUserRequest,
     ) -> Result<()> {
+        let lower_email = request.email.as_ref().map(|s| s.as_str().to_lowercase());
         let update_user = model::users::ActiveModel {
             user_id: ActiveValue::Set(request.user_id.clone()),
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
+            lowercase_email: lower_email.map(ActiveValue::Set).unwrap_or_default(),
             display_name: to_value(&request.display_name),
             ..Default::default()
         };
@@ -173,27 +181,27 @@ impl SqlBackendHandler {
         let mut update_user_attributes = Vec::new();
         let mut remove_user_attributes = Vec::new();
         let mut process_serialized =
-            |value: ActiveValue<Serialized>, attribute_name: &str| match &value {
+            |value: ActiveValue<Serialized>, attribute_name: AttributeName| match &value {
                 ActiveValue::NotSet => {
-                    remove_user_attributes.push(attribute_name.to_owned());
+                    remove_user_attributes.push(attribute_name);
                 }
                 ActiveValue::Set(_) => {
                     update_user_attributes.push(model::user_attributes::ActiveModel {
                         user_id: Set(request.user_id.clone()),
-                        attribute_name: Set(attribute_name.to_owned()),
+                        attribute_name: Set(attribute_name),
                         value,
                     })
                 }
                 _ => unreachable!(),
             };
         if let Some(value) = to_serialized_value(&request.first_name) {
-            process_serialized(value, "first_name");
+            process_serialized(value, "first_name".into());
         }
         if let Some(value) = to_serialized_value(&request.last_name) {
-            process_serialized(value, "last_name");
+            process_serialized(value, "last_name".into());
         }
         if let Some(avatar) = request.avatar {
-            process_serialized(avatar.into_active_value(), "avatar");
+            process_serialized(avatar.into_active_value(), "avatar".into());
         }
         let schema = Self::get_schema_with_transaction(transaction).await?;
         for attribute in request.insert_attributes {
@@ -202,7 +210,7 @@ impl SqlBackendHandler {
                 .get_attribute_type(&attribute.name)
                 .is_some()
             {
-                process_serialized(ActiveValue::Set(attribute.value), &attribute.name);
+                process_serialized(ActiveValue::Set(attribute.value), attribute.name.clone());
             } else {
                 return Err(DomainError::InternalError(format!(
                     "User attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
@@ -287,9 +295,11 @@ impl UserBackendHandler for SqlBackendHandler {
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
         let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(request.user_id.as_str(), &now);
+        let lower_email = request.email.as_str().to_lowercase();
         let new_user = model::users::ActiveModel {
             user_id: Set(request.user_id.clone()),
             email: Set(request.email),
+            lowercase_email: Set(lower_email),
             display_name: to_value(&request.display_name),
             creation_date: ActiveValue::Set(now),
             uuid: ActiveValue::Set(uuid),
@@ -299,21 +309,21 @@ impl UserBackendHandler for SqlBackendHandler {
         if let Some(first_name) = request.first_name {
             new_user_attributes.push(model::user_attributes::ActiveModel {
                 user_id: Set(request.user_id.clone()),
-                attribute_name: Set("first_name".to_owned()),
+                attribute_name: Set("first_name".into()),
                 value: Set(Serialized::from(&first_name)),
             });
         }
         if let Some(last_name) = request.last_name {
             new_user_attributes.push(model::user_attributes::ActiveModel {
                 user_id: Set(request.user_id.clone()),
-                attribute_name: Set("last_name".to_owned()),
+                attribute_name: Set("last_name".into()),
                 value: Set(Serialized::from(&last_name)),
             });
         }
         if let Some(avatar) = request.avatar {
             new_user_attributes.push(model::user_attributes::ActiveModel {
                 user_id: Set(request.user_id.clone()),
-                attribute_name: Set("avatar".to_owned()),
+                attribute_name: Set("avatar".into()),
                 value: Set(Serialized::from(&avatar)),
             });
         }
@@ -452,12 +462,36 @@ mod tests {
         let users = get_user_names(
             &fixture.handler,
             Some(UserRequestFilter::AttributeEquality(
-                "first_name".to_string(),
+                AttributeName::from("first_name"),
                 "first bob".to_string(),
             )),
         )
         .await;
         assert_eq!(users, vec!["bob"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_users_email_filter_uppercase_email() {
+        let fixture = TestFixture::new().await;
+        insert_user_no_password(&fixture.handler, "UppEr").await;
+        let users_and_emails = fixture
+            .handler
+            .list_users(
+                Some(UserRequestFilter::Equality(
+                    UserColumn::Email,
+                    "uPPer@bob.bob".to_string(),
+                )),
+                false,
+            )
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|u| (u.user.user_id.to_string(), u.user.email.to_string()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            users_and_emails,
+            vec![("upper".to_owned(), "UppEr@bob.bob".to_owned())]
+        );
     }
 
     #[tokio::test]
@@ -503,7 +537,7 @@ mod tests {
         let fixture = TestFixture::new().await;
         let users = get_user_names(
             &fixture.handler,
-            Some(UserRequestFilter::MemberOf("Best Group".to_string())),
+            Some(UserRequestFilter::MemberOf("Best Group".into())),
         )
         .await;
         assert_eq!(users, vec!["bob", "patrick"]);
@@ -515,7 +549,7 @@ mod tests {
         let users = get_user_names(
             &fixture.handler,
             Some(UserRequestFilter::Or(vec![
-                UserRequestFilter::MemberOf("Best Group".to_string()),
+                UserRequestFilter::MemberOf("Best Group".into()),
                 UserRequestFilter::Equality(UserColumn::Uuid, "abc".to_string()),
             ])),
         )
@@ -764,7 +798,7 @@ mod tests {
             .handler
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
-                email: Some("email".to_string()),
+                email: Some("email".into()),
                 display_name: Some("display_name".to_string()),
                 first_name: Some("first_name".to_string()),
                 last_name: Some("last_name".to_string()),
@@ -780,21 +814,21 @@ mod tests {
             .get_user_details(&UserId::new("bob"))
             .await
             .unwrap();
-        assert_eq!(user.email, "email");
+        assert_eq!(user.email, "email".into());
         assert_eq!(user.display_name.unwrap(), "display_name");
         assert_eq!(
             user.attributes,
             vec![
                 AttributeValue {
-                    name: "avatar".to_owned(),
+                    name: "avatar".into(),
                     value: Serialized::from(&JpegPhoto::for_tests())
                 },
                 AttributeValue {
-                    name: "first_name".to_owned(),
+                    name: "first_name".into(),
                     value: Serialized::from("first_name")
                 },
                 AttributeValue {
-                    name: "last_name".to_owned(),
+                    name: "last_name".into(),
                     value: Serialized::from("last_name")
                 }
             ]
@@ -827,11 +861,11 @@ mod tests {
             user.attributes,
             vec![
                 AttributeValue {
-                    name: "avatar".to_owned(),
+                    name: "avatar".into(),
                     value: Serialized::from(&JpegPhoto::for_tests())
                 },
                 AttributeValue {
-                    name: "first_name".to_owned(),
+                    name: "first_name".into(),
                     value: Serialized::from("first bob")
                 }
             ]
@@ -850,7 +884,7 @@ mod tests {
                 last_name: None,
                 avatar: None,
                 insert_attributes: vec![AttributeValue {
-                    name: "first_name".to_owned(),
+                    name: "first_name".into(),
                     value: Serialized::from("new first"),
                 }],
                 ..Default::default()
@@ -867,11 +901,11 @@ mod tests {
             user.attributes,
             vec![
                 AttributeValue {
-                    name: "first_name".to_owned(),
+                    name: "first_name".into(),
                     value: Serialized::from("new first")
                 },
                 AttributeValue {
-                    name: "last_name".to_owned(),
+                    name: "last_name".into(),
                     value: Serialized::from("last bob")
                 }
             ]
@@ -889,7 +923,7 @@ mod tests {
                 first_name: None,
                 last_name: None,
                 avatar: None,
-                delete_attributes: vec!["first_name".to_owned()],
+                delete_attributes: vec!["first_name".into()],
                 ..Default::default()
             })
             .await
@@ -903,7 +937,7 @@ mod tests {
         assert_eq!(
             user.attributes,
             vec![AttributeValue {
-                name: "last_name".to_owned(),
+                name: "last_name".into(),
                 value: Serialized::from("last bob")
             }]
         );
@@ -920,9 +954,9 @@ mod tests {
                 first_name: None,
                 last_name: None,
                 avatar: None,
-                delete_attributes: vec!["first_name".to_owned()],
+                delete_attributes: vec!["first_name".into()],
                 insert_attributes: vec![AttributeValue {
-                    name: "first_name".to_owned(),
+                    name: "first_name".into(),
                     value: Serialized::from("new first"),
                 }],
                 ..Default::default()
@@ -939,11 +973,11 @@ mod tests {
             user.attributes,
             vec![
                 AttributeValue {
-                    name: "first_name".to_owned(),
+                    name: "first_name".into(),
                     value: Serialized::from("new first")
                 },
                 AttributeValue {
-                    name: "last_name".to_owned(),
+                    name: "last_name".into(),
                     value: Serialized::from("last bob")
                 },
             ]
@@ -970,7 +1004,7 @@ mod tests {
             .await
             .unwrap();
         let avatar = AttributeValue {
-            name: "avatar".to_owned(),
+            name: "avatar".into(),
             value: Serialized::from(&JpegPhoto::for_tests()),
         };
         assert!(user.attributes.contains(&avatar));
@@ -1000,13 +1034,13 @@ mod tests {
             .handler
             .create_user(CreateUserRequest {
                 user_id: UserId::new("james"),
-                email: "email".to_string(),
+                email: "email".into(),
                 display_name: Some("display_name".to_string()),
                 first_name: None,
                 last_name: Some("last_name".to_string()),
                 avatar: Some(JpegPhoto::for_tests()),
                 attributes: vec![AttributeValue {
-                    name: "first_name".to_owned(),
+                    name: "first_name".into(),
                     value: Serialized::from("First Name"),
                 }],
             })
@@ -1018,21 +1052,21 @@ mod tests {
             .get_user_details(&UserId::new("james"))
             .await
             .unwrap();
-        assert_eq!(user.email, "email");
+        assert_eq!(user.email, "email".into());
         assert_eq!(user.display_name.unwrap(), "display_name");
         assert_eq!(
             user.attributes,
             vec![
                 AttributeValue {
-                    name: "avatar".to_owned(),
+                    name: "avatar".into(),
                     value: Serialized::from(&JpegPhoto::for_tests())
                 },
                 AttributeValue {
-                    name: "first_name".to_owned(),
+                    name: "first_name".into(),
                     value: Serialized::from("First Name")
                 },
                 AttributeValue {
-                    name: "last_name".to_owned(),
+                    name: "last_name".into(),
                     value: Serialized::from("last_name")
                 }
             ]

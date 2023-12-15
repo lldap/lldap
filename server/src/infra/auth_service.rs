@@ -28,7 +28,7 @@ use crate::{
         error::DomainError,
         handler::{BackendHandler, BindRequest, LoginHandler, UserRequestFilter},
         opaque_handler::OpaqueHandler,
-        types::{GroupDetails, UserColumn, UserId},
+        types::{GroupDetails, GroupName, UserColumn, UserId},
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler, ValidationResults},
@@ -58,7 +58,10 @@ async fn create_jwt<Handler: TcpBackendHandler>(
         exp: Utc::now() + chrono::Duration::days(1),
         iat: Utc::now(),
         user: user.to_string(),
-        groups: groups.into_iter().map(|g| g.display_name).collect(),
+        groups: groups
+            .into_iter()
+            .map(|g| g.display_name.into_string())
+            .collect(),
     };
     let expiry = claims.exp.naive_utc();
     let header = jwt::Header {
@@ -187,7 +190,7 @@ where
         user.display_name
             .as_deref()
             .unwrap_or_else(|| user.user_id.as_str()),
-        &user.email,
+        user.email.as_str(),
         &token,
         &data.server_url,
         &data.mail_options,
@@ -503,7 +506,7 @@ where
         .get_user_groups(&user_id)
         .await?
         .iter()
-        .any(|g| g.display_name == "lldap_admin");
+        .any(|g| g.display_name == "lldap_admin".into());
     if !validation_result.can_change_password(&user_id, user_is_admin) {
         return Err(TcpError::UnauthorizedError(
             "Not authorized to change the user's password".to_string(),
@@ -633,7 +636,11 @@ pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
     }
     Ok(state.backend_handler.get_permissions_from_groups(
         UserId::new(&token.claims().user),
-        token.claims().groups.iter(),
+        token
+            .claims()
+            .groups
+            .iter()
+            .map(|s| GroupName::from(s.as_str())),
     ))
 }
 

@@ -3,7 +3,7 @@
 use sea_orm::{entity::prelude::*, sea_query::BlobSize};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::types::{UserId, Uuid};
+use crate::domain::types::{Email, UserId, Uuid};
 
 #[derive(Copy, Clone, Default, Debug, DeriveEntity)]
 pub struct Entity;
@@ -13,7 +13,8 @@ pub struct Entity;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: UserId,
-    pub email: String,
+    pub email: Email,
+    pub lowercase_email: String,
     pub display_name: Option<String>,
     pub creation_date: chrono::NaiveDateTime,
     pub password_hash: Option<Vec<u8>>,
@@ -32,6 +33,7 @@ impl EntityName for Entity {
 pub enum Column {
     UserId,
     Email,
+    LowercaseEmail,
     DisplayName,
     CreationDate,
     PasswordHash,
@@ -47,6 +49,7 @@ impl ColumnTrait for Column {
         match self {
             Column::UserId => ColumnType::String(Some(255)),
             Column::Email => ColumnType::String(Some(255)),
+            Column::LowercaseEmail => ColumnType::String(Some(255)),
             Column::DisplayName => ColumnType::String(Some(255)),
             Column::CreationDate => ColumnType::DateTime,
             Column::PasswordHash => ColumnType::Binary(BlobSize::Medium),

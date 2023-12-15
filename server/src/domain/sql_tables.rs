@@ -6,7 +6,7 @@ pub type DbConnection = sea_orm::DatabaseConnection;
 #[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord, DeriveValueType)]
 pub struct SchemaVersion(pub i16);
 
-pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(5);
+pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(6);
 
 pub async fn init_table(pool: &DbConnection) -> anyhow::Result<()> {
     let version = {
@@ -51,8 +51,8 @@ mod tests {
         sql_pool
             .execute(raw_statement(
                 r#"INSERT INTO users
-                   (user_id, email, display_name, creation_date, password_hash, uuid)
-                   VALUES ("bôb", "böb@bob.bob", "Bob Bobbersön", "1970-01-01 00:00:00", "bob00", "abc")"#,
+                   (user_id, email, lowercase_email, display_name, creation_date, password_hash, uuid)
+                   VALUES ("bôb", "böb@bob.bob", "böb@bob.bob", "Bob Bobbersön", "1970-01-01 00:00:00", "bob00", "abc")"#,
             ))
             .await
             .unwrap();
@@ -370,6 +370,83 @@ mod tests {
               UserAttribute { user_attribute_user_id: "bob2".to_string(), user_attribute_name: "first_name".to_owned(), user_attribute_value: Serialized::from("first bob") },
               UserAttribute { user_attribute_user_id: "bob2".to_string(), user_attribute_name: "last_name".to_owned(), user_attribute_value: Serialized::from("last bob") },
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_migration_to_v6() {
+        crate::infra::logging::init_for_tests();
+        let sql_pool = get_in_memory_db().await;
+        upgrade_to_v1(&sql_pool).await.unwrap();
+        migrate_from_version(&sql_pool, SchemaVersion(1), SchemaVersion(5))
+            .await
+            .unwrap();
+        sql_pool
+            .execute(raw_statement(
+                r#"INSERT INTO users (user_id, email, display_name, creation_date, uuid)
+                       VALUES ("bob", "BOb@bob.com", "", "1970-01-01 00:00:00", "a02eaf13-48a7-30f6-a3d4-040ff7c52b04")"#,
+            ))
+            .await
+            .unwrap();
+        sql_pool
+            .execute(raw_statement(
+                r#"INSERT INTO groups (display_name, creation_date, uuid)
+                       VALUES ("BestGroup", "1970-01-01 00:00:00", "986765a5-3f03-389e-b47b-536b2d6e1bec")"#,
+            ))
+            .await
+            .unwrap();
+        migrate_from_version(&sql_pool, SchemaVersion(5), SchemaVersion(6))
+            .await
+            .unwrap();
+        assert_eq!(
+            sql_migrations::JustSchemaVersion::find_by_statement(raw_statement(
+                r#"SELECT version FROM metadata"#
+            ))
+            .one(&sql_pool)
+            .await
+            .unwrap()
+            .unwrap(),
+            sql_migrations::JustSchemaVersion {
+                version: SchemaVersion(6)
+            }
+        );
+        #[derive(FromQueryResult, PartialEq, Eq, Debug)]
+        struct ShortUserDetails {
+            email: String,
+            lowercase_email: String,
+        }
+        let result = ShortUserDetails::find_by_statement(raw_statement(
+            r#"SELECT email, lowercase_email FROM users WHERE user_id = "bob""#,
+        ))
+        .one(&sql_pool)
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            result,
+            ShortUserDetails {
+                email: "BOb@bob.com".to_owned(),
+                lowercase_email: "bob@bob.com".to_owned(),
+            }
+        );
+        #[derive(FromQueryResult, PartialEq, Eq, Debug)]
+        struct ShortGroupDetails {
+            display_name: String,
+            lowercase_display_name: String,
+        }
+        let result = ShortGroupDetails::find_by_statement(raw_statement(
+            r#"SELECT display_name, lowercase_display_name FROM groups"#,
+        ))
+        .one(&sql_pool)
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            result,
+            ShortGroupDetails {
+                display_name: "BestGroup".to_owned(),
+                lowercase_display_name: "bestgroup".to_owned(),
+            }
         );
     }
 

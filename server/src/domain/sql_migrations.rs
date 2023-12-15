@@ -18,6 +18,7 @@ pub enum Users {
     Table,
     UserId,
     Email,
+    LowercaseEmail,
     DisplayName,
     FirstName,
     LastName,
@@ -34,6 +35,7 @@ pub enum Groups {
     Table,
     GroupId,
     DisplayName,
+    LowercaseDisplayName,
     CreationDate,
     Uuid,
 }
@@ -875,6 +877,53 @@ async fn migrate_to_v5(transaction: DatabaseTransaction) -> Result<DatabaseTrans
     Ok(transaction)
 }
 
+async fn migrate_to_v6(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
+    transaction
+        .execute(
+            builder.build(
+                Table::alter().table(Groups::Table).add_column(
+                    ColumnDef::new(Groups::LowercaseDisplayName)
+                        .string_len(255)
+                        .not_null()
+                        .default("UNSET"),
+                ),
+            ),
+        )
+        .await?;
+    transaction
+        .execute(
+            builder.build(
+                Table::alter().table(Users::Table).add_column(
+                    ColumnDef::new(Users::LowercaseEmail)
+                        .string_len(255)
+                        .not_null()
+                        .default("UNSET"),
+                ),
+            ),
+        )
+        .await?;
+
+    transaction
+        .execute(builder.build(Query::update().table(Groups::Table).value(
+            Groups::LowercaseDisplayName,
+            Func::lower(Expr::col(Groups::DisplayName)),
+        )))
+        .await?;
+
+    transaction
+        .execute(
+            builder.build(
+                Query::update()
+                    .table(Users::Table)
+                    .value(Users::LowercaseEmail, Func::lower(Expr::col(Users::Email))),
+            ),
+        )
+        .await?;
+
+    Ok(transaction)
+}
+
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -900,6 +949,7 @@ pub async fn migrate_from_version(
         to_sync!(migrate_to_v3),
         to_sync!(migrate_to_v4),
         to_sync!(migrate_to_v5),
+        to_sync!(migrate_to_v6),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {

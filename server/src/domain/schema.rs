@@ -37,7 +37,7 @@ impl From<Schema> for PublicSchema {
     fn from(mut schema: Schema) -> Self {
         schema.user_attributes.attributes.extend_from_slice(&[
             AttributeSchema {
-                name: "user_id".to_owned(),
+                name: "user_id".into(),
                 attribute_type: AttributeType::String,
                 is_list: false,
                 is_visible: true,
@@ -45,7 +45,7 @@ impl From<Schema> for PublicSchema {
                 is_hardcoded: true,
             },
             AttributeSchema {
-                name: "creation_date".to_owned(),
+                name: "creation_date".into(),
                 attribute_type: AttributeType::DateTime,
                 is_list: false,
                 is_visible: true,
@@ -53,7 +53,7 @@ impl From<Schema> for PublicSchema {
                 is_hardcoded: true,
             },
             AttributeSchema {
-                name: "mail".to_owned(),
+                name: "mail".into(),
                 attribute_type: AttributeType::String,
                 is_list: false,
                 is_visible: true,
@@ -61,7 +61,7 @@ impl From<Schema> for PublicSchema {
                 is_hardcoded: true,
             },
             AttributeSchema {
-                name: "uuid".to_owned(),
+                name: "uuid".into(),
                 attribute_type: AttributeType::String,
                 is_list: false,
                 is_visible: true,
@@ -69,7 +69,7 @@ impl From<Schema> for PublicSchema {
                 is_hardcoded: true,
             },
             AttributeSchema {
-                name: "display_name".to_owned(),
+                name: "display_name".into(),
                 attribute_type: AttributeType::String,
                 is_list: false,
                 is_visible: true,
@@ -83,7 +83,7 @@ impl From<Schema> for PublicSchema {
             .sort_by(|a, b| a.name.cmp(&b.name));
         schema.group_attributes.attributes.extend_from_slice(&[
             AttributeSchema {
-                name: "group_id".to_owned(),
+                name: "group_id".into(),
                 attribute_type: AttributeType::Integer,
                 is_list: false,
                 is_visible: true,
@@ -91,7 +91,7 @@ impl From<Schema> for PublicSchema {
                 is_hardcoded: true,
             },
             AttributeSchema {
-                name: "creation_date".to_owned(),
+                name: "creation_date".into(),
                 attribute_type: AttributeType::DateTime,
                 is_list: false,
                 is_visible: true,
@@ -99,7 +99,7 @@ impl From<Schema> for PublicSchema {
                 is_hardcoded: true,
             },
             AttributeSchema {
-                name: "uuid".to_owned(),
+                name: "uuid".into(),
                 attribute_type: AttributeType::String,
                 is_list: false,
                 is_visible: true,
@@ -107,7 +107,7 @@ impl From<Schema> for PublicSchema {
                 is_hardcoded: true,
             },
             AttributeSchema {
-                name: "display_name".to_owned(),
+                name: "display_name".into(),
                 attribute_type: AttributeType::String,
                 is_list: false,
                 is_visible: true,

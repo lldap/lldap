@@ -6,7 +6,9 @@ use crate::{
             PublicSchema, SchemaAttributeExtractor, SchemaGroupAttributeExtractor,
             SchemaUserAttributeExtractor,
         },
-        types::{AttributeType, GroupDetails, GroupId, JpegPhoto, UserColumn, UserId},
+        types::{
+            AttributeName, AttributeType, GroupDetails, GroupId, JpegPhoto, UserColumn, UserId,
+        },
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
@@ -50,7 +52,7 @@ impl TryInto<DomainRequestFilter> for RequestFilter {
             self.member_of_id,
         ) {
             (Some(eq), None, None, None, None, None) => {
-                match map_user_field(&eq.field.to_ascii_lowercase()) {
+                match map_user_field(&eq.field.as_str().into()) {
                     UserFieldType::NoMatch => Err(format!("Unknown request filter: {}", &eq.field)),
                     UserFieldType::PrimaryField(UserColumn::UserId) => {
                         Ok(DomainRequestFilter::UserId(UserId::new(&eq.value)))
@@ -59,7 +61,7 @@ impl TryInto<DomainRequestFilter> for RequestFilter {
                         Ok(DomainRequestFilter::Equality(column, eq.value))
                     }
                     UserFieldType::Attribute(column) => Ok(DomainRequestFilter::AttributeEquality(
-                        column.to_owned(),
+                        AttributeName::from(column),
                         eq.value,
                     )),
                 }
@@ -77,7 +79,9 @@ impl TryInto<DomainRequestFilter> for RequestFilter {
             (None, None, None, Some(not), None, None) => {
                 Ok(DomainRequestFilter::Not(Box::new((*not).try_into()?)))
             }
-            (None, None, None, None, Some(group), None) => Ok(DomainRequestFilter::MemberOf(group)),
+            (None, None, None, None, Some(group), None) => {
+                Ok(DomainRequestFilter::MemberOf(group.into()))
+            }
             (None, None, None, None, None, Some(group_id)) => {
                 Ok(DomainRequestFilter::MemberOfId(GroupId(group_id)))
             }
@@ -228,7 +232,7 @@ impl<Handler: BackendHandler> User<Handler> {
     }
 
     fn email(&self) -> &str {
-        &self.user.email
+        self.user.email.as_str()
     }
 
     fn display_name(&self) -> &str {
@@ -239,7 +243,7 @@ impl<Handler: BackendHandler> User<Handler> {
         self.user
             .attributes
             .iter()
-            .find(|a| a.name == "first_name")
+            .find(|a| a.name.as_str() == "first_name")
             .map(|a| a.value.unwrap())
             .unwrap_or("")
     }
@@ -248,7 +252,7 @@ impl<Handler: BackendHandler> User<Handler> {
         self.user
             .attributes
             .iter()
-            .find(|a| a.name == "last_name")
+            .find(|a| a.name.as_str() == "last_name")
             .map(|a| a.value.unwrap())
             .unwrap_or("")
     }
@@ -257,7 +261,7 @@ impl<Handler: BackendHandler> User<Handler> {
         self.user
             .attributes
             .iter()
-            .find(|a| a.name == "avatar")
+            .find(|a| a.name.as_str() == "avatar")
             .map(|a| String::from(&a.value.unwrap::<JpegPhoto>()))
     }
 
@@ -384,7 +388,7 @@ impl<Handler: BackendHandler> From<GroupDetails> for Group<Handler> {
     fn from(group_details: GroupDetails) -> Self {
         Self {
             group_id: group_details.group_id.0,
-            display_name: group_details.display_name,
+            display_name: group_details.display_name.to_string(),
             creation_date: group_details.creation_date,
             uuid: group_details.uuid.into_string(),
             attributes: group_details.attributes,
@@ -398,7 +402,7 @@ impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
     fn from(group: DomainGroup) -> Self {
         Self {
             group_id: group.id.0,
-            display_name: group.display_name,
+            display_name: group.display_name.to_string(),
             creation_date: group.creation_date,
             uuid: group.uuid.into_string(),
             attributes: group.attributes,
@@ -417,7 +421,7 @@ pub struct AttributeSchema<Handler: BackendHandler> {
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> AttributeSchema<Handler> {
     fn name(&self) -> String {
-        self.schema.name.clone()
+        self.schema.name.to_string()
     }
     fn attribute_type(&self) -> AttributeType {
         self.schema.attribute_type
@@ -509,7 +513,7 @@ impl<Handler: BackendHandler, Extractor: SchemaAttributeExtractor>
     AttributeValue<Handler, Extractor>
 {
     fn name(&self) -> &str {
-        &self.attribute.name
+        self.attribute.name.as_str()
     }
     async fn value(&self, context: &Context<Handler>) -> FieldResult<Vec<String>> {
         let handler = context
@@ -648,7 +652,7 @@ mod tests {
                 user_attributes: DomainAttributeList {
                     attributes: vec![
                         DomainAttributeSchema {
-                            name: "first_name".to_owned(),
+                            name: "first_name".into(),
                             attribute_type: AttributeType::String,
                             is_list: false,
                             is_visible: true,
@@ -656,7 +660,7 @@ mod tests {
                             is_hardcoded: true,
                         },
                         DomainAttributeSchema {
-                            name: "last_name".to_owned(),
+                            name: "last_name".into(),
                             attribute_type: AttributeType::String,
                             is_list: false,
                             is_visible: true,
@@ -667,7 +671,7 @@ mod tests {
                 },
                 group_attributes: DomainAttributeList {
                     attributes: vec![DomainAttributeSchema {
-                        name: "club_name".to_owned(),
+                        name: "club_name".into(),
                         attribute_type: AttributeType::String,
                         is_list: false,
                         is_visible: true,
@@ -682,16 +686,16 @@ mod tests {
             .return_once(|_| {
                 Ok(DomainUser {
                     user_id: UserId::new("bob"),
-                    email: "bob@bobbers.on".to_string(),
+                    email: "bob@bobbers.on".into(),
                     creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
                     uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     attributes: vec![
                         DomainAttributeValue {
-                            name: "first_name".to_owned(),
+                            name: "first_name".into(),
                             value: Serialized::from("Bob"),
                         },
                         DomainAttributeValue {
-                            name: "last_name".to_owned(),
+                            name: "last_name".into(),
                             value: Serialized::from("Bobberson"),
                         },
                     ],
@@ -701,17 +705,17 @@ mod tests {
         let mut groups = HashSet::new();
         groups.insert(GroupDetails {
             group_id: GroupId(3),
-            display_name: "Bobbersons".to_string(),
+            display_name: "Bobbersons".into(),
             creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
             uuid: crate::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: vec![DomainAttributeValue {
-                name: "club_name".to_owned(),
+                name: "club_name".into(),
                 value: Serialized::from("Gang of Four"),
             }],
         });
         groups.insert(GroupDetails {
             group_id: GroupId(7),
-            display_name: "Jefferees".to_string(),
+            display_name: "Jefferees".into(),
             creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
             uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: Vec::new(),
@@ -800,7 +804,7 @@ mod tests {
                         "robert@bobbers.on".to_owned(),
                     ),
                     DomainRequestFilter::AttributeEquality(
-                        "first_name".to_owned(),
+                        AttributeName::from("first_name"),
                         "robert".to_owned(),
                     ),
                 ]))),
@@ -811,7 +815,7 @@ mod tests {
                     DomainUserAndGroups {
                         user: DomainUser {
                             user_id: UserId::new("bob"),
-                            email: "bob@bobbers.on".to_owned(),
+                            email: "bob@bobbers.on".into(),
                             ..Default::default()
                         },
                         groups: None,
@@ -819,7 +823,7 @@ mod tests {
                     DomainUserAndGroups {
                         user: DomainUser {
                             user_id: UserId::new("robert"),
-                            email: "robert@bobbers.on".to_owned(),
+                            email: "robert@bobbers.on".into(),
                             ..Default::default()
                         },
                         groups: None,
@@ -1022,7 +1026,7 @@ mod tests {
             Ok(crate::domain::handler::Schema {
                 user_attributes: AttributeList {
                     attributes: vec![crate::domain::handler::AttributeSchema {
-                        name: "invisible".to_owned(),
+                        name: "invisible".into(),
                         attribute_type: AttributeType::JpegPhoto,
                         is_list: false,
                         is_visible: false,

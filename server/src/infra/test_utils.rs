@@ -45,8 +45,8 @@ mockall::mock! {
     impl SchemaBackendHandler for TestBackendHandler {
         async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
         async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
-        async fn delete_user_attribute(&self, name: &str) -> Result<()>;
-        async fn delete_group_attribute(&self, name: &str) -> Result<()>;
+        async fn delete_user_attribute(&self, name: &AttributeName) -> Result<()>;
+        async fn delete_group_attribute(&self, name: &AttributeName) -> Result<()>;
     }
     #[async_trait]
     impl BackendHandler for TestBackendHandler {}
@@ -74,7 +74,7 @@ pub fn setup_default_schema(mock: &mut MockTestBackendHandler) {
             user_attributes: AttributeList {
                 attributes: vec![
                     AttributeSchema {
-                        name: "avatar".to_owned(),
+                        name: "avatar".into(),
                         attribute_type: AttributeType::JpegPhoto,
                         is_list: false,
                         is_visible: true,
@@ -82,7 +82,7 @@ pub fn setup_default_schema(mock: &mut MockTestBackendHandler) {
                         is_hardcoded: true,
                     },
                     AttributeSchema {
-                        name: "first_name".to_owned(),
+                        name: "first_name".into(),
                         attribute_type: AttributeType::String,
                         is_list: false,
                         is_visible: true,
@@ -90,7 +90,7 @@ pub fn setup_default_schema(mock: &mut MockTestBackendHandler) {
                         is_hardcoded: true,
                     },
                     AttributeSchema {
-                        name: "last_name".to_owned(),
+                        name: "last_name".into(),
                         attribute_type: AttributeType::String,
                         is_list: false,
                         is_visible: true,

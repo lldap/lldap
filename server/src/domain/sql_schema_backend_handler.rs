@@ -6,6 +6,7 @@ use crate::domain::{
     },
     model,
     sql_backend_handler::SqlBackendHandler,
+    types::AttributeName,
 };
 use async_trait::async_trait;
 use sea_orm::{
@@ -52,15 +53,15 @@ impl SchemaBackendHandler for SqlBackendHandler {
         Ok(())
     }
 
-    async fn delete_user_attribute(&self, name: &str) -> Result<()> {
-        model::UserAttributeSchema::delete_by_id(name)
+    async fn delete_user_attribute(&self, name: &AttributeName) -> Result<()> {
+        model::UserAttributeSchema::delete_by_id(name.clone())
             .exec(&self.sql_pool)
             .await?;
         Ok(())
     }
 
-    async fn delete_group_attribute(&self, name: &str) -> Result<()> {
-        model::GroupAttributeSchema::delete_by_id(name)
+    async fn delete_group_attribute(&self, name: &AttributeName) -> Result<()> {
+        model::GroupAttributeSchema::delete_by_id(name.clone())
             .exec(&self.sql_pool)
             .await?;
         Ok(())
@@ -123,7 +124,7 @@ mod tests {
                 user_attributes: AttributeList {
                     attributes: vec![
                         AttributeSchema {
-                            name: "avatar".to_owned(),
+                            name: "avatar".into(),
                             attribute_type: AttributeType::JpegPhoto,
                             is_list: false,
                             is_visible: true,
@@ -131,7 +132,7 @@ mod tests {
                             is_hardcoded: true,
                         },
                         AttributeSchema {
-                            name: "first_name".to_owned(),
+                            name: "first_name".into(),
                             attribute_type: AttributeType::String,
                             is_list: false,
                             is_visible: true,
@@ -139,7 +140,7 @@ mod tests {
                             is_hardcoded: true,
                         },
                         AttributeSchema {
-                            name: "last_name".to_owned(),
+                            name: "last_name".into(),
                             attribute_type: AttributeType::String,
                             is_list: false,
                             is_visible: true,
@@ -159,7 +160,7 @@ mod tests {
     async fn test_user_attribute_add_and_delete() {
         let fixture = TestFixture::new().await;
         let new_attribute = CreateAttributeRequest {
-            name: "new_attribute".to_owned(),
+            name: "new_attribute".into(),
             attribute_type: AttributeType::Integer,
             is_list: true,
             is_visible: false,
@@ -171,7 +172,7 @@ mod tests {
             .await
             .unwrap();
         let expected_value = AttributeSchema {
-            name: "new_attribute".to_owned(),
+            name: "new_attribute".into(),
             attribute_type: AttributeType::Integer,
             is_list: true,
             is_visible: false,
@@ -188,7 +189,7 @@ mod tests {
             .contains(&expected_value));
         fixture
             .handler
-            .delete_user_attribute("new_attribute")
+            .delete_user_attribute(&"new_attribute".into())
             .await
             .unwrap();
         assert!(!fixture
@@ -205,7 +206,7 @@ mod tests {
     async fn test_group_attribute_add_and_delete() {
         let fixture = TestFixture::new().await;
         let new_attribute = CreateAttributeRequest {
-            name: "new_attribute".to_owned(),
+            name: "NeW_aTTribute".into(),
             attribute_type: AttributeType::JpegPhoto,
             is_list: false,
             is_visible: true,
@@ -217,7 +218,7 @@ mod tests {
             .await
             .unwrap();
         let expected_value = AttributeSchema {
-            name: "new_attribute".to_owned(),
+            name: "new_attribute".into(),
             attribute_type: AttributeType::JpegPhoto,
             is_list: false,
             is_visible: true,
@@ -234,7 +235,7 @@ mod tests {
             .contains(&expected_value));
         fixture
             .handler
-            .delete_group_attribute("new_attribute")
+            .delete_group_attribute(&"new_attriBUte".into())
             .await
             .unwrap();
         assert!(!fixture
