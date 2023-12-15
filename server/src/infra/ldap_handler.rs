@@ -13,7 +13,7 @@ use crate::{
         },
         opaque_handler::OpaqueHandler,
         schema::PublicSchema,
-        types::{Group, JpegPhoto, UserAndGroups, UserId},
+        types::{AttributeName, Email, Group, JpegPhoto, UserAndGroups, UserId},
     },
     infra::access_control::{
         AccessControlledBackendHandler, AdminBackendHandler, UserAndGroupListerBackendHandler,
@@ -233,8 +233,8 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     pub fn new(
         backend_handler: AccessControlledBackendHandler<Backend>,
         mut ldap_base_dn: String,
-        ignored_user_attributes: Vec<String>,
-        ignored_group_attributes: Vec<String>,
+        ignored_user_attributes: Vec<AttributeName>,
+        ignored_group_attributes: Vec<AttributeName>,
     ) -> Self {
         ldap_base_dn.make_ascii_lowercase();
         Self {
@@ -354,7 +354,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                                 ),
                             })?
                             .iter()
-                            .any(|g| g.display_name == "lldap_admin");
+                            .any(|g| g.display_name == "lldap_admin".into());
                         if !credentials.can_change_password(&uid, user_is_admin) {
                             Err(LdapError {
                                 code: LdapResultCode::InsufficentAccessRights,
@@ -479,7 +479,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         message: format!("Internal error while requesting user's groups: {:#?}", e),
                     })?
                     .iter()
-                    .any(|g| g.display_name == "lldap_admin");
+                    .any(|g| g.display_name == "lldap_admin".into());
                 for change in &request.changes {
                     self.handle_modify_change(&uid, &credentials, user_is_admin, change)
                         .await?
@@ -695,10 +695,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         backend_handler
             .create_user(CreateUserRequest {
                 user_id,
-                email: get_attribute("mail")
-                    .or_else(|| get_attribute("email"))
-                    .transpose()?
-                    .unwrap_or_default(),
+                email: Email::from(
+                    get_attribute("mail")
+                        .or_else(|| get_attribute("email"))
+                        .transpose()?
+                        .unwrap_or_default(),
+                ),
                 display_name: get_attribute("cn").transpose()?,
                 first_name: get_attribute("givenname").transpose()?,
                 last_name: get_attribute("sn").transpose()?,
@@ -857,7 +859,7 @@ mod tests {
                 let mut set = HashSet::new();
                 set.insert(GroupDetails {
                     group_id: GroupId(42),
-                    display_name: group,
+                    display_name: group.into(),
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     attributes: Vec::new(),
@@ -944,7 +946,7 @@ mod tests {
                 let mut set = HashSet::new();
                 set.insert(GroupDetails {
                     group_id: GroupId(42),
-                    display_name: "lldap_admin".to_string(),
+                    display_name: "lldap_admin".into(),
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     attributes: Vec::new(),
@@ -1031,7 +1033,7 @@ mod tests {
                     },
                     groups: Some(vec![GroupDetails {
                         group_id: GroupId(42),
-                        display_name: "rockstars".to_string(),
+                        display_name: "rockstars".into(),
                         creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                         uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                         attributes: Vec::new(),
@@ -1179,16 +1181,16 @@ mod tests {
                 UserAndGroups {
                     user: User {
                         user_id: UserId::new("bob_1"),
-                        email: "bob@bobmail.bob".to_string(),
+                        email: "bob@bobmail.bob".into(),
                         display_name: Some("Bôb Böbberson".to_string()),
                         uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
                         attributes: vec![
                             AttributeValue {
-                                name: "first_name".to_owned(),
+                                name: "first_name".into(),
                                 value: Serialized::from("Bôb"),
                             },
                             AttributeValue {
-                                name: "last_name".to_owned(),
+                                name: "last_name".into(),
                                 value: Serialized::from("Böbberson"),
                             },
                         ],
@@ -1199,19 +1201,19 @@ mod tests {
                 UserAndGroups {
                     user: User {
                         user_id: UserId::new("jim"),
-                        email: "jim@cricket.jim".to_string(),
+                        email: "jim@cricket.jim".into(),
                         display_name: Some("Jimminy Cricket".to_string()),
                         attributes: vec![
                             AttributeValue {
-                                name: "avatar".to_owned(),
+                                name: "avatar".into(),
                                 value: Serialized::from(&JpegPhoto::for_tests()),
                             },
                             AttributeValue {
-                                name: "first_name".to_owned(),
+                                name: "first_name".into(),
                                 value: Serialized::from("Jim"),
                             },
                             AttributeValue {
-                                name: "last_name".to_owned(),
+                                name: "last_name".into(),
                                 value: Serialized::from("Cricket"),
                             },
                         ],
@@ -1347,7 +1349,7 @@ mod tests {
                 Ok(vec![
                     Group {
                         id: GroupId(1),
-                        display_name: "group_1".to_string(),
+                        display_name: "group_1".into(),
                         creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                         users: vec![UserId::new("bob"), UserId::new("john")],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -1355,7 +1357,7 @@ mod tests {
                     },
                     Group {
                         id: GroupId(3),
-                        display_name: "BestGroup".to_string(),
+                        display_name: "BestGroup".into(),
                         creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                         users: vec![UserId::new("john")],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -1426,9 +1428,9 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
             .with(eq(Some(GroupRequestFilter::And(vec![
-                GroupRequestFilter::DisplayName("group_1".to_string()),
+                GroupRequestFilter::DisplayName("group_1".into()),
                 GroupRequestFilter::Member(UserId::new("bob")),
-                GroupRequestFilter::DisplayName("rockstars".to_string()),
+                GroupRequestFilter::DisplayName("rockstars".into()),
                 false.into(),
                 GroupRequestFilter::Uuid(uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc")),
                 true.into(),
@@ -1446,7 +1448,7 @@ mod tests {
             .times(1)
             .return_once(|_| {
                 Ok(vec![Group {
-                    display_name: "group_1".to_string(),
+                    display_name: "group_1".into(),
                     id: GroupId(1),
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![],
@@ -1511,13 +1513,13 @@ mod tests {
         mock.expect_list_groups()
             .with(eq(Some(GroupRequestFilter::Or(vec![
                 GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
-                    "group_2".to_string(),
+                    "group_2".into(),
                 ))),
             ]))))
             .times(1)
             .return_once(|_| {
                 Ok(vec![Group {
-                    display_name: "group_1".to_string(),
+                    display_name: "group_1".into(),
                     id: GroupId(1),
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![],
@@ -1554,7 +1556,7 @@ mod tests {
         mock.expect_list_groups()
             .with(eq(Some(GroupRequestFilter::And(vec![
                 true.into(),
-                GroupRequestFilter::DisplayName("rockstars".to_string()),
+                GroupRequestFilter::DisplayName("rockstars".into()),
             ]))))
             .times(1)
             .return_once(|_| Ok(vec![]));
@@ -1598,7 +1600,7 @@ mod tests {
         mock.expect_list_groups()
             .with(eq(Some(GroupRequestFilter::Or(vec![
                 GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
-                    "group_2".to_string(),
+                    "group_2".into(),
                 ))),
             ]))))
             .times(1)
@@ -1661,7 +1663,7 @@ mod tests {
                         true.into(),
                         false.into(),
                         UserRequestFilter::AttributeEquality(
-                            "first_name".to_owned(),
+                            AttributeName::from("first_name"),
                             "firstname".to_owned(),
                         ),
                         false.into(),
@@ -1765,7 +1767,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
             .with(
-                eq(Some(UserRequestFilter::MemberOf("group_1".to_string()))),
+                eq(Some(UserRequestFilter::MemberOf("group_1".into()))),
                 eq(false),
             )
             .times(1)
@@ -1865,15 +1867,15 @@ mod tests {
             Ok(vec![UserAndGroups {
                 user: User {
                     user_id: UserId::new("bob_1"),
-                    email: "bob@bobmail.bob".to_string(),
+                    email: "bob@bobmail.bob".into(),
                     display_name: Some("Bôb Böbberson".to_string()),
                     attributes: vec![
                         AttributeValue {
-                            name: "first_name".to_owned(),
+                            name: "first_name".into(),
                             value: Serialized::from("Bôb"),
                         },
                         AttributeValue {
-                            name: "last_name".to_owned(),
+                            name: "last_name".into(),
                             value: Serialized::from("Böbberson"),
                         },
                     ],
@@ -1888,7 +1890,7 @@ mod tests {
             .return_once(|_| {
                 Ok(vec![Group {
                     id: GroupId(1),
-                    display_name: "group_1".to_string(),
+                    display_name: "group_1".into(),
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![UserId::new("bob"), UserId::new("john")],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -1948,15 +1950,15 @@ mod tests {
             Ok(vec![UserAndGroups {
                 user: User {
                     user_id: UserId::new("bob_1"),
-                    email: "bob@bobmail.bob".to_string(),
+                    email: "bob@bobmail.bob".into(),
                     display_name: Some("Bôb Böbberson".to_string()),
                     attributes: vec![
                         AttributeValue {
-                            name: "avatar".to_owned(),
+                            name: "avatar".into(),
                             value: Serialized::from(&JpegPhoto::for_tests()),
                         },
                         AttributeValue {
-                            name: "last_name".to_owned(),
+                            name: "last_name".into(),
                             value: Serialized::from("Böbberson"),
                         },
                     ],
@@ -1971,7 +1973,7 @@ mod tests {
             .returning(|_| {
                 Ok(vec![Group {
                     id: GroupId(1),
-                    display_name: "group_1".to_string(),
+                    display_name: "group_1".into(),
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![UserId::new("bob"), UserId::new("john")],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -2354,7 +2356,7 @@ mod tests {
         let mut groups = HashSet::new();
         groups.insert(GroupDetails {
             group_id: GroupId(0),
-            display_name: "lldap_admin".to_string(),
+            display_name: "lldap_admin".into(),
             creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
             uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: Vec::new(),
@@ -2434,7 +2436,7 @@ mod tests {
         mock.expect_create_user()
             .with(eq(CreateUserRequest {
                 user_id: UserId::new("bob"),
-                email: "".to_owned(),
+                email: "".into(),
                 display_name: Some("Bob".to_string()),
                 ..Default::default()
             }))
@@ -2476,7 +2478,7 @@ mod tests {
         mock.expect_create_user()
             .with(eq(CreateUserRequest {
                 user_id: UserId::new("bob"),
-                email: "".to_owned(),
+                email: "".into(),
                 display_name: Some("Bob".to_string()),
                 ..Default::default()
             }))
@@ -2533,7 +2535,7 @@ mod tests {
             Ok(vec![UserAndGroups {
                 user: User {
                     user_id: UserId::new("bob"),
-                    email: "bob@bobmail.bob".to_string(),
+                    email: "bob@bobmail.bob".into(),
                     ..Default::default()
                 },
                 groups: None,
@@ -2578,10 +2580,10 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users().returning(|_, _| Ok(vec![]));
         mock.expect_list_groups().returning(|f| {
-            assert_eq!(f, Some(GroupRequestFilter::DisplayName("group".to_owned())));
+            assert_eq!(f, Some(GroupRequestFilter::DisplayName("group".into())));
             Ok(vec![Group {
                 id: GroupId(1),
-                display_name: "group".to_string(),
+                display_name: "group".into(),
                 creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                 users: vec![UserId::new("bob")],
                 uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -2642,7 +2644,7 @@ mod tests {
             Ok(vec![UserAndGroups {
                 user: User {
                     user_id: UserId::new("bob"),
-                    email: "bob@bobmail.bob".to_string(),
+                    email: "bob@bobmail.bob".into(),
                     ..Default::default()
                 },
                 groups: None,
@@ -2672,10 +2674,10 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users().returning(|_, _| Ok(vec![]));
         mock.expect_list_groups().returning(|f| {
-            assert_eq!(f, Some(GroupRequestFilter::DisplayName("group".to_owned())));
+            assert_eq!(f, Some(GroupRequestFilter::DisplayName("group".into())));
             Ok(vec![Group {
                 id: GroupId(1),
-                display_name: "group".to_string(),
+                display_name: "group".into(),
                 creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                 users: vec![UserId::new("bob")],
                 uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -2736,7 +2738,7 @@ mod tests {
                 user: User {
                     user_id: UserId::new("test"),
                     attributes: vec![AttributeValue {
-                        name: "nickname".to_owned(),
+                        name: "nickname".into(),
                         value: Serialized::from("Bob the Builder"),
                     }],
                     ..Default::default()
@@ -2747,12 +2749,12 @@ mod tests {
         mock.expect_list_groups().times(1).return_once(|_| {
             Ok(vec![Group {
                 id: GroupId(1),
-                display_name: "group".to_string(),
+                display_name: "group".into(),
                 creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                 users: vec![UserId::new("bob")],
                 uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 attributes: vec![AttributeValue {
-                    name: "club_name".to_owned(),
+                    name: "club_name".into(),
                     value: Serialized::from("Breakfast Club"),
                 }],
             }])
@@ -2761,7 +2763,7 @@ mod tests {
             Ok(crate::domain::handler::Schema {
                 user_attributes: AttributeList {
                     attributes: vec![AttributeSchema {
-                        name: "nickname".to_owned(),
+                        name: "nickname".into(),
                         attribute_type: AttributeType::String,
                         is_list: false,
                         is_visible: true,
@@ -2771,7 +2773,7 @@ mod tests {
                 },
                 group_attributes: AttributeList {
                     attributes: vec![AttributeSchema {
-                        name: "club_name".to_owned(),
+                        name: "club_name".into(),
                         attribute_type: AttributeType::String,
                         is_list: false,
                         is_visible: true,

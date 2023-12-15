@@ -1,7 +1,10 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{handler::AttributeSchema, types::AttributeType};
+use crate::domain::{
+    handler::AttributeSchema,
+    types::{AttributeName, AttributeType},
+};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "user_attribute_schema")]
@@ -11,7 +14,7 @@ pub struct Model {
         auto_increment = false,
         column_name = "user_attribute_schema_name"
     )]
-    pub attribute_name: String,
+    pub attribute_name: AttributeName,
     #[sea_orm(column_name = "user_attribute_schema_type")]
     pub attribute_type: AttributeType,
     #[sea_orm(column_name = "user_attribute_schema_is_list")]

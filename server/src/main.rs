@@ -36,7 +36,7 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
     handler
         .create_user(CreateUserRequest {
             user_id: config.ldap_user_dn.clone(),
-            email: config.ldap_user_email.clone(),
+            email: config.ldap_user_email.clone().into(),
             display_name: Some("Administrator".to_string()),
             ..Default::default()
         })
@@ -44,9 +44,7 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
         .await
         .context("Error creating admin user")?;
     let groups = handler
-        .list_groups(Some(GroupRequestFilter::DisplayName(
-            "lldap_admin".to_owned(),
-        )))
+        .list_groups(Some(GroupRequestFilter::DisplayName("lldap_admin".into())))
         .await?;
     assert_eq!(groups.len(), 1);
     handler
@@ -57,14 +55,14 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
 
 async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> Result<()> {
     if handler
-        .list_groups(Some(GroupRequestFilter::DisplayName(group_name.to_owned())))
+        .list_groups(Some(GroupRequestFilter::DisplayName(group_name.into())))
         .await?
         .is_empty()
     {
         warn!("Could not find {} group, trying to create it", group_name);
         handler
             .create_group(CreateGroupRequest {
-                display_name: group_name.to_owned(),
+                display_name: group_name.into(),
                 ..Default::default()
             })
             .await
@@ -94,7 +92,7 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;
     let admin_present = if let Ok(admins) = backend_handler
         .list_users(
-            Some(UserRequestFilter::MemberOf("lldap_admin".to_owned())),
+            Some(UserRequestFilter::MemberOf("lldap_admin".into())),
             false,
         )
         .await

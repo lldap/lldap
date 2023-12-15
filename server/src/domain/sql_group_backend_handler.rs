@@ -37,7 +37,9 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
             }
         }
         Not(f) => get_group_filter_expr(*f).not(),
-        DisplayName(name) => GroupColumn::DisplayName.eq(name).into_condition(),
+        DisplayName(name) => GroupColumn::LowercaseDisplayName
+            .eq(name.as_str().to_lowercase())
+            .into_condition(),
         GroupId(id) => GroupColumn::GroupId.eq(id.0).into_condition(),
         Uuid(uuid) => GroupColumn::Uuid.eq(uuid.to_string()).into_condition(),
         // WHERE (group_id in (SELECT group_id FROM memberships WHERE user_id = user))
@@ -153,9 +155,11 @@ impl GroupBackendHandler for SqlBackendHandler {
     #[instrument(skip(self), level = "debug", ret, err)]
     async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId> {
         let now = chrono::Utc::now().naive_utc();
-        let uuid = Uuid::from_name_and_date(&request.display_name, &now);
+        let uuid = Uuid::from_name_and_date(request.display_name.as_str(), &now);
+        let lower_display_name = request.display_name.as_str().to_lowercase();
         let new_group = model::groups::ActiveModel {
             display_name: Set(request.display_name),
+            lowercase_display_name: Set(lower_display_name),
             creation_date: Set(now),
             uuid: Set(uuid),
             ..Default::default()
@@ -217,9 +221,14 @@ impl SqlBackendHandler {
         request: UpdateGroupRequest,
         transaction: &DatabaseTransaction,
     ) -> Result<()> {
+        let lower_display_name = request
+            .display_name
+            .as_ref()
+            .map(|s| s.as_str().to_lowercase());
         let update_group = model::groups::ActiveModel {
             group_id: Set(request.group_id),
             display_name: request.display_name.map(Set).unwrap_or_default(),
+            lowercase_display_name: lower_display_name.map(Set).unwrap_or_default(),
             ..Default::default()
         };
         update_group.update(transaction).await?;
@@ -288,7 +297,7 @@ mod tests {
     use crate::domain::{
         handler::{CreateAttributeRequest, SchemaBackendHandler, SubStringFilter},
         sql_backend_handler::tests::*,
-        types::{AttributeType, Serialized, UserId},
+        types::{AttributeType, GroupName, Serialized, UserId},
     };
     use pretty_assertions::assert_eq;
 
@@ -308,7 +317,7 @@ mod tests {
     async fn get_group_names(
         handler: &SqlBackendHandler,
         filters: Option<GroupRequestFilter>,
-    ) -> Vec<String> {
+    ) -> Vec<GroupName> {
         handler
             .list_groups(filters)
             .await
@@ -324,9 +333,9 @@ mod tests {
         assert_eq!(
             get_group_names(&fixture.handler, None).await,
             vec![
-                "Best Group".to_owned(),
-                "Empty Group".to_owned(),
-                "Worst Group".to_owned()
+                "Best Group".into(),
+                "Empty Group".into(),
+                "Worst Group".into()
             ]
         );
     }
@@ -338,12 +347,25 @@ mod tests {
             get_group_names(
                 &fixture.handler,
                 Some(GroupRequestFilter::Or(vec![
-                    GroupRequestFilter::DisplayName("Empty Group".to_owned()),
+                    GroupRequestFilter::DisplayName("Empty Group".into()),
                     GroupRequestFilter::Member(UserId::new("bob")),
                 ]))
             )
             .await,
-            vec!["Best Group".to_owned(), "Empty Group".to_owned()]
+            vec!["Best Group".into(), "Empty Group".into()]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_groups_case_insensitive_filter() {
+        let fixture = TestFixture::new().await;
+        assert_eq!(
+            get_group_names(
+                &fixture.handler,
+                Some(GroupRequestFilter::DisplayName("eMpTy gRoup".into()),)
+            )
+            .await,
+            vec!["Empty Group".into()]
         );
     }
 
@@ -355,7 +377,7 @@ mod tests {
                 &fixture.handler,
                 Some(GroupRequestFilter::And(vec![
                     GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
-                        "value".to_owned()
+                        "value".into()
                     ))),
                     GroupRequestFilter::GroupId(fixture.groups[0]),
                 ]))
@@ -392,7 +414,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(details.group_id, fixture.groups[0]);
-        assert_eq!(details.display_name, "Best Group");
+        assert_eq!(details.display_name, "Best Group".into());
         assert_eq!(
             get_group_ids(
                 &fixture.handler,
@@ -410,7 +432,7 @@ mod tests {
             .handler
             .update_group(UpdateGroupRequest {
                 group_id: fixture.groups[0],
-                display_name: Some("Awesomest Group".to_owned()),
+                display_name: Some("Awesomest Group".into()),
                 delete_attributes: Vec::new(),
                 insert_attributes: Vec::new(),
             })
@@ -421,7 +443,7 @@ mod tests {
             .get_group_details(fixture.groups[0])
             .await
             .unwrap();
-        assert_eq!(details.display_name, "Awesomest Group");
+        assert_eq!(details.display_name, "Awesomest Group".into());
     }
 
     #[tokio::test]
@@ -452,7 +474,7 @@ mod tests {
         fixture
             .handler
             .add_group_attribute(CreateAttributeRequest {
-                name: "new_attribute".to_owned(),
+                name: "new_attribute".into(),
                 attribute_type: AttributeType::String,
                 is_list: false,
                 is_visible: true,
@@ -463,9 +485,9 @@ mod tests {
         let new_group_id = fixture
             .handler
             .create_group(CreateGroupRequest {
-                display_name: "New Group".to_owned(),
+                display_name: "New Group".into(),
                 attributes: vec![AttributeValue {
-                    name: "new_attribute".to_owned(),
+                    name: "new_attribute".into(),
                     value: Serialized::from("value"),
                 }],
             })
@@ -476,11 +498,11 @@ mod tests {
             .get_group_details(new_group_id)
             .await
             .unwrap();
-        assert_eq!(&group_details.display_name, "New Group");
+        assert_eq!(group_details.display_name, "New Group".into());
         assert_eq!(
             group_details.attributes,
             vec![AttributeValue {
-                name: "new_attribute".to_owned(),
+                name: "new_attribute".into(),
                 value: Serialized::from("value"),
             }]
         );
@@ -492,7 +514,7 @@ mod tests {
         fixture
             .handler
             .add_group_attribute(CreateAttributeRequest {
-                name: "new_attribute".to_owned(),
+                name: "new_attribute".into(),
                 attribute_type: AttributeType::Integer,
                 is_list: false,
                 is_visible: true,
@@ -502,7 +524,7 @@ mod tests {
             .unwrap();
         let group_id = fixture.groups[0];
         let attributes = vec![AttributeValue {
-            name: "new_attribute".to_owned(),
+            name: "new_attribute".into(),
             value: Serialized::from(&42i64),
         }];
         fixture
@@ -522,7 +544,7 @@ mod tests {
             .update_group(UpdateGroupRequest {
                 group_id,
                 display_name: None,
-                delete_attributes: vec!["new_attribute".to_owned()],
+                delete_attributes: vec!["new_attribute".into()],
                 insert_attributes: Vec::new(),
             })
             .await

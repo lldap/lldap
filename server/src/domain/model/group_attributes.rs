@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::types::{AttributeValue, GroupId, Serialized};
+use crate::domain::types::{AttributeName, AttributeValue, GroupId, Serialized};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "group_attributes")]
@@ -17,7 +17,7 @@ pub struct Model {
         auto_increment = false,
         column_name = "group_attribute_name"
     )]
-    pub attribute_name: String,
+    pub attribute_name: AttributeName,
     #[sea_orm(column_name = "group_attribute_value")]
     pub value: Serialized,
 }

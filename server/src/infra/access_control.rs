@@ -12,7 +12,7 @@ use crate::domain::{
         UpdateUserRequest, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
     },
     schema::PublicSchema,
-    types::{Group, GroupDetails, GroupId, User, UserAndGroups, UserId},
+    types::{AttributeName, Group, GroupDetails, GroupId, GroupName, User, UserAndGroups, UserId},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -110,8 +110,8 @@ pub trait AdminBackendHandler:
     async fn delete_group(&self, group_id: GroupId) -> Result<()>;
     async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
     async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
-    async fn delete_user_attribute(&self, name: &str) -> Result<()>;
-    async fn delete_group_attribute(&self, name: &str) -> Result<()>;
+    async fn delete_user_attribute(&self, name: &AttributeName) -> Result<()>;
+    async fn delete_group_attribute(&self, name: &AttributeName) -> Result<()>;
 }
 
 #[async_trait]
@@ -181,10 +181,10 @@ impl<Handler: BackendHandler> AdminBackendHandler for Handler {
     async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()> {
         <Handler as SchemaBackendHandler>::add_group_attribute(self, request).await
     }
-    async fn delete_user_attribute(&self, name: &str) -> Result<()> {
+    async fn delete_user_attribute(&self, name: &AttributeName) -> Result<()> {
         <Handler as SchemaBackendHandler>::delete_user_attribute(self, name).await
     }
-    async fn delete_group_attribute(&self, name: &str) -> Result<()> {
+    async fn delete_group_attribute(&self, name: &AttributeName) -> Result<()> {
         <Handler as SchemaBackendHandler>::delete_group_attribute(self, name).await
     }
 }
@@ -264,19 +264,23 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         Ok(self.get_permissions_from_groups(user_id, user_groups.iter().map(|g| &g.display_name)))
     }
 
-    pub fn get_permissions_from_groups<'a, Groups: Iterator<Item = &'a String> + Clone + 'a>(
+    pub fn get_permissions_from_groups<Groups, T>(
         &self,
         user_id: UserId,
         groups: Groups,
-    ) -> ValidationResults {
-        let is_in_group = |name| groups.clone().any(|g| g == name);
+    ) -> ValidationResults
+    where
+        Groups: Iterator<Item = T> + Clone,
+        T: AsRef<GroupName>,
+    {
+        let is_in_group = |name: GroupName| groups.clone().any(|g| *g.as_ref() == name);
         ValidationResults {
             user: user_id,
-            permission: if is_in_group("lldap_admin") {
+            permission: if is_in_group("lldap_admin".into()) {
                 Permission::Admin
-            } else if is_in_group("lldap_password_manager") {
+            } else if is_in_group("lldap_password_manager".into()) {
                 Permission::PasswordManager
-            } else if is_in_group("lldap_strict_readonly") {
+            } else if is_in_group("lldap_strict_readonly".into()) {
                 Permission::Readonly
             } else {
                 Permission::Regular

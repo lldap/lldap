@@ -5,8 +5,8 @@ use crate::{
             CreateUserRequest, UpdateGroupRequest, UpdateUserRequest,
         },
         types::{
-            AttributeType, AttributeValue as DomainAttributeValue, GroupId, JpegPhoto, Serialized,
-            UserId,
+            AttributeName, AttributeType, AttributeValue as DomainAttributeValue, GroupId,
+            JpegPhoto, Serialized, UserId,
         },
     },
     infra::{
@@ -149,7 +149,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         handler
             .create_user(CreateUserRequest {
                 user_id: user_id.clone(),
-                email: user.email,
+                email: user.email.into(),
                 display_name: user.display_name,
                 first_name: user.first_name,
                 last_name: user.last_name,
@@ -225,12 +225,17 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         handler
             .update_user(UpdateUserRequest {
                 user_id,
-                email: user.email,
+                email: user.email.map(Into::into),
                 display_name: user.display_name,
                 first_name: user.first_name,
                 last_name: user.last_name,
                 avatar,
-                delete_attributes: user.remove_attributes.unwrap_or_default(),
+                delete_attributes: user
+                    .remove_attributes
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
                 insert_attributes,
             })
             .instrument(span)
@@ -263,8 +268,13 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         handler
             .update_group(UpdateGroupRequest {
                 group_id: GroupId(group.id),
-                display_name: group.display_name,
-                delete_attributes: group.remove_attributes.unwrap_or_default(),
+                display_name: group.display_name.map(Into::into),
+                delete_attributes: group
+                    .remove_attributes
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
                 insert_attributes,
             })
             .instrument(span)
@@ -377,7 +387,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             ))?;
         handler
             .add_user_attribute(CreateAttributeRequest {
-                name,
+                name: name.into(),
                 attribute_type,
                 is_list,
                 is_visible,
@@ -408,7 +418,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             ))?;
         handler
             .add_group_attribute(CreateAttributeRequest {
-                name,
+                name: name.into(),
                 attribute_type,
                 is_list,
                 is_visible,
@@ -424,6 +434,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         name: String,
     ) -> FieldResult<Success> {
         let span = debug_span!("[GraphQL mutation] delete_user_attribute");
+        let name = AttributeName::from(name);
         span.in_scope(|| {
             debug!(?name);
         });
@@ -438,9 +449,9 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .get_schema()
             .user_attributes
             .get_attribute_schema(&name)
-            .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", name))?;
+            .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", &name))?;
         if attribute_schema.is_hardcoded {
-            return Err(anyhow!("Permission denied: Attribute {} cannot be deleted", name).into());
+            return Err(anyhow!("Permission denied: Attribute {} cannot be deleted", &name).into());
         }
         handler
             .delete_user_attribute(&name)
@@ -454,6 +465,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         name: String,
     ) -> FieldResult<Success> {
         let span = debug_span!("[GraphQL mutation] delete_group_attribute");
+        let name = AttributeName::from(name);
         span.in_scope(|| {
             debug!(?name);
         });
@@ -468,9 +480,9 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .get_schema()
             .group_attributes
             .get_attribute_schema(&name)
-            .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", name))?;
+            .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", &name))?;
         if attribute_schema.is_hardcoded {
-            return Err(anyhow!("Permission denied: Attribute {} cannot be deleted", name).into());
+            return Err(anyhow!("Permission denied: Attribute {} cannot be deleted", &name).into());
         }
         handler
             .delete_group_attribute(&name)
@@ -496,7 +508,7 @@ async fn create_group_with_details<Handler: BackendHandler>(
         .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr, true))
         .collect::<Result<Vec<_>, _>>()?;
     let request = CreateGroupRequest {
-        display_name: request.display_name,
+        display_name: request.display_name.into(),
         attributes,
     };
     let group_id = handler.create_group(request).await?;
@@ -512,8 +524,9 @@ fn deserialize_attribute(
     attribute: AttributeValue,
     is_admin: bool,
 ) -> FieldResult<DomainAttributeValue> {
+    let attribute_name = AttributeName::from(attribute.name.as_str());
     let attribute_schema = attribute_schema
-        .get_attribute_schema(&attribute.name)
+        .get_attribute_schema(&attribute_name)
         .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", attribute.name))?;
     if !is_admin && !attribute_schema.is_editable {
         return Err(anyhow!(
@@ -571,7 +584,7 @@ fn deserialize_attribute(
         ),
     };
     Ok(DomainAttributeValue {
-        name: attribute.name,
+        name: attribute_name,
         value: deserialized_values,
     })
 }

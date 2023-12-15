@@ -7,7 +7,7 @@ use crate::domain::{
     handler::{GroupListerBackendHandler, GroupRequestFilter},
     ldap::error::LdapError,
     schema::{PublicSchema, SchemaGroupAttributeExtractor},
-    types::{Group, UserId, Uuid},
+    types::{AttributeName, Group, UserId, Uuid},
 };
 
 use super::{
@@ -23,15 +23,15 @@ pub fn get_group_attribute(
     base_dn_str: &str,
     attribute: &str,
     user_filter: &Option<UserId>,
-    ignored_group_attributes: &[String],
+    ignored_group_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
-    let attribute = attribute.to_ascii_lowercase();
+    let attribute = AttributeName::from(attribute);
     let attribute_values = match attribute.as_str() {
         "objectclass" => vec![b"groupOfUniqueNames".to_vec()],
         // Always returned as part of the base response.
         "dn" | "distinguishedname" => return None,
-        "cn" | "uid" | "id" => vec![group.display_name.clone().into_bytes()],
+        "cn" | "uid" | "id" => vec![group.display_name.to_string().into_bytes()],
         "entryuuid" | "uuid" => vec![group.uuid.to_string().into_bytes()],
         "member" | "uniquemember" => group
             .users
@@ -48,11 +48,11 @@ pub fn get_group_attribute(
                 attribute
             )
         }
-        attr => {
+        _ => {
             if !ignored_group_attributes.contains(&attribute) {
                 match get_custom_attribute::<SchemaGroupAttributeExtractor>(
                     &group.attributes,
-                    attr,
+                    &attribute,
                     schema,
                 ) {
                     Some(v) => return Some(v),
@@ -91,7 +91,7 @@ fn make_ldap_search_group_result_entry(
     base_dn_str: &str,
     attributes: &[String],
     user_filter: &Option<UserId>,
-    ignored_group_attributes: &[String],
+    ignored_group_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
     let expanded_attributes = expand_group_attribute_wildcards(attributes);
@@ -125,12 +125,12 @@ fn convert_group_filter(
     let rec = |f| convert_group_filter(ldap_info, f);
     match filter {
         LdapFilter::Equality(field, value) => {
-            let field = &field.to_ascii_lowercase();
-            let value = &value.to_ascii_lowercase();
+            let field = AttributeName::from(field.as_str());
+            let value = value.to_ascii_lowercase();
             match field.as_str() {
                 "member" | "uniquemember" => {
                     let user_name = get_user_id_from_distinguished_name(
-                        value,
+                        &value,
                         &ldap_info.base_dn,
                         &ldap_info.base_dn_str,
                     )?;
@@ -150,8 +150,8 @@ fn convert_group_filter(
                     warn!("Invalid dn filter on group: {}", value);
                     GroupRequestFilter::from(false)
                 })),
-                _ => match map_group_field(field) {
-                    Some("display_name") => Ok(GroupRequestFilter::DisplayName(value.to_string())),
+                _ => match map_group_field(&field) {
+                    Some("display_name") => Ok(GroupRequestFilter::DisplayName(value.into())),
                     Some("uuid") => Ok(GroupRequestFilter::Uuid(
                         Uuid::try_from(value.as_str()).map_err(|e| LdapError {
                             code: LdapResultCode::InappropriateMatching,
@@ -159,9 +159,9 @@ fn convert_group_filter(
                         })?,
                     )),
                     _ => {
-                        if !ldap_info.ignored_group_attributes.contains(field) {
+                        if !ldap_info.ignored_group_attributes.contains(&field) {
                             warn!(
-                                r#"Ignoring unknown group attribute "{:?}" in filter.\n\
+                                r#"Ignoring unknown group attribute "{}" in filter.\n\
                                 To disable this warning, add it to "ignored_group_attributes" in the config."#,
                                 field
                             );
@@ -179,24 +179,24 @@ fn convert_group_filter(
         )),
         LdapFilter::Not(filter) => Ok(GroupRequestFilter::Not(Box::new(rec(filter)?))),
         LdapFilter::Present(field) => {
-            let field = &field.to_ascii_lowercase();
+            let field = AttributeName::from(field.as_str());
             Ok(GroupRequestFilter::from(
-                field == "objectclass"
-                    || field == "dn"
-                    || field == "distinguishedname"
-                    || map_group_field(field).is_some(),
+                field.as_str() == "objectclass"
+                    || field.as_str() == "dn"
+                    || field.as_str() == "distinguishedname"
+                    || map_group_field(&field).is_some(),
             ))
         }
         LdapFilter::Substring(field, substring_filter) => {
-            let field = &field.to_ascii_lowercase();
-            match map_group_field(field.as_str()) {
+            let field = AttributeName::from(field.as_str());
+            match map_group_field(&field) {
                 Some("display_name") => Ok(GroupRequestFilter::DisplayNameSubString(
                     substring_filter.clone().into(),
                 )),
                 _ => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
                     message: format!(
-                        "Unsupported group attribute for substring filter: {:?}",
+                        "Unsupported group attribute for substring filter: \"{}\"",
                         field
                     ),
                 }),

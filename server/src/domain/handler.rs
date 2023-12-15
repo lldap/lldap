@@ -1,8 +1,8 @@
 use crate::domain::{
     error::Result,
     types::{
-        AttributeType, AttributeValue, Group, GroupDetails, GroupId, JpegPhoto, User,
-        UserAndGroups, UserColumn, UserId, Uuid,
+        AttributeName, AttributeType, AttributeValue, Email, Group, GroupDetails, GroupId,
+        GroupName, JpegPhoto, User, UserAndGroups, UserColumn, UserId, Uuid,
     },
 };
 use async_trait::async_trait;
@@ -54,10 +54,10 @@ pub enum UserRequestFilter {
     UserId(UserId),
     UserIdSubString(SubStringFilter),
     Equality(UserColumn, String),
-    AttributeEquality(String, String),
+    AttributeEquality(AttributeName, String),
     SubString(UserColumn, SubStringFilter),
     // Check if a user belongs to a group identified by name.
-    MemberOf(String),
+    MemberOf(GroupName),
     // Same, by id.
     MemberOfId(GroupId),
 }
@@ -77,7 +77,7 @@ pub enum GroupRequestFilter {
     And(Vec<GroupRequestFilter>),
     Or(Vec<GroupRequestFilter>),
     Not(Box<GroupRequestFilter>),
-    DisplayName(String),
+    DisplayName(GroupName),
     DisplayNameSubString(SubStringFilter),
     Uuid(Uuid),
     GroupId(GroupId),
@@ -99,7 +99,7 @@ impl From<bool> for GroupRequestFilter {
 pub struct CreateUserRequest {
     // Same fields as User, but no creation_date, and with password.
     pub user_id: UserId,
-    pub email: String,
+    pub email: Email,
     pub display_name: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
@@ -111,32 +111,32 @@ pub struct CreateUserRequest {
 pub struct UpdateUserRequest {
     // Same fields as CreateUserRequest, but no with an extra layer of Option.
     pub user_id: UserId,
-    pub email: Option<String>,
+    pub email: Option<Email>,
     pub display_name: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub avatar: Option<JpegPhoto>,
-    pub delete_attributes: Vec<String>,
+    pub delete_attributes: Vec<AttributeName>,
     pub insert_attributes: Vec<AttributeValue>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
 pub struct CreateGroupRequest {
-    pub display_name: String,
+    pub display_name: GroupName,
     pub attributes: Vec<AttributeValue>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct UpdateGroupRequest {
     pub group_id: GroupId,
-    pub display_name: Option<String>,
-    pub delete_attributes: Vec<String>,
+    pub display_name: Option<GroupName>,
+    pub delete_attributes: Vec<AttributeName>,
     pub insert_attributes: Vec<AttributeValue>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct AttributeSchema {
-    pub name: String,
+    pub name: AttributeName,
     //TODO: pub aliases: Vec<String>,
     pub attribute_type: AttributeType,
     pub is_list: bool,
@@ -147,7 +147,7 @@ pub struct AttributeSchema {
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct CreateAttributeRequest {
-    pub name: String,
+    pub name: AttributeName,
     pub attribute_type: AttributeType,
     pub is_list: bool,
     pub is_visible: bool,
@@ -160,11 +160,11 @@ pub struct AttributeList {
 }
 
 impl AttributeList {
-    pub fn get_attribute_schema(&self, name: &str) -> Option<&AttributeSchema> {
-        self.attributes.iter().find(|a| a.name == name)
+    pub fn get_attribute_schema(&self, name: &AttributeName) -> Option<&AttributeSchema> {
+        self.attributes.iter().find(|a| a.name == *name)
     }
 
-    pub fn get_attribute_type(&self, name: &str) -> Option<(AttributeType, bool)> {
+    pub fn get_attribute_type(&self, name: &AttributeName) -> Option<(AttributeType, bool)> {
         self.get_attribute_schema(name)
             .map(|a| (a.attribute_type, a.is_list))
     }
@@ -224,8 +224,8 @@ pub trait SchemaBackendHandler: ReadSchemaBackendHandler {
     async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
     async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
     // Note: It's up to the caller to make sure that the attribute is not hardcoded.
-    async fn delete_user_attribute(&self, name: &str) -> Result<()>;
-    async fn delete_group_attribute(&self, name: &str) -> Result<()>;
+    async fn delete_user_attribute(&self, name: &AttributeName) -> Result<()>;
+    async fn delete_group_attribute(&self, name: &AttributeName) -> Result<()>;
 }
 
 #[async_trait]

@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use base64::Engine;
 use chrono::{NaiveDateTime, TimeZone};
 use sea_orm::{
@@ -121,12 +123,22 @@ impl Serialized {
 }
 
 #[derive(
-    PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default, Serialize, Deserialize, DeriveValueType,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Clone,
+    Debug,
+    Default,
+    Hash,
+    Serialize,
+    Deserialize,
+    DeriveValueType,
 )]
 #[serde(from = "String")]
-pub struct UserId(String);
+pub struct CaseInsensitiveString(String);
 
-impl UserId {
+impl CaseInsensitiveString {
     pub fn new(user_id: &str) -> Self {
         Self(user_id.to_lowercase())
     }
@@ -140,29 +152,185 @@ impl UserId {
     }
 }
 
-impl std::fmt::Display for UserId {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<String> for UserId {
+impl From<String> for CaseInsensitiveString {
     fn from(s: String) -> Self {
         Self::new(&s)
     }
 }
 
-impl From<&UserId> for Value {
-    fn from(user_id: &UserId) -> Self {
-        user_id.as_str().into()
+macro_rules! make_case_insensitive_string {
+    ($c:ident) => {
+        #[derive(
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Ord,
+            Clone,
+            Debug,
+            Default,
+            Hash,
+            Serialize,
+            Deserialize,
+            DeriveValueType,
+        )]
+        #[serde(from = "CaseInsensitiveString")]
+        pub struct $c(CaseInsensitiveString);
+
+        impl $c {
+            pub fn new(raw: &str) -> Self {
+                Self(CaseInsensitiveString::new(raw))
+            }
+
+            pub fn as_str(&self) -> &str {
+                self.0.as_str()
+            }
+
+            pub fn into_string(self) -> String {
+                self.0.into_string()
+            }
+        }
+
+        impl From<CaseInsensitiveString> for $c {
+            fn from(s: CaseInsensitiveString) -> Self {
+                Self(s)
+            }
+        }
+
+        impl From<String> for $c {
+            fn from(s: String) -> Self {
+                Self(CaseInsensitiveString::from(s))
+            }
+        }
+
+        impl From<&str> for $c {
+            fn from(s: &str) -> Self {
+                Self::new(s)
+            }
+        }
+
+        impl std::fmt::Display for $c {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "{}", self.0.as_str())
+            }
+        }
+
+        impl From<&$c> for Value {
+            fn from(user_id: &$c) -> Self {
+                user_id.as_str().into()
+            }
+        }
+
+        impl TryFromU64 for $c {
+            fn try_from_u64(_n: u64) -> Result<Self, DbErr> {
+                Err(DbErr::ConvertFromU64("$c cannot be constructed from u64"))
+            }
+        }
+    };
+}
+
+fn compare_str_case_insensitive(s1: &str, s2: &str) -> Ordering {
+    let mut it_1 = s1.chars().flat_map(|c| c.to_lowercase());
+    let mut it_2 = s2.chars().flat_map(|c| c.to_lowercase());
+    loop {
+        match (it_1.next(), it_2.next()) {
+            (Some(c1), Some(c2)) => {
+                let o = c1.cmp(&c2);
+                if o != Ordering::Equal {
+                    return o;
+                }
+            }
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => return Ordering::Greater,
+            (None, None) => return Ordering::Equal,
+        }
     }
 }
 
-impl TryFromU64 for UserId {
-    fn try_from_u64(_n: u64) -> Result<Self, DbErr> {
-        Err(DbErr::ConvertFromU64(
-            "UserId cannot be constructed from u64",
-        ))
+macro_rules! make_case_insensitive_comparable_string {
+    ($c:ident) => {
+        #[derive(Clone, Debug, Default, Serialize, Deserialize, DeriveValueType)]
+        pub struct $c(String);
+
+        impl PartialEq for $c {
+            fn eq(&self, other: &Self) -> bool {
+                compare_str_case_insensitive(&self.0, &other.0) == Ordering::Equal
+            }
+        }
+
+        impl Eq for $c {}
+
+        impl PartialOrd for $c {
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                Some(compare_str_case_insensitive(&self.0, &other.0))
+            }
+        }
+
+        impl Ord for $c {
+            fn cmp(&self, other: &Self) -> Ordering {
+                compare_str_case_insensitive(&self.0, &other.0)
+            }
+        }
+
+        impl std::hash::Hash for $c {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                self.0.to_lowercase().hash(state)
+            }
+        }
+
+        impl $c {
+            pub fn new(raw: &str) -> Self {
+                Self(raw.to_owned())
+            }
+
+            pub fn as_str(&self) -> &str {
+                self.0.as_str()
+            }
+
+            pub fn into_string(self) -> String {
+                self.0
+            }
+        }
+
+        impl From<String> for $c {
+            fn from(s: String) -> Self {
+                Self(s)
+            }
+        }
+
+        impl From<&str> for $c {
+            fn from(s: &str) -> Self {
+                Self::new(s)
+            }
+        }
+
+        impl std::fmt::Display for $c {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "{}", self.0.as_str())
+            }
+        }
+
+        impl From<&$c> for Value {
+            fn from(user_id: &$c) -> Self {
+                user_id.as_str().into()
+            }
+        }
+
+        impl TryFromU64 for $c {
+            fn try_from_u64(_n: u64) -> Result<Self, DbErr> {
+                Err(DbErr::ConvertFromU64("$c cannot be constructed from u64"))
+            }
+        }
+    };
+}
+
+make_case_insensitive_string!(UserId);
+make_case_insensitive_string!(AttributeName);
+make_case_insensitive_comparable_string!(Email);
+make_case_insensitive_comparable_string!(GroupName);
+
+impl AsRef<GroupName> for GroupName {
+    fn as_ref(&self) -> &GroupName {
+        self
     }
 }
 
@@ -283,14 +451,14 @@ impl IntoActiveValue<Serialized> for JpegPhoto {
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AttributeValue {
-    pub name: String,
+    pub name: AttributeName,
     pub value: Serialized,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub user_id: UserId,
-    pub email: String,
+    pub email: Email,
     pub display_name: Option<String>,
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
@@ -303,7 +471,7 @@ impl Default for User {
         let epoch = chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc();
         User {
             user_id: UserId::default(),
-            email: String::new(),
+            email: Email::default(),
             display_name: None,
             creation_date: epoch,
             uuid: Uuid::from_name_and_date("", &epoch),
@@ -397,7 +565,7 @@ impl ValueType for AttributeType {
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Group {
     pub id: GroupId,
-    pub display_name: String,
+    pub display_name: GroupName,
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
     pub users: Vec<UserId>,
@@ -407,7 +575,7 @@ pub struct Group {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GroupDetails {
     pub group_id: GroupId,
-    pub display_name: String,
+    pub display_name: GroupName,
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
     pub attributes: Vec<AttributeValue>,
