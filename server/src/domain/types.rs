@@ -261,7 +261,7 @@ macro_rules! make_case_insensitive_comparable_string {
 
         impl PartialOrd for $c {
             fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                Some(compare_str_case_insensitive(&self.0, &other.0))
+                Some(self.cmp(other))
             }
         }
 
