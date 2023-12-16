@@ -37,6 +37,7 @@
 - [Installation](#installation)
   - [With Docker](#with-docker)
   - [With Kubernetes](#with-kubernetes)
+  - [From a package repository](#from-a-package-repository)
   - [From source](#from-source)
     - [Backend](#backend)
     - [Frontend](#frontend)
@@ -166,6 +167,34 @@ You can bootstrap your lldap instance (users, groups)
 using [bootstrap.sh](example_configs/bootstrap/bootstrap.md#kubernetes-job).
 It can be run by Argo CD for managing users in git-opt way, or as a one-shot job.
 
+### From a package repository
+**Do not open issues in this repository for problems with third-party
+pre-built packages. Report issues downstream.**
+
+Depending on the distribution you use, it might be possible to install lldap
+from a package repository, officially supported by the distribution or
+community contributed.
+
+#### Arch Linux
+
+Arch Linux offers unofficial support through the [Arch User Repository
+(AUR)](https://wiki.archlinux.org/title/Arch_User_Repository).
+Available package descriptions in AUR are:
+
+- [lldap](https://aur.archlinux.org/packages/lldap) -  Builds the latest stable version.
+- [lldap-bin](https://aur.archlinux.org/packages/lldap-bin) - Uses the latest
+  pre-compiled binaries from the [releases in this repository](https://github.com/lldap/lldap/releases).
+  This package is recommended if you want to run lldap on a system with
+  limited resources.
+- [lldap-git](https://aur.archlinux.org/packages/lldap-git) - Builds the
+  latest main branch code.
+
+The package descriptions can be used
+[to create and install packages](https://wiki.archlinux.org/title/Arch_User_Repository#Getting_started).
+Each package places lldap's configuration file at `/etc/lldap.toml` and offers
+[systemd service](https://wiki.archlinux.org/title/systemd#Using_units)
+`lldap.service` to (auto-)start and stop lldap.
+
 ### From source
 
 #### Backend
@@ -287,8 +316,10 @@ folder for help with:
 - [Jellyfin](example_configs/jellyfin.md)
 - [Jenkins](example_configs/jenkins.md)
 - [Jitsi Meet](example_configs/jitsi_meet.conf)
+- [Kasm](example_configs/kasm.md)
 - [KeyCloak](example_configs/keycloak.md)
 - [LibreNMS](example_configs/librenms.md)
+- [Mastodon](example_configs/mastodon.env.example)
 - [Matrix](example_configs/matrix_synapse.yml)
 - [Mealie](example_configs/mealie.md)
 - [MinIO](example_configs/minio.md)
@@ -304,6 +335,7 @@ folder for help with:
 - [Squid](example_configs/squid.md)
 - [Syncthing](example_configs/syncthing.md)
 - [TheLounge](example_configs/thelounge.md)
+- [Traccar](example_configs/traccar.xml)
 - [Vaultwarden](example_configs/vaultwarden.md)
 - [WeKan](example_configs/wekan.md)
 - [WG Portal](example_configs/wg_portal.env.example)

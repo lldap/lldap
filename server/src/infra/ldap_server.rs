@@ -2,6 +2,7 @@ use crate::{
     domain::{
         handler::{BackendHandler, LoginHandler},
         opaque_handler::OpaqueHandler,
+        types::AttributeName,
     },
     infra::{
         access_control::AccessControlledBackendHandler,
@@ -72,8 +73,8 @@ async fn handle_ldap_stream<Stream, Backend>(
     stream: Stream,
     backend_handler: Backend,
     ldap_base_dn: String,
-    ignored_user_attributes: Vec<String>,
-    ignored_group_attributes: Vec<String>,
+    ignored_user_attributes: Vec<AttributeName>,
+    ignored_group_attributes: Vec<AttributeName>,
 ) -> Result<Stream>
 where
     Backend: BackendHandler + LoginHandler + OpaqueHandler + 'static,

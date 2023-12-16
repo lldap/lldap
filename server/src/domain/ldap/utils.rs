@@ -7,7 +7,9 @@ use crate::domain::{
     handler::SubStringFilter,
     ldap::error::{LdapError, LdapResult},
     schema::{PublicSchema, SchemaAttributeExtractor},
-    types::{AttributeType, AttributeValue, JpegPhoto, UserColumn, UserId},
+    types::{
+        AttributeName, AttributeType, AttributeValue, GroupName, JpegPhoto, UserColumn, UserId,
+    },
 };
 
 impl From<LdapSubstringFilter> for SubStringFilter {
@@ -103,8 +105,8 @@ pub fn get_group_id_from_distinguished_name(
     dn: &str,
     base_tree: &[(String, String)],
     base_dn_str: &str,
-) -> LdapResult<String> {
-    get_id_from_distinguished_name(dn, base_tree, base_dn_str, true)
+) -> LdapResult<GroupName> {
+    get_id_from_distinguished_name(dn, base_tree, base_dn_str, true).map(GroupName::from)
 }
 
 #[instrument(skip(all_attribute_keys), level = "debug")]
@@ -160,9 +162,8 @@ pub enum UserFieldType {
     Attribute(&'static str),
 }
 
-pub fn map_user_field(field: &str) -> UserFieldType {
-    assert!(field == field.to_ascii_lowercase());
-    match field {
+pub fn map_user_field(field: &AttributeName) -> UserFieldType {
+    match field.as_str() {
         "uid" | "user_id" | "id" => UserFieldType::PrimaryField(UserColumn::UserId),
         "mail" | "email" => UserFieldType::PrimaryField(UserColumn::Email),
         "cn" | "displayname" | "display_name" => {
@@ -179,9 +180,8 @@ pub fn map_user_field(field: &str) -> UserFieldType {
     }
 }
 
-pub fn map_group_field(field: &str) -> Option<&'static str> {
-    assert!(field == field.to_ascii_lowercase());
-    Some(match field {
+pub fn map_group_field(field: &AttributeName) -> Option<&'static str> {
+    Some(match field.as_str() {
         "cn" | "displayname" | "uid" | "display_name" => "display_name",
         "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => "creation_date",
         "entryuuid" | "uuid" => "uuid",
@@ -192,13 +192,13 @@ pub fn map_group_field(field: &str) -> Option<&'static str> {
 pub struct LdapInfo {
     pub base_dn: Vec<(String, String)>,
     pub base_dn_str: String,
-    pub ignored_user_attributes: Vec<String>,
-    pub ignored_group_attributes: Vec<String>,
+    pub ignored_user_attributes: Vec<AttributeName>,
+    pub ignored_group_attributes: Vec<AttributeName>,
 }
 
 pub fn get_custom_attribute<Extractor: SchemaAttributeExtractor>(
     attributes: &[AttributeValue],
-    attribute_name: &str,
+    attribute_name: &AttributeName,
     schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
     let convert_date = |date| {
@@ -212,7 +212,7 @@ pub fn get_custom_attribute<Extractor: SchemaAttributeExtractor>(
         .and_then(|attribute_type| {
             attributes
                 .iter()
-                .find(|a| a.name == attribute_name)
+                .find(|a| &a.name == attribute_name)
                 .map(|attribute| match attribute_type {
                     (AttributeType::String, false) => {
                         vec![attribute.value.unwrap::<String>().into_bytes()]

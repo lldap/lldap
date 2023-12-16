@@ -1,5 +1,5 @@
 use crate::{
-    domain::types::UserId,
+    domain::types::{AttributeName, UserId},
     infra::cli::{GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts},
 };
 use anyhow::{Context, Result};
@@ -86,9 +86,9 @@ pub struct Configuration {
     #[builder(default = r#"String::from("sqlite://users.db?mode=rwc")"#)]
     pub database_url: String,
     #[builder(default)]
-    pub ignored_user_attributes: Vec<String>,
+    pub ignored_user_attributes: Vec<AttributeName>,
     #[builder(default)]
-    pub ignored_group_attributes: Vec<String>,
+    pub ignored_group_attributes: Vec<AttributeName>,
     #[builder(default = "false")]
     pub verbose: bool,
     #[builder(default = r#"String::from("server_key")"#)]

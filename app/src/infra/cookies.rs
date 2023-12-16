@@ -22,10 +22,11 @@ pub fn set_cookie(cookie_name: &str, value: &str, expiration: &DateTime<Utc>) ->
                 .map_err(|_| anyhow!("Document is not an HTMLDocument"))
         })?;
     let cookie_string = format!(
-        "{}={}; expires={}; sameSite=Strict; path=/",
+        "{}={}; expires={}; sameSite=Strict; path={}/",
         cookie_name,
         value,
-        expiration.to_rfc2822()
+        expiration.to_rfc2822(),
+        yew_router::utils::base_url().unwrap_or_default()
     );
     doc.set_cookie(&cookie_string)
         .map_err(|_| anyhow!("Could not set cookie"))

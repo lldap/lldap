@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::types::{AttributeValue, Serialized, UserId};
+use crate::domain::types::{AttributeName, AttributeValue, Serialized, UserId};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "user_attributes")]
@@ -17,7 +17,7 @@ pub struct Model {
         auto_increment = false,
         column_name = "user_attribute_name"
     )]
-    pub attribute_name: String,
+    pub attribute_name: AttributeName,
     #[sea_orm(column_name = "user_attribute_value")]
     pub value: Serialized,
 }

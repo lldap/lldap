@@ -28,7 +28,7 @@ use crate::{
         error::DomainError,
         handler::{BackendHandler, BindRequest, LoginHandler, UserRequestFilter},
         opaque_handler::OpaqueHandler,
-        types::{GroupDetails, UserColumn, UserId},
+        types::{GroupDetails, GroupName, UserColumn, UserId},
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler, ValidationResults},
@@ -58,7 +58,10 @@ async fn create_jwt<Handler: TcpBackendHandler>(
         exp: Utc::now() + chrono::Duration::days(1),
         iat: Utc::now(),
         user: user.to_string(),
-        groups: groups.into_iter().map(|g| g.display_name).collect(),
+        groups: groups
+            .into_iter()
+            .map(|g| g.display_name.into_string())
+            .collect(),
     };
     let expiry = claims.exp.naive_utc();
     let header = jwt::Header {
@@ -112,13 +115,17 @@ where
             "Invalid refresh token".to_string(),
         )));
     }
+    let mut path = data.server_url.path().to_string();
+    if !path.ends_with('/') {
+        path.push('/');
+    };
     let groups = data.get_readonly_handler().get_user_groups(&user).await?;
     let token = create_jwt(data.get_tcp_handler(), jwt_key, &user, groups).await;
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", token.as_str())
                 .max_age(1.days())
-                .path("/")
+                .path(&path)
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -183,7 +190,7 @@ where
         user.display_name
             .as_deref()
             .unwrap_or_else(|| user.user_id.as_str()),
-        &user.email,
+        user.email.as_str(),
         &token,
         &data.server_url,
         &data.mail_options,
@@ -239,12 +246,16 @@ where
         .await;
     let groups = HashSet::new();
     let token = create_jwt(data.get_tcp_handler(), &data.jwt_key, &user_id, groups).await;
+    let mut path = data.server_url.path().to_string();
+    if !path.ends_with('/') {
+        path.push('/');
+    };
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", token.as_str())
                 .max_age(5.minutes())
                 // Cookie is only valid to reset the password.
-                .path("/auth")
+                .path(format!("{}auth", path))
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -284,11 +295,15 @@ where
     for jwt_hash in new_blacklisted_jwt_hashes {
         jwt_blacklist.insert(jwt_hash);
     }
+    let mut path = data.server_url.path().to_string();
+    if !path.ends_with('/') {
+        path.push('/');
+    };
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", "")
                 .max_age(0.days())
-                .path("/")
+                .path(&path)
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -296,7 +311,7 @@ where
         .cookie(
             Cookie::build("refresh_token", "")
                 .max_age(0.days())
-                .path("/auth")
+                .path(format!("{}auth", path))
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -351,12 +366,15 @@ where
     let (refresh_token, max_age) = data.get_tcp_handler().create_refresh_token(name).await?;
     let token = create_jwt(data.get_tcp_handler(), &data.jwt_key, name, groups).await;
     let refresh_token_plus_name = refresh_token + "+" + name.as_str();
-
+    let mut path = data.server_url.path().to_string();
+    if !path.ends_with('/') {
+        path.push('/');
+    };
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", token.as_str())
                 .max_age(1.days())
-                .path("/")
+                .path(&path)
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -364,7 +382,7 @@ where
         .cookie(
             Cookie::build("refresh_token", refresh_token_plus_name.clone())
                 .max_age(max_age.num_days().days())
-                .path("/auth")
+                .path(format!("{}auth", path))
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -488,7 +506,7 @@ where
         .get_user_groups(&user_id)
         .await?
         .iter()
-        .any(|g| g.display_name == "lldap_admin");
+        .any(|g| g.display_name == "lldap_admin".into());
     if !validation_result.can_change_password(&user_id, user_is_admin) {
         return Err(TcpError::UnauthorizedError(
             "Not authorized to change the user's password".to_string(),
@@ -618,7 +636,11 @@ pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
     }
     Ok(state.backend_handler.get_permissions_from_groups(
         UserId::new(&token.claims().user),
-        token.claims().groups.iter(),
+        token
+            .claims()
+            .groups
+            .iter()
+            .map(|s| GroupName::from(s.as_str())),
     ))
 }
 

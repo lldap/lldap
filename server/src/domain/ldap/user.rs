@@ -14,7 +14,7 @@ use crate::domain::{
         },
     },
     schema::{PublicSchema, SchemaUserAttributeExtractor},
-    types::{GroupDetails, User, UserAndGroups, UserColumn, UserId},
+    types::{AttributeName, GroupDetails, User, UserAndGroups, UserColumn, UserId},
 };
 
 pub fn get_user_attribute(
@@ -22,10 +22,10 @@ pub fn get_user_attribute(
     attribute: &str,
     base_dn_str: &str,
     groups: Option<&[GroupDetails]>,
-    ignored_user_attributes: &[String],
+    ignored_user_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
-    let attribute = attribute.to_ascii_lowercase();
+    let attribute = AttributeName::from(attribute);
     let attribute_values = match attribute.as_str() {
         "objectclass" => vec![
             b"inetOrgPerson".to_vec(),
@@ -37,20 +37,22 @@ pub fn get_user_attribute(
         "dn" | "distinguishedname" => return None,
         "uid" | "user_id" | "id" => vec![user.user_id.to_string().into_bytes()],
         "entryuuid" | "uuid" => vec![user.uuid.to_string().into_bytes()],
-        "mail" | "email" => vec![user.email.clone().into_bytes()],
-        "givenname" | "first_name" | "firstname" => get_custom_attribute::<
-            SchemaUserAttributeExtractor,
-        >(
-            &user.attributes, "first_name", schema
-        )?,
+        "mail" | "email" => vec![user.email.to_string().into_bytes()],
+        "givenname" | "first_name" | "firstname" => {
+            get_custom_attribute::<SchemaUserAttributeExtractor>(
+                &user.attributes,
+                &"first_name".into(),
+                schema,
+            )?
+        }
         "sn" | "last_name" | "lastname" => get_custom_attribute::<SchemaUserAttributeExtractor>(
             &user.attributes,
-            "last_name",
+            &"last_name".into(),
             schema,
         )?,
         "jpegphoto" | "avatar" => get_custom_attribute::<SchemaUserAttributeExtractor>(
             &user.attributes,
-            "avatar",
+            &"avatar".into(),
             schema,
         )?,
         "memberof" => groups
@@ -80,7 +82,7 @@ pub fn get_user_attribute(
             if !ignored_user_attributes.contains(&attribute) {
                 match get_custom_attribute::<SchemaUserAttributeExtractor>(
                     &user.attributes,
-                    attr,
+                    &attribute,
                     schema,
                 ) {
                     Some(v) => return Some(v),
@@ -118,7 +120,7 @@ fn make_ldap_search_user_result_entry(
     base_dn_str: &str,
     attributes: &[String],
     groups: Option<&[GroupDetails]>,
-    ignored_user_attributes: &[String],
+    ignored_user_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
     let expanded_attributes = expand_user_attribute_wildcards(attributes);
@@ -156,7 +158,7 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
         )),
         LdapFilter::Not(filter) => Ok(UserRequestFilter::Not(Box::new(rec(filter)?))),
         LdapFilter::Equality(field, value) => {
-            let field = &field.to_ascii_lowercase();
+            let field = AttributeName::from(field.as_str());
             match field.as_str() {
                 "memberof" => Ok(UserRequestFilter::MemberOf(
                     get_group_id_from_distinguished_name(
@@ -179,7 +181,7 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                     warn!("Invalid dn filter on user: {}", value);
                     UserRequestFilter::from(false)
                 })),
-                _ => match map_user_field(field) {
+                _ => match map_user_field(&field) {
                     UserFieldType::PrimaryField(UserColumn::UserId) => {
                         Ok(UserRequestFilter::UserId(UserId::new(value)))
                     }
@@ -187,11 +189,11 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                         Ok(UserRequestFilter::Equality(field, value.clone()))
                     }
                     UserFieldType::Attribute(field) => Ok(UserRequestFilter::AttributeEquality(
-                        field.to_owned(),
+                        AttributeName::from(field),
                         value.clone(),
                     )),
                     UserFieldType::NoMatch => {
-                        if !ldap_info.ignored_user_attributes.contains(field) {
+                        if !ldap_info.ignored_user_attributes.contains(&field) {
                             warn!(
                                 r#"Ignoring unknown user attribute "{}" in filter.\n\
                                       To disable this warning, add it to "ignored_user_attributes" in the config"#,
@@ -204,18 +206,18 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
             }
         }
         LdapFilter::Present(field) => {
-            let field = &field.to_ascii_lowercase();
+            let field = AttributeName::from(field.as_str());
             // Check that it's a field we support.
             Ok(UserRequestFilter::from(
-                field == "objectclass"
-                    || field == "dn"
-                    || field == "distinguishedname"
-                    || !matches!(map_user_field(field), UserFieldType::NoMatch),
+                field.as_str() == "objectclass"
+                    || field.as_str() == "dn"
+                    || field.as_str() == "distinguishedname"
+                    || !matches!(map_user_field(&field), UserFieldType::NoMatch),
             ))
         }
         LdapFilter::Substring(field, substring_filter) => {
-            let field = &field.to_ascii_lowercase();
-            match map_user_field(field.as_str()) {
+            let field = AttributeName::from(field.as_str());
+            match map_user_field(&field) {
                 UserFieldType::PrimaryField(UserColumn::UserId) => Ok(
                     UserRequestFilter::UserIdSubString(substring_filter.clone().into()),
                 ),
