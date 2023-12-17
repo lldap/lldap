@@ -1,15 +1,9 @@
 # GitLab Configuration
 
-## Placeholders
-* Name for your LDAP server: ``LDAP``
-* Host: ``ldap.example.com``
-* Port: ``3890``
-* Domain: ``dc=example,dc=com``
-* Bind user: ``bind_user`` (has to be a member of the ``lldap_strict_readonly`` group)
-* Bind user passwort: ``<bind user password>``
-* Group of users that will have access to GitLab: ``git_user``
+Members of the group ``git_user`` will have access to GitLab.
 
-## Edit ``/etc/gitlab/gitlab.rb``:
+Edit ``/etc/gitlab/gitlab.rb``:
+
 ```ruby
 gitlab_rails['ldap_enabled'] = true
 gitlab_rails['ldap_servers'] = {
@@ -27,7 +21,7 @@ gitlab_rails['ldap_servers'] = {
     'attributes' => {
       'username' => 'uid',
       'email' => 'mail',
-      'name' => 'cn',
+      'name' => 'displayName',
       'first_name' => 'givenName',
       'last_name' => 'sn'
     }
