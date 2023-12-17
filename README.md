@@ -311,6 +311,7 @@ folder for help with:
 - [Emby](example_configs/emby.md)
 - [Ergo IRCd](example_configs/ergo.md)
 - [Gitea](example_configs/gitea.md)
+- [GitLab](example_configs/gitlab.md)
 - [Grafana](example_configs/grafana_ldap_config.toml)
 - [Hedgedoc](example_configs/hedgedoc.md)
 - [Jellyfin](example_configs/jellyfin.md)
