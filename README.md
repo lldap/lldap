@@ -175,7 +175,11 @@ Depending on the distribution you use, it might be possible to install lldap
 from a package repository, officially supported by the distribution or
 community contributed.
 
-#### Arch Linux
+##### Debian, CentOS Fedora, OpenSUSE, Ubuntu
+The pre-packaged per distribution can be fetched [LLDAP OBS](https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap)
+- Installation through pre-packaged login using `admin` and `password` as default login.
+
+##### Arch Linux
 
 Arch Linux offers unofficial support through the [Arch User Repository
 (AUR)](https://wiki.archlinux.org/title/Arch_User_Repository).
