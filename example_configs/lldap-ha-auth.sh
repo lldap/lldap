@@ -66,5 +66,26 @@ fi
 
 DISPLAY_NAME=$(jq -r .displayName <<< $USER_JSON)
 
+IS_ADMIN=false
+if [[ ! -z "$3" ]] && jq -e '.groups|map(.displayName)|index("'"$3"'")' <<< "$USER_JSON" > /dev/null 2>&1; then
+    IS_ADMIN=true
+fi
+
+IS_LOCAL=false
+if [[ ! -z "$4" ]] && jq -e '.groups|map(.displayName)|index("'"$4"'")' <<< "$USER_JSON" > /dev/null 2>&1; then
+	IS_LOCAL=true
+fi
+
 [[ ! -z "$DISPLAY_NAME" ]] && echo "name = $DISPLAY_NAME"
 
+if [[ "$IS_ADMIN" = true ]]; then
+	echo "group = system-admin"
+else
+    echo "group = system-users"
+fi
+
+if [[ "$IS_LOCAL" = true ]]; then
+	echo "local_only = true"
+else
+    echo "local_only = false"
+fi

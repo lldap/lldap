@@ -318,6 +318,7 @@ folder for help with:
 - [GitLab](example_configs/gitlab.md)
 - [Grafana](example_configs/grafana_ldap_config.toml)
 - [Hedgedoc](example_configs/hedgedoc.md)
+- [Home Assistant](example_configs/home-assistant.md)
 - [Jellyfin](example_configs/jellyfin.md)
 - [Jenkins](example_configs/jenkins.md)
 - [Jitsi Meet](example_configs/jitsi_meet.conf)
