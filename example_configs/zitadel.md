@@ -5,7 +5,7 @@ In Zitadel, go to `Instance > Settings` for instance-wide LDAP setup or `<Organi
 Click `Identity Providers` and select `Active Directory/LDAP`.
 
 Replace every instance of `dc=example,dc=com` with your configured domain.
-**Group filter is not supported at the time of writing.**
+**Group filter is not supported in `Zitadel` at the time of writing.**
 ### Connection
 * Name: The name to identify your identity provider
 * Servers: `ldaps://<FQDN or Host IP>:<Port for LADPS>` or `ldap://<FQDN or Host IP>:<Port for LADP>` 
@@ -35,6 +35,11 @@ The following section applied to `Zitadel` only, nothing will change on `LLDAP` 
 
 **DO NOT** enable `Automatic update` if you haven't setup a smtp server. Zitadel will update account's email and sent a verification code to verify the address. 
 If you don't have a smtp server setup correctly and the email adress of `ZITADEL Admin` is changed, you are **permanently** locked out.
+
+## Enable Identity Provider
+After clicking `Save`, you will be redirected to `Identity Providers` page.
+
+Enable the LDAP by hovering onto the item and clicking the checkmark (`set as available`)
 
 ## Enable LDAP Login
 Under `Settings`, select `Login Behavior and Security`
