@@ -228,7 +228,7 @@ Then you can build the frontend files with
 
 ```shell
 ./app/build.sh
-````
+```
 
 (you'll need to run this after every front-end change to update the WASM
 package served).
