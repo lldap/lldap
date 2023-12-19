@@ -20,17 +20,21 @@ Replace every instance of `dc=example,dc=com` with your configured domain.
 
 ### LDAP Attributes
 * ID attribute: `uid`
-* Avatar Url attribute: `jpegPhoto`
-* Displayname attribute: `cn`
+* displayName attribute: `cn`
 * Email attribute: `mail`
 * Given name attribute: `givenName`
-* Family name attribute: `sn`
+* Family name attribute: `lastName`
 
 ### optional
+The following section applied to `Zitadel` only, nothing will change on `LLDAP` side.
+
 * Account creation allowed [x]
 * Account linking allowed [x]
 
 **Either one of them or both of them must be enabled**
+
+**DO NOT** enable `Automatic update` if you haven't setup a smtp server. Zitadel will update account's email and sent a verification code to verify the address. 
+If you don't have a smtp server setup correctly and the email adress of `ZITADEL Admin` is changed, you are **permanently** locked out.
 
 ## Enable LDAP Login
 Under `Settings`, select `Login Behavior and Security`
