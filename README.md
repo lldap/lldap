@@ -160,64 +160,89 @@ Then the service will listen on two ports, one for LDAP and one for the web
 front-end.
 
 ### With Kubernetes
----
-  See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for Kubernetes
 
-  You can bootstrap your lldap instance (users, groups) using [bootstrap.sh](example_configs/bootstrap/bootstrap.md#kubernetes-job).
-  It can be run by Argo CD for managing users in git-opt way, or as a one-shot job.
+See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for Kubernetes
+
+You can bootstrap your lldap instance (users, groups)
+using [bootstrap.sh](example_configs/bootstrap/bootstrap.md#kubernetes-job).
+It can be run by Argo CD for managing users in git-opt way, or as a one-shot job.
 
 ### From a package repository
----
-  **Do not open issues in this repository for problems with third-party pre-built packages. Report issues downstream.**
+**Do not open issues in this repository for problems with third-party
+pre-built packages. Report issues downstream.**
 
-  Depending on the distribution you use, it might be possible to install lldap from a package repository, officially supported by the distribution or community contributed.
+Depending on the distribution you use, it might be possible to install lldap
+from a package repository, officially supported by the distribution or
+community contributed.
 
-  * #### Debian, CentOS Fedora, OpenSUSE, Ubuntu
-    The package for these distributions can be found at [LLDAP OBS](https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap).
-    - When using the distributed package, the default login is `admin/password`. You can change that from the web UI after starting the service.
+#### Debian, CentOS Fedora, OpenSUSE, Ubuntu
+The package for these distributions can be found at [LLDAP OBS](https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap).
+- When using the distributed package, the default login is `admin/password`. You can change that from the web UI after starting the service.
 
-  * #### Arch Linux
-    Arch Linux offers unofficial support through the [Arch User Repository(AUR)](https://wiki.archlinux.org/title/Arch_User_Repository).
-    Available package descriptions in AUR are:
-    - [lldap](https://aur.archlinux.org/packages/lldap) -  Builds the latest stable version.
-    - [lldap-bin](https://aur.archlinux.org/packages/lldap-bin) - Uses the latest
-      pre-compiled binaries from the [releases in this repository](https://github.com/lldap/lldap/releases).
-      This package is recommended if you want to run lldap on a system with limited resources.
-    - [lldap-git](https://aur.archlinux.org/packages/lldap-git) - Builds thelatest main branch code.
-      The package descriptions can be used [to create and install packages](https://wiki.archlinux.org/title/Arch_User_Repository#Getting_started).
-      Each package places lldap's configuration file at `/etc/lldap.toml` and offers [systemd service](https://wiki.archlinux.org/title/systemd#Using_units) `lldap.service` to (auto-)start and stop lldap.
+#### Arch Linux
+
+Arch Linux offers unofficial support through the [Arch User Repository
+(AUR)](https://wiki.archlinux.org/title/Arch_User_Repository).
+Available package descriptions in AUR are:
+
+- [lldap](https://aur.archlinux.org/packages/lldap) -  Builds the latest stable version.
+- [lldap-bin](https://aur.archlinux.org/packages/lldap-bin) - Uses the latest
+  pre-compiled binaries from the [releases in this repository](https://github.com/lldap/lldap/releases).
+  This package is recommended if you want to run lldap on a system with
+  limited resources.
+- [lldap-git](https://aur.archlinux.org/packages/lldap-git) - Builds the
+  latest main branch code.
+
+The package descriptions can be used
+[to create and install packages](https://wiki.archlinux.org/title/Arch_User_Repository#Getting_started).
+Each package places lldap's configuration file at `/etc/lldap.toml` and offers
+[systemd service](https://wiki.archlinux.org/title/systemd#Using_units)
+`lldap.service` to (auto-)start and stop lldap.
 
 ### From source
----
-  * #### Backend
-    To compile the project, you'll need:
-    - curl and gzip: `sudo apt install curl gzip`
-    - Rust/Cargo: [rustup.rs](https://rustup.rs/)
-    Then you can compile the server (and the migration tool if you want):
 
-    ```shell
-    cargo build --release -p lldap -p lldap_migration_tool
-    ```
-    The resulting binaries will be in `./target/release/`. Alternatively, you can
-    just run `cargo run -- run` to run the server.
+#### Backend
 
-  * #### Frontend
-    To bring up the server, you'll need to compile the frontend. In addition to `cargo`, you'll need:
-    - WASM-pack: `cargo install wasm-pack`
-    Then you can build the frontend files with
-    ```shell
-    ./app/build.sh
-    ````
-    (you'll need to run this after every front-end change to update the WASM package served).
+To compile the project, you'll need:
 
-    The default config is in `src/infra/configuration.rs`, but you can override it by creating an `lldap_config.toml`, setting environment variables or passing arguments to `cargo run`.
-  
-    Have a look at the docker template: `lldap_config.docker_template.toml`.
+- curl and gzip: `sudo apt install curl gzip`
+- Rust/Cargo: [rustup.rs](https://rustup.rs/)
 
-    You can also install it as a systemd service, see [lldap.service](example_configs/lldap.service).
+Then you can compile the server (and the migration tool if you want):
+
+```shell
+cargo build --release -p lldap -p lldap_migration_tool
+```
+
+The resulting binaries will be in `./target/release/`. Alternatively, you can
+just run `cargo run -- run` to run the server.
+
+#### Frontend
+
+To bring up the server, you'll need to compile the frontend. In addition to
+`cargo`, you'll need:
+
+- WASM-pack: `cargo install wasm-pack`
+
+Then you can build the frontend files with
+
+```shell
+./app/build.sh
+````
+
+(you'll need to run this after every front-end change to update the WASM
+package served).
+
+The default config is in `src/infra/configuration.rs`, but you can override it
+by creating an `lldap_config.toml`, setting environment variables or passing
+arguments to `cargo run`. Have a look at the docker template:
+`lldap_config.docker_template.toml`.
+
+You can also install it as a systemd service, see
+[lldap.service](example_configs/lldap.service).
 
 ### Cross-compilation
----
+
 Docker images are provided for AMD64, ARM64 and ARM/V7.
 
 If you want to cross-compile yourself, you can do so by installing
@@ -241,7 +266,7 @@ files in an `app` folder next to the binary).
 ## Client configuration
 
 ### Compatible services
----
+
 Most services that can use LDAP as an authentication provider should work out
 of the box. For new services, it's possible that they require a bit of tweaking
 on LLDAP's side to make things work. In that case, just create an issue with
@@ -249,7 +274,7 @@ the relevant details (logs of the service, LLDAP logs with `verbose=true` in
 the config).
 
 ### General configuration guide
----
+
 To configure the services that will talk to LLDAP, here are the values:
 
 - The LDAP user DN is from the configuration. By default,
@@ -270,7 +295,7 @@ the `lldap_strict_readonly` or `lldap_password_manager` group, to avoid granting
 administration access to many services.
 
 ### Sample client configurations
----
+
 Some specific clients have been tested to work and come with sample
 configuration files, or guides. See the [`example_configs`](example_configs)
 folder for help with:
@@ -332,46 +357,48 @@ migration docs](/docs/database_migration.md).
 
 ## Comparisons with other services
 
-  ### vs OpenLDAP
-  [OpenLDAP](https://www.openldap.org) is a monster of a service that implements all of LDAP and all of its extensions, plus some of its own. 
-  That said, if you need all that flexibility, it might be what you need!
-  Note that installation can be a bit painful (figuring out how to use `slapd`) and people have mixed
-  experiences following tutorials online. If you don't configure it properly, you
-  might end up storing passwords in clear, so a breach of your server would
-  reveal all the stored passwords!
+### vs OpenLDAP
 
-  OpenLDAP doesn't come with a UI: if you want a web interface, you'll have to
-  install one (not that many look nice) and configure it.
+[OpenLDAP](https://www.openldap.org) is a monster of a service that implements
+all of LDAP and all of its extensions, plus some of its own. That said, if you
+need all that flexibility, it might be what you need! Note that installation
+can be a bit painful (figuring out how to use `slapd`) and people have mixed
+experiences following tutorials online. If you don't configure it properly, you
+might end up storing passwords in clear, so a breach of your server would
+reveal all the stored passwords!
 
-  LLDAP is much simpler to setup, has a much smaller image (10x smaller, 20x if
-  you add PhpLdapAdmin), and comes packed with its own purpose-built web UI.
-  However, it's not as flexible as OpenLDAP.
+OpenLDAP doesn't come with a UI: if you want a web interface, you'll have to
+install one (not that many look nice) and configure it.
 
-  ### vs FreeIPA
+LLDAP is much simpler to setup, has a much smaller image (10x smaller, 20x if
+you add PhpLdapAdmin), and comes packed with its own purpose-built web UI.
+However, it's not as flexible as OpenLDAP.
 
-  [FreeIPA](http://www.freeipa.org) is the one-stop shop for identity management:
-  LDAP, Kerberos, NTP, DNS, Samba, you name it, it has it. In addition to user
-  management, it also does security policies, single sign-on, certificate
-  management, linux account management and so on.
+### vs FreeIPA
 
-  If you need all of that, go for it! Keep in mind that a more complex system is
-  more complex to maintain, though.
+[FreeIPA](http://www.freeipa.org) is the one-stop shop for identity management:
+LDAP, Kerberos, NTP, DNS, Samba, you name it, it has it. In addition to user
+management, it also does security policies, single sign-on, certificate
+management, linux account management and so on.
 
-  LLDAP is much lighter to run (<10 MB RAM including the DB), easier to
-  configure (no messing around with DNS or security policies) and simpler to
-  use. It also comes conveniently packed in a docker container.
+If you need all of that, go for it! Keep in mind that a more complex system is
+more complex to maintain, though.
 
-  ### vs Kanidm
+LLDAP is much lighter to run (<10 MB RAM including the DB), easier to
+configure (no messing around with DNS or security policies) and simpler to
+use. It also comes conveniently packed in a docker container.
 
-  [Kanidm](https://kanidm.com) is an up-and-coming Rust identity management
-  platform, covering all your bases: OAuth, Linux accounts, SSH keys, Radius,
-  WebAuthn. It comes with a (read-only) LDAPS server.
+### vs Kanidm
 
-  It's fairly easy to install and does much more; but their LDAP server is
-  read-only, and by having more moving parts it is inherently more complex. If
-  you don't need to modify the users through LDAP and you're planning on
-  installing something like [KeyCloak](https://www.keycloak.org) to provide
-  modern identity protocols, check out Kanidm.
+[Kanidm](https://kanidm.com) is an up-and-coming Rust identity management
+platform, covering all your bases: OAuth, Linux accounts, SSH keys, Radius,
+WebAuthn. It comes with a (read-only) LDAPS server.
+
+It's fairly easy to install and does much more; but their LDAP server is
+read-only, and by having more moving parts it is inherently more complex. If
+you don't need to modify the users through LDAP and you're planning on
+installing something like [KeyCloak](https://www.keycloak.org) to provide
+modern identity protocols, check out Kanidm.
 
 ## I can't log in!
 
