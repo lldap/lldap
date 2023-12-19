@@ -16,9 +16,20 @@ homeassistant:
     - type: homeassistant
     - type: command_line
       command: /config/lldap-ha-auth.sh
-      # Only allow users in the 'homeassistant_user' group to login.
-      # Change to ["https://lldap.example.com"] to allow all users
-      args: ["https://lldap.example.com", "homeassistant_user"]
+      # arguments: [<LDAP Host>, <regular user group>, <admin user group>, <local user group>]
+      # <regular user group>: Only allow users in the <regular user group> (e.g., 'homeassistant_user')
+      # group to login. Users will have the default 'system-users' permission.
+      #
+      # <admin user group>: Allow users in the <regular user group> (e.g., 'homeassistant_user') with
+      # <admin user group> (e.g., 'homeassistant_admin') to login and have the default 'system-admin' 
+      # permission.
+      #
+      # <local user group>: Users in the <local user group> (e.g., 'homeassistant_local') can only access
+      # homeassistant inside LAN network.
+      #
+      # Change to ["https://lldap.example.com"] to allow all users. All of them will have the default 
+      # 'system-users' permission, and can access outside of LAN network.
+      args: ["https://lldap.example.com", "homeassistant_user", "homeassistant_admin", "homeassistant_local"]
       meta: true
 ```
 3. Reload your config or restart Home Assistant
