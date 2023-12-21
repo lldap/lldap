@@ -78,6 +78,12 @@
 ## is just the default one.
 #ldap_user_pass = "REPLACE_WITH_PASSWORD"
 
+## Force reset of the admin password.
+## Break glass in case of emergency: if you lost the admin password, you
+## can set this to true to force a reset of the admin password to the value
+## of ldap_user_pass above.
+# force_reset_admin_password = false
+
 ## Database URL.
 ## This encodes the type of database (SQlite, MySQL, or PostgreSQL)
 ## , the path, the user, password, and sometimes the mode (when

@@ -107,6 +107,18 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
             .await
             .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))
             .context("while creating the admin user")?;
+    } else if config.force_ldap_user_pass_reset {
+        warn!("Forcing admin password reset to the config-provided password");
+        register_password(
+            &backend_handler,
+            &config.ldap_user_dn,
+            &config.ldap_user_pass,
+        )
+        .await
+        .context(format!(
+            "while resetting admin password for {}",
+            &config.ldap_user_dn
+        ))?;
     }
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,
