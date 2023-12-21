@@ -83,6 +83,8 @@ pub struct Configuration {
     pub ldap_user_email: String,
     #[builder(default = r#"SecUtf8::from("password")"#)]
     pub ldap_user_pass: SecUtf8,
+    #[builder(default = "false")]
+    pub force_ldap_user_pass_reset: bool,
     #[builder(default = r#"String::from("sqlite://users.db?mode=rwc")"#)]
     pub database_url: String,
     #[builder(default)]
@@ -243,6 +245,10 @@ impl ConfigOverrider for RunOpts {
 
         if let Some(database_url) = self.database_url.as_ref() {
             config.database_url = database_url.to_string();
+        }
+
+        if let Some(force_ldap_user_pass_reset) = self.force_ldap_user_pass_reset {
+            config.force_ldap_user_pass_reset = force_ldap_user_pass_reset;
         }
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);

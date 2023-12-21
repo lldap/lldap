@@ -89,6 +89,10 @@ pub struct RunOpts {
     #[clap(short, long, env = "LLDAP_DATABASE_URL")]
     pub database_url: Option<String>,
 
+    /// Force admin password reset to the config value.
+    #[clap(short, long, env = "LLDAP_FORCE_LADP_USER_PASS_RESET")]
+    pub force_ldap_user_pass_reset: Option<bool>,
+
     #[clap(flatten)]
     pub smtp_opts: SmtpOpts,
 
