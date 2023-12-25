@@ -4,8 +4,9 @@ In Zitadel, go to `Instance > Settings` for instance-wide LDAP setup or `<Organi
 ## Identity Providers Setup
 Click `Identity Providers` and select `Active Directory/LDAP`.
 
-Replace every instance of `dc=example,dc=com` with your configured domain.
 **Group filter is not supported in `Zitadel` at the time of writing.**
+
+Replace every instance of `dc=example,dc=com` with your configured domain.
 ### Connection
 * Name: The name to identify your identity provider
 * Servers: `ldaps://<FQDN or Host IP>:<Port for LADPS>` or `ldap://<FQDN or Host IP>:<Port for LADP>` 
@@ -14,9 +15,9 @@ Replace every instance of `dc=example,dc=com` with your configured domain.
 * Bind Password: `<user password>`
 
 ### User binding
-* Userbase: `ou=people,dc=example,dc=com`
+* Userbase: `dn`
 * User filters: `uid`. `mail` will not work.
-* User Object Classes: `inetOrgPerson`
+* User Object Classes: `person`
 
 ### LDAP Attributes
 * ID attribute: `uid`
@@ -24,6 +25,7 @@ Replace every instance of `dc=example,dc=com` with your configured domain.
 * Email attribute: `mail`
 * Given name attribute: `givenName`
 * Family name attribute: `lastName`
+* Preferred username attribute: `uid`
 
 ### optional
 The following section applied to `Zitadel` only, nothing will change on `LLDAP` side.
@@ -35,6 +37,8 @@ The following section applied to `Zitadel` only, nothing will change on `LLDAP` 
 
 **DO NOT** enable `Automatic update` if you haven't setup a smtp server. Zitadel will update account's email and sent a verification code to verify the address. 
 If you don't have a smtp server setup correctly and the email adress of `ZITADEL Admin` is changed, you are **permanently** locked out.
+
+`Automatic creation` can automatically create a new account without user interaction when `Given name attribute`, `Family name attribute`, `Email attribute`, and `Preferred username attribute` are presented.
 
 ## Enable Identity Provider
 After clicking `Save`, you will be redirected to `Identity Providers` page.
