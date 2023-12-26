@@ -434,6 +434,9 @@ jobs:
        - name: Test Dummy User MySQL
          run: ldapsearch -H ldap://localhost:3893 -LLL -D "uid=dummyuser,ou=people,dc=example,dc=com" -w 'dummypassword' -s "One" -b "ou=people,dc=example,dc=com"
 
+########################################
+#### BUILD BASE IMAGE ##################
+########################################
   build-docker-image:
     needs: [build-ui, build-bin]
     name: Build Docker image
@@ -443,7 +446,7 @@ jobs:
         container: ["debian","alpine"]
         include:
           - container: alpine
-            platforms: linux/amd64,linux/arm64
+            platforms: linux/amd64,linux/arm64,linux/arm/v7
             tags: |
                   type=ref,event=pr
                   type=semver,pattern=v{{version}}
@@ -468,13 +471,19 @@ jobs:
                   type=raw,value=latest,enable={{ is_default_branch }}
                   type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
                   type=raw,value={{ date 'YYYY-MM-DD' }},enable={{ is_default_branch }}
-
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
     permissions:
       contents: read
       packages: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.1.1
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -488,10 +497,40 @@ jobs:
 
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
+      - name: Docker ${{ matrix.container }} Base meta
+        id: meta-base
+        uses: docker/metadata-action@v5
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            localhost:5000/lldap/lldap
+          tags: ${{ matrix.container }}-base
+
+      - name: Build ${{ matrix.container }} Base Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          #push: ${{ github.event_name != 'pull_request' }}
+          push: true
+          platforms: ${{ matrix.platforms }}
+          file: ./.github/workflows/Dockerfile.ci.${{ matrix.container }}-base
+          tags: |
+                ${{ steps.meta-base.outputs.tags }}
+          labels: ${{ steps.meta-base.outputs.labels }}
+          cache-from: type=gha,mode=max
+          cache-to: type=gha,mode=max
+
+#####################################
+#### build variants docker image ####
+#####################################
 
       - name: Docker ${{ matrix.container }} meta
-        id: meta
+        id: meta-standard
         uses: docker/metadata-action@v5
         with:
           # list of Docker images to use as base name for tags
@@ -523,6 +562,39 @@ jobs:
             suffix=-${{ matrix.container }}
           tags: ${{ matrix.tags }}
 
+      - name: Docker ${{ matrix.container }}-rootless meta
+        id: meta-rootless
+        uses: docker/metadata-action@v5
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            nitnelave/lldap
+            lldap/lldap
+            ghcr.io/lldap/lldap
+          # Wanted Docker tags
+          # vX-alpine
+          # vX.Y-alpine
+          # vX.Y.Z-alpine
+          # latest
+          # latest-alpine
+          # stable
+          # stable-alpine
+          # YYYY-MM-DD
+          # YYYY-MM-DD-alpine
+          #################
+          # vX-debian
+          # vX.Y-debian
+          # vX.Y.Z-debian
+          # latest-debian
+          # stable-debian
+          # YYYY-MM-DD-debian
+          #################
+          # Check matrix for tag list definition
+          flavor: |
+            latest=false
+            suffix=-${{ matrix.container }}-rootless
+          tags: ${{ matrix.tags }}
+
       # Docker login to nitnelave/lldap and lldap/lldap
       - name: Login to Nitnelave/LLDAP Docker Hub
         if: github.event_name != 'pull_request'
@@ -539,10 +611,6 @@ jobs:
           username: nitnelave
           password: ${{ secrets.GITHUB_TOKEN }}
 
-
-########################################
-####       docker image build       ####
-########################################
       - name: Build ${{ matrix.container }} Docker Image
         uses: docker/build-push-action@v5
         with:
@@ -551,8 +619,22 @@ jobs:
           platforms: ${{ matrix.platforms  }}
           file: ./.github/workflows/Dockerfile.ci.${{ matrix.container  }}
           tags: |
-                ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+                ${{ steps.meta-standard.outputs.tags }}
+          labels: ${{ steps.meta-standard.outputs.labels }}
+          cache-from: type=gha,mode=max
+          cache-to: type=gha,mode=max
+
+
+      - name: Build ${{ matrix.container }}-rootless Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: ${{ matrix.platforms  }}
+          file: ./.github/workflows/Dockerfile.ci.${{ matrix.container  }}-rootless
+          tags: |
+                ${{ steps.meta-rootless.outputs.tags }}
+          labels: ${{ steps.meta-rootless.outputs.labels }}
           cache-from: type=gha,mode=max
           cache-to: type=gha,mode=max
 

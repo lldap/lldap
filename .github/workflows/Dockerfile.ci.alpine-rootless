@@ -1,0 +1,3 @@
+FROM localhost:5000/lldap/lldap:alpine-base
+COPY --chown=$USER:$USER docker-entrypoint-rootless.sh /docker-entrypoint.sh
+USER $USER
