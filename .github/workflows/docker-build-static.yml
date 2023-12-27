@@ -515,8 +515,9 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          #push: ${{ github.event_name != 'pull_request' }}
-          push: true
+          # On PR will fail, force fully uncomment push: true, or docker image will fail for next steps
+          push: ${{ github.event_name != 'pull_request' }}
+          #push: true
           platforms: ${{ matrix.platforms }}
           file: ./.github/workflows/Dockerfile.ci.${{ matrix.container }}-base
           tags: |

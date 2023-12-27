@@ -65,7 +65,7 @@ ENV UID=1000
 ENV GID=1000
 ENV USER=lldap
 RUN apt update && \
-    apt install -y --no-install-recommends tini openssl ca-certificates gosu tzdata && \
+    apt install -y --no-install-recommends tini openssl ca-certificates tzdata && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -g $GID $USER && useradd --system -m -g $USER --uid $UID $USER && \
