@@ -516,8 +516,8 @@ jobs:
         with:
           context: .
           # On PR will fail, force fully uncomment push: true, or docker image will fail for next steps
-          push: ${{ github.event_name != 'pull_request' }}
-          #push: true
+          #push: ${{ github.event_name != 'pull_request' }}
+          push: true
           platforms: ${{ matrix.platforms }}
           file: ./.github/workflows/Dockerfile.ci.${{ matrix.container }}-base
           tags: |
