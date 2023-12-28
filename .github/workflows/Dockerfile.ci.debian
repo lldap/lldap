@@ -1,79 +1,31 @@
-FROM debian:bullseye AS lldap
-ARG DEBIAN_FRONTEND=noninteractive
-ARG TARGETPLATFORM
-RUN apt update && apt install -y wget
-WORKDIR /dim
-COPY bin/ bin/
-COPY web/ web/
-
-RUN mkdir -p target/
-RUN mkdir -p /lldap/app
-
-RUN if [ "${TARGETPLATFORM}" = "linux/amd64" ]; then \
-    mv bin/x86_64-unknown-linux-musl-lldap-bin/lldap target/lldap && \
-    mv bin/x86_64-unknown-linux-musl-lldap_migration_tool-bin/lldap_migration_tool target/lldap_migration_tool && \
-    mv bin/x86_64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
-    chmod +x target/lldap && \
-    chmod +x target/lldap_migration_tool && \
-    chmod +x target/lldap_set_password && \
-    ls -la target/ . && \
-    pwd \
-    ; fi
-
-RUN if [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
-    mv bin/aarch64-unknown-linux-musl-lldap-bin/lldap target/lldap && \
-    mv bin/aarch64-unknown-linux-musl-lldap_migration_tool-bin/lldap_migration_tool target/lldap_migration_tool && \
-    mv bin/aarch64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
-    chmod +x target/lldap && \
-    chmod +x target/lldap_migration_tool && \
-    chmod +x target/lldap_set_password && \
-    ls -la target/ . && \
-    pwd \
-    ; fi
-
-RUN if [ "${TARGETPLATFORM}" = "linux/arm/v7" ]; then \
-    mv bin/armv7-unknown-linux-musleabihf-lldap-bin/lldap target/lldap && \
-    mv bin/armv7-unknown-linux-musleabihf-lldap_migration_tool-bin/lldap_migration_tool target/lldap_migration_tool && \
-    mv bin/armv7-unknown-linux-musleabihf-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
-    chmod +x target/lldap && \
-    chmod +x target/lldap_migration_tool && \
-    chmod +x target/lldap_set_password && \
-    ls -la target/ . && \
-    pwd \
-    ; fi
-
-# Web and App dir
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-COPY lldap_config.docker_template.toml /lldap/
-COPY web/index_local.html web/index.html
-RUN cp target/lldap /lldap/ && \
-    cp target/lldap_migration_tool /lldap/ && \
-    cp target/lldap_set_password /lldap/ && \
-    cp -R web/index.html \
-          web/pkg \
-          web/static \
-          /lldap/app/
-
-WORKDIR /lldap
-RUN set -x \
-    && for file in $(cat /lldap/app/static/libraries.txt); do wget -P app/static "$file"; done \
-    && for file in $(cat /lldap/app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
-    && chmod a+r -R .
-
-FROM debian:bullseye-slim
-ENV UID=1000
-ENV GID=1000
-ENV USER=lldap
-RUN apt update && \
-    apt install -y --no-install-recommends tini openssl ca-certificates gosu tzdata && \
-    apt clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    groupadd -g $GID $USER && useradd --system -m -g $USER --uid $UID $USER && \
-    mkdir -p /data && chown $USER:$USER /data
-COPY --from=lldap --chown=$USER:$USER /lldap /app
-COPY --from=lldap --chown=$USER:$USER /docker-entrypoint.sh /docker-entrypoint.sh
-VOLUME ["/data"]
-WORKDIR /app
-ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
-CMD ["run", "--config-file", "/data/lldap_config.toml"]
-HEALTHCHECK CMD ["/app/lldap", "healthcheck", "--config-file", "/data/lldap_config.toml"]
+FROM localhost:5000/lldap/lldap:debian-base
+# Taken directly from https://github.com/tianon/gosu/blob/master/INSTALL.md
+ENV GOSU_VERSION 1.17
+RUN set -eux; \
+# save list of currently installed packages for later so we can clean up
+	savedAptMark="$(apt-mark showmanual)"; \
+	apt-get update; \
+	apt-get install -y --no-install-recommends ca-certificates gnupg wget; \
+	rm -rf /var/lib/apt/lists/*; \
+	\
+	dpkgArch="$(dpkg --print-architecture | awk -F- '{ print $NF }')"; \
+	wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$dpkgArch"; \
+	wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$dpkgArch.asc"; \
+	\
+# verify the signature
+	export GNUPGHOME="$(mktemp -d)"; \
+	gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4; \
+	gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu; \
+	gpgconf --kill all; \
+	rm -rf "$GNUPGHOME" /usr/local/bin/gosu.asc; \
+	\
+# clean up fetch dependencies
+	apt-mark auto '.*' > /dev/null; \
+	[ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; \
+	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
+	\
+	chmod +x /usr/local/bin/gosu; \
+# verify that the binary works
+	gosu --version; \
+	gosu nobody true
+COPY --chown=$USER:$USER docker-entrypoint.sh /docker-entrypoint.sh

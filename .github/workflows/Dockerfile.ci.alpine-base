@@ -1,0 +1,84 @@
+FROM debian:bullseye AS lldap
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TARGETPLATFORM
+RUN apt update && apt install -y wget
+WORKDIR /dim
+COPY bin/ bin/
+COPY web/ web/
+
+RUN mkdir -p target/
+RUN mkdir -p /lldap/app
+
+RUN if [ "${TARGETPLATFORM}" = "linux/amd64" ]; then \
+    mv bin/x86_64-unknown-linux-musl-lldap-bin/lldap target/lldap && \
+    mv bin/x86_64-unknown-linux-musl-lldap_migration_tool-bin/lldap_migration_tool target/lldap_migration_tool && \
+    mv bin/x86_64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
+    chmod +x target/lldap && \
+    chmod +x target/lldap_migration_tool && \
+    chmod +x target/lldap_set_password && \
+    ls -la target/ . && \
+    pwd \
+    ; fi
+
+RUN if [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
+    mv bin/aarch64-unknown-linux-musl-lldap-bin/lldap target/lldap && \
+    mv bin/aarch64-unknown-linux-musl-lldap_migration_tool-bin/lldap_migration_tool target/lldap_migration_tool && \
+    mv bin/aarch64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
+    chmod +x target/lldap && \
+    chmod +x target/lldap_migration_tool && \
+    chmod +x target/lldap_set_password && \
+    ls -la target/ . && \
+    pwd \
+    ; fi
+
+RUN if [ "${TARGETPLATFORM}" = "linux/arm/v7" ]; then \
+    mv bin/armv7-unknown-linux-musleabihf-lldap-bin/lldap target/lldap && \
+    mv bin/armv7-unknown-linux-musleabihf-lldap_migration_tool-bin/lldap_migration_tool target/lldap_migration_tool && \
+    mv bin/armv7-unknown-linux-musleabihf-lldap_set_password-bin/lldap_set_password target/lldap_set_password && \
+    chmod +x target/lldap && \
+    chmod +x target/lldap_migration_tool && \
+    chmod +x target/lldap_set_password && \
+    ls -la target/ . && \
+    pwd \
+    ; fi
+
+# Web and App dir
+COPY lldap_config.docker_template.toml /lldap/
+COPY web/index_local.html web/index.html
+RUN cp target/lldap /lldap/ && \
+    cp target/lldap_migration_tool /lldap/ && \
+    cp target/lldap_set_password /lldap/ && \
+    cp -R web/index.html \
+          web/pkg \
+          web/static \
+          /lldap/app/
+
+WORKDIR /lldap
+RUN set -x \
+    && for file in $(cat /lldap/app/static/libraries.txt); do wget -P app/static "$file"; done \
+    && for file in $(cat /lldap/app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
+    && chmod a+r -R .
+
+FROM alpine:3.16
+WORKDIR /app
+ENV UID=1000
+ENV GID=1000
+ENV USER=lldap
+RUN apk add --no-cache tini ca-certificates bash tzdata && \
+    addgroup -g $GID $USER && \
+    adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "$(pwd)" \
+    --ingroup "$USER" \
+    --no-create-home \
+    --uid "$UID" \
+    "$USER" && \
+    mkdir -p /data && \
+    chown $USER:$USER /data
+COPY --from=lldap --chown=$USER:$USER /lldap /app
+VOLUME ["/data"]
+HEALTHCHECK CMD ["/app/lldap", "healthcheck", "--config-file", "/data/lldap_config.toml"]
+WORKDIR /app
+ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+CMD ["run", "--config-file", "/data/lldap_config.toml"]
