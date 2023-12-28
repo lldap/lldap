@@ -530,39 +530,6 @@ jobs:
 #### build variants docker image ####
 #####################################
 
-      - name: Docker ${{ matrix.container }} meta
-        id: meta-standard
-        uses: docker/metadata-action@v5
-        with:
-          # list of Docker images to use as base name for tags
-          images: |
-            nitnelave/lldap
-            lldap/lldap
-            ghcr.io/lldap/lldap
-          # Wanted Docker tags
-          # vX-alpine
-          # vX.Y-alpine
-          # vX.Y.Z-alpine
-          # latest
-          # latest-alpine
-          # stable
-          # stable-alpine
-          # YYYY-MM-DD
-          # YYYY-MM-DD-alpine
-          #################
-          # vX-debian
-          # vX.Y-debian
-          # vX.Y.Z-debian
-          # latest-debian
-          # stable-debian
-          # YYYY-MM-DD-debian
-          #################
-          # Check matrix for tag list definition
-          flavor: |
-            latest=false
-            suffix=-${{ matrix.container }}
-          tags: ${{ matrix.tags }}
-
       - name: Docker ${{ matrix.container }}-rootless meta
         id: meta-rootless
         uses: docker/metadata-action@v5
@@ -596,6 +563,39 @@ jobs:
             suffix=-${{ matrix.container }}-rootless
           tags: ${{ matrix.tags }}
 
+      - name: Docker ${{ matrix.container }} meta
+        id: meta-standard
+        uses: docker/metadata-action@v5
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            nitnelave/lldap
+            lldap/lldap
+            ghcr.io/lldap/lldap
+          # Wanted Docker tags
+          # vX-alpine
+          # vX.Y-alpine
+          # vX.Y.Z-alpine
+          # latest
+          # latest-alpine
+          # stable
+          # stable-alpine
+          # YYYY-MM-DD
+          # YYYY-MM-DD-alpine
+          #################
+          # vX-debian
+          # vX.Y-debian
+          # vX.Y.Z-debian
+          # latest-debian
+          # stable-debian
+          # YYYY-MM-DD-debian
+          #################
+          # Check matrix for tag list definition
+          flavor: |
+            latest=false
+            suffix=-${{ matrix.container }}
+          tags: ${{ matrix.tags }}
+
       # Docker login to nitnelave/lldap and lldap/lldap
       - name: Login to Nitnelave/LLDAP Docker Hub
         if: github.event_name != 'pull_request'
@@ -612,20 +612,6 @@ jobs:
           username: nitnelave
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build ${{ matrix.container }} Docker Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          platforms: ${{ matrix.platforms  }}
-          file: ./.github/workflows/Dockerfile.ci.${{ matrix.container  }}
-          tags: |
-                ${{ steps.meta-standard.outputs.tags }}
-          labels: ${{ steps.meta-standard.outputs.labels }}
-          cache-from: type=gha,mode=max
-          cache-to: type=gha,mode=max
-
-
       - name: Build ${{ matrix.container }}-rootless Docker Image
         uses: docker/build-push-action@v5
         with:
@@ -636,6 +622,20 @@ jobs:
           tags: |
                 ${{ steps.meta-rootless.outputs.tags }}
           labels: ${{ steps.meta-rootless.outputs.labels }}
+          cache-from: type=gha,mode=max
+          cache-to: type=gha,mode=max
+
+### This docker build always the last, due :latest tag pushed multiple times, for whatever variants may added in future add docker build above this
+      - name: Build ${{ matrix.container }} Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: ${{ matrix.platforms  }}
+          file: ./.github/workflows/Dockerfile.ci.${{ matrix.container  }}
+          tags: |
+                ${{ steps.meta-standard.outputs.tags }}
+          labels: ${{ steps.meta-standard.outputs.labels }}
           cache-from: type=gha,mode=max
           cache-to: type=gha,mode=max
 
