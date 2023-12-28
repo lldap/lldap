@@ -563,7 +563,6 @@ jobs:
             suffix=-${{ matrix.container }}-rootless
           tags: ${{ matrix.tags }}
 
-### This docker build always the last, due :latest tag pushed multiple times, for whatever variants may added in future add docker build above this
       - name: Docker ${{ matrix.container }} meta
         id: meta-standard
         uses: docker/metadata-action@v5
@@ -613,20 +612,6 @@ jobs:
           username: nitnelave
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build ${{ matrix.container }} Docker Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          platforms: ${{ matrix.platforms  }}
-          file: ./.github/workflows/Dockerfile.ci.${{ matrix.container  }}
-          tags: |
-                ${{ steps.meta-standard.outputs.tags }}
-          labels: ${{ steps.meta-standard.outputs.labels }}
-          cache-from: type=gha,mode=max
-          cache-to: type=gha,mode=max
-
-
       - name: Build ${{ matrix.container }}-rootless Docker Image
         uses: docker/build-push-action@v5
         with:
@@ -637,6 +622,20 @@ jobs:
           tags: |
                 ${{ steps.meta-rootless.outputs.tags }}
           labels: ${{ steps.meta-rootless.outputs.labels }}
+          cache-from: type=gha,mode=max
+          cache-to: type=gha,mode=max
+
+### This docker build always the last, due :latest tag pushed multiple times, for whatever variants may added in future add docker build above this
+      - name: Build ${{ matrix.container }} Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: ${{ matrix.platforms  }}
+          file: ./.github/workflows/Dockerfile.ci.${{ matrix.container  }}
+          tags: |
+                ${{ steps.meta-standard.outputs.tags }}
+          labels: ${{ steps.meta-standard.outputs.labels }}
           cache-from: type=gha,mode=max
           cache-to: type=gha,mode=max
 
