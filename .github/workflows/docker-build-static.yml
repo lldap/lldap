@@ -530,39 +530,6 @@ jobs:
 #### build variants docker image ####
 #####################################
 
-      - name: Docker ${{ matrix.container }} meta
-        id: meta-standard
-        uses: docker/metadata-action@v5
-        with:
-          # list of Docker images to use as base name for tags
-          images: |
-            nitnelave/lldap
-            lldap/lldap
-            ghcr.io/lldap/lldap
-          # Wanted Docker tags
-          # vX-alpine
-          # vX.Y-alpine
-          # vX.Y.Z-alpine
-          # latest
-          # latest-alpine
-          # stable
-          # stable-alpine
-          # YYYY-MM-DD
-          # YYYY-MM-DD-alpine
-          #################
-          # vX-debian
-          # vX.Y-debian
-          # vX.Y.Z-debian
-          # latest-debian
-          # stable-debian
-          # YYYY-MM-DD-debian
-          #################
-          # Check matrix for tag list definition
-          flavor: |
-            latest=false
-            suffix=-${{ matrix.container }}
-          tags: ${{ matrix.tags }}
-
       - name: Docker ${{ matrix.container }}-rootless meta
         id: meta-rootless
         uses: docker/metadata-action@v5
@@ -594,6 +561,40 @@ jobs:
           flavor: |
             latest=false
             suffix=-${{ matrix.container }}-rootless
+          tags: ${{ matrix.tags }}
+
+### This docker build always the last, due :latest tag pushed multiple times, for whatever variants may added in future add docker build above this
+      - name: Docker ${{ matrix.container }} meta
+        id: meta-standard
+        uses: docker/metadata-action@v5
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            nitnelave/lldap
+            lldap/lldap
+            ghcr.io/lldap/lldap
+          # Wanted Docker tags
+          # vX-alpine
+          # vX.Y-alpine
+          # vX.Y.Z-alpine
+          # latest
+          # latest-alpine
+          # stable
+          # stable-alpine
+          # YYYY-MM-DD
+          # YYYY-MM-DD-alpine
+          #################
+          # vX-debian
+          # vX.Y-debian
+          # vX.Y.Z-debian
+          # latest-debian
+          # stable-debian
+          # YYYY-MM-DD-debian
+          #################
+          # Check matrix for tag list definition
+          flavor: |
+            latest=false
+            suffix=-${{ matrix.container }}
           tags: ${{ matrix.tags }}
 
       # Docker login to nitnelave/lldap and lldap/lldap
