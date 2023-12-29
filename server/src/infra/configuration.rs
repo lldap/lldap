@@ -1,12 +1,16 @@
 use crate::{
-    domain::types::{AttributeName, UserId},
+    domain::{
+        sql_tables::{ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation},
+        types::{AttributeName, UserId},
+    },
     infra::cli::{GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts},
 };
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
+use figment_file_provider_adapter::FileAdapter;
 use lettre::message::Mailbox;
 use lldap_auth::opaque::{server::ServerSetup, KeyPair};
 use secstr::SecUtf8;
@@ -85,6 +89,8 @@ pub struct Configuration {
     pub ldap_user_pass: SecUtf8,
     #[builder(default = "false")]
     pub force_ldap_user_pass_reset: bool,
+    #[builder(default = "false")]
+    pub force_update_private_key: bool,
     #[builder(default = r#"String::from("sqlite://users.db?mode=rwc")"#)]
     pub database_url: String,
     #[builder(default)]
@@ -107,7 +113,7 @@ pub struct Configuration {
     pub http_url: Url,
     #[serde(skip)]
     #[builder(field(private), default = "None")]
-    server_setup: Option<ServerSetup>,
+    server_setup: Option<ServerSetupConfig>,
 }
 
 impl std::default::Default for Configuration {
@@ -125,6 +131,7 @@ impl ConfigurationBuilder {
                 .and_then(|o| o.as_ref())
                 .map(SecUtf8::unsecure)
                 .unwrap_or_default(),
+            PrivateKeyLocation::Default,
         )?;
         Ok(self.server_setup(Some(server_setup)).private_build()?)
     }
@@ -133,19 +140,84 @@ impl ConfigurationBuilder {
     pub fn for_tests() -> Configuration {
         ConfigurationBuilder::default()
             .verbose(true)
-            .server_setup(Some(generate_random_private_key()))
+            .server_setup(Some(ServerSetupConfig {
+                server_setup: generate_random_private_key(),
+                private_key_location: PrivateKeyLocation::Tests,
+            }))
             .private_build()
             .unwrap()
     }
 }
 
+fn stable_hash(val: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(val);
+    hasher.finalize().into()
+}
+
 impl Configuration {
     pub fn get_server_setup(&self) -> &ServerSetup {
-        self.server_setup.as_ref().unwrap()
+        &self.server_setup.as_ref().unwrap().server_setup
     }
 
     pub fn get_server_keys(&self) -> &KeyPair {
         self.get_server_setup().keypair()
+    }
+
+    pub fn get_private_key_info(&self) -> PrivateKeyInfo {
+        PrivateKeyInfo {
+            private_key_hash: PrivateKeyHash(stable_hash(self.get_server_keys().private())),
+            private_key_location: self
+                .server_setup
+                .as_ref()
+                .unwrap()
+                .private_key_location
+                .clone(),
+        }
+    }
+}
+
+/// Returns whether the private key is entirely new.
+pub fn compare_private_key_hashes(
+    previous_info: Option<&PrivateKeyInfo>,
+    private_key_info: &PrivateKeyInfo,
+) -> Result<bool> {
+    match previous_info {
+        None => Ok(true),
+        Some(previous_info) => {
+            if previous_info.private_key_hash == private_key_info.private_key_hash {
+                Ok(false)
+            } else {
+                match (
+                    &previous_info.private_key_location,
+                    &private_key_info.private_key_location,
+                ) {
+                    (
+                        PrivateKeyLocation::KeyFile(old_location, file_path),
+                        PrivateKeyLocation::KeySeed(new_location),
+                    ) => {
+                        bail!("The private key is configured to be generated from a seed (from {new_location:?}), but it used to come from the file {file_path:?} (defined in {old_location:?}). Did you just upgrade from <=v0.4 to >=v0.5? The key seed was not supported, revert to just using the file.");
+                    }
+                    (PrivateKeyLocation::Default, PrivateKeyLocation::KeySeed(new_location)) => {
+                        bail!("The private key is configured to be generated from a seed (from {new_location:?}), but it used to come from default key file \"server_key\". Did you just upgrade from <=v0.4 to >=v0.5? The key seed was not yet supported, revert to just using the file.");
+                    }
+                    (
+                        PrivateKeyLocation::KeyFile(old_location, old_path),
+                        PrivateKeyLocation::KeyFile(new_location, new_path),
+                    ) => {
+                        if old_path == new_path {
+                            bail!("The contents of the private key file from {old_path:?} have changed. This usually means that the file was deleted and re-created. If using docker, make sure that the folder is made persistent (by mounting a volume or a directory). If you have several instances of LLDAP, make sure they share the same file (or switch to a key seed).");
+                        } else {
+                            bail!("The private key file used to be {old_path:?} (defined in {old_location:?}), but now is {new_path:?} (defined in {new_location:?}. Make sure to copy the old file in the new location.");
+                        }
+                    }
+                    (old_location, new_location) => {
+                        bail!("The private key has changed. It used to come from {old_location:?}, but now it comes from {new_location:?}.");
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -168,34 +240,129 @@ fn write_to_readonly_file(path: &std::path::Path, buffer: &[u8]) -> Result<()> {
     Ok(file.write_all(buffer)?)
 }
 
-fn get_server_setup(file_path: &str, key_seed: &str) -> Result<ServerSetup> {
+#[derive(Debug, Clone)]
+pub struct ServerSetupConfig {
+    server_setup: ServerSetup,
+    private_key_location: PrivateKeyLocation,
+}
+
+#[derive(derive_more::From)]
+enum PrivateKeyLocationOrFigment {
+    Figment(Figment),
+    PrivateKeyLocation(PrivateKeyLocation),
+}
+
+impl PrivateKeyLocationOrFigment {
+    fn for_key_seed(&self) -> PrivateKeyLocation {
+        match self {
+            PrivateKeyLocationOrFigment::Figment(config) => {
+                match config.find_metadata("key_seed") {
+                    Some(figment::Metadata {
+                        source: Some(figment::Source::File(path)),
+                        ..
+                    }) => PrivateKeyLocation::KeySeed(ConfigLocation::ConfigFile(
+                        path.to_string_lossy().to_string(),
+                    )),
+                    Some(figment::Metadata {
+                        source: None, name, ..
+                    }) => PrivateKeyLocation::KeySeed(ConfigLocation::EnvironmentVariable(
+                        name.clone().to_string(),
+                    )),
+                    None
+                    | Some(figment::Metadata {
+                        source: Some(figment::Source::Code(_)),
+                        ..
+                    }) => PrivateKeyLocation::Default,
+                    other => panic!("Unexpected config location: {:?}", other),
+                }
+            }
+            PrivateKeyLocationOrFigment::PrivateKeyLocation(PrivateKeyLocation::KeyFile(
+                config_location,
+                _,
+            )) => {
+                panic!("Unexpected location: {:?}", config_location)
+            }
+            PrivateKeyLocationOrFigment::PrivateKeyLocation(location) => location.clone(),
+        }
+    }
+
+    fn for_key_file(&self, server_key_file: &str) -> PrivateKeyLocation {
+        match self {
+            PrivateKeyLocationOrFigment::Figment(config) => {
+                match config.find_metadata("key_file") {
+                    Some(figment::Metadata {
+                        source: Some(figment::Source::File(path)),
+                        ..
+                    }) => PrivateKeyLocation::KeyFile(
+                        ConfigLocation::ConfigFile(path.to_string_lossy().to_string()),
+                        server_key_file.into(),
+                    ),
+                    Some(figment::Metadata {
+                        source: None, name, ..
+                    }) => PrivateKeyLocation::KeyFile(
+                        ConfigLocation::EnvironmentVariable(name.to_string()),
+                        server_key_file.into(),
+                    ),
+                    None
+                    | Some(figment::Metadata {
+                        source: Some(figment::Source::Code(_)),
+                        ..
+                    }) => PrivateKeyLocation::Default,
+                    other => panic!("Unexpected config location: {:?}", other),
+                }
+            }
+            PrivateKeyLocationOrFigment::PrivateKeyLocation(PrivateKeyLocation::KeySeed(file)) => {
+                panic!("Unexpected location: {:?}", file)
+            }
+            PrivateKeyLocationOrFigment::PrivateKeyLocation(location) => location.clone(),
+        }
+    }
+}
+
+fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
+    file_path: &str,
+    key_seed: &str,
+    private_key_location: L,
+) -> Result<ServerSetupConfig> {
+    let private_key_location = private_key_location.into();
     use std::fs::read;
     let path = std::path::Path::new(file_path);
     if !key_seed.is_empty() {
-        if file_path != "server_key" || path.exists() {
+        if path.exists() {
+            bail!(
+                "A key_seed was given, but a key file already exists at `{}`. Which one to use is ambiguous, aborting.\nNote: If you just migrated from <=v0.4 to >=v0.5, the previous version did not support key_seed, so it was falling back onto a key file. Remove the seed from the configuration.",
+                file_path
+            );
+        } else if file_path == "server_key" {
             eprintln!("WARNING: A key_seed was given, we will ignore the server_key and generate one from the seed!");
         } else {
-            println!("Got a key_seed, ignoring key_file");
+            println!("Generating the key from the key_seed");
         }
-        let hash = |val: &[u8]| -> [u8; 32] {
-            use sha2::{Digest, Sha256};
-            let mut seed_hasher = Sha256::new();
-            seed_hasher.update(val);
-            seed_hasher.finalize().into()
-        };
         use rand::SeedableRng;
-        let mut rng = rand_chacha::ChaCha20Rng::from_seed(hash(key_seed.as_bytes()));
-        Ok(ServerSetup::new(&mut rng))
+        let mut rng = rand_chacha::ChaCha20Rng::from_seed(stable_hash(key_seed.as_bytes()));
+        Ok(ServerSetupConfig {
+            server_setup: ServerSetup::new(&mut rng),
+            private_key_location: private_key_location.for_key_seed(),
+        })
     } else if path.exists() {
         let bytes = read(file_path).context(format!("Could not read key file `{}`", file_path))?;
-        Ok(ServerSetup::deserialize(&bytes)?)
+        Ok(ServerSetupConfig {
+            server_setup: ServerSetup::deserialize(&bytes).context(format!(
+                "while parsing the contents of the `{}` file",
+                file_path
+            ))?,
+            private_key_location: private_key_location.for_key_file(file_path),
+        })
     } else {
         let server_setup = generate_random_private_key();
         write_to_readonly_file(path, &server_setup.serialize()).context(format!(
             "Could not write the generated server setup to file `{}`",
             file_path,
         ))?;
-        Ok(server_setup)
+        Ok(ServerSetupConfig {
+            server_setup,
+            private_key_location: private_key_location.for_key_file(file_path),
+        })
     }
 }
 
@@ -249,6 +416,10 @@ impl ConfigOverrider for RunOpts {
 
         if let Some(force_ldap_user_pass_reset) = self.force_ldap_user_pass_reset {
             config.force_ldap_user_pass_reset = force_ldap_user_pass_reset;
+        }
+
+        if let Some(force_update_private_key) = self.force_update_private_key {
+            config.force_update_private_key = force_update_private_key;
         }
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);
@@ -323,21 +494,20 @@ pub fn init<C>(overrides: C) -> Result<Configuration>
 where
     C: TopLevelCommandOpts + ConfigOverrider,
 {
-    let config_file = overrides.general_config().config_file.clone();
-
     println!(
         "Loading configuration from {}",
-        overrides.general_config().config_file
+        &overrides.general_config().config_file
     );
 
-    use figment_file_provider_adapter::FileAdapter;
     let ignore_keys = ["key_file", "cert_file"];
-    let mut config: Configuration = Figment::from(Serialized::defaults(
+    let figment_config = Figment::from(Serialized::defaults(
         ConfigurationBuilder::default().private_build().unwrap(),
     ))
-    .merge(FileAdapter::wrap(Toml::file(config_file)).ignore(&ignore_keys))
-    .merge(FileAdapter::wrap(Env::prefixed("LLDAP_").split("__")).ignore(&ignore_keys))
-    .extract()?;
+    .merge(
+        FileAdapter::wrap(Toml::file(&overrides.general_config().config_file)).ignore(&ignore_keys),
+    )
+    .merge(FileAdapter::wrap(Env::prefixed("LLDAP_").split("__")).ignore(&ignore_keys));
+    let mut config: Configuration = figment_config.extract()?;
 
     overrides.override_config(&mut config);
     if config.verbose {
@@ -350,6 +520,7 @@ where
             .as_ref()
             .map(SecUtf8::unsecure)
             .unwrap_or_default(),
+        figment_config,
     )?);
     if config.jwt_secret == SecUtf8::from("secretjwtsecret") {
         println!("WARNING: Default JWT secret used! This is highly unsafe and can allow attackers to log in as admin.");
@@ -366,12 +537,19 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
+    use figment::Jail;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn check_generated_server_key() {
         assert_eq!(
-            bincode::serialize(&get_server_setup("/doesnt/exist", "key seed").unwrap()).unwrap(),
+            bincode::serialize(
+                &get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests)
+                    .unwrap()
+                    .server_setup
+            )
+            .unwrap(),
             [
                 255, 206, 202, 50, 247, 13, 59, 191, 69, 244, 148, 187, 150, 227, 12, 250, 20, 207,
                 211, 151, 147, 33, 107, 132, 2, 252, 121, 94, 97, 6, 97, 232, 163, 168, 86, 246,
@@ -387,5 +565,154 @@ mod tests {
                 251, 22, 44, 98, 168, 67, 224, 255, 139, 159, 25, 24, 254, 88, 3
             ]
         );
+    }
+
+    fn default_run_opts() -> RunOpts {
+        RunOpts::parse_from::<_, std::ffi::OsString>([])
+    }
+
+    fn write_random_key(jail: &Jail, file: &str) {
+        use std::io::Write;
+        let file = std::fs::File::create(jail.directory().join(file)).unwrap();
+        let mut writer = std::io::BufWriter::new(file);
+        writer
+            .write_all(&generate_random_private_key().serialize())
+            .unwrap();
+    }
+
+    #[test]
+    fn figment_location_extraction_key_file() {
+        Jail::expect_with(|jail| {
+            jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            jail.set_env("LLDAP_KEY_SEED", "a123");
+            let ignore_keys = ["key_file", "cert_file"];
+            let figment_config = Figment::from(Serialized::defaults(
+                ConfigurationBuilder::default().private_build().unwrap(),
+            ))
+            .merge(FileAdapter::wrap(Toml::file("lldap_config.toml")).ignore(&ignore_keys))
+            .merge(FileAdapter::wrap(Env::prefixed("LLDAP_").split("__")).ignore(&ignore_keys));
+            assert_eq!(
+                PrivateKeyLocationOrFigment::Figment(figment_config).for_key_file("path"),
+                PrivateKeyLocation::KeyFile(
+                    ConfigLocation::ConfigFile(
+                        jail.directory()
+                            .join("lldap_config.toml")
+                            .to_string_lossy()
+                            .to_string()
+                    ),
+                    "path".into()
+                )
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_server_setup_key_extraction_seed_success_with_nonexistant_file() {
+        Jail::expect_with(|jail| {
+            jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            jail.set_env("LLDAP_KEY_SEED", "a123");
+            init(default_run_opts()).unwrap();
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_server_setup_key_extraction_seed_failure_with_existing_file() {
+        Jail::expect_with(|jail| {
+            jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            jail.set_env("LLDAP_KEY_SEED", "a123");
+            write_random_key(jail, "test");
+            init(default_run_opts()).unwrap_err();
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_server_setup_key_extraction_file_success_with_existing_file() {
+        Jail::expect_with(|jail| {
+            jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            write_random_key(jail, "test");
+            init(default_run_opts()).unwrap();
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_server_setup_key_extraction_file_success_with_nonexistent_file() {
+        Jail::expect_with(|jail| {
+            jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            init(default_run_opts()).unwrap();
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_server_setup_key_extraction_file_with_previous_different_file() {
+        Jail::expect_with(|jail| {
+            jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            write_random_key(jail, "test");
+            let config = init(default_run_opts()).unwrap();
+            let info = config.get_private_key_info();
+            write_random_key(jail, "test");
+            let new_config = init(default_run_opts()).unwrap();
+            let error_message =
+                compare_private_key_hashes(Some(&info), &new_config.get_private_key_info())
+                    .unwrap_err()
+                    .to_string();
+            if let PrivateKeyLocation::KeyFile(_, file) = info.private_key_location {
+                assert!(
+                    error_message.contains(
+                        "The contents of the private key file from \"test\" have changed"
+                    ),
+                    "{error_message}"
+                );
+                assert_eq!(file, "test");
+            } else {
+                panic!(
+                    "Unexpected private key location: {:?}",
+                    info.private_key_location
+                );
+            }
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_server_setup_key_extraction_file_to_seed() {
+        Jail::expect_with(|jail| {
+            jail.create_file("lldap_config.toml", "")?;
+            write_random_key(jail, "server_key");
+            init(default_run_opts()).unwrap();
+            jail.create_file("lldap_config.toml", r#"key_seed = "test""#)?;
+            let error_message = init(default_run_opts()).unwrap_err().to_string();
+            assert!(
+                error_message.contains("A key_seed was given, but a key file already exists at",),
+                "{error_message}"
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_server_setup_key_extraction_file_to_seed_removed_file() {
+        Jail::expect_with(|jail| {
+            jail.create_file("lldap_config.toml", "")?;
+            write_random_key(jail, "server_key");
+            let config = init(default_run_opts()).unwrap();
+            let info = config.get_private_key_info();
+            std::fs::remove_file(jail.directory().join("server_key")).unwrap();
+            jail.create_file("lldap_config.toml", r#"key_seed = "test""#)?;
+            let new_config = init(default_run_opts()).unwrap();
+            let error_message =
+                compare_private_key_hashes(Some(&info), &new_config.get_private_key_info())
+                    .unwrap_err()
+                    .to_string();
+            assert!(
+                error_message.contains("but it used to come from default key file",),
+                "{error_message}"
+            );
+            Ok(())
+        });
     }
 }

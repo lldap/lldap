@@ -13,8 +13,14 @@ use crate::{
         },
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
+        sql_tables::{get_private_key_info, set_private_key_info},
     },
-    infra::{cli::*, configuration::Configuration, db_cleaner::Scheduler, healthcheck, mail},
+    infra::{
+        cli::*,
+        configuration::{compare_private_key_hashes, Configuration},
+        db_cleaner::Scheduler,
+        healthcheck, mail,
+    },
 };
 use actix::Actor;
 use actix_server::ServerBuilder;
@@ -86,6 +92,26 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     domain::sql_tables::init_table(&sql_pool)
         .await
         .context("while creating the tables")?;
+    let private_key_info = config.get_private_key_info();
+    let force_update_private_key = config.force_update_private_key;
+    match (
+        compare_private_key_hashes(
+            get_private_key_info(&sql_pool).await?.as_ref(),
+            &private_key_info,
+        ),
+        force_update_private_key,
+    ) {
+        (Ok(false) | Err(_), true) => {
+            return Err(anyhow!("The private key has not changed, but force_update_private_key/LLDAP_FORCE_UPDATE_PRIVATE_KEY is set to true. Please set force_update_private_key to false and restart the server."));
+        }
+        (Ok(true), _) => {
+            set_private_key_info(&sql_pool, private_key_info).await?;
+        }
+        (Ok(false), false) => {}
+        (Err(e), false) => {
+            return Err(anyhow!("The private key encoding the passwords has changed since last successful startup. Changing the private key will invalidate all existing passwords. If you want to proceed, restart the server with the CLI arg --force_update_private_key or the env variable LLDAP_FORCE_UPDATE_PRIVATE_KEY=true. You probably also want --force_ldap_user_pass_reset / LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password to the value in the configuration.").context(e));
+        }
+    }
     let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
     ensure_group_exists(&backend_handler, "lldap_admin").await?;
     ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
