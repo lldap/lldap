@@ -25,6 +25,7 @@ base64 = "0.21"
 bincode = "1.3"
 cron = "*"
 derive_builder = "0.12"
+derive_more = "0.99"
 figment_file_provider_adapter = "0.1"
 futures = "*"
 futures-util = "*"
@@ -162,3 +163,7 @@ features = ["file_locks"]
 [dev-dependencies.uuid]
 version = "1"
 features = ["v4"]
+
+[dev-dependencies.figment]
+features = ["test"]
+version = "*"

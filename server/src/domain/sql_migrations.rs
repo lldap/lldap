@@ -5,7 +5,8 @@ use crate::domain::{
 use itertools::Itertools;
 use sea_orm::{
     sea_query::{
-        self, all, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, Query, Table, Value,
+        self, all, BlobSize::Blob, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index,
+        Query, Table, Value,
     },
     ConnectionTrait, DatabaseTransaction, DbErr, DeriveIden, FromQueryResult, Iden, Order,
     Statement, TransactionTrait,
@@ -91,6 +92,8 @@ pub enum Metadata {
     Table,
     // Which version of the schema we're at.
     Version,
+    PrivateKeyHash,
+    PrivateKeyLocation,
 }
 
 #[derive(FromQueryResult, PartialEq, Eq, Debug)]
@@ -924,6 +927,28 @@ async fn migrate_to_v6(transaction: DatabaseTransaction) -> Result<DatabaseTrans
     Ok(transaction)
 }
 
+async fn migrate_to_v7(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
+    transaction
+        .execute(
+            builder.build(
+                Table::alter()
+                    .table(Metadata::Table)
+                    .add_column(ColumnDef::new(Metadata::PrivateKeyHash).blob(Blob(Some(32)))),
+            ),
+        )
+        .await?;
+    transaction
+        .execute(
+            builder.build(
+                Table::alter()
+                    .table(Metadata::Table)
+                    .add_column(ColumnDef::new(Metadata::PrivateKeyLocation).string_len(255)),
+            ),
+        )
+        .await?;
+    Ok(transaction)
+}
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -950,6 +975,7 @@ pub async fn migrate_from_version(
         to_sync!(migrate_to_v4),
         to_sync!(migrate_to_v5),
         to_sync!(migrate_to_v6),
+        to_sync!(migrate_to_v7),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {

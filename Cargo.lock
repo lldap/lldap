@@ -1351,8 +1351,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e56602b469b2201400dec66a66aec5a9b8761ee97cd1b8c96ab2483fcc16cc9"
 dependencies = [
  "atomic",
+ "parking_lot",
  "pear",
  "serde",
+ "tempfile",
  "toml",
  "uncased",
  "version_check",
@@ -2473,6 +2475,7 @@ dependencies = [
  "clap",
  "cron",
  "derive_builder",
+ "derive_more",
  "figment",
  "figment_file_provider_adapter",
  "futures",
