@@ -35,6 +35,9 @@ pub fn get_user_attribute(
         ],
         // dn is always returned as part of the base response.
         "dn" | "distinguishedname" => return None,
+        "entrydn" => {
+            vec![format!("uid={},ou=people,{}", &user.user_id, base_dn_str).into_bytes()]
+        }
         "uid" | "user_id" | "id" => vec![user.user_id.to_string().into_bytes()],
         "entryuuid" | "uuid" => vec![user.uuid.to_string().into_bytes()],
         "mail" | "email" => vec![user.email.to_string().into_bytes()],

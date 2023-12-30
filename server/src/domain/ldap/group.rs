@@ -31,6 +31,9 @@ pub fn get_group_attribute(
         "objectclass" => vec![b"groupOfUniqueNames".to_vec()],
         // Always returned as part of the base response.
         "dn" | "distinguishedname" => return None,
+        "entrydn" => {
+            vec![format!("uid={},ou=groups,{}", group.display_name, base_dn_str).into_bytes()]
+        }
         "cn" | "uid" | "id" => vec![group.display_name.to_string().into_bytes()],
         "entryuuid" | "uuid" => vec![group.uuid.to_string().into_bytes()],
         "member" | "uniquemember" => group
