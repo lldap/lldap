@@ -1368,7 +1368,14 @@ mod tests {
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_group_search_request(
             LdapFilter::And(vec![]),
-            vec!["objectClass", "dn", "cn", "uniqueMember", "entryUuid"],
+            vec![
+                "objectClass",
+                "dn",
+                "cn",
+                "uniqueMember",
+                "entryUuid",
+                "entryDN",
+            ],
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
@@ -1395,6 +1402,10 @@ mod tests {
                             atype: "entryUuid".to_string(),
                             vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
                         },
+                        LdapPartialAttribute {
+                            atype: "entryDN".to_string(),
+                            vals: vec![b"uid=group_1,ou=groups,dc=example,dc=com".to_vec()],
+                        },
                     ],
                 }),
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
@@ -1415,6 +1426,10 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
                             vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
+                        },
+                        LdapPartialAttribute {
+                            atype: "entryDN".to_string(),
+                            vals: vec![b"uid=BestGroup,ou=groups,dc=example,dc=com".to_vec()],
                         },
                     ],
                 }),
