@@ -317,6 +317,7 @@ folder for help with:
 - [Gitea](example_configs/gitea.md)
 - [GitLab](example_configs/gitlab.md)
 - [Grafana](example_configs/grafana_ldap_config.toml)
+- [Grocy](example_configs/grocy.md)
 - [Hedgedoc](example_configs/hedgedoc.md)
 - [Home Assistant](example_configs/home-assistant.md)
 - [Jellyfin](example_configs/jellyfin.md)
