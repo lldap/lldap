@@ -5,8 +5,8 @@ use crate::domain::{
 use itertools::Itertools;
 use sea_orm::{
     sea_query::{
-        self, all, BlobSize::Blob, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index,
-        Query, Table, Value,
+        self, all, Alias, BinOper, BlobSize::Blob, ColumnDef, Expr, ForeignKey, ForeignKeyAction,
+        Func, Index, Query, SimpleExpr, Table, Value,
     },
     ConnectionTrait, DatabaseTransaction, DbErr, DeriveIden, FromQueryResult, Iden, Order,
     Statement, TransactionTrait,
@@ -949,6 +949,86 @@ async fn migrate_to_v7(transaction: DatabaseTransaction) -> Result<DatabaseTrans
         .await?;
     Ok(transaction)
 }
+
+async fn migrate_to_v8(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
+    // Remove duplicate memberships.
+    #[derive(FromQueryResult)]
+    #[allow(dead_code)]
+    struct MembershipInfo {
+        user_id: UserId,
+        group_id: GroupId,
+        cnt: i64,
+    }
+    let mut delete_queries = MembershipInfo::find_by_statement(
+        builder.build(
+            Query::select()
+                .from(Memberships::Table)
+                .columns([Memberships::UserId, Memberships::GroupId])
+                .expr_as(
+                    Expr::count(Expr::col((Memberships::Table, Memberships::UserId))),
+                    Alias::new("cnt"),
+                )
+                .group_by_columns([Memberships::UserId, Memberships::GroupId])
+                .cond_having(all![SimpleExpr::Binary(
+                    Box::new(Expr::col((Memberships::Table, Memberships::UserId)).count()),
+                    BinOper::GreaterThan,
+                    Box::new(SimpleExpr::Value(1.into()))
+                )]),
+        ),
+    )
+    .all(&transaction)
+    .await?
+    .into_iter()
+    .map(
+        |MembershipInfo {
+             user_id,
+             group_id,
+             cnt,
+         }| {
+            builder
+                .build(
+                    Query::delete()
+                        .from_table(Memberships::Table)
+                        .cond_where(all![
+                            Expr::col(Memberships::UserId).eq(user_id),
+                            Expr::col(Memberships::GroupId).eq(group_id)
+                        ])
+                        .limit(cnt as u64 - 1),
+                )
+                .to_owned()
+        },
+    )
+    .peekable();
+    if delete_queries.peek().is_some() {
+        match transaction.get_database_backend() {
+            sea_orm::DatabaseBackend::Sqlite => {
+                return Err(DbErr::Migration(format!(
+                    "The Sqlite driver does not support LIMIT in DELETE. Run these queries manually:\n{}" , delete_queries.map(|s| s.to_string()).join("\n"))));
+            }
+            sea_orm::DatabaseBackend::MySql | sea_orm::DatabaseBackend::Postgres => {
+                for query in delete_queries {
+                    transaction.execute(query).await?;
+                }
+            }
+        }
+    }
+    transaction
+        .execute(
+            builder.build(
+                Index::create()
+                    .if_not_exists()
+                    .name("unique-memberships")
+                    .table(Memberships::Table)
+                    .col(Memberships::UserId)
+                    .col(Memberships::GroupId)
+                    .unique(),
+            ),
+        )
+        .await?;
+    Ok(transaction)
+}
+
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -976,6 +1056,7 @@ pub async fn migrate_from_version(
         to_sync!(migrate_to_v5),
         to_sync!(migrate_to_v6),
         to_sync!(migrate_to_v7),
+        to_sync!(migrate_to_v8),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {
