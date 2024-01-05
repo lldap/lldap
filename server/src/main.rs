@@ -179,9 +179,13 @@ fn run_server_command(opts: RunOpts) -> Result<()> {
     let config = infra::configuration::init(opts)?;
     infra::logging::init(&config)?;
 
-    actix::run(
-        run_server(config).unwrap_or_else(|e| error!("Could not bring up the servers: {:#}", e)),
-    )?;
+    use std::sync::{Arc, Mutex};
+    let result = Arc::new(Mutex::new(Ok(())));
+    let result_async = Arc::clone(&result);
+    actix::run(run_server(config).unwrap_or_else(move |e| *result_async.lock().unwrap() = Err(e)))?;
+    if let Err(e) = result.lock().unwrap().as_ref() {
+        anyhow::bail!(format!("Could not set up servers: {:#}", e));
+    }
 
     info!("End.");
     Ok(())
