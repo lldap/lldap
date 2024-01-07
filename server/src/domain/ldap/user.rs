@@ -5,6 +5,7 @@ use ldap3_proto::{
 use tracing::{debug, instrument, warn};
 
 use crate::domain::{
+    deserialize::deserialize_attribute_value,
     handler::{UserListerBackendHandler, UserRequestFilter},
     ldap::{
         error::{LdapError, LdapResult},
@@ -14,7 +15,7 @@ use crate::domain::{
         },
     },
     schema::{PublicSchema, SchemaUserAttributeExtractor},
-    types::{AttributeName, GroupDetails, User, UserAndGroups, UserColumn, UserId},
+    types::{AttributeName, AttributeType, GroupDetails, User, UserAndGroups, UserColumn, UserId},
 };
 
 pub fn get_user_attribute(
@@ -150,8 +151,26 @@ fn make_ldap_search_user_result_entry(
     }
 }
 
-fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<UserRequestFilter> {
-    let rec = |f| convert_user_filter(ldap_info, f);
+fn get_user_attribute_equality_filter(
+    field: &AttributeName,
+    typ: AttributeType,
+    is_list: bool,
+    value: &str,
+) -> LdapResult<UserRequestFilter> {
+    deserialize_attribute_value(&[value.to_owned()], typ, is_list)
+        .map_err(|e| LdapError {
+            code: LdapResultCode::Other,
+            message: format!("Invalid value for attribute {}: {}", field, e),
+        })
+        .map(|v| UserRequestFilter::AttributeEquality(field.clone(), v))
+}
+
+fn convert_user_filter(
+    ldap_info: &LdapInfo,
+    filter: &LdapFilter,
+    schema: &PublicSchema,
+) -> LdapResult<UserRequestFilter> {
+    let rec = |f| convert_user_filter(ldap_info, f, schema);
     match filter {
         LdapFilter::And(filters) => Ok(UserRequestFilter::And(
             filters.iter().map(rec).collect::<LdapResult<_>>()?,
@@ -184,17 +203,16 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                     warn!("Invalid dn filter on user: {}", value);
                     UserRequestFilter::from(false)
                 })),
-                _ => match map_user_field(&field) {
+                _ => match map_user_field(&field, schema) {
                     UserFieldType::PrimaryField(UserColumn::UserId) => {
                         Ok(UserRequestFilter::UserId(UserId::new(value)))
                     }
                     UserFieldType::PrimaryField(field) => {
                         Ok(UserRequestFilter::Equality(field, value.clone()))
                     }
-                    UserFieldType::Attribute(field) => Ok(UserRequestFilter::AttributeEquality(
-                        AttributeName::from(field),
-                        value.clone(),
-                    )),
+                    UserFieldType::Attribute(field, typ, is_list) => {
+                        get_user_attribute_equality_filter(&field, typ, is_list, value)
+                    }
                     UserFieldType::NoMatch => {
                         if !ldap_info.ignored_user_attributes.contains(&field) {
                             warn!(
@@ -215,17 +233,17 @@ fn convert_user_filter(ldap_info: &LdapInfo, filter: &LdapFilter) -> LdapResult<
                 field.as_str() == "objectclass"
                     || field.as_str() == "dn"
                     || field.as_str() == "distinguishedname"
-                    || !matches!(map_user_field(&field), UserFieldType::NoMatch),
+                    || !matches!(map_user_field(&field, schema), UserFieldType::NoMatch),
             ))
         }
         LdapFilter::Substring(field, substring_filter) => {
             let field = AttributeName::from(field.as_str());
-            match map_user_field(&field) {
+            match map_user_field(&field, schema) {
                 UserFieldType::PrimaryField(UserColumn::UserId) => Ok(
                     UserRequestFilter::UserIdSubString(substring_filter.clone().into()),
                 ),
                 UserFieldType::NoMatch
-                | UserFieldType::Attribute(_)
+                | UserFieldType::Attribute(_, _, _)
                 | UserFieldType::PrimaryField(UserColumn::CreationDate)
                 | UserFieldType::PrimaryField(UserColumn::Uuid) => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
@@ -258,8 +276,9 @@ pub async fn get_user_list<Backend: UserListerBackendHandler>(
     request_groups: bool,
     base: &str,
     backend: &Backend,
+    schema: &PublicSchema,
 ) -> LdapResult<Vec<UserAndGroups>> {
-    let filters = convert_user_filter(ldap_info, ldap_filter)?;
+    let filters = convert_user_filter(ldap_info, ldap_filter, schema)?;
     debug!(?filters);
     backend
         .list_users(Some(filters), request_groups)

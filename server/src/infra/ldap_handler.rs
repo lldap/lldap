@@ -531,6 +531,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         &self,
         backend_handler: &impl UserAndGroupListerBackendHandler,
         request: &LdapSearchRequest,
+        schema: &PublicSchema,
     ) -> LdapResult<InternalSearchResults> {
         let dn_parts = parse_distinguished_name(&request.base.to_ascii_lowercase())?;
         let scope = get_search_scope(&self.ldap_info.base_dn, &dn_parts, &request.scope);
@@ -554,11 +555,19 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 need_groups,
                 &request.base,
                 backend_handler,
+                schema,
             )
             .await
         });
         let get_group_list = cast(|filter: &LdapFilter| async {
-            get_groups_list(&self.ldap_info, filter, &request.base, backend_handler).await
+            get_groups_list(
+                &self.ldap_info,
+                filter,
+                &request.base,
+                backend_handler,
+                schema,
+            )
+            .await
         });
         Ok(match scope {
             SearchScope::Global => InternalSearchResults::UsersAndGroups(
@@ -617,13 +626,15 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         let backend_handler = self
             .backend_handler
             .get_user_restricted_lister_handler(user_info);
-        let search_results = self.do_search_internal(&backend_handler, request).await?;
 
         let schema =
             PublicSchema::from(backend_handler.get_schema().await.map_err(|e| LdapError {
                 code: LdapResultCode::OperationsError,
                 message: format!("Unable to get schema: {:#}", e),
             })?);
+        let search_results = self
+            .do_search_internal(&backend_handler, request, &schema)
+            .await?;
         let mut results = match search_results {
             InternalSearchResults::UsersAndGroups(users, groups) => {
                 convert_users_to_ldap_op(users, &request.attrs, &self.ldap_info, &schema)
@@ -1686,7 +1697,7 @@ mod tests {
                         false.into(),
                         UserRequestFilter::AttributeEquality(
                             AttributeName::from("first_name"),
-                            "firstname".to_owned(),
+                            Serialized::from("firstname"),
                         ),
                         false.into(),
                         UserRequestFilter::UserIdSubString(SubStringFilter {

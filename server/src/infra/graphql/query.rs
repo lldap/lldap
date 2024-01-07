@@ -1,24 +1,25 @@
 use crate::{
     domain::{
+        deserialize::deserialize_attribute_value,
         handler::{BackendHandler, ReadSchemaBackendHandler},
         ldap::utils::{map_user_field, UserFieldType},
+        model::UserColumn,
         schema::{
             PublicSchema, SchemaAttributeExtractor, SchemaGroupAttributeExtractor,
             SchemaUserAttributeExtractor,
         },
-        types::{
-            AttributeName, AttributeType, GroupDetails, GroupId, JpegPhoto, UserColumn, UserId,
-        },
+        types::{AttributeType, GroupDetails, GroupId, JpegPhoto, UserId},
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
         graphql::api::{field_error_callback, Context},
     },
 };
+use anyhow::Context as AnyhowContext;
 use chrono::{NaiveDateTime, TimeZone};
 use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, debug_span, Instrument};
+use tracing::{debug, debug_span, Instrument, Span};
 
 type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
 type DomainUser = crate::domain::types::User;
@@ -40,9 +41,8 @@ pub struct RequestFilter {
     member_of_id: Option<i32>,
 }
 
-impl TryInto<DomainRequestFilter> for RequestFilter {
-    type Error = String;
-    fn try_into(self) -> Result<DomainRequestFilter, Self::Error> {
+impl RequestFilter {
+    fn try_into_domain_filter(self, schema: &PublicSchema) -> FieldResult<DomainRequestFilter> {
         match (
             self.eq,
             self.any,
@@ -52,33 +52,39 @@ impl TryInto<DomainRequestFilter> for RequestFilter {
             self.member_of_id,
         ) {
             (Some(eq), None, None, None, None, None) => {
-                match map_user_field(&eq.field.as_str().into()) {
-                    UserFieldType::NoMatch => Err(format!("Unknown request filter: {}", &eq.field)),
+                match map_user_field(&eq.field.as_str().into(), schema) {
+                    UserFieldType::NoMatch => {
+                        Err(format!("Unknown request filter: {}", &eq.field).into())
+                    }
                     UserFieldType::PrimaryField(UserColumn::UserId) => {
                         Ok(DomainRequestFilter::UserId(UserId::new(&eq.value)))
                     }
                     UserFieldType::PrimaryField(column) => {
                         Ok(DomainRequestFilter::Equality(column, eq.value))
                     }
-                    UserFieldType::Attribute(column) => Ok(DomainRequestFilter::AttributeEquality(
-                        AttributeName::from(column),
-                        eq.value,
-                    )),
+                    UserFieldType::Attribute(name, typ, false) => {
+                        let value = deserialize_attribute_value(&[eq.value], typ, false)
+                            .context(format!("While deserializing attribute {}", &name))?;
+                        Ok(DomainRequestFilter::AttributeEquality(name, value))
+                    }
+                    UserFieldType::Attribute(_, _, true) => {
+                        Err("Equality not supported for list fields".into())
+                    }
                 }
             }
             (None, Some(any), None, None, None, None) => Ok(DomainRequestFilter::Or(
                 any.into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<Vec<_>, String>>()?,
+                    .map(|f| f.try_into_domain_filter(schema))
+                    .collect::<FieldResult<Vec<_>>>()?,
             )),
             (None, None, Some(all), None, None, None) => Ok(DomainRequestFilter::And(
                 all.into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<Vec<_>, String>>()?,
+                    .map(|f| f.try_into_domain_filter(schema))
+                    .collect::<FieldResult<Vec<_>>>()?,
             )),
-            (None, None, None, Some(not), None, None) => {
-                Ok(DomainRequestFilter::Not(Box::new((*not).try_into()?)))
-            }
+            (None, None, None, Some(not), None, None) => Ok(DomainRequestFilter::Not(Box::new(
+                (*not).try_into_domain_filter(schema)?,
+            ))),
             (None, None, None, None, Some(group), None) => {
                 Ok(DomainRequestFilter::MemberOf(group.into()))
             }
@@ -86,9 +92,9 @@ impl TryInto<DomainRequestFilter> for RequestFilter {
                 Ok(DomainRequestFilter::MemberOfId(GroupId(group_id)))
             }
             (None, None, None, None, None, None) => {
-                Err("No field specified in request filter".to_string())
+                Err("No field specified in request filter".into())
             }
-            _ => Err("Multiple fields specified in request filter".to_string()),
+            _ => Err("Multiple fields specified in request filter".into()),
         }
     }
 }
@@ -154,8 +160,14 @@ impl<Handler: BackendHandler> Query<Handler> {
                 &span,
                 "Unauthorized access to user list",
             ))?;
+        let schema = self.get_schema(context, span.clone()).await?;
         Ok(handler
-            .list_users(filters.map(TryInto::try_into).transpose()?, false)
+            .list_users(
+                filters
+                    .map(|f| f.try_into_domain_filter(&schema))
+                    .transpose()?,
+                false,
+            )
             .instrument(span)
             .await
             .map(|v| v.into_iter().map(Into::into).collect())?)
@@ -196,6 +208,16 @@ impl<Handler: BackendHandler> Query<Handler> {
 
     async fn schema(context: &Context<Handler>) -> FieldResult<Schema<Handler>> {
         let span = debug_span!("[GraphQL query] get_schema");
+        self.get_schema(context, span).await.map(Into::into)
+    }
+}
+
+impl<Handler: BackendHandler> Query<Handler> {
+    async fn get_schema(
+        &self,
+        context: &Context<Handler>,
+        span: Span,
+    ) -> FieldResult<PublicSchema> {
         let handler = context
             .handler
             .get_user_restricted_lister_handler(&context.validation_result);
@@ -203,8 +225,7 @@ impl<Handler: BackendHandler> Query<Handler> {
             .get_schema()
             .instrument(span)
             .await
-            .map(Into::<PublicSchema>::into)
-            .map(Into::into)?)
+            .map(Into::<PublicSchema>::into)?)
     }
 }
 
@@ -594,7 +615,7 @@ mod tests {
     use crate::{
         domain::{
             handler::AttributeList,
-            types::{AttributeType, Serialized},
+            types::{AttributeName, AttributeType, Serialized},
         },
         infra::{
             access_control::{Permission, ValidationResults},
@@ -795,6 +816,7 @@ mod tests {
         }"#;
 
         let mut mock = MockTestBackendHandler::new();
+        setup_default_schema(&mut mock);
         mock.expect_list_users()
             .with(
                 eq(Some(DomainRequestFilter::Or(vec![
@@ -805,7 +827,7 @@ mod tests {
                     ),
                     DomainRequestFilter::AttributeEquality(
                         AttributeName::from("first_name"),
-                        "robert".to_owned(),
+                        Serialized::from("robert"),
                     ),
                 ]))),
                 eq(false),
