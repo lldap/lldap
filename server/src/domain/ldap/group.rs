@@ -14,7 +14,7 @@ use super::{
     error::LdapResult,
     utils::{
         expand_attribute_wildcards, get_custom_attribute, get_group_id_from_distinguished_name,
-        get_user_id_from_distinguished_name, map_group_field, LdapInfo,
+        get_user_id_from_distinguished_name, map_group_field, GroupFieldType, LdapInfo,
     },
 };
 
@@ -124,8 +124,9 @@ fn make_ldap_search_group_result_entry(
 fn convert_group_filter(
     ldap_info: &LdapInfo,
     filter: &LdapFilter,
+    schema: &PublicSchema,
 ) -> LdapResult<GroupRequestFilter> {
-    let rec = |f| convert_group_filter(ldap_info, f);
+    let rec = |f| convert_group_filter(ldap_info, f, schema);
     match filter {
         LdapFilter::Equality(field, value) => {
             let field = AttributeName::from(field.as_str());
@@ -153,9 +154,11 @@ fn convert_group_filter(
                     warn!("Invalid dn filter on group: {}", value);
                     GroupRequestFilter::from(false)
                 })),
-                _ => match map_group_field(&field) {
-                    Some("display_name") => Ok(GroupRequestFilter::DisplayName(value.into())),
-                    Some("uuid") => Ok(GroupRequestFilter::Uuid(
+                _ => match map_group_field(&field, schema) {
+                    GroupFieldType::DisplayName => {
+                        Ok(GroupRequestFilter::DisplayName(value.into()))
+                    }
+                    GroupFieldType::Uuid => Ok(GroupRequestFilter::Uuid(
                         Uuid::try_from(value.as_str()).map_err(|e| LdapError {
                             code: LdapResultCode::InappropriateMatching,
                             message: format!("Invalid UUID: {:#}", e),
@@ -187,13 +190,13 @@ fn convert_group_filter(
                 field.as_str() == "objectclass"
                     || field.as_str() == "dn"
                     || field.as_str() == "distinguishedname"
-                    || map_group_field(&field).is_some(),
+                    || !matches!(map_group_field(&field, schema), GroupFieldType::NoMatch),
             ))
         }
         LdapFilter::Substring(field, substring_filter) => {
             let field = AttributeName::from(field.as_str());
-            match map_group_field(&field) {
-                Some("display_name") => Ok(GroupRequestFilter::DisplayNameSubString(
+            match map_group_field(&field, schema) {
+                GroupFieldType::DisplayName => Ok(GroupRequestFilter::DisplayNameSubString(
                     substring_filter.clone().into(),
                 )),
                 _ => Err(LdapError {
@@ -218,8 +221,9 @@ pub async fn get_groups_list<Backend: GroupListerBackendHandler>(
     ldap_filter: &LdapFilter,
     base: &str,
     backend: &Backend,
+    schema: &PublicSchema,
 ) -> LdapResult<Vec<Group>> {
-    let filters = convert_group_filter(ldap_info, ldap_filter)?;
+    let filters = convert_group_filter(ldap_info, ldap_filter, schema)?;
     debug!(?filters);
     backend
         .list_groups(Some(filters))

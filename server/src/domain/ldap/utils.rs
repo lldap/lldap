@@ -159,34 +159,66 @@ pub fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) 
 pub enum UserFieldType {
     NoMatch,
     PrimaryField(UserColumn),
-    Attribute(&'static str),
+    Attribute(AttributeName, AttributeType, bool),
 }
 
-pub fn map_user_field(field: &AttributeName) -> UserFieldType {
+pub fn map_user_field(field: &AttributeName, schema: &PublicSchema) -> UserFieldType {
     match field.as_str() {
         "uid" | "user_id" | "id" => UserFieldType::PrimaryField(UserColumn::UserId),
         "mail" | "email" => UserFieldType::PrimaryField(UserColumn::Email),
         "cn" | "displayname" | "display_name" => {
             UserFieldType::PrimaryField(UserColumn::DisplayName)
         }
-        "givenname" | "first_name" | "firstname" => UserFieldType::Attribute("first_name"),
-        "sn" | "last_name" | "lastname" => UserFieldType::Attribute("last_name"),
-        "avatar" | "jpegphoto" => UserFieldType::Attribute("avatar"),
+        "givenname" | "first_name" | "firstname" => UserFieldType::Attribute(
+            AttributeName::from("first_name"),
+            AttributeType::String,
+            false,
+        ),
+        "sn" | "last_name" | "lastname" => UserFieldType::Attribute(
+            AttributeName::from("last_name"),
+            AttributeType::String,
+            false,
+        ),
+        "avatar" | "jpegphoto" => UserFieldType::Attribute(
+            AttributeName::from("avatar"),
+            AttributeType::JpegPhoto,
+            false,
+        ),
         "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => {
             UserFieldType::PrimaryField(UserColumn::CreationDate)
         }
         "entryuuid" | "uuid" => UserFieldType::PrimaryField(UserColumn::Uuid),
-        _ => UserFieldType::NoMatch,
+        _ => schema
+            .get_schema()
+            .user_attributes
+            .get_attribute_type(field)
+            .map(|(t, is_list)| UserFieldType::Attribute(field.clone(), t, is_list))
+            .unwrap_or(UserFieldType::NoMatch),
     }
 }
 
-pub fn map_group_field(field: &AttributeName) -> Option<&'static str> {
-    Some(match field.as_str() {
-        "cn" | "displayname" | "uid" | "display_name" => "display_name",
-        "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => "creation_date",
-        "entryuuid" | "uuid" => "uuid",
-        _ => return None,
-    })
+pub enum GroupFieldType {
+    NoMatch,
+    DisplayName,
+    CreationDate,
+    Uuid,
+    Attribute(AttributeName, AttributeType, bool),
+}
+
+pub fn map_group_field(field: &AttributeName, schema: &PublicSchema) -> GroupFieldType {
+    match field.as_str() {
+        "cn" | "displayname" | "uid" | "display_name" => GroupFieldType::DisplayName,
+        "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => {
+            GroupFieldType::CreationDate
+        }
+        "entryuuid" | "uuid" => GroupFieldType::Uuid,
+        _ => schema
+            .get_schema()
+            .group_attributes
+            .get_attribute_type(field)
+            .map(|(t, is_list)| GroupFieldType::Attribute(field.clone(), t, is_list))
+            .unwrap_or(GroupFieldType::NoMatch),
+    }
 }
 
 pub struct LdapInfo {

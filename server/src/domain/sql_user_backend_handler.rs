@@ -22,14 +22,14 @@ use sea_orm::{
 use std::collections::HashSet;
 use tracing::instrument;
 
-fn attribute_condition(name: AttributeName, value: String) -> Cond {
+fn attribute_condition(name: AttributeName, value: Serialized) -> Cond {
     Expr::in_subquery(
         Expr::col(UserColumn::UserId.as_column_ref()),
         model::UserAttributes::find()
             .select_only()
             .column(model::UserAttributesColumn::UserId)
             .filter(model::UserAttributesColumn::AttributeName.eq(name))
-            .filter(model::UserAttributesColumn::Value.eq(Serialized::from(&value)))
+            .filter(model::UserAttributesColumn::Value.eq(value))
             .into_query(),
     )
     .into_condition()
@@ -463,7 +463,7 @@ mod tests {
             &fixture.handler,
             Some(UserRequestFilter::AttributeEquality(
                 AttributeName::from("first_name"),
-                "first bob".to_string(),
+                Serialized::from("first bob"),
             )),
         )
         .await;

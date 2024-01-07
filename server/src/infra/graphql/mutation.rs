@@ -1,12 +1,13 @@
 use crate::{
     domain::{
+        deserialize::deserialize_attribute_value,
         handler::{
             AttributeList, BackendHandler, CreateAttributeRequest, CreateGroupRequest,
             CreateUserRequest, UpdateGroupRequest, UpdateUserRequest,
         },
         types::{
             AttributeName, AttributeType, AttributeValue as DomainAttributeValue, GroupId,
-            JpegPhoto, Serialized, UserId,
+            JpegPhoto, UserId,
         },
     },
     infra::{
@@ -535,54 +536,12 @@ fn deserialize_attribute(
         )
         .into());
     }
-    if !attribute_schema.is_list && attribute.value.len() != 1 {
-        return Err(anyhow!(
-            "Attribute {} is not a list, but multiple values were provided",
-            attribute.name
-        )
-        .into());
-    }
-    let parse_int = |value: &String| -> FieldResult<i64> {
-        Ok(value
-            .parse::<i64>()
-            .with_context(|| format!("Invalid integer value {}", value))?)
-    };
-    let parse_date = |value: &String| -> FieldResult<chrono::NaiveDateTime> {
-        Ok(chrono::DateTime::parse_from_rfc3339(value)
-            .with_context(|| format!("Invalid date value {}", value))?
-            .naive_utc())
-    };
-    let parse_photo = |value: &String| -> FieldResult<JpegPhoto> {
-        Ok(JpegPhoto::try_from(value.as_str()).context("Provided image is not a valid JPEG")?)
-    };
-    let deserialized_values = match (attribute_schema.attribute_type, attribute_schema.is_list) {
-        (AttributeType::String, false) => Serialized::from(&attribute.value[0]),
-        (AttributeType::String, true) => Serialized::from(&attribute.value),
-        (AttributeType::Integer, false) => Serialized::from(&parse_int(&attribute.value[0])?),
-        (AttributeType::Integer, true) => Serialized::from(
-            &attribute
-                .value
-                .iter()
-                .map(parse_int)
-                .collect::<FieldResult<Vec<_>>>()?,
-        ),
-        (AttributeType::DateTime, false) => Serialized::from(&parse_date(&attribute.value[0])?),
-        (AttributeType::DateTime, true) => Serialized::from(
-            &attribute
-                .value
-                .iter()
-                .map(parse_date)
-                .collect::<FieldResult<Vec<_>>>()?,
-        ),
-        (AttributeType::JpegPhoto, false) => Serialized::from(&parse_photo(&attribute.value[0])?),
-        (AttributeType::JpegPhoto, true) => Serialized::from(
-            &attribute
-                .value
-                .iter()
-                .map(parse_photo)
-                .collect::<FieldResult<Vec<_>>>()?,
-        ),
-    };
+    let deserialized_values = deserialize_attribute_value(
+        &attribute.value,
+        attribute_schema.attribute_type,
+        attribute_schema.is_list,
+    )
+    .context(format!("While deserializing attribute {}", attribute.name))?;
     Ok(DomainAttributeValue {
         name: attribute_name,
         value: deserialized_values,

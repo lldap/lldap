@@ -2,7 +2,7 @@ use crate::domain::{
     error::Result,
     types::{
         AttributeName, AttributeType, AttributeValue, Email, Group, GroupDetails, GroupId,
-        GroupName, JpegPhoto, User, UserAndGroups, UserColumn, UserId, Uuid,
+        GroupName, JpegPhoto, Serialized, User, UserAndGroups, UserColumn, UserId, Uuid,
     },
 };
 use async_trait::async_trait;
@@ -54,7 +54,7 @@ pub enum UserRequestFilter {
     UserId(UserId),
     UserIdSubString(SubStringFilter),
     Equality(UserColumn, String),
-    AttributeEquality(AttributeName, String),
+    AttributeEquality(AttributeName, Serialized),
     SubString(UserColumn, SubStringFilter),
     // Check if a user belongs to a group identified by name.
     MemberOf(GroupName),
