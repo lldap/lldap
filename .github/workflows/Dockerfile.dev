@@ -1,5 +1,5 @@
 # Keep tracking base image
-FROM rust:1.71-slim-bookworm
+FROM rust:1.74-slim-bookworm
 
 # Set needed env path
 ENV PATH="/opt/armv7l-linux-musleabihf-cross/:/opt/armv7l-linux-musleabihf-cross/bin/:/opt/aarch64-linux-musl-cross/:/opt/aarch64-linux-musl-cross/bin/:/opt/x86_64-linux-musl-cross/:/opt/x86_64-linux-musl-cross/bin/:$PATH"
