@@ -35,7 +35,7 @@ itertools = "0.10"
 juniper = "0.15"
 jwt = "0.16"
 lber = "0.4.1"
-ldap3_proto = "^0.4"
+ldap3_proto = "^0.4.2"
 log = "*"
 orion = "0.17"
 rand_chacha = "0.3"
@@ -54,7 +54,7 @@ tracing-actix-web = "0.7"
 tracing-attributes = "^0.1.21"
 tracing-log = "*"
 urlencoding = "2"
-webpki-roots = "*"
+webpki-roots = "0.22.2"
 
 [dependencies.chrono]
 features = ["serde"]

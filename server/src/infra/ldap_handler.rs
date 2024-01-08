@@ -274,7 +274,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             Ok(s) => s,
             Err(e) => return (LdapResultCode::NamingViolation, e.to_string()),
         };
-        let LdapBindCred::Simple(password) = &request.cred;
+        let password = if let LdapBindCred::Simple(password) = &request.cred {
+            password
+        } else {
+            return (
+                LdapResultCode::UnwillingToPerform,
+                "SASL not supported".to_string(),
+            );
+        };
         match self
             .get_login_handler()
             .bind(BindRequest {
