@@ -42,10 +42,13 @@
     - [Backend](#backend)
     - [Frontend](#frontend)
   - [Cross-compilation](#cross-compilation)
+- [Usage](#usage)
+  - [Recommended architecture](#recommended-architecture)
 - [Client configuration](#client-configuration)
   - [Compatible services](#compatible-services)
   - [General configuration guide](#general-configuration-guide)
   - [Sample client configurations](#sample-client-configurations)
+  - [Incompatible services](#incompatible-services)
 - [Migrating from SQLite](#migrating-from-sqlite)
 - [Comparisons with other services](#comparisons-with-other-services)
   - [vs OpenLDAP](#vs-openldap)
@@ -263,6 +266,47 @@ You can then get the compiled server binary in
 Raspberry Pi (or other target), with the folder structure maintained (`app`
 files in an `app` folder next to the binary).
 
+## Usage
+
+The simplest way to use LLDAP is through the web front-end. There you can
+create users, set passwords, add them to groups and so on. Users can also
+connect to the web UI and change their information, or request a password reset
+link (if you configured the SMTP client).
+
+Creating and managing custom attributes is currently in Beta. It's not
+supported in the Web UI. The recommended way is to use
+[Zepmann/lldap-cli](https://github.com/Zepmann/lldap-cli), a
+community-contributed CLI frontend.
+
+LLDAP is also very scriptable, through its GraphQL API. See the
+[Scripting](docs/scripting.md) docs for more info.
+
+### Recommended architecture
+
+If you are using containers, a sample architecture could look like this:
+
+- A reverse proxy (e.g. nginx or Traefik)
+- An authentication service (e.g. Authelia, Authentik or KeyCloak) connected to
+  LLDAP to provide authentication for non-authenticated services, or to provide
+  SSO with compatible ones.
+- The LLDAP service, with the web port exposed to Traefik.
+  - The LDAP port doesn't need to be exposed, since only the other containers
+    will access it.
+  - You can also set up LDAPS if you want to expose the LDAP port to the
+    internet (not recommended) or for an extra layer of security in the
+    inter-container communication (though it's very much optional).
+  - The default LLDAP container starts up as root to fix up some files'
+    permissions before downgrading the privilege to the given user. However,
+    you can (should?) use the `*-rootless` version of the images to be able to
+    start directly as that user, once you got the permissions right. Just don't
+    forget to change from the `UID/GID` env vars to the `uid` docker-compose
+    field.
+- Any other service that needs to connect to LLDAP for authentication (e.g.
+  NextCloud) can be added to a shared network with LLDAP. The finest
+  granularity is a network for each pair of LLDAP-service, but there are often
+  coarser granularities that make sense (e.g. a network for the \*arr stack and
+  LLDAP).
+
 ## Client configuration
 
 ### Compatible services
@@ -351,6 +395,27 @@ folder for help with:
 - [Zendto](example_configs/zendto.md)
 - [Zitadel](example_configs/zitadel.md)
 - [Zulip](example_configs/zulip.md)
+
+### Incompatible services
+
+Though we try to be maximally compatible, not every feature is supported; LLDAP
+is not a fully-featured LDAP server, intentionally so.
+
+LDAP browsing tools are generally not supported, though they could be. If you
+need to use one but it behaves weirdly, please file a bug.
+
+Some services use features that are not implemented, or require specific
+attributes. You can try to create those attributes (see custom attributes in
+the [Usage](#usage) section).
+
+Finally, some services require password hashes so they can validate themselves
+the user's password without contacting LLDAP. This is not and will not be
+supported, it's incompatible with our password hashing scheme (a zero-knowledge
+proof). Furthermore, it's generally not recommended in terms of security, since
+it duplicates the places from which a password hash could leak.
+
+In that category, the most prominent is Synology. It is, to date, the only
+service that seems definitely incompatible with LLDAP.
 
 ## Migrating from SQLite
 

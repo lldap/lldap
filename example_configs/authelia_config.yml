@@ -33,7 +33,7 @@ authentication_backend:
     users_filter: "(&({username_attribute}={input})(objectClass=person))"
     # Set this to ou=groups, because all groups are stored in this ou
     additional_groups_dn: ou=groups
-    # Only this filter is supported right now
+    # The groups are not displayed in the UI, but this filter works.
     groups_filter: "(member={dn})"
     # The attribute holding the name of the group.
     group_name_attribute: cn
