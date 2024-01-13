@@ -10,7 +10,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
 
-pub use super::model::{GroupColumn, UserColumn};
+pub use super::model::UserColumn;
 
 #[derive(PartialEq, Hash, Eq, Clone, Debug, Default, Serialize, Deserialize, DeriveValueType)]
 #[serde(try_from = "&str")]
