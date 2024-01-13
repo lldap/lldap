@@ -47,7 +47,7 @@ fn gitea() {
     let mut found_users: HashSet<String> = HashSet::new();
     for result in results {
         let attrs = SearchEntry::construct(result).attrs;
-        let user = attrs.get("uid").unwrap().get(0).unwrap();
+        let user = attrs.get("uid").unwrap().first().unwrap();
         found_users.insert(user.clone());
     }
     assert!(found_users.contains(&gitea_user1));

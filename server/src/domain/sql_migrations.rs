@@ -48,6 +48,7 @@ pub enum Memberships {
     GroupId,
 }
 
+#[allow(clippy::enum_variant_names)] // The table names are generated from the enum.
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum UserAttributeSchema {
     Table,
@@ -67,6 +68,7 @@ pub enum UserAttributes {
     UserAttributeValue,
 }
 
+#[allow(clippy::enum_variant_names)] // The table names are generated from the enum.
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum GroupAttributeSchema {
     Table,

@@ -102,7 +102,7 @@ fn get_users_and_groups(results: SearchResult) -> HashMap<String, HashSet<String
     let mut found_users: HashMap<String, HashSet<String>> = HashMap::new();
     for result in results {
         let attrs = SearchEntry::construct(result).attrs;
-        let user = attrs.get("uid").unwrap().get(0).unwrap();
+        let user = attrs.get("uid").unwrap().first().unwrap();
         let user_groups = attrs.get("memberof").unwrap().clone();
         let mut groups: HashSet<String> = HashSet::new();
         groups.extend(user_groups.clone());
