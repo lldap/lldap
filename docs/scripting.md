@@ -18,6 +18,15 @@ still supports basic RootDSE queries.
 
 Anonymous bind is not supported.
 
+## `lldap-cli`
+
+There is a community-built CLI frontend,
+[Zepmann/lldap-cli](https://github.com/Zepmann/lldap-cli), that supports all
+(as of this writing) the operations possible. Getting information from the
+server, creating users, adding them to groups, creating new custom attributes
+and populating them, all of that is supported. It is currently the easiest way
+to script the interaction with LLDAP.
+
 ## GraphQL
 
 The best way to interact with LLDAP programmatically is via the GraphQL
