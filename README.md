@@ -99,8 +99,9 @@ MySQL/MariaDB or PostgreSQL.
 ### With Docker
 
 The image is available at `lldap/lldap`. You should persist the `/data`
-folder, which contains your configuration, the database and the private key
-file.
+folder, which contains your configuration and the SQLite database (you can
+remove this step if you use a different DB and configure with environment
+variables only).
 
 Configure the server by copying the `lldap_config.docker_template.toml` to
 `/data/lldap_config.toml` and updating the configuration values (especially the
@@ -108,10 +109,12 @@ Configure the server by copying the `lldap_config.docker_template.toml` to
 Environment variables should be prefixed with `LLDAP_` to override the
 configuration.
 
-If the `lldap_config.toml` doesn't exist when starting up, LLDAP will use default one. The default admin password is `password`, you can change the password later using the web interface.
+If the `lldap_config.toml` doesn't exist when starting up, LLDAP will use
+default one. The default admin password is `password`, you can change the
+password later using the web interface.
 
 Secrets can also be set through a file. The filename should be specified by the
-variables `LLDAP_JWT_SECRET_FILE` or `LLDAP_LDAP_USER_PASS_FILE`, and the file
+variables `LLDAP_JWT_SECRET_FILE` or `LLDAP_KEY_SEED_FILE`, and the file
 contents are loaded into the respective configuration parameters. Note that
 `_FILE` variables take precedence.
 
@@ -121,6 +124,7 @@ Example for docker compose:
 - `:latest` tag image contains recently pushed code or feature tests, in which some instability can be expected.
 - If `UID` and `GID` no defined LLDAP will use default `UID` and `GID` number `1000`.
 - If no `TZ` is set, default `UTC` timezone will be used.
+- You can generate the secrets by running `./generate_secrets.sh`
 
 ```yaml
 version: "3"
@@ -133,8 +137,8 @@ services:
   lldap:
     image: lldap/lldap:stable
     ports:
-      # For LDAP
-      - "3890:3890"
+      # For LDAP, not recommended to expose, see Usage section.
+      #- "3890:3890"
       # For LDAPS (LDAP Over SSL), enable port if LLDAP_LDAPS_OPTIONS__ENABLED set true, look env below
       #- "6360:6360"
       # For the web front-end
@@ -148,7 +152,7 @@ services:
       - GID=####
       - TZ=####/####
       - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
-      - LLDAP_LDAP_USER_PASS=REPLACE_WITH_PASSWORD
+      - LLDAP_KEY_SEED=REPLACE_WITH_RANDOM
       - LLDAP_LDAP_BASE_DN=dc=example,dc=com
       # If using LDAPS, set enabled true and configure cert and key path
       # - LLDAP_LDAPS_OPTIONS__ENABLED=true
@@ -171,6 +175,7 @@ using [bootstrap.sh](example_configs/bootstrap/bootstrap.md#kubernetes-job).
 It can be run by Argo CD for managing users in git-opt way, or as a one-shot job.
 
 ### From a package repository
+
 **Do not open issues in this repository for problems with third-party
 pre-built packages. Report issues downstream.**
 
@@ -179,6 +184,7 @@ from a package repository, officially supported by the distribution or
 community contributed.
 
 #### Debian, CentOS Fedora, OpenSUSE, Ubuntu
+
 The package for these distributions can be found at [LLDAP OBS](https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap).
 - When using the distributed package, the default login is `admin/password`. You can change that from the web UI after starting the service.
 
@@ -223,9 +229,7 @@ just run `cargo run -- run` to run the server.
 #### Frontend
 
 To bring up the server, you'll need to compile the frontend. In addition to
-`cargo`, you'll need:
-
-- WASM-pack: `cargo install wasm-pack`
+`cargo`, you'll need WASM-pack, which can be installed by running `cargo install wasm-pack`.
 
 Then you can build the frontend files with
 
