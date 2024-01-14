@@ -24,7 +24,7 @@ use crate::{
 };
 use actix::Actor;
 use actix_server::ServerBuilder;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use futures_util::TryFutureExt;
 use sea_orm::Database;
 use tracing::*;
@@ -101,15 +101,15 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
         ),
         force_update_private_key,
     ) {
-        (Ok(false) | Err(_), true) => {
-            return Err(anyhow!("The private key has not changed, but force_update_private_key/LLDAP_FORCE_UPDATE_PRIVATE_KEY is set to true. Please set force_update_private_key to false and restart the server."));
+        (Ok(false), true) => {
+            bail!("The private key has not changed, but force_update_private_key/LLDAP_FORCE_UPDATE_PRIVATE_KEY is set to true. Please set force_update_private_key to false and restart the server.");
         }
-        (Ok(true), _) => {
+        (Ok(true), _) | (Err(_), true) => {
             set_private_key_info(&sql_pool, private_key_info).await?;
         }
         (Ok(false), false) => {}
         (Err(e), false) => {
-            return Err(anyhow!("The private key encoding the passwords has changed since last successful startup. Changing the private key will invalidate all existing passwords. If you want to proceed, restart the server with the CLI arg --force_update_private_key or the env variable LLDAP_FORCE_UPDATE_PRIVATE_KEY=true. You probably also want --force_ldap_user_pass_reset / LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password to the value in the configuration.").context(e));
+            return Err(anyhow!("The private key encoding the passwords has changed since last successful startup. Changing the private key will invalidate all existing passwords. If you want to proceed, restart the server with the CLI arg --force-update-private-key=true or the env variable LLDAP_FORCE_UPDATE_PRIVATE_KEY=true. You probably also want --force-ldap-user-pass-reset / LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password to the value in the configuration.").context(e));
         }
     }
     let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
@@ -145,6 +145,9 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
             "while resetting admin password for {}",
             &config.ldap_user_dn
         ))?;
+    }
+    if config.force_update_private_key || config.force_ldap_user_pass_reset {
+        bail!("Restart the server without --force-update-private-key or --force-ldap-user-pass-reset to continue.");
     }
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,
