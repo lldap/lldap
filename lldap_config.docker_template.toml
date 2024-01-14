@@ -98,21 +98,20 @@
 database_url = "sqlite:///data/users.db?mode=rwc"
 
 ## Private key file.
+## Not recommended, use key_seed instead.
 ## Contains the secret private key used to store the passwords safely.
 ## Note that even with a database dump and the private key, an attacker
 ## would still have to perform an (expensive) brute force attack to find
 ## each password.
 ## Randomly generated on first run if it doesn't exist.
-## Alternatively, you can use key_seed to override this instead of relying on
-## a file.
 ## Env variable: LLDAP_KEY_FILE
-key_file = "/data/private_key"
+#key_file = "/data/private_key"
 
 ## Seed to generate the server private key, see key_file above.
 ## This can be any random string, the recommendation is that it's at least 12
 ## characters long.
 ## Env variable: LLDAP_KEY_SEED
-#key_seed = "RanD0m STR1ng"
+key_seed = "RanD0m STR1ng"
 
 ## Ignored attributes.
 ## Some services will request attributes that are not present in LLDAP. When it
