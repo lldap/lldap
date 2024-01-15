@@ -123,7 +123,7 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                         &mut rng,
                     )?;
                     let req = registration::ClientRegistrationStartRequest {
-                        username: user_id,
+                        username: user_id.into(),
                         registration_start_request: message,
                     };
                     self.common

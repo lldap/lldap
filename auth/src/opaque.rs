@@ -1,3 +1,4 @@
+use crate::types::UserId;
 use opaque_ke::ciphersuite::CipherSuite;
 use rand::{CryptoRng, RngCore};
 
@@ -145,12 +146,12 @@ pub mod server {
         pub fn start_registration(
             server_setup: &ServerSetup,
             registration_request: RegistrationRequest,
-            username: &str,
+            username: &UserId,
         ) -> AuthenticationResult<ServerRegistrationStartResult> {
             Ok(ServerRegistration::start(
                 server_setup,
                 registration_request,
-                username.as_bytes(),
+                username.as_str().as_bytes(),
             )?)
         }
 
@@ -178,14 +179,14 @@ pub mod server {
             server_setup: &ServerSetup,
             password_file: Option<ServerRegistration>,
             credential_request: CredentialRequest,
-            username: &str,
+            username: &UserId,
         ) -> AuthenticationResult<ServerLoginStartResult> {
             Ok(ServerLogin::start(
                 rng,
                 server_setup,
                 password_file,
                 credential_request,
-                username.as_bytes(),
+                username.as_str().as_bytes(),
                 ServerLoginStartParameters::default(),
             )?)
         }

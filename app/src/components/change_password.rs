@@ -97,7 +97,7 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                             .context("Could not initialize login")?;
                     self.opaque_data = OpaqueData::Login(login_start_request.state);
                     let req = login::ClientLoginStartRequest {
-                        username: ctx.props().username.clone(),
+                        username: ctx.props().username.clone().into(),
                         login_start_request: login_start_request.message,
                     };
                     self.common.call_backend(
@@ -134,7 +134,7 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                 )
                 .context("Could not initiate password change")?;
                 let req = registration::ClientRegistrationStartRequest {
-                    username: ctx.props().username.clone(),
+                    username: ctx.props().username.clone().into(),
                     registration_start_request: registration_start_request.message,
                 };
                 self.opaque_data = OpaqueData::Registration(registration_start_request.state);

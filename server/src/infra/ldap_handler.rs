@@ -306,7 +306,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     async fn change_password<B: OpaqueHandler>(
         &self,
         backend_handler: &B,
-        user: &UserId,
+        user: UserId,
         password: &[u8],
     ) -> Result<()> {
         use lldap_auth::*;
@@ -314,7 +314,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         let registration_start_request =
             opaque::client::registration::start_registration(password, &mut rng)?;
         let req = registration::ClientRegistrationStartRequest {
-            username: user.to_string(),
+            username: user.clone(),
             registration_start_request: registration_start_request.message,
         };
         let registration_start_response = backend_handler.registration_start(req).await?;
@@ -371,7 +371,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                                 ),
                             })
                         } else if let Err(e) = self
-                            .change_password(self.get_opaque_handler(), &uid, password.as_bytes())
+                            .change_password(self.get_opaque_handler(), uid, password.as_bytes())
                             .await
                         {
                             Err(LdapError {
@@ -413,7 +413,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     async fn handle_modify_change(
         &mut self,
-        user_id: &UserId,
+        user_id: UserId,
         credentials: &ValidationResults,
         user_is_admin: bool,
         change: &LdapModify,
@@ -429,7 +429,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 ),
             });
         }
-        if !credentials.can_change_password(user_id, user_is_admin) {
+        if !credentials.can_change_password(&user_id, user_is_admin) {
             return Err(LdapError {
                 code: LdapResultCode::InsufficentAccessRights,
                 message: format!(
@@ -488,7 +488,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     .iter()
                     .any(|g| g.display_name == "lldap_admin".into());
                 for change in &request.changes {
-                    self.handle_modify_change(&uid, &credentials, user_is_admin, change)
+                    self.handle_modify_change(uid.clone(), &credentials, user_is_admin, change)
                         .await?
                 }
                 Ok(vec![make_modify_response(
@@ -2199,7 +2199,7 @@ mod tests {
             opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
                 .unwrap();
         let request = registration::ClientRegistrationStartRequest {
-            username: "bob".to_string(),
+            username: "bob".into(),
             registration_start_request: registration_start_request.message,
         };
         let start_response = opaque::server::registration::start_registration(
@@ -2247,7 +2247,7 @@ mod tests {
             opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
                 .unwrap();
         let request = registration::ClientRegistrationStartRequest {
-            username: "bob".to_string(),
+            username: "bob".into(),
             registration_start_request: registration_start_request.message,
         };
         let start_response = opaque::server::registration::start_registration(
@@ -2297,7 +2297,7 @@ mod tests {
             opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
                 .unwrap();
         let request = registration::ClientRegistrationStartRequest {
-            username: "bob".to_string(),
+            username: "bob".into(),
             registration_start_request: registration_start_request.message,
         };
         let start_response = opaque::server::registration::start_registration(

@@ -33,7 +33,7 @@ fn passwords_match(
         server_setup,
         Some(password_file),
         client_login_start_result.message,
-        username.as_str(),
+        username,
     )?;
     client::login::finish_login(
         client_login_start_result.state,
@@ -100,15 +100,13 @@ impl OpaqueHandler for SqlOpaqueHandler {
         &self,
         request: login::ClientLoginStartRequest,
     ) -> Result<login::ServerLoginStartResponse> {
+        let user_id = request.username;
         let maybe_password_file = self
-            .get_password_file_for_user(UserId::new(&request.username))
+            .get_password_file_for_user(user_id.clone())
             .await?
             .map(|bytes| {
                 opaque::server::ServerRegistration::deserialize(&bytes).map_err(|_| {
-                    DomainError::InternalError(format!(
-                        "Corrupted password file for {}",
-                        &request.username
-                    ))
+                    DomainError::InternalError(format!("Corrupted password file for {}", &user_id))
                 })
             })
             .transpose()?;
@@ -120,11 +118,11 @@ impl OpaqueHandler for SqlOpaqueHandler {
             self.config.get_server_setup(),
             maybe_password_file,
             request.login_start_request,
-            &request.username,
+            &user_id,
         )?;
         let secret_key = self.get_orion_secret_key()?;
         let server_data = login::ServerData {
-            username: request.username,
+            username: user_id,
             server_login: start_response.state,
         };
         let encrypted_state = orion::aead::seal(&secret_key, &bincode::serialize(&server_data)?)?;
@@ -151,7 +149,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
             opaque::server::login::finish_login(server_login, request.credential_finalization)?
                 .session_key;
 
-        Ok(UserId::new(&username))
+        Ok(username)
     }
 
     #[instrument(skip_all, level = "debug", err)]
@@ -191,7 +189,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
             opaque::server::registration::get_password_file(request.registration_upload);
         // Set the user password to the new password.
         let user_update = model::users::ActiveModel {
-            user_id: ActiveValue::Set(UserId::new(&username)),
+            user_id: ActiveValue::Set(username),
             password_hash: ActiveValue::Set(Some(password_file.serialize())),
             ..Default::default()
         };
@@ -204,7 +202,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
 #[instrument(skip_all, level = "debug", err, fields(username = %username.as_str()))]
 pub(crate) async fn register_password(
     opaque_handler: &SqlOpaqueHandler,
-    username: &UserId,
+    username: UserId,
     password: &SecUtf8,
 ) -> Result<()> {
     let mut rng = rand::rngs::OsRng;
@@ -213,7 +211,7 @@ pub(crate) async fn register_password(
         opaque::client::registration::start_registration(password.unsecure().as_bytes(), &mut rng)?;
     let start_response = opaque_handler
         .registration_start(ClientRegistrationStartRequest {
-            username: username.to_string(),
+            username,
             registration_start_request: registration_start.message,
         })
         .await?;
@@ -245,7 +243,7 @@ mod tests {
         let login_start = opaque::client::login::start_login(password, &mut rng)?;
         let start_response = opaque_handler
             .login_start(ClientLoginStartRequest {
-                username: username.to_string(),
+                username: UserId::new(username),
                 login_start_request: login_start.message,
             })
             .await?;
@@ -276,7 +274,7 @@ mod tests {
             .unwrap_err();
         register_password(
             &opaque_handler,
-            &UserId::new("bob"),
+            UserId::new("bob"),
             &secstr::SecUtf8::from("bob00"),
         )
         .await?;

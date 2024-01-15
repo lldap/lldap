@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 
 use base64::Engine;
 use chrono::{NaiveDateTime, TimeZone};
+use lldap_auth::types::CaseInsensitiveString;
 use sea_orm::{
     entity::IntoActiveValue,
     sea_query::{value::ValueType, ArrayType, BlobSize, ColumnType, Nullable, ValueTypeErr},
@@ -11,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
 
 pub use super::model::UserColumn;
+pub use lldap_auth::types::UserId;
 
 #[derive(PartialEq, Hash, Eq, Clone, Debug, Default, Serialize, Deserialize, DeriveValueType)]
 #[serde(try_from = "&str")]
@@ -122,112 +124,6 @@ impl Serialized {
     }
 }
 
-#[derive(
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Clone,
-    Debug,
-    Default,
-    Hash,
-    Serialize,
-    Deserialize,
-    DeriveValueType,
-)]
-#[serde(from = "String")]
-pub struct CaseInsensitiveString(String);
-
-impl CaseInsensitiveString {
-    pub fn new(user_id: &str) -> Self {
-        Self(user_id.to_lowercase())
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    pub fn into_string(self) -> String {
-        self.0
-    }
-}
-
-impl From<String> for CaseInsensitiveString {
-    fn from(s: String) -> Self {
-        Self::new(&s)
-    }
-}
-
-macro_rules! make_case_insensitive_string {
-    ($c:ident) => {
-        #[derive(
-            PartialEq,
-            Eq,
-            PartialOrd,
-            Ord,
-            Clone,
-            Debug,
-            Default,
-            Hash,
-            Serialize,
-            Deserialize,
-            DeriveValueType,
-        )]
-        #[serde(from = "CaseInsensitiveString")]
-        pub struct $c(CaseInsensitiveString);
-
-        impl $c {
-            pub fn new(raw: &str) -> Self {
-                Self(CaseInsensitiveString::new(raw))
-            }
-
-            pub fn as_str(&self) -> &str {
-                self.0.as_str()
-            }
-
-            pub fn into_string(self) -> String {
-                self.0.into_string()
-            }
-        }
-
-        impl From<CaseInsensitiveString> for $c {
-            fn from(s: CaseInsensitiveString) -> Self {
-                Self(s)
-            }
-        }
-
-        impl From<String> for $c {
-            fn from(s: String) -> Self {
-                Self(CaseInsensitiveString::from(s))
-            }
-        }
-
-        impl From<&str> for $c {
-            fn from(s: &str) -> Self {
-                Self::new(s)
-            }
-        }
-
-        impl std::fmt::Display for $c {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "{}", self.0.as_str())
-            }
-        }
-
-        impl From<&$c> for Value {
-            fn from(user_id: &$c) -> Self {
-                user_id.as_str().into()
-            }
-        }
-
-        impl TryFromU64 for $c {
-            fn try_from_u64(_n: u64) -> Result<Self, DbErr> {
-                Err(DbErr::ConvertFromU64("$c cannot be constructed from u64"))
-            }
-        }
-    };
-}
-
 fn compare_str_case_insensitive(s1: &str, s2: &str) -> Ordering {
     let mut it_1 = s1.chars().flat_map(|c| c.to_lowercase());
     let mut it_2 = s2.chars().flat_map(|c| c.to_lowercase());
@@ -323,8 +219,58 @@ macro_rules! make_case_insensitive_comparable_string {
     };
 }
 
-make_case_insensitive_string!(UserId);
-make_case_insensitive_string!(AttributeName);
+#[derive(
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Clone,
+    Debug,
+    Default,
+    Hash,
+    Serialize,
+    Deserialize,
+    DeriveValueType,
+)]
+#[serde(from = "CaseInsensitiveString")]
+pub struct AttributeName(CaseInsensitiveString);
+
+impl AttributeName {
+    pub fn new(s: &str) -> Self {
+        s.into()
+    }
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+    pub fn into_string(self) -> String {
+        self.0.into_string()
+    }
+}
+impl<T> From<T> for AttributeName
+where
+    T: Into<CaseInsensitiveString>,
+{
+    fn from(s: T) -> Self {
+        Self(s.into())
+    }
+}
+impl std::fmt::Display for AttributeName {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_str())
+    }
+}
+impl From<&AttributeName> for Value {
+    fn from(attribute_name: &AttributeName) -> Self {
+        attribute_name.as_str().into()
+    }
+}
+impl TryFromU64 for AttributeName {
+    fn try_from_u64(_n: u64) -> Result<Self, DbErr> {
+        Err(DbErr::ConvertFromU64(
+            "AttributeName cannot be constructed from u64",
+        ))
+    }
+}
 make_case_insensitive_comparable_string!(Email);
 make_case_insensitive_comparable_string!(GroupName);
 

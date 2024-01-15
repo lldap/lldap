@@ -46,7 +46,9 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
             display_name: Some("Administrator".to_string()),
             ..Default::default()
         })
-        .and_then(|_| register_password(handler, &config.ldap_user_dn, &config.ldap_user_pass))
+        .and_then(|_| {
+            register_password(handler, config.ldap_user_dn.clone(), &config.ldap_user_pass)
+        })
         .await
         .context("Error creating admin user")?;
     let groups = handler
@@ -137,7 +139,7 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
         warn!("Forcing admin password reset to the config-provided password");
         register_password(
             &backend_handler,
-            &config.ldap_user_dn,
+            config.ldap_user_dn.clone(),
             &config.ldap_user_pass,
         )
         .await

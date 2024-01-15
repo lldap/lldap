@@ -68,7 +68,7 @@ impl CommonComponent<ResetPasswordStep2Form> for ResetPasswordStep2Form {
                     opaque_registration::start_registration(new_password.as_bytes(), &mut rng)
                         .context("Could not initiate password change")?;
                 let req = registration::ClientRegistrationStartRequest {
-                    username: self.username.clone().unwrap(),
+                    username: self.username.as_ref().unwrap().into(),
                     registration_start_request: registration_start_request.message,
                 };
                 self.opaque_data = Some(registration_start_request.state);
