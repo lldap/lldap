@@ -79,6 +79,7 @@ version = "0.10.1"
 
 [dependencies.lldap_auth]
 path = "../auth"
+features = ["opaque_server", "opaque_client", "sea_orm"]
 
 [dependencies.opaque-ke]
 version = "0.6"

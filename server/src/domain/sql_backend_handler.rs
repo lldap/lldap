@@ -63,7 +63,7 @@ pub mod tests {
             opaque::client::registration::start_registration(pass.as_bytes(), &mut rng).unwrap();
         let response = handler
             .registration_start(registration::ClientRegistrationStartRequest {
-                username: name.to_string(),
+                username: name.into(),
                 registration_start_request: client_registration_start.message,
             })
             .await

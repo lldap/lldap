@@ -10,7 +10,7 @@ pub fn get_token(client: &Client) -> String {
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(
             serde_json::to_string(&lldap_auth::login::ClientSimpleLoginRequest {
-                username,
+                username: username.into(),
                 password,
             })
             .expect("Failed to encode the username/password as json to log in"),

@@ -2572,6 +2572,7 @@ dependencies = [
  "opaque-ke",
  "rand 0.8.5",
  "rust-argon2",
+ "sea-orm",
  "serde",
  "sha2 0.9.9",
  "thiserror",

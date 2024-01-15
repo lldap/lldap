@@ -136,7 +136,7 @@ fn try_login(
     let ClientLoginStartResult { state, message } =
         start_login(password, &mut rng).context("Could not initialize login")?;
     let req = ClientLoginStartRequest {
-        username: username.to_owned(),
+        username: username.into(),
         login_start_request: message,
     };
     let response = client

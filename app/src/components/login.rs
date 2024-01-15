@@ -66,7 +66,7 @@ impl CommonComponent<LoginForm> for LoginForm {
                     opaque::client::login::start_login(&password, &mut rng)
                         .context("Could not initialize login")?;
                 let req = login::ClientLoginStartRequest {
-                    username,
+                    username: username.into(),
                     login_start_request: message,
                 };
                 self.common

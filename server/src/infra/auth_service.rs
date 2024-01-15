@@ -428,13 +428,13 @@ async fn simple_login<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + LoginHandler + 'static,
 {
-    let user_id = UserId::new(&request.username);
+    let login::ClientSimpleLoginRequest { username, password } = request.into_inner();
     let bind_request = BindRequest {
-        name: user_id.clone(),
-        password: request.password.clone(),
+        name: username.clone(),
+        password,
     };
     data.get_login_handler().bind(bind_request).await?;
-    get_login_successful_response(&data, &user_id).await
+    get_login_successful_response(&data, &username).await
 }
 
 async fn simple_login_handler<Backend>(
@@ -500,14 +500,14 @@ where
         .await
         .map_err(|e| TcpError::BadRequest(format!("{:#?}", e)))?
         .into_inner();
-    let user_id = UserId::new(&registration_start_request.username);
+    let user_id = &registration_start_request.username;
     let user_is_admin = data
         .get_readonly_handler()
-        .get_user_groups(&user_id)
+        .get_user_groups(user_id)
         .await?
         .iter()
         .any(|g| g.display_name == "lldap_admin".into());
-    if !validation_result.can_change_password(&user_id, user_is_admin) {
+    if !validation_result.can_change_password(user_id, user_is_admin) {
         return Err(TcpError::UnauthorizedError(
             "Not authorized to change the user's password".to_string(),
         ));

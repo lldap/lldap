@@ -13,6 +13,7 @@ default = ["opaque_server", "opaque_client"]
 opaque_server = []
 opaque_client = []
 js = []
+sea_orm = ["dep:sea-orm"]
 
 [dependencies]
 rust-argon2 = "0.8"
@@ -30,6 +31,12 @@ version = "0.6"
 [dependencies.chrono]
 version = "*"
 features = [ "serde" ]
+
+[dependencies.sea-orm]
+version= "0.12"
+default-features = false
+features = ["macros"]
+optional = true
 
 # For WASM targets, use the JS getrandom.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]
