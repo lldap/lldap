@@ -14,7 +14,7 @@ use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{fn_service, ServiceFactoryExt};
 use anyhow::{anyhow, Context, Result};
-use ldap3_proto::{proto::LdapControl, proto::LdapMsg, proto::LdapOp, LdapCodec};
+use ldap3_proto::{control::LdapControl, proto::LdapMsg, proto::LdapOp, LdapCodec};
 use rustls::PrivateKey;
 use tokio_rustls::TlsAcceptor as RustlsTlsAcceptor;
 use tokio_util::codec::{FramedRead, FramedWrite};
