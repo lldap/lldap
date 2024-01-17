@@ -1,13 +1,15 @@
+use chrono::TimeZone;
 use ldap3_proto::{
     proto::LdapOp, LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry,
 };
 use tracing::{debug, instrument, warn};
 
 use crate::domain::{
+    deserialize::deserialize_attribute_value,
     handler::{GroupListerBackendHandler, GroupRequestFilter},
     ldap::error::LdapError,
     schema::{PublicSchema, SchemaGroupAttributeExtractor},
-    types::{AttributeName, Group, UserId, Uuid},
+    types::{AttributeName, AttributeType, Group, UserId, Uuid},
 };
 
 use super::{
@@ -27,47 +29,53 @@ pub fn get_group_attribute(
     schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
     let attribute = AttributeName::from(attribute);
-    let attribute_values = match attribute.as_str() {
-        "objectclass" => vec![b"groupOfUniqueNames".to_vec()],
+    let attribute_values = match map_group_field(&attribute, schema) {
+        GroupFieldType::ObjectClass => vec![b"groupOfUniqueNames".to_vec()],
         // Always returned as part of the base response.
-        "dn" | "distinguishedname" => return None,
-        "entrydn" => {
+        GroupFieldType::Dn => return None,
+        GroupFieldType::EntryDn => {
             vec![format!("uid={},ou=groups,{}", group.display_name, base_dn_str).into_bytes()]
         }
-        "cn" | "uid" | "id" => vec![group.display_name.to_string().into_bytes()],
-        "entryuuid" | "uuid" => vec![group.uuid.to_string().into_bytes()],
-        "member" | "uniquemember" => group
+        GroupFieldType::DisplayName => vec![group.display_name.to_string().into_bytes()],
+        GroupFieldType::CreationDate => vec![chrono::Utc
+            .from_utc_datetime(&group.creation_date)
+            .to_rfc3339()
+            .into_bytes()],
+        GroupFieldType::Member => group
             .users
             .iter()
             .filter(|u| user_filter.as_ref().map(|f| *u == f).unwrap_or(true))
             .map(|u| format!("uid={},ou=people,{}", u, base_dn_str).into_bytes())
             .collect(),
-        "1.1" => return None,
-        // We ignore the operational attribute wildcard
-        "+" => return None,
-        "*" => {
-            panic!(
-                "Matched {}, * should have been expanded into attribute list and * removed",
-                attribute
-            )
+        GroupFieldType::Uuid => vec![group.uuid.to_string().into_bytes()],
+        GroupFieldType::Attribute(attr, _, _) => {
+            get_custom_attribute::<SchemaGroupAttributeExtractor>(&group.attributes, &attr, schema)?
         }
-        _ => {
-            if !ignored_group_attributes.contains(&attribute) {
-                match get_custom_attribute::<SchemaGroupAttributeExtractor>(
-                    &group.attributes,
-                    &attribute,
-                    schema,
-                ) {
-                    Some(v) => return Some(v),
-                    None => warn!(
-                        r#"Ignoring unrecognized group attribute: {}\n\
-                      To disable this warning, add it to "ignored_group_attributes" in the config."#,
-                        attribute
-                    ),
-                };
+        GroupFieldType::NoMatch => match attribute.as_str() {
+            "1.1" => return None,
+            // We ignore the operational attribute wildcard
+            "+" => return None,
+            "*" => {
+                panic!(
+                    "Matched {}, * should have been expanded into attribute list and * removed",
+                    attribute
+                )
             }
-            return None;
-        }
+            _ => {
+                if ignored_group_attributes.contains(&attribute) {
+                    return None;
+                }
+                get_custom_attribute::<SchemaGroupAttributeExtractor>(
+                        &group.attributes,
+                        &attribute,
+                        schema,
+                    ).or_else(||{warn!(
+                            r#"Ignoring unrecognized group attribute: {}\n\
+                               To disable this warning, add it to "ignored_group_attributes" in the config."#,
+                            attribute
+                        );None})?
+            }
+        },
     };
     if attribute_values.len() == 1 && attribute_values[0].is_empty() {
         None
@@ -121,6 +129,20 @@ fn make_ldap_search_group_result_entry(
     }
 }
 
+fn get_group_attribute_equality_filter(
+    field: &AttributeName,
+    typ: AttributeType,
+    is_list: bool,
+    value: &str,
+) -> LdapResult<GroupRequestFilter> {
+    deserialize_attribute_value(&[value.to_owned()], typ, is_list)
+        .map_err(|e| LdapError {
+            code: LdapResultCode::Other,
+            message: format!("Invalid value for attribute {}: {}", field, e),
+        })
+        .map(|v| GroupRequestFilter::AttributeEquality(field.clone(), v))
+}
+
 fn convert_group_filter(
     ldap_info: &LdapInfo,
     filter: &LdapFilter,
@@ -131,8 +153,15 @@ fn convert_group_filter(
         LdapFilter::Equality(field, value) => {
             let field = AttributeName::from(field.as_str());
             let value = value.to_ascii_lowercase();
-            match field.as_str() {
-                "member" | "uniquemember" => {
+            match map_group_field(&field, schema) {
+                GroupFieldType::DisplayName => Ok(GroupRequestFilter::DisplayName(value.into())),
+                GroupFieldType::Uuid => Ok(GroupRequestFilter::Uuid(
+                    Uuid::try_from(value.as_str()).map_err(|e| LdapError {
+                        code: LdapResultCode::InappropriateMatching,
+                        message: format!("Invalid UUID: {:#}", e),
+                    })?,
+                )),
+                GroupFieldType::Member => {
                     let user_name = get_user_id_from_distinguished_name(
                         &value,
                         &ldap_info.base_dn,
@@ -140,41 +169,39 @@ fn convert_group_filter(
                     )?;
                     Ok(GroupRequestFilter::Member(user_name))
                 }
-                "objectclass" => Ok(GroupRequestFilter::from(matches!(
+                GroupFieldType::ObjectClass => Ok(GroupRequestFilter::from(matches!(
                     value.as_str(),
                     "groupofuniquenames" | "groupofnames"
                 ))),
-                "dn" => Ok(get_group_id_from_distinguished_name(
-                    value.to_ascii_lowercase().as_str(),
-                    &ldap_info.base_dn,
-                    &ldap_info.base_dn_str,
-                )
-                .map(GroupRequestFilter::DisplayName)
-                .unwrap_or_else(|_| {
-                    warn!("Invalid dn filter on group: {}", value);
-                    GroupRequestFilter::from(false)
-                })),
-                _ => match map_group_field(&field, schema) {
-                    GroupFieldType::DisplayName => {
-                        Ok(GroupRequestFilter::DisplayName(value.into()))
-                    }
-                    GroupFieldType::Uuid => Ok(GroupRequestFilter::Uuid(
-                        Uuid::try_from(value.as_str()).map_err(|e| LdapError {
-                            code: LdapResultCode::InappropriateMatching,
-                            message: format!("Invalid UUID: {:#}", e),
-                        })?,
-                    )),
-                    _ => {
-                        if !ldap_info.ignored_group_attributes.contains(&field) {
-                            warn!(
-                                r#"Ignoring unknown group attribute "{}" in filter.\n\
+                GroupFieldType::Dn | GroupFieldType::EntryDn => {
+                    Ok(get_group_id_from_distinguished_name(
+                        value.as_str(),
+                        &ldap_info.base_dn,
+                        &ldap_info.base_dn_str,
+                    )
+                    .map(GroupRequestFilter::DisplayName)
+                    .unwrap_or_else(|_| {
+                        warn!("Invalid dn filter on group: {}", value);
+                        GroupRequestFilter::from(false)
+                    }))
+                }
+                GroupFieldType::NoMatch => {
+                    if !ldap_info.ignored_group_attributes.contains(&field) {
+                        warn!(
+                            r#"Ignoring unknown group attribute "{}" in filter.\n\
                                 To disable this warning, add it to "ignored_group_attributes" in the config."#,
-                                field
-                            );
-                        }
-                        Ok(GroupRequestFilter::from(false))
+                            field
+                        );
                     }
-                },
+                    Ok(GroupRequestFilter::from(false))
+                }
+                GroupFieldType::Attribute(field, typ, is_list) => {
+                    get_group_attribute_equality_filter(&field, typ, is_list, &value)
+                }
+                GroupFieldType::CreationDate => Err(LdapError {
+                    code: LdapResultCode::UnwillingToPerform,
+                    message: "Creation date filter for groups not supported".to_owned(),
+                }),
             }
         }
         LdapFilter::And(filters) => Ok(GroupRequestFilter::And(
@@ -186,12 +213,10 @@ fn convert_group_filter(
         LdapFilter::Not(filter) => Ok(GroupRequestFilter::Not(Box::new(rec(filter)?))),
         LdapFilter::Present(field) => {
             let field = AttributeName::from(field.as_str());
-            Ok(GroupRequestFilter::from(
-                field.as_str() == "objectclass"
-                    || field.as_str() == "dn"
-                    || field.as_str() == "distinguishedname"
-                    || !matches!(map_group_field(&field, schema), GroupFieldType::NoMatch),
-            ))
+            Ok(GroupRequestFilter::from(!matches!(
+                map_group_field(&field, schema),
+                GroupFieldType::NoMatch
+            )))
         }
         LdapFilter::Substring(field, substring_filter) => {
             let field = AttributeName::from(field.as_str());
@@ -199,6 +224,7 @@ fn convert_group_filter(
                 GroupFieldType::DisplayName => Ok(GroupRequestFilter::DisplayNameSubString(
                     substring_filter.clone().into(),
                 )),
+                GroupFieldType::NoMatch => Ok(GroupRequestFilter::from(false)),
                 _ => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
                     message: format!(

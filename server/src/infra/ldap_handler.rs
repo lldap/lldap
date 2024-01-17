@@ -1613,7 +1613,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups_unsupported_substring() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let mut ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new()).await;
         let request = make_group_search_request(
             LdapFilter::Substring("member".to_owned(), LdapSubstringFilter::default()),
             vec!["cn"],
@@ -1624,6 +1624,24 @@ mod tests {
                 code: LdapResultCode::UnwillingToPerform,
                 message: r#"Unsupported group attribute for substring filter: "member""#.to_owned()
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_groups_missing_attribute_substring() {
+        let request = make_group_search_request(
+            LdapFilter::Substring("nonexistent".to_owned(), LdapSubstringFilter::default()),
+            vec!["cn"],
+        );
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_groups()
+            .with(eq(Some(false.into())))
+            .times(1)
+            .return_once(|_| Ok(vec![]));
+        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()]),
         );
     }
 
