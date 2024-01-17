@@ -27,78 +27,75 @@ pub fn get_user_attribute(
     schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
     let attribute = AttributeName::from(attribute);
-    let attribute_values = match attribute.as_str() {
-        "objectclass" => vec![
+    let attribute_values = match map_user_field(&attribute, schema) {
+        UserFieldType::ObjectClass => vec![
             b"inetOrgPerson".to_vec(),
             b"posixAccount".to_vec(),
             b"mailAccount".to_vec(),
             b"person".to_vec(),
         ],
         // dn is always returned as part of the base response.
-        "dn" | "distinguishedname" => return None,
-        "entrydn" => {
+        UserFieldType::Dn => return None,
+        UserFieldType::EntryDn => {
             vec![format!("uid={},ou=people,{}", &user.user_id, base_dn_str).into_bytes()]
         }
-        "uid" | "user_id" | "id" => vec![user.user_id.to_string().into_bytes()],
-        "entryuuid" | "uuid" => vec![user.uuid.to_string().into_bytes()],
-        "mail" | "email" => vec![user.email.to_string().into_bytes()],
-        "givenname" | "first_name" | "firstname" => {
-            get_custom_attribute::<SchemaUserAttributeExtractor>(
-                &user.attributes,
-                &"first_name".into(),
-                schema,
-            )?
-        }
-        "sn" | "last_name" | "lastname" => get_custom_attribute::<SchemaUserAttributeExtractor>(
-            &user.attributes,
-            &"last_name".into(),
-            schema,
-        )?,
-        "jpegphoto" | "avatar" => get_custom_attribute::<SchemaUserAttributeExtractor>(
-            &user.attributes,
-            &"avatar".into(),
-            schema,
-        )?,
-        "memberof" => groups
+        UserFieldType::MemberOf => groups
             .into_iter()
             .flatten()
             .map(|id_and_name| {
                 format!("cn={},ou=groups,{}", &id_and_name.display_name, base_dn_str).into_bytes()
             })
             .collect(),
-        "cn" | "displayname" => vec![user.display_name.clone()?.into_bytes()],
-        "creationdate" | "creation_date" | "createtimestamp" | "modifytimestamp" => {
-            vec![chrono::Utc
-                .from_utc_datetime(&user.creation_date)
-                .to_rfc3339()
-                .into_bytes()]
+        UserFieldType::PrimaryField(UserColumn::UserId) => {
+            vec![user.user_id.to_string().into_bytes()]
         }
-        "1.1" => return None,
-        // We ignore the operational attribute wildcard.
-        "+" => return None,
-        "*" => {
-            panic!(
-                "Matched {}, * should have been expanded into attribute list and * removed",
-                attribute
-            )
+        UserFieldType::PrimaryField(UserColumn::Email) => vec![user.email.to_string().into_bytes()],
+        UserFieldType::PrimaryField(
+            UserColumn::LowercaseEmail
+            | UserColumn::PasswordHash
+            | UserColumn::TotpSecret
+            | UserColumn::MfaType,
+        ) => panic!("Should not get here"),
+        UserFieldType::PrimaryField(UserColumn::Uuid) => vec![user.uuid.to_string().into_bytes()],
+        UserFieldType::PrimaryField(UserColumn::DisplayName) => {
+            vec![user.display_name.clone()?.into_bytes()]
         }
-        attr => {
-            if !ignored_user_attributes.contains(&attribute) {
-                match get_custom_attribute::<SchemaUserAttributeExtractor>(
+        UserFieldType::PrimaryField(UserColumn::CreationDate) => vec![chrono::Utc
+            .from_utc_datetime(&user.creation_date)
+            .to_rfc3339()
+            .into_bytes()],
+        UserFieldType::Attribute(attr, _, _) => {
+            get_custom_attribute::<SchemaUserAttributeExtractor>(&user.attributes, &attr, schema)?
+        }
+        UserFieldType::NoMatch => match attribute.as_str() {
+            "1.1" => return None,
+            // We ignore the operational attribute wildcard.
+            "+" => return None,
+            "*" => {
+                panic!(
+                    "Matched {}, * should have been expanded into attribute list and * removed",
+                    attribute
+                )
+            }
+            _ => {
+                if ignored_user_attributes.contains(&attribute) {
+                    return None;
+                }
+                get_custom_attribute::<SchemaUserAttributeExtractor>(
                     &user.attributes,
                     &attribute,
                     schema,
-                ) {
-                    Some(v) => return Some(v),
-                    None => warn!(
+                )
+                .or_else(|| {
+                    warn!(
                         r#"Ignoring unrecognized group attribute: {}\n\
                       To disable this warning, add it to "ignored_user_attributes" in the config."#,
-                        attr
-                    ),
-                };
+                        attribute
+                    );
+                    None
+                })?
             }
-            return None;
-        }
+        },
     };
     if attribute_values.len() == 1 && attribute_values[0].is_empty() {
         None
@@ -181,49 +178,48 @@ fn convert_user_filter(
         LdapFilter::Not(filter) => Ok(UserRequestFilter::Not(Box::new(rec(filter)?))),
         LdapFilter::Equality(field, value) => {
             let field = AttributeName::from(field.as_str());
-            match field.as_str() {
-                "memberof" => Ok(UserRequestFilter::MemberOf(
+            let value = value.to_ascii_lowercase();
+            match map_user_field(&field, schema) {
+                UserFieldType::PrimaryField(UserColumn::UserId) => {
+                    Ok(UserRequestFilter::UserId(UserId::new(&value)))
+                }
+                UserFieldType::PrimaryField(field) => Ok(UserRequestFilter::Equality(field, value)),
+                UserFieldType::Attribute(field, typ, is_list) => {
+                    get_user_attribute_equality_filter(&field, typ, is_list, &value)
+                }
+                UserFieldType::NoMatch => {
+                    if !ldap_info.ignored_user_attributes.contains(&field) {
+                        warn!(
+                            r#"Ignoring unknown user attribute "{}" in filter.\n\
+                                      To disable this warning, add it to "ignored_user_attributes" in the config"#,
+                            field
+                        );
+                    }
+                    Ok(UserRequestFilter::from(false))
+                }
+                UserFieldType::ObjectClass => Ok(UserRequestFilter::from(matches!(
+                    value.as_str(),
+                    "person" | "inetorgperson" | "posixaccount" | "mailaccount"
+                ))),
+                UserFieldType::MemberOf => Ok(UserRequestFilter::MemberOf(
                     get_group_id_from_distinguished_name(
-                        &value.to_ascii_lowercase(),
+                        &value,
                         &ldap_info.base_dn,
                         &ldap_info.base_dn_str,
                     )?,
                 )),
-                "objectclass" => Ok(UserRequestFilter::from(matches!(
-                    value.to_ascii_lowercase().as_str(),
-                    "person" | "inetorgperson" | "posixaccount" | "mailaccount"
-                ))),
-                "dn" => Ok(get_user_id_from_distinguished_name(
-                    value.to_ascii_lowercase().as_str(),
-                    &ldap_info.base_dn,
-                    &ldap_info.base_dn_str,
-                )
-                .map(UserRequestFilter::UserId)
-                .unwrap_or_else(|_| {
-                    warn!("Invalid dn filter on user: {}", value);
-                    UserRequestFilter::from(false)
-                })),
-                _ => match map_user_field(&field, schema) {
-                    UserFieldType::PrimaryField(UserColumn::UserId) => {
-                        Ok(UserRequestFilter::UserId(UserId::new(value)))
-                    }
-                    UserFieldType::PrimaryField(field) => {
-                        Ok(UserRequestFilter::Equality(field, value.clone()))
-                    }
-                    UserFieldType::Attribute(field, typ, is_list) => {
-                        get_user_attribute_equality_filter(&field, typ, is_list, value)
-                    }
-                    UserFieldType::NoMatch => {
-                        if !ldap_info.ignored_user_attributes.contains(&field) {
-                            warn!(
-                                r#"Ignoring unknown user attribute "{}" in filter.\n\
-                                      To disable this warning, add it to "ignored_user_attributes" in the config"#,
-                                field
-                            );
-                        }
-                        Ok(UserRequestFilter::from(false))
-                    }
-                },
+                UserFieldType::EntryDn | UserFieldType::Dn => {
+                    Ok(get_user_id_from_distinguished_name(
+                        value.as_str(),
+                        &ldap_info.base_dn,
+                        &ldap_info.base_dn_str,
+                    )
+                    .map(UserRequestFilter::UserId)
+                    .unwrap_or_else(|_| {
+                        warn!("Invalid dn filter on user: {}", value);
+                        UserRequestFilter::from(false)
+                    }))
+                }
             }
         }
         LdapFilter::Present(field) => {
@@ -242,8 +238,11 @@ fn convert_user_filter(
                 UserFieldType::PrimaryField(UserColumn::UserId) => Ok(
                     UserRequestFilter::UserIdSubString(substring_filter.clone().into()),
                 ),
-                UserFieldType::NoMatch
-                | UserFieldType::Attribute(_, _, _)
+                UserFieldType::Attribute(_, _, _)
+                | UserFieldType::ObjectClass
+                | UserFieldType::MemberOf
+                | UserFieldType::Dn
+                | UserFieldType::EntryDn
                 | UserFieldType::PrimaryField(UserColumn::CreationDate)
                 | UserFieldType::PrimaryField(UserColumn::Uuid) => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
@@ -252,6 +251,7 @@ fn convert_user_filter(
                         field
                     ),
                 }),
+                UserFieldType::NoMatch => Ok(UserRequestFilter::from(false)),
                 UserFieldType::PrimaryField(field) => Ok(UserRequestFilter::SubString(
                     field,
                     substring_filter.clone().into(),

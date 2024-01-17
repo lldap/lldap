@@ -158,12 +158,20 @@ pub fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) 
 
 pub enum UserFieldType {
     NoMatch,
+    ObjectClass,
+    MemberOf,
+    Dn,
+    EntryDn,
     PrimaryField(UserColumn),
     Attribute(AttributeName, AttributeType, bool),
 }
 
 pub fn map_user_field(field: &AttributeName, schema: &PublicSchema) -> UserFieldType {
     match field.as_str() {
+        "memberof" | "ismemberof" => UserFieldType::MemberOf,
+        "objectclass" => UserFieldType::ObjectClass,
+        "dn" | "distinguishedname" => UserFieldType::Dn,
+        "entrydn" => UserFieldType::EntryDn,
         "uid" | "user_id" | "id" => UserFieldType::PrimaryField(UserColumn::UserId),
         "mail" | "email" => UserFieldType::PrimaryField(UserColumn::Email),
         "cn" | "displayname" | "display_name" => {
@@ -201,16 +209,25 @@ pub enum GroupFieldType {
     NoMatch,
     DisplayName,
     CreationDate,
+    ObjectClass,
+    Dn,
+    // Like Dn, but returned as part of the attributes.
+    EntryDn,
+    Member,
     Uuid,
     Attribute(AttributeName, AttributeType, bool),
 }
 
 pub fn map_group_field(field: &AttributeName, schema: &PublicSchema) -> GroupFieldType {
     match field.as_str() {
-        "cn" | "displayname" | "uid" | "display_name" => GroupFieldType::DisplayName,
+        "dn" | "distinguishedname" => GroupFieldType::Dn,
+        "entrydn" => GroupFieldType::EntryDn,
+        "objectclass" => GroupFieldType::ObjectClass,
+        "cn" | "displayname" | "uid" | "display_name" | "id" => GroupFieldType::DisplayName,
         "creationdate" | "createtimestamp" | "modifytimestamp" | "creation_date" => {
             GroupFieldType::CreationDate
         }
+        "member" | "uniquemember" => GroupFieldType::Member,
         "entryuuid" | "uuid" => GroupFieldType::Uuid,
         _ => schema
             .get_schema()
