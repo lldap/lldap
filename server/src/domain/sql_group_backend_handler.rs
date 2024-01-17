@@ -6,7 +6,7 @@ use crate::domain::{
     },
     model::{self, GroupColumn, MembershipColumn},
     sql_backend_handler::SqlBackendHandler,
-    types::{AttributeValue, Group, GroupDetails, GroupId, Uuid},
+    types::{AttributeName, AttributeValue, Group, GroupDetails, GroupId, Serialized, Uuid},
 };
 use async_trait::async_trait;
 use sea_orm::{
@@ -15,6 +15,19 @@ use sea_orm::{
     QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use tracing::instrument;
+
+fn attribute_condition(name: AttributeName, value: Serialized) -> Cond {
+    Expr::in_subquery(
+        Expr::col(GroupColumn::GroupId.as_column_ref()),
+        model::GroupAttributes::find()
+            .select_only()
+            .column(model::GroupAttributesColumn::GroupId)
+            .filter(model::GroupAttributesColumn::AttributeName.eq(name))
+            .filter(model::GroupAttributesColumn::Value.eq(value))
+            .into_query(),
+    )
+    .into_condition()
+}
 
 fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
     use GroupRequestFilter::*;
@@ -58,6 +71,7 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
         ))))
         .like(filter.to_sql_filter())
         .into_condition(),
+        AttributeEquality(name, value) => attribute_condition(name, value),
     }
 }
 
@@ -401,6 +415,46 @@ mod tests {
             )
             .await,
             // Best group
+            vec![fixture.groups[0]]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_groups_other_filter() {
+        let fixture = TestFixture::new().await;
+        fixture
+            .handler
+            .add_group_attribute(CreateAttributeRequest {
+                name: "gid".into(),
+                attribute_type: AttributeType::Integer,
+                is_list: false,
+                is_visible: true,
+                is_editable: true,
+            })
+            .await
+            .unwrap();
+        fixture
+            .handler
+            .update_group(UpdateGroupRequest {
+                group_id: fixture.groups[0],
+                display_name: None,
+                delete_attributes: Vec::new(),
+                insert_attributes: vec![AttributeValue {
+                    name: "gid".into(),
+                    value: Serialized::from(&512),
+                }],
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            get_group_ids(
+                &fixture.handler,
+                Some(GroupRequestFilter::AttributeEquality(
+                    AttributeName::from("gid"),
+                    Serialized::from(&512),
+                )),
+            )
+            .await,
             vec![fixture.groups[0]]
         );
     }

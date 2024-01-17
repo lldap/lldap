@@ -70,6 +70,10 @@ impl RequestFilter {
                     UserFieldType::Attribute(_, _, true) => {
                         Err("Equality not supported for list fields".into())
                     }
+                    UserFieldType::MemberOf => Ok(DomainRequestFilter::MemberOf(eq.value.into())),
+                    UserFieldType::ObjectClass | UserFieldType::Dn | UserFieldType::EntryDn => {
+                        Err("Ldap fields not supported in request filter".into())
+                    }
                 }
             }
             (None, Some(any), None, None, None, None) => Ok(DomainRequestFilter::Or(
