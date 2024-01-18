@@ -68,7 +68,7 @@ impl CommonComponent<CreateUserAttributeForm> for CreateUserAttributeForm {
                 };
                 let req = create_user_attribute::Variables {
                     name: model.attribute_name,
-                    attribute_type: attribute_type,
+                    attribute_type,
                     is_editable: model.is_editable,
                     is_list: model.is_list,
                     is_visible: model.is_visible,
@@ -107,8 +107,10 @@ impl Component for CreateUserAttributeForm {
     type Properties = ();
 
     fn create(_: &Context<Self>) -> Self {
-        let mut model = CreateUserAttributeModel::default();
-        model.attribute_type = "String".to_string();
+        let model = CreateUserAttributeModel {
+            attribute_type: "String".to_string(),
+            ..Default::default()
+        };
         Self {
             common: CommonComponentParts::<Self>::create(),
             form: yew_form::Form::<CreateUserAttributeModel>::new(model),
