@@ -1,0 +1,5 @@
+mutation DeleteUserAttributeQuery($name: String!) {
+    deleteUserAttribute(name: $name) {
+        ok
+    }
+}

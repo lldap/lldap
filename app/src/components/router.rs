@@ -24,6 +24,10 @@ pub enum AppRoute {
     GroupDetails { group_id: i64 },
     #[at("/")]
     Index,
+    #[at("/user-attributes")]
+    ListUserAttributes,
+    #[at("/user-attributes/create")]
+    CreateUserAttribute,
 }
 
 pub type Link = yew_router::components::Link<AppRoute>;

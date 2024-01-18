@@ -3,6 +3,7 @@ use crate::{
         change_password::ChangePasswordForm,
         create_group::CreateGroupForm,
         create_user::CreateUserForm,
+        create_user_attribute::CreateUserAttributeForm,
         group_details::GroupDetails,
         group_table::GroupTable,
         login::LoginForm,
@@ -10,6 +11,7 @@ use crate::{
         reset_password_step1::ResetPasswordStep1Form,
         reset_password_step2::ResetPasswordStep2Form,
         router::{AppRoute, Link, Redirect},
+        user_attributes_table::UserAttributesTable,
         user_details::UserDetails,
         user_table::UserTable,
     },
@@ -227,12 +229,24 @@ impl App {
             AppRoute::CreateGroup => html! {
                 <CreateGroupForm/>
             },
+            AppRoute::CreateUserAttribute => html! {
+                <CreateUserAttributeForm/>
+            },
             AppRoute::ListGroups => html! {
                 <div>
                   <GroupTable />
                   <Link classes="btn btn-primary" to={AppRoute::CreateGroup}>
                     <i class="bi-plus-circle me-2"></i>
                     {"Create a group"}
+                  </Link>
+                </div>
+            },
+            AppRoute::ListUserAttributes => html! {
+                <div>
+                  <UserAttributesTable />
+                  <Link classes="btn btn-primary" to={AppRoute::CreateUserAttribute}>
+                    <i class="bi-plus-circle me-2"></i>
+                    {"Create an attribute"}
                   </Link>
                 </div>
             },
@@ -289,6 +303,14 @@ impl App {
                           to={AppRoute::ListGroups}>
                           <i class="bi-collection me-2"></i>
                           {"Groups"}
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          classes="nav-link px-2 h6"
+                          to={AppRoute::ListUserAttributes}>
+                          <i class="bi-list-ul me-2"></i>
+                          {"User attributes"}
                         </Link>
                       </li>
                     </>

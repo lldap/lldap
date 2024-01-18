@@ -1,0 +1,14 @@
+query GetUserAttributesSchema {
+  schema {
+    userSchema {
+      attributes {
+        name
+        attributeType
+        isList
+        isVisible
+        isEditable
+        isHardcoded
+      }
+    }
+  }
+}
