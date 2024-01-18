@@ -374,6 +374,7 @@ folder for help with:
 - [Kasm](example_configs/kasm.md)
 - [KeyCloak](example_configs/keycloak.md)
 - [LibreNMS](example_configs/librenms.md)
+- [Maddy](example_configs/maddy.md)
 - [Mastodon](example_configs/mastodon.env.example)
 - [Matrix](example_configs/matrix_synapse.yml)
 - [Mealie](example_configs/mealie.md)
