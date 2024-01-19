@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use crate::{
     components::{
         delete_user_attribute::DeleteUserAttribute,
@@ -31,14 +29,9 @@ pub type Attribute = get_user_attributes_schema::GetUserAttributesSchemaSchemaUs
 
 convert_attribute_type!(get_user_attributes_schema::AttributeType);
 
-fn sort_with_hardcoded_first(a: &Attribute, b: &Attribute) -> Ordering {
-    if a.is_hardcoded && !b.is_hardcoded {
-        Ordering::Less
-    } else if !a.is_hardcoded && b.is_hardcoded {
-        Ordering::Greater
-    } else {
-        a.name.cmp(&b.name)
-    }
+#[derive(yew::Properties, Clone, PartialEq, Eq)]
+pub struct Props {
+    pub hardcoded: bool,
 }
 
 pub struct UserSchemaTable {
@@ -83,7 +76,7 @@ impl CommonComponent<UserSchemaTable> for UserSchemaTable {
 
 impl Component for UserSchemaTable {
     type Message = Msg;
-    type Properties = ();
+    type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
         let mut table = UserSchemaTable {
@@ -115,23 +108,25 @@ impl Component for UserSchemaTable {
 
 impl UserSchemaTable {
     fn view_attributes(&self, ctx: &Context<Self>) -> Html {
+        let hardcoded = ctx.props().hardcoded;
         let make_table = |attributes: &Vec<Attribute>| {
             html! {
                 <div class="table-responsive">
-                  <table class="table table-hover">
-                    <thead>
-                      <tr>
-                        <th>{"Attribute name"}</th>
-                        <th>{"Type"}</th>
-                        <th>{"Editable"}</th>
-                        <th>{"Visible"}</th>
-                        <th>{"Delete"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {attributes.iter().map(|u| self.view_attribute(ctx, u)).collect::<Vec<_>>()}
-                    </tbody>
-                  </table>
+                    <h3>{if hardcoded {"Hardcoded"} else {"User-defined"}}{" attributes"}</h3>
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>{"Attribute name"}</th>
+                                <th>{"Type"}</th>
+                                <th>{"Editable"}</th>
+                                <th>{"Visible"}</th>
+                                {if hardcoded {html!{}} else {html!{<th>{"Delete"}</th>}}}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {attributes.iter().map(|u| self.view_attribute(ctx, u)).collect::<Vec<_>>()}
+                        </tbody>
+                    </table>
                 </div>
             }
         };
@@ -139,7 +134,7 @@ impl UserSchemaTable {
             None => html! {{"Loading..."}},
             Some(attributes) => {
                 let mut attributes = attributes.clone();
-                attributes.sort_by(sort_with_hardcoded_first);
+                attributes.retain(|attribute| attribute.is_hardcoded == ctx.props().hardcoded);
                 make_table(&attributes)
             }
         }
@@ -153,18 +148,27 @@ impl UserSchemaTable {
           <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z"></path>
         </svg>
                 };
+        let hardcoded = ctx.props().hardcoded;
         html! {
             <tr key={attribute.name.clone()}>
                 <td>{&attribute.name}</td>
                 <td>{if attribute.is_list { format!("List<{attribute_type}>")} else {attribute_type.to_string()}}</td>
                 <td>{if attribute.is_editable {checkmark.clone()} else {html!{}}}</td>
                 <td>{if attribute.is_visible {checkmark.clone()} else {html!{}}}</td>
-                <td>{if attribute.is_hardcoded {html!{}} else { html!{
-                    <DeleteUserAttribute
-                        attribute_name={attribute.name.clone()}
-                        on_attribute_deleted={link.callback(Msg::OnAttributeDeleted)}
-                        on_error={link.callback(Msg::OnError)}/>
-                        }}}</td>
+                {
+                    if hardcoded {
+                        html!{}
+                    } else { 
+                        html!{
+                            <td>
+                                <DeleteUserAttribute
+                                    attribute_name={attribute.name.clone()}
+                                    on_attribute_deleted={link.callback(Msg::OnAttributeDeleted)}
+                                    on_error={link.callback(Msg::OnError)}/>
+                            </td>
+                        }
+                    }
+                }
             </tr>
         }
     }
@@ -181,7 +185,8 @@ impl UserSchemaTable {
 pub fn list_user_schema() -> Html {
     html! {
         <div>
-            <UserSchemaTable />
+            <UserSchemaTable hardcoded={true} />
+            <UserSchemaTable hardcoded={false} />
             <Link classes="btn btn-primary" to={AppRoute::CreateUserAttribute}>
                 <i class="bi-plus-circle me-2"></i>
                 {"Create an attribute"}
