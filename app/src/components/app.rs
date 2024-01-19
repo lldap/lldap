@@ -11,8 +11,8 @@ use crate::{
         reset_password_step1::ResetPasswordStep1Form,
         reset_password_step2::ResetPasswordStep2Form,
         router::{AppRoute, Link, Redirect},
-        user_attributes_table::UserAttributesTable,
         user_details::UserDetails,
+        user_schema_table::ListUserSchema,
         user_table::UserTable,
     },
     infra::{api::HostService, cookies::get_cookie},
@@ -241,14 +241,8 @@ impl App {
                   </Link>
                 </div>
             },
-            AppRoute::ListUserAttributes => html! {
-                <div>
-                  <UserAttributesTable />
-                  <Link classes="btn btn-primary" to={AppRoute::CreateUserAttribute}>
-                    <i class="bi-plus-circle me-2"></i>
-                    {"Create an attribute"}
-                  </Link>
-                </div>
+            AppRoute::ListUserSchema => html! {
+                <ListUserSchema />
             },
             AppRoute::GroupDetails { group_id } => html! {
                 <GroupDetails group_id={*group_id} />
@@ -308,9 +302,9 @@ impl App {
                       <li>
                         <Link
                           classes="nav-link px-2 h6"
-                          to={AppRoute::ListUserAttributes}>
+                          to={AppRoute::ListUserSchema}>
                           <i class="bi-list-ul me-2"></i>
-                          {"User attributes"}
+                          {"User schema"}
                         </Link>
                       </li>
                     </>

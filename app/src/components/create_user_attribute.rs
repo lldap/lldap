@@ -1,6 +1,13 @@
 use crate::{
-    components::router::AppRoute,
-    infra::common_component::{CommonComponent, CommonComponentParts},
+    components::{
+        form::{checkbox::CheckBox, field::Field, select::Select, submit::Submit},
+        router::AppRoute,
+    },
+    convert_attribute_type,
+    infra::{
+        common_component::{CommonComponent, CommonComponentParts},
+        schema::AttributeType,
+    },
 };
 use anyhow::{bail, Result};
 use gloo_console::log;
@@ -19,7 +26,7 @@ use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 )]
 pub struct CreateUserAttribute;
 
-type AttributeType = create_user_attribute::AttributeType;
+convert_attribute_type!(create_user_attribute::AttributeType);
 
 pub struct CreateUserAttributeForm {
     common: CommonComponentParts<Self>,
@@ -59,16 +66,10 @@ impl CommonComponent<CreateUserAttributeForm> for CreateUserAttributeForm {
                 if model.is_editable && !model.is_visible {
                     bail!("Editable attributes must also be visible");
                 }
-                let attribute_type = match model.attribute_type.as_str() {
-                    "Jpeg" => AttributeType::JPEG_PHOTO,
-                    "DateTime" => AttributeType::DATE_TIME,
-                    "Integer" => AttributeType::INTEGER,
-                    "String" => AttributeType::STRING,
-                    _ => bail!("Check the form for errors"),
-                };
+                let attribute_type = model.attribute_type.parse::<AttributeType>().unwrap();
                 let req = create_user_attribute::Variables {
                     name: model.attribute_name,
-                    attribute_type,
+                    attribute_type: create_user_attribute::AttributeType::from(attribute_type),
                     is_editable: model.is_editable,
                     is_list: model.is_list,
                     is_visible: model.is_visible,
@@ -88,10 +89,7 @@ impl CommonComponent<CreateUserAttributeForm> for CreateUserAttributeForm {
                     "Created user attribute '{}'",
                     model.attribute_name
                 ));
-                ctx.link()
-                    .history()
-                    .unwrap()
-                    .push(AppRoute::ListUserAttributes);
+                ctx.link().history().unwrap().push(AppRoute::ListUserSchema);
                 Ok(true)
             }
         }
@@ -108,7 +106,7 @@ impl Component for CreateUserAttributeForm {
 
     fn create(_: &Context<Self>) -> Self {
         let model = CreateUserAttributeModel {
-            attribute_type: "String".to_string(),
+            attribute_type: AttributeType::String.to_string(),
             ..Default::default()
         };
         Self {
@@ -123,105 +121,45 @@ impl Component for CreateUserAttributeForm {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let link = ctx.link();
-        type Field = yew_form::Field<CreateUserAttributeModel>;
-        type Select = yew_form::Select<CreateUserAttributeModel>;
-        type Checkbox = yew_form::CheckBox<CreateUserAttributeModel>;
         html! {
           <div class="row justify-content-center">
             <form class="form py-3" style="max-width: 636px">
-              <div class="row mb-3">
-                <h5 class="fw-bold">{"Create a user attribute"}</h5>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="attribute_name"
-                  class="form-label col-4 col-form-label">
-                  {"Attribute name"}
-                  <span class="text-danger">{"*"}</span>
-                  {":"}
-                </label>
-                <div class="col-8">
-                  <Field
-                    form={&self.form}
-                    field_name="attribute_name"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    autocomplete="attribute_name"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("attribute_name")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="attribute_type"
-                  class="form-label col-4 col-form-label">
-                  {"Type:"}
-                </label>
-                <div class="col-8">
-                  <Select
-                    form={&self.form}
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    field_name="attribute_type"
-                    oninput={link.callback(|_| Msg::Update)} >
-                    <option selected=true value="String">{"String"}</option>
-                    <option value="Integer">{"Integer"}</option>
-                    <option value="Jpeg">{"Jpeg"}</option>
-                    <option value="DateTime">{"DateTime"}</option>
-                  </Select>
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("attribute_type")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="is_list"
-                  class="form-label col-4 col-form-label">
-                  {"Multiple values:"}
-                </label>
-                <div class="col-8">
-                  <Checkbox
-                    form={&self.form}
-                    field_name="is_list"
-                    ontoggle={link.callback(|_| Msg::Update)} />
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="is_visible"
-                  class="form-label col-4 col-form-label">
-                  {"Visible to users:"}
-                </label>
-                <div class="col-8">
-                  <Checkbox
-                    form={&self.form}
-                    field_name="is_visible"
-                    ontoggle={link.callback(|_| Msg::Update)} />
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="is_editable"
-                  class="form-label col-4 col-form-label">
-                  {"Editable by users:"}
-                </label>
-                <div class="col-8">
-                  <Checkbox
-                    form={&self.form}
-                    field_name="is_editable"
-                    ontoggle={link.callback(|_| Msg::Update)} />
-                </div>
-              </div>
-              <div class="form-group row justify-content-center">
-                <button
-                  class="btn btn-primary col-auto col-form-label"
-                  type="submit"
-                  disabled={self.common.is_task_running()}
-                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})}>
-                  <i class="bi-save me-2"></i>
-                  {"Submit"}
-                </button>
-              </div>
+              <h5 class="fw-bold">{"Create a user attribute"}</h5>
+              <Field<CreateUserAttributeModel>
+                label="Name"
+                required={true}
+                form={&self.form}
+                field_name="attribute_name"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Select<CreateUserAttributeModel>
+                label="Type"
+                required={true}
+                form={&self.form}
+                field_name="attribute_name"
+                oninput={link.callback(|_| Msg::Update)}>
+                <option selected=true value="String">{"String"}</option>
+                <option value="Integer">{"Integer"}</option>
+                <option value="Jpeg">{"Jpeg"}</option>
+                <option value="DateTime">{"DateTime"}</option>
+              </Select<CreateUserAttributeModel>>
+              <CheckBox<CreateUserAttributeModel>
+                label="Multiple values"
+                form={&self.form}
+                field_name="is_list"
+                ontoggle={link.callback(|_| Msg::Update)} />
+              <CheckBox<CreateUserAttributeModel>
+                label="Visible to users"
+                form={&self.form}
+                field_name="is_visible"
+                ontoggle={link.callback(|_| Msg::Update)} />
+              <CheckBox<CreateUserAttributeModel>
+                label="Editable by users"
+                form={&self.form}
+                field_name="is_editable"
+                ontoggle={link.callback(|_| Msg::Update)} />
+              <Submit
+                disabled={self.common.is_task_running()}
+                onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})}/>
             </form>
             { if let Some(e) = &self.common.error {
                 html! {
