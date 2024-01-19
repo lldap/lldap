@@ -25,9 +25,14 @@ type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
 type DomainUser = crate::domain::types::User;
 type DomainGroup = crate::domain::types::Group;
 type DomainUserAndGroups = crate::domain::types::UserAndGroups;
+type DomainUserAndSchema = crate::domain::types::UserAndSchema;
+type DomainGroupAndSchema = crate::domain::types::GroupAndSchema;
+type DomainGroupDetailsAndSchema = crate::domain::types::GroupDetailsAndSchema;
+type DomainUserAndGroupsAndSchema = crate::domain::types::UserAndGroupsAndSchema;
 type DomainAttributeList = crate::domain::handler::AttributeList;
 type DomainAttributeSchema = crate::domain::handler::AttributeSchema;
 type DomainAttributeValue = crate::domain::types::AttributeValue;
+type DomainAttributeValueAndSchema = crate::domain::types::AttributeValueAndSchema;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
 /// A filter for requests, specifying a boolean expression based on field constraints. Only one of
@@ -143,11 +148,15 @@ impl<Handler: BackendHandler> Query<Handler> {
                 &span,
                 "Unauthorized access to user data",
             ))?;
-        Ok(handler
+        let user = handler
             .get_user_details(&user_id)
             .instrument(span)
-            .await
-            .map(Into::into)?)
+            .await?;
+        let schema = self.get_schema(context, span).await?;
+        return Ok(DomainUserAndSchema {
+            user,
+            schema: schema.get_schema().user_attributes.attributes,
+        }.into())
     }
 
     async fn users(
@@ -237,6 +246,7 @@ impl<Handler: BackendHandler> Query<Handler> {
 /// Represents a single user.
 pub struct User<Handler: BackendHandler> {
     user: DomainUser,
+    schema: Vec<DomainAttributeSchema>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
 
@@ -245,6 +255,7 @@ impl<Handler: BackendHandler> Default for User<Handler> {
     fn default() -> Self {
         Self {
             user: DomainUser::default(),
+            schema: Vec::default(),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -332,19 +343,21 @@ impl<Handler: BackendHandler> User<Handler> {
     }
 }
 
-impl<Handler: BackendHandler> From<DomainUser> for User<Handler> {
-    fn from(user: DomainUser) -> Self {
+impl<Handler: BackendHandler> From<DomainUserAndSchema> for User<Handler> {
+    fn from(user: DomainUserAndSchema) -> Self {
         Self {
-            user,
+            user: user.user,
+            schema: user.schema,
             _phantom: std::marker::PhantomData,
         }
     }
 }
 
-impl<Handler: BackendHandler> From<DomainUserAndGroups> for User<Handler> {
-    fn from(user: DomainUserAndGroups) -> Self {
+impl<Handler: BackendHandler> From<DomainUserAndGroupsAndSchema> for User<Handler> {
+    fn from(user: DomainUserAndGroupsAndSchema) -> Self {
         Self {
             user: user.user,
+            schema: user.user_schema,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -358,6 +371,7 @@ pub struct Group<Handler: BackendHandler> {
     creation_date: chrono::NaiveDateTime,
     uuid: String,
     attributes: Vec<DomainAttributeValue>,
+    schema: Vec<DomainAttributeSchema>,
     members: Option<Vec<String>>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
@@ -409,29 +423,31 @@ impl<Handler: BackendHandler> Group<Handler> {
     }
 }
 
-impl<Handler: BackendHandler> From<GroupDetails> for Group<Handler> {
-    fn from(group_details: GroupDetails) -> Self {
+impl<Handler: BackendHandler> From<DomainGroupDetailsAndSchema> for Group<Handler> {
+    fn from(group_details: DomainGroupDetailsAndSchema) -> Self {
         Self {
-            group_id: group_details.group_id.0,
-            display_name: group_details.display_name.to_string(),
-            creation_date: group_details.creation_date,
-            uuid: group_details.uuid.into_string(),
-            attributes: group_details.attributes,
+            group_id: group_details.group.group_id.0,
+            display_name: group_details.group.display_name.to_string(),
+            creation_date: group_details.group.creation_date,
+            uuid: group_details.group.uuid.into_string(),
+            attributes: group_details.group.attributes,
             members: None,
+            schema: group_details.schema,
             _phantom: std::marker::PhantomData,
         }
     }
 }
 
-impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
-    fn from(group: DomainGroup) -> Self {
+impl<Handler: BackendHandler> From<DomainGroupAndSchema> for Group<Handler> {
+    fn from(group: DomainGroupAndSchema) -> Self {
         Self {
-            group_id: group.id.0,
-            display_name: group.display_name.to_string(),
-            creation_date: group.creation_date,
-            uuid: group.uuid.into_string(),
-            attributes: group.attributes,
-            members: Some(group.users.into_iter().map(UserId::into_string).collect()),
+            group_id: group.group.id.0,
+            display_name: group.group.display_name.to_string(),
+            creation_date: group.group.creation_date,
+            uuid: group.group.uuid.into_string(),
+            attributes: group.group.attributes,
+            members: Some(group.group.users.into_iter().map(UserId::into_string).collect()),
+            schema: group.schema,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -529,6 +545,7 @@ impl<Handler: BackendHandler> From<PublicSchema> for Schema<Handler> {
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct AttributeValue<Handler: BackendHandler, Extractor> {
     attribute: DomainAttributeValue,
+    schema: DomainAttributeSchema,
     _phantom: std::marker::PhantomData<Box<Handler>>,
     _phantom_extractor: std::marker::PhantomData<Extractor>,
 }
@@ -601,12 +618,13 @@ pub fn serialize_attribute(
         .ok_or_else(|| FieldError::from(anyhow::anyhow!("Unknown attribute: {}", &attribute.name)))
 }
 
-impl<Handler: BackendHandler, Extractor> From<DomainAttributeValue>
+impl<Handler: BackendHandler, Extractor> From<DomainAttributeValueAndSchema>
     for AttributeValue<Handler, Extractor>
 {
-    fn from(value: DomainAttributeValue) -> Self {
+    fn from(value: DomainAttributeValueAndSchema) -> Self {
         Self {
-            attribute: value,
+            attribute: value.value,
+            schema: value.schema,
             _phantom: std::marker::PhantomData,
             _phantom_extractor: std::marker::PhantomData,
         }

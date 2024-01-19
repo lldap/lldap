@@ -11,6 +11,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
 
+use super::handler::AttributeSchema;
 pub use super::model::UserColumn;
 pub use lldap_auth::types::UserId;
 
@@ -531,6 +532,38 @@ pub struct GroupDetails {
 pub struct UserAndGroups {
     pub user: User,
     pub groups: Option<Vec<GroupDetails>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttributeValueAndSchema {
+    pub value: AttributeValue,
+    pub schema: AttributeSchema,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserAndSchema {
+    pub user: User,
+    pub schema: Vec<AttributeSchema>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroupAndSchema {
+    pub group: Group,
+    pub schema: Vec<AttributeSchema>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroupDetailsAndSchema {
+    pub group: GroupDetails,
+    pub schema: Vec<AttributeSchema>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserAndGroupsAndSchema {
+    pub user: User,
+    pub user_schema: Vec<AttributeSchema>,
+    pub group: Option<Vec<GroupDetails>>,
+    pub group_schema: Vec<AttributeSchema>,
 }
 
 #[cfg(test)]
