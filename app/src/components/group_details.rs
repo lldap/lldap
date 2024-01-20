@@ -2,6 +2,7 @@ use crate::{
     components::{
         add_group_member::{self, AddGroupMemberComponent},
         remove_user_from_group::RemoveUserFromGroupComponent,
+        group_attributes_form::GroupAttributesForm,
         router::{AppRoute, Link},
     },
     infra::common_component::{CommonComponent, CommonComponentParts},
@@ -22,12 +23,22 @@ pub struct GetGroupDetails;
 pub type Group = get_group_details::GetGroupDetailsGroup;
 pub type User = get_group_details::GetGroupDetailsGroupUsers;
 pub type AddGroupMemberUser = add_group_member::User;
+pub type AttributeSchema = get_group_details::GetGroupDetailsSchemaGroupSchemaAttributes;
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Attribute {
+  pub name: String,
+  pub value: Vec<String>,
+  pub attribute_type: String,
+  pub is_list: bool,
+}
 
 pub struct GroupDetails {
     common: CommonComponentParts<Self>,
     /// The group info. If none, the error is in `error`. If `error` is None, then we haven't
     /// received the server response yet.
     group: Option<Group>,
+    attributes: Vec<Attribute>,
 }
 
 /// State machine describing the possible transitions of the component state.
@@ -185,7 +196,22 @@ impl CommonComponent<GroupDetails> for GroupDetails {
     fn handle_msg(&mut self, _: &Context<Self>, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::GroupDetailsResponse(response) => match response {
-                Ok(group) => self.group = Some(group.group),
+                Ok(response) => {
+                  let group = response.group;
+                  self.group = Some(group.clone());
+                  let set_attributes = group.attributes.clone();
+                  let mut attribute_schema = response.schema.group_schema.attributes;
+                  attribute_schema.retain(|schema| !schema.is_hardcoded);
+                  let attributes = attribute_schema.into_iter().map(|schema| {
+                    Attribute {
+                      name: schema.name.clone(),
+                      value: set_attributes.iter().find(|attribute_value| attribute_value.name == schema.name).unwrap().value.clone(),
+                      attribute_type: format!("{:?}",schema.attribute_type),
+                      is_list: schema.is_list,
+                    }
+                  }).collect();
+                  self.attributes = attributes;
+                },
                 Err(e) => {
                     self.group = None;
                     bail!("Error getting user details: {}", e);
@@ -222,6 +248,7 @@ impl Component for GroupDetails {
         let mut table = Self {
             common: CommonComponentParts::<Self>::create(),
             group: None,
+            attributes: Vec::default(),
         };
         table.get_group_details(ctx);
         table
@@ -239,6 +266,7 @@ impl Component for GroupDetails {
                 html! {
                     <div>
                       {self.view_details(u)}
+                      <GroupAttributesForm attributes={self.attributes.clone()} />
                       {self.view_user_list(ctx, u)}
                       {self.view_add_user_button(ctx, u)}
                       {self.view_messages(error)}

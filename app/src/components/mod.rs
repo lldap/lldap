@@ -6,6 +6,7 @@ pub mod create_group;
 pub mod create_user;
 pub mod delete_group;
 pub mod delete_user;
+pub mod group_attributes_form;
 pub mod group_details;
 pub mod group_table;
 pub mod login;
