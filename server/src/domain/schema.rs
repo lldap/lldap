@@ -4,7 +4,7 @@ use crate::domain::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct PublicSchema(Schema);
 
 impl PublicSchema {
