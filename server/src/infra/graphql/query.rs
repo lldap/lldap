@@ -1,13 +1,12 @@
+use std::sync::Arc;
+
 use crate::{
     domain::{
         deserialize::deserialize_attribute_value,
         handler::{BackendHandler, ReadSchemaBackendHandler},
         ldap::utils::{map_user_field, UserFieldType},
         model::UserColumn,
-        schema::{
-            PublicSchema, SchemaAttributeExtractor, SchemaGroupAttributeExtractor,
-            SchemaUserAttributeExtractor,
-        },
+        schema::PublicSchema,
         types::{AttributeType, GroupDetails, GroupId, JpegPhoto, UserId},
     },
     infra::{
@@ -143,11 +142,9 @@ impl<Handler: BackendHandler> Query<Handler> {
                 &span,
                 "Unauthorized access to user data",
             ))?;
-        Ok(handler
-            .get_user_details(&user_id)
-            .instrument(span)
-            .await
-            .map(Into::into)?)
+        let schema = Arc::new(self.get_schema(context, span.clone()).await?);
+        let user = handler.get_user_details(&user_id).instrument(span).await?;
+        User::<Handler>::from_user(user, schema)
     }
 
     async fn users(
@@ -164,8 +161,8 @@ impl<Handler: BackendHandler> Query<Handler> {
                 &span,
                 "Unauthorized access to user list",
             ))?;
-        let schema = self.get_schema(context, span.clone()).await?;
-        Ok(handler
+        let schema = Arc::new(self.get_schema(context, span.clone()).await?);
+        let users = handler
             .list_users(
                 filters
                     .map(|f| f.try_into_domain_filter(&schema))
@@ -173,8 +170,11 @@ impl<Handler: BackendHandler> Query<Handler> {
                 false,
             )
             .instrument(span)
-            .await
-            .map(|v| v.into_iter().map(Into::into).collect())?)
+            .await?;
+        users
+            .into_iter()
+            .map(|u| User::<Handler>::from_user_and_groups(u, schema.clone()))
+            .collect()
     }
 
     async fn groups(context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
@@ -185,11 +185,12 @@ impl<Handler: BackendHandler> Query<Handler> {
                 &span,
                 "Unauthorized access to group list",
             ))?;
-        Ok(handler
-            .list_groups(None)
-            .instrument(span)
-            .await
-            .map(|v| v.into_iter().map(Into::into).collect())?)
+        let schema = Arc::new(self.get_schema(context, span.clone()).await?);
+        let domain_groups = handler.list_groups(None).instrument(span).await?;
+        domain_groups
+            .into_iter()
+            .map(|g| Group::<Handler>::from_group(g, schema.clone()))
+            .collect()
     }
 
     async fn group(context: &Context<Handler>, group_id: i32) -> FieldResult<Group<Handler>> {
@@ -203,11 +204,12 @@ impl<Handler: BackendHandler> Query<Handler> {
                 &span,
                 "Unauthorized access to group data",
             ))?;
-        Ok(handler
+        let schema = Arc::new(self.get_schema(context, span.clone()).await?);
+        let group_details = handler
             .get_group_details(GroupId(group_id))
             .instrument(span)
-            .await
-            .map(Into::into)?)
+            .await?;
+        Group::<Handler>::from_group_details(group_details, schema.clone())
     }
 
     async fn schema(context: &Context<Handler>) -> FieldResult<Schema<Handler>> {
@@ -237,16 +239,45 @@ impl<Handler: BackendHandler> Query<Handler> {
 /// Represents a single user.
 pub struct User<Handler: BackendHandler> {
     user: DomainUser,
+    attributes: Vec<AttributeValue<Handler>>,
+    schema: Arc<PublicSchema>,
+    groups: Option<Vec<Group<Handler>>>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
 
-#[cfg(test)]
-impl<Handler: BackendHandler> Default for User<Handler> {
-    fn default() -> Self {
-        Self {
-            user: DomainUser::default(),
+impl<Handler: BackendHandler> User<Handler> {
+    pub fn from_user(mut user: DomainUser, schema: Arc<PublicSchema>) -> FieldResult<Self> {
+        let attributes = std::mem::take(&mut user.attributes);
+        Ok(Self {
+            user,
+            attributes: attributes
+                .into_iter()
+                .map(|a| {
+                    AttributeValue::<Handler>::from_schema(a, &schema.get_schema().user_attributes)
+                })
+                .collect::<FieldResult<Vec<_>>>()?,
+            schema,
+            groups: None,
             _phantom: std::marker::PhantomData,
+        })
+    }
+}
+
+impl<Handler: BackendHandler> User<Handler> {
+    pub fn from_user_and_groups(
+        DomainUserAndGroups { user, groups }: DomainUserAndGroups,
+        schema: Arc<PublicSchema>,
+    ) -> FieldResult<Self> {
+        let mut user = Self::from_user(user, schema.clone())?;
+        if let Some(groups) = groups {
+            user.groups = Some(
+                groups
+                    .into_iter()
+                    .map(|g| Group::<Handler>::from_group_details(g, schema.clone()))
+                    .collect::<FieldResult<Vec<_>>>()?,
+            );
         }
+        Ok(user)
     }
 }
 
@@ -299,17 +330,15 @@ impl<Handler: BackendHandler> User<Handler> {
     }
 
     /// User-defined attributes.
-    fn attributes(&self) -> Vec<AttributeValue<Handler, SchemaUserAttributeExtractor>> {
-        self.user
-            .attributes
-            .clone()
-            .into_iter()
-            .map(Into::into)
-            .collect()
+    fn attributes(&self) -> &[AttributeValue<Handler>] {
+        &self.attributes
     }
 
     /// The groups to which this user belongs.
     async fn groups(&self, context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
+        if let Some(groups) = &self.groups {
+            return Ok(groups.clone());
+        }
         let span = debug_span!("[GraphQL query] user::groups");
         span.in_scope(|| {
             debug!(user_id = ?self.user.user_id);
@@ -317,36 +346,16 @@ impl<Handler: BackendHandler> User<Handler> {
         let handler = context
             .get_readable_handler(&self.user.user_id)
             .expect("We shouldn't be able to get there without readable permission");
-        Ok(handler
+        let domain_groups = handler
             .get_user_groups(&self.user.user_id)
             .instrument(span)
-            .await
-            .map(|set| {
-                let mut groups = set
-                    .into_iter()
-                    .map(Into::into)
-                    .collect::<Vec<Group<Handler>>>();
-                groups.sort_by(|g1, g2| g1.display_name.cmp(&g2.display_name));
-                groups
-            })?)
-    }
-}
-
-impl<Handler: BackendHandler> From<DomainUser> for User<Handler> {
-    fn from(user: DomainUser) -> Self {
-        Self {
-            user,
-            _phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<Handler: BackendHandler> From<DomainUserAndGroups> for User<Handler> {
-    fn from(user: DomainUserAndGroups) -> Self {
-        Self {
-            user: user.user,
-            _phantom: std::marker::PhantomData,
-        }
+            .await?;
+        let mut groups = domain_groups
+            .into_iter()
+            .map(|g| Group::<Handler>::from_group_details(g, self.schema.clone()))
+            .collect::<FieldResult<Vec<Group<Handler>>>>()?;
+        groups.sort_by(|g1, g2| g1.display_name.cmp(&g2.display_name));
+        Ok(groups)
     }
 }
 
@@ -357,9 +366,67 @@ pub struct Group<Handler: BackendHandler> {
     display_name: String,
     creation_date: chrono::NaiveDateTime,
     uuid: String,
-    attributes: Vec<DomainAttributeValue>,
-    members: Option<Vec<String>>,
+    attributes: Vec<AttributeValue<Handler>>,
+    schema: Arc<PublicSchema>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
+}
+
+impl<Handler: BackendHandler> Group<Handler> {
+    pub fn from_group(
+        group: DomainGroup,
+        schema: Arc<PublicSchema>,
+    ) -> FieldResult<Group<Handler>> {
+        Ok(Self {
+            group_id: group.id.0,
+            display_name: group.display_name.to_string(),
+            creation_date: group.creation_date,
+            uuid: group.uuid.into_string(),
+            attributes: group
+                .attributes
+                .into_iter()
+                .map(|a| {
+                    AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
+                })
+                .collect::<FieldResult<Vec<_>>>()?,
+            schema,
+            _phantom: std::marker::PhantomData,
+        })
+    }
+
+    pub fn from_group_details(
+        group_details: GroupDetails,
+        schema: Arc<PublicSchema>,
+    ) -> FieldResult<Group<Handler>> {
+        Ok(Self {
+            group_id: group_details.group_id.0,
+            display_name: group_details.display_name.to_string(),
+            creation_date: group_details.creation_date,
+            uuid: group_details.uuid.into_string(),
+            attributes: group_details
+                .attributes
+                .into_iter()
+                .map(|a| {
+                    AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
+                })
+                .collect::<FieldResult<Vec<_>>>()?,
+            schema,
+            _phantom: std::marker::PhantomData,
+        })
+    }
+}
+
+impl<Handler: BackendHandler> Clone for Group<Handler> {
+    fn clone(&self) -> Self {
+        Self {
+            group_id: self.group_id,
+            display_name: self.display_name.clone(),
+            creation_date: self.creation_date,
+            uuid: self.uuid.clone(),
+            attributes: self.attributes.clone(),
+            schema: self.schema.clone(),
+            _phantom: std::marker::PhantomData,
+        }
+    }
 }
 
 #[graphql_object(context = Context<Handler>)]
@@ -378,12 +445,8 @@ impl<Handler: BackendHandler> Group<Handler> {
     }
 
     /// User-defined attributes.
-    fn attributes(&self) -> Vec<AttributeValue<Handler, SchemaGroupAttributeExtractor>> {
-        self.attributes
-            .clone()
-            .into_iter()
-            .map(Into::into)
-            .collect()
+    fn attributes(&self) -> &[AttributeValue<Handler>] {
+        &self.attributes
     }
 
     /// The groups to which this user belongs.
@@ -398,42 +461,17 @@ impl<Handler: BackendHandler> Group<Handler> {
                 &span,
                 "Unauthorized access to group data",
             ))?;
-        Ok(handler
+        let domain_users = handler
             .list_users(
                 Some(DomainRequestFilter::MemberOfId(GroupId(self.group_id))),
                 false,
             )
             .instrument(span)
-            .await
-            .map(|v| v.into_iter().map(Into::into).collect())?)
-    }
-}
-
-impl<Handler: BackendHandler> From<GroupDetails> for Group<Handler> {
-    fn from(group_details: GroupDetails) -> Self {
-        Self {
-            group_id: group_details.group_id.0,
-            display_name: group_details.display_name.to_string(),
-            creation_date: group_details.creation_date,
-            uuid: group_details.uuid.into_string(),
-            attributes: group_details.attributes,
-            members: None,
-            _phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<Handler: BackendHandler> From<DomainGroup> for Group<Handler> {
-    fn from(group: DomainGroup) -> Self {
-        Self {
-            group_id: group.id.0,
-            display_name: group.display_name.to_string(),
-            creation_date: group.creation_date,
-            uuid: group.uuid.into_string(),
-            attributes: group.attributes,
-            members: Some(group.users.into_iter().map(UserId::into_string).collect()),
-            _phantom: std::marker::PhantomData,
-        }
+            .await?;
+        domain_users
+            .into_iter()
+            .map(|u| User::<Handler>::from_user_and_groups(u, self.schema.clone()))
+            .collect()
     }
 }
 
@@ -462,6 +500,15 @@ impl<Handler: BackendHandler> AttributeSchema<Handler> {
     }
     fn is_hardcoded(&self) -> bool {
         self.schema.is_hardcoded
+    }
+}
+
+impl<Handler: BackendHandler> Clone for AttributeSchema<Handler> {
+    fn clone(&self) -> Self {
+        Self {
+            schema: self.schema.clone(),
+            _phantom: std::marker::PhantomData,
+        }
     }
 }
 
@@ -527,88 +574,92 @@ impl<Handler: BackendHandler> From<PublicSchema> for Schema<Handler> {
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct AttributeValue<Handler: BackendHandler, Extractor> {
+pub struct AttributeValue<Handler: BackendHandler> {
     attribute: DomainAttributeValue,
+    schema: AttributeSchema<Handler>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
-    _phantom_extractor: std::marker::PhantomData<Extractor>,
 }
 
 #[graphql_object(context = Context<Handler>)]
-impl<Handler: BackendHandler, Extractor: SchemaAttributeExtractor>
-    AttributeValue<Handler, Extractor>
-{
+impl<Handler: BackendHandler> AttributeValue<Handler> {
     fn name(&self) -> &str {
         self.attribute.name.as_str()
     }
-    async fn value(&self, context: &Context<Handler>) -> FieldResult<Vec<String>> {
-        let handler = context
-            .handler
-            .get_user_restricted_lister_handler(&context.validation_result);
-        serialize_attribute(
-            &self.attribute,
-            Extractor::get_attributes(&PublicSchema::from(handler.get_schema().await?)),
-        )
+
+    fn value(&self) -> FieldResult<Vec<String>> {
+        Ok(serialize_attribute(&self.attribute, &self.schema.schema))
+    }
+
+    fn schema(&self) -> &AttributeSchema<Handler> {
+        &self.schema
+    }
+}
+
+impl<Handler: BackendHandler> Clone for AttributeValue<Handler> {
+    fn clone(&self) -> Self {
+        Self {
+            attribute: self.attribute.clone(),
+            schema: self.schema.clone(),
+            _phantom: std::marker::PhantomData,
+        }
     }
 }
 
 pub fn serialize_attribute(
     attribute: &DomainAttributeValue,
-    attributes: &DomainAttributeList,
-) -> FieldResult<Vec<String>> {
+    attribute_schema: &DomainAttributeSchema,
+) -> Vec<String> {
     let convert_date = |date| chrono::Utc.from_utc_datetime(&date).to_rfc3339();
-    attributes
-        .get_attribute_type(&attribute.name)
-        .map(|attribute_type| {
-            match attribute_type {
-                (AttributeType::String, false) => {
-                    vec![attribute.value.unwrap::<String>()]
-                }
-                (AttributeType::Integer, false) => {
-                    // LDAP integers are encoded as strings.
-                    vec![attribute.value.unwrap::<i64>().to_string()]
-                }
-                (AttributeType::JpegPhoto, false) => {
-                    vec![String::from(&attribute.value.unwrap::<JpegPhoto>())]
-                }
-                (AttributeType::DateTime, false) => {
-                    vec![convert_date(attribute.value.unwrap::<NaiveDateTime>())]
-                }
-                (AttributeType::String, true) => attribute
-                    .value
-                    .unwrap::<Vec<String>>()
-                    .into_iter()
-                    .collect(),
-                (AttributeType::Integer, true) => attribute
-                    .value
-                    .unwrap::<Vec<i64>>()
-                    .into_iter()
-                    .map(|i| i.to_string())
-                    .collect(),
-                (AttributeType::JpegPhoto, true) => attribute
-                    .value
-                    .unwrap::<Vec<JpegPhoto>>()
-                    .iter()
-                    .map(String::from)
-                    .collect(),
-                (AttributeType::DateTime, true) => attribute
-                    .value
-                    .unwrap::<Vec<NaiveDateTime>>()
-                    .into_iter()
-                    .map(convert_date)
-                    .collect(),
-            }
-        })
-        .ok_or_else(|| FieldError::from(anyhow::anyhow!("Unknown attribute: {}", &attribute.name)))
+    match (attribute_schema.attribute_type, attribute_schema.is_list) {
+        (AttributeType::String, false) => vec![attribute.value.unwrap::<String>()],
+        (AttributeType::Integer, false) => {
+            // LDAP integers are encoded as strings.
+            vec![attribute.value.unwrap::<i64>().to_string()]
+        }
+        (AttributeType::JpegPhoto, false) => {
+            vec![String::from(&attribute.value.unwrap::<JpegPhoto>())]
+        }
+        (AttributeType::DateTime, false) => {
+            vec![convert_date(attribute.value.unwrap::<NaiveDateTime>())]
+        }
+        (AttributeType::String, true) => attribute
+            .value
+            .unwrap::<Vec<String>>()
+            .into_iter()
+            .collect(),
+        (AttributeType::Integer, true) => attribute
+            .value
+            .unwrap::<Vec<i64>>()
+            .into_iter()
+            .map(|i| i.to_string())
+            .collect(),
+        (AttributeType::JpegPhoto, true) => attribute
+            .value
+            .unwrap::<Vec<JpegPhoto>>()
+            .iter()
+            .map(String::from)
+            .collect(),
+        (AttributeType::DateTime, true) => attribute
+            .value
+            .unwrap::<Vec<NaiveDateTime>>()
+            .into_iter()
+            .map(convert_date)
+            .collect(),
+    }
 }
 
-impl<Handler: BackendHandler, Extractor> From<DomainAttributeValue>
-    for AttributeValue<Handler, Extractor>
-{
-    fn from(value: DomainAttributeValue) -> Self {
-        Self {
-            attribute: value,
-            _phantom: std::marker::PhantomData,
-            _phantom_extractor: std::marker::PhantomData,
+impl<Handler: BackendHandler> AttributeValue<Handler> {
+    fn from_schema(a: DomainAttributeValue, schema: &DomainAttributeList) -> FieldResult<Self> {
+        match schema.get_attribute_schema(&a.name) {
+            Some(s) => Ok(AttributeValue::<Handler> {
+                attribute: a,
+                schema: AttributeSchema::<Handler> {
+                    schema: s.clone(),
+                    _phantom: std::marker::PhantomData,
+                },
+                _phantom: std::marker::PhantomData,
+            }),
+            None => Err(FieldError::from(format!("Unknown attribute {}", &a.name))),
         }
     }
 }
