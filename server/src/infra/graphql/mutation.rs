@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     domain::{
         deserialize::deserialize_attribute_value,
@@ -159,11 +161,8 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             })
             .instrument(span.clone())
             .await?;
-        Ok(handler
-            .get_user_details(&user_id)
-            .instrument(span)
-            .await
-            .map(Into::into)?)
+        let user_details = handler.get_user_details(&user_id).instrument(span).await?;
+        super::query::User::<Handler>::from_user(user_details, Arc::new(schema))
     }
 
     async fn create_group(
@@ -513,11 +512,8 @@ async fn create_group_with_details<Handler: BackendHandler>(
         attributes,
     };
     let group_id = handler.create_group(request).await?;
-    Ok(handler
-        .get_group_details(group_id)
-        .instrument(span)
-        .await
-        .map(Into::into)?)
+    let group_details = handler.get_group_details(group_id).instrument(span).await?;
+    super::query::Group::<Handler>::from_group_details(group_details, Arc::new(schema))
 }
 
 fn deserialize_attribute(
