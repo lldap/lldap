@@ -1,6 +1,7 @@
 type AttributeValue {
   name: String!
   value: [String!]!
+  schema: AttributeSchema!
 }
 
 type Mutation {
@@ -152,15 +153,15 @@ type User {
   groups: [Group!]!
 }
 
-type AttributeList {
-  attributes: [AttributeSchema!]!
-}
-
 enum AttributeType {
   STRING
   INTEGER
   JPEG_PHOTO
   DATE_TIME
+}
+
+type AttributeList {
+  attributes: [AttributeSchema!]!
 }
 
 type Success {
