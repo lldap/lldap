@@ -3,6 +3,8 @@ use lettre::message::Mailbox;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use crate::infra::database_string::DatabaseUrl;
+
 /// lldap is a lightweight LDAP server
 #[derive(Debug, Parser, Clone)]
 #[clap(version, author)]
@@ -87,7 +89,7 @@ pub struct RunOpts {
 
     /// Database connection URL
     #[clap(short, long, env = "LLDAP_DATABASE_URL")]
-    pub database_url: Option<String>,
+    pub database_url: Option<DatabaseUrl>,
 
     /// Force admin password reset to the config value.
     #[clap(long, env = "LLDAP_FORCE_LADP_USER_PASS_RESET")]

@@ -18,6 +18,7 @@ use crate::{
     infra::{
         cli::*,
         configuration::{compare_private_key_hashes, Configuration},
+        database_string::DatabaseUrl,
         db_cleaner::Scheduler,
         healthcheck, mail,
     },
@@ -84,7 +85,7 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     info!("Starting LLDAP version {}", env!("CARGO_PKG_VERSION"));
 
     let sql_pool = {
-        let mut sql_opt = sea_orm::ConnectOptions::new(config.database_url.clone());
+        let mut sql_opt = sea_orm::ConnectOptions::new(config.database_url.to_string());
         sql_opt
             .max_connections(5)
             .sqlx_logging(true)
@@ -248,9 +249,9 @@ fn run_healthcheck(opts: RunOpts) -> Result<()> {
     std::process::exit(i32::from(failure))
 }
 
-async fn create_schema(database_url: String) -> Result<()> {
+async fn create_schema(database_url: DatabaseUrl) -> Result<()> {
     let sql_pool = {
-        let mut sql_opt = sea_orm::ConnectOptions::new(database_url.clone());
+        let mut sql_opt = sea_orm::ConnectOptions::new(database_url.to_string());
         sql_opt
             .max_connections(1)
             .sqlx_logging(true)
