@@ -100,13 +100,11 @@ fn expand_group_attribute_wildcards(attributes: &[String]) -> Vec<&str> {
 fn make_ldap_search_group_result_entry(
     group: Group,
     base_dn_str: &str,
-    attributes: &[String],
+    expanded_attributes: &[&str],
     user_filter: &Option<UserId>,
     ignored_group_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
-    let expanded_attributes = expand_group_attribute_wildcards(attributes);
-
     LdapSearchResultEntry {
         dn: format!("cn={},ou=groups,{}", group.display_name, base_dn_str),
         attributes: expanded_attributes
@@ -267,11 +265,17 @@ pub fn convert_groups_to_ldap_op<'a>(
     user_filter: &'a Option<UserId>,
     schema: &'a PublicSchema,
 ) -> impl Iterator<Item = LdapOp> + 'a {
+    let expanded_attributes = if groups.is_empty() {
+        None
+    } else {
+        Some(expand_group_attribute_wildcards(attributes))
+    };
+
     groups.into_iter().map(move |g| {
         LdapOp::SearchResultEntry(make_ldap_search_group_result_entry(
             g,
             &ldap_info.base_dn_str,
-            attributes,
+            expanded_attributes.as_ref().unwrap(),
             user_filter,
             &ldap_info.ignored_group_attributes,
             schema,

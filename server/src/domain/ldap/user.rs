@@ -119,12 +119,11 @@ const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
 fn make_ldap_search_user_result_entry(
     user: User,
     base_dn_str: &str,
-    attributes: &[String],
+    expanded_attributes: &[&str],
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
-    let expanded_attributes = expand_user_attribute_wildcards(attributes);
     let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
     LdapSearchResultEntry {
         dn,
@@ -295,11 +294,16 @@ pub fn convert_users_to_ldap_op<'a>(
     ldap_info: &'a LdapInfo,
     schema: &'a PublicSchema,
 ) -> impl Iterator<Item = LdapOp> + 'a {
+    let expanded_attributes = if users.is_empty() {
+        None
+    } else {
+        Some(expand_user_attribute_wildcards(attributes))
+    };
     users.into_iter().map(move |u| {
         LdapOp::SearchResultEntry(make_ldap_search_user_result_entry(
             u.user,
             &ldap_info.base_dn_str,
-            attributes,
+            expanded_attributes.as_ref().unwrap(),
             u.groups.as_deref(),
             &ldap_info.ignored_user_attributes,
             schema,
