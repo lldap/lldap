@@ -570,10 +570,27 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             .await
         });
         Ok(match scope {
-            SearchScope::Global => InternalSearchResults::UsersAndGroups(
-                get_user_list(&request.filter).await?,
-                get_group_list(&request.filter).await?,
-            ),
+            SearchScope::Global => {
+                let users = get_user_list(&request.filter).await;
+                let groups = get_group_list(&request.filter).await;
+                match (users, groups) {
+                    (Ok(users), Err(e)) => {
+                        warn!("Error while getting groups: {:#}", e);
+                        InternalSearchResults::UsersAndGroups(users, Vec::new())
+                    }
+                    (Err(e), Ok(groups)) => {
+                        warn!("Error while getting users: {:#}", e);
+                        InternalSearchResults::UsersAndGroups(Vec::new(), groups)
+                    }
+                    (Err(user_error), Err(_)) => {
+                        InternalSearchResults::Raw(vec![make_search_error(
+                            user_error.code,
+                            user_error.message,
+                        )])
+                    }
+                    (Ok(users), Ok(groups)) => InternalSearchResults::UsersAndGroups(users, groups),
+                }
+            }
             SearchScope::Users => InternalSearchResults::UsersAndGroups(
                 get_user_list(&request.filter).await?,
                 Vec::new(),
