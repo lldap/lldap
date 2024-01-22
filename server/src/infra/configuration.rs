@@ -3,7 +3,10 @@ use crate::{
         sql_tables::{ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation},
         types::{AttributeName, UserId},
     },
-    infra::cli::{GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts},
+    infra::{
+        cli::{GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts},
+        database_string::DatabaseUrl,
+    },
 };
 use anyhow::{bail, Context, Result};
 use figment::{
@@ -91,8 +94,8 @@ pub struct Configuration {
     pub force_ldap_user_pass_reset: bool,
     #[builder(default = "false")]
     pub force_update_private_key: bool,
-    #[builder(default = r#"String::from("sqlite://users.db?mode=rwc")"#)]
-    pub database_url: String,
+    #[builder(default = r#"DatabaseUrl::from("sqlite://users.db?mode=rwc")"#)]
+    pub database_url: DatabaseUrl,
     #[builder(default)]
     pub ignored_user_attributes: Vec<AttributeName>,
     #[builder(default)]
@@ -411,7 +414,7 @@ impl ConfigOverrider for RunOpts {
         }
 
         if let Some(database_url) = self.database_url.as_ref() {
-            config.database_url = database_url.to_string();
+            config.database_url = database_url.clone();
         }
 
         if let Some(force_ldap_user_pass_reset) = self.force_ldap_user_pass_reset {
