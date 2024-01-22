@@ -114,21 +114,21 @@ pub fn expand_attribute_wildcards<'a>(
     ldap_attributes: &'a [String],
     all_attribute_keys: &'a [&'static str],
 ) -> Vec<&'a str> {
-    let mut attributes_out = ldap_attributes
+    let extra_attributes =
+        if ldap_attributes.iter().any(|x| x == "*") || ldap_attributes.is_empty() {
+            all_attribute_keys
+        } else {
+            &[]
+        }
         .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>();
-
-    if attributes_out.iter().any(|&x| x == "*") || attributes_out.is_empty() {
-        // Remove occurrences of '*'
-        attributes_out.retain(|&x| x != "*");
-        // Splice in all non-operational attributes
-        attributes_out.extend(all_attribute_keys.iter());
-    }
+        .copied();
+    let attributes_out = ldap_attributes
+        .iter()
+        .map(|s| s.as_str())
+        .filter(|&s| s != "*" && s != "+" && s != "1.1");
 
     // Deduplicate, preserving order
-    let resolved_attributes = attributes_out
-        .into_iter()
+    let resolved_attributes = itertools::chain(attributes_out, extra_attributes)
         .unique_by(|a| a.to_ascii_lowercase())
         .collect_vec();
     debug!(?resolved_attributes);
