@@ -1,4 +1,4 @@
-FROM rust:1.72
+FROM rust:1.74
 
 ARG USERNAME=lldapdev
 # We need to keep the user as 1001 to match the GitHub runner's UID.

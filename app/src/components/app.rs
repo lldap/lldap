@@ -3,6 +3,7 @@ use crate::{
         change_password::ChangePasswordForm,
         create_group::CreateGroupForm,
         create_user::CreateUserForm,
+        create_user_attribute::CreateUserAttributeForm,
         group_details::GroupDetails,
         group_table::GroupTable,
         login::LoginForm,
@@ -11,6 +12,7 @@ use crate::{
         reset_password_step2::ResetPasswordStep2Form,
         router::{AppRoute, Link, Redirect},
         user_details::UserDetails,
+        user_schema_table::ListUserSchema,
         user_table::UserTable,
     },
     infra::{api::HostService, cookies::get_cookie},
@@ -227,6 +229,9 @@ impl App {
             AppRoute::CreateGroup => html! {
                 <CreateGroupForm/>
             },
+            AppRoute::CreateUserAttribute => html! {
+                <CreateUserAttributeForm/>
+            },
             AppRoute::ListGroups => html! {
                 <div>
                   <GroupTable />
@@ -235,6 +240,9 @@ impl App {
                     {"Create a group"}
                   </Link>
                 </div>
+            },
+            AppRoute::ListUserSchema => html! {
+                <ListUserSchema />
             },
             AppRoute::GroupDetails { group_id } => html! {
                 <GroupDetails group_id={*group_id} />
@@ -289,6 +297,14 @@ impl App {
                           to={AppRoute::ListGroups}>
                           <i class="bi-collection me-2"></i>
                           {"Groups"}
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          classes="nav-link px-2 h6"
+                          to={AppRoute::ListUserSchema}>
+                          <i class="bi-list-ul me-2"></i>
+                          {"User schema"}
                         </Link>
                       </li>
                     </>
