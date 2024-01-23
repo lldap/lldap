@@ -53,19 +53,21 @@ impl CommonComponent<UserSchemaTable> for UserSchemaTable {
                 Ok(true)
             }
             Msg::OnError(e) => Err(e),
-            Msg::OnAttributeDeleted(attribute_name) => match self.attributes {
-                None => {
-                    log!("Attribute deleted but component has no attributes");
-                    Err(anyhow!("invalid state"))
+            Msg::OnAttributeDeleted(attribute_name) => {
+                match self.attributes {
+                    None => {
+                        log!(format!("Attribute {attribute_name} was  deleted but component has no attributes"));
+                        Err(anyhow!("invalid state"))
+                    }
+                    Some(_) => {
+                        self.attributes
+                            .as_mut()
+                            .unwrap()
+                            .retain(|a| a.name != attribute_name);
+                        Ok(true)
+                    }
                 }
-                Some(_) => {
-                    self.attributes
-                        .as_mut()
-                        .unwrap()
-                        .retain(|a| a.name != attribute_name);
-                    Ok(true)
-                }
-            },
+            }
         }
     }
 
@@ -158,7 +160,7 @@ impl UserSchemaTable {
                 {
                     if hardcoded {
                         html!{}
-                    } else { 
+                    } else {
                         html!{
                             <td>
                                 <DeleteUserAttribute

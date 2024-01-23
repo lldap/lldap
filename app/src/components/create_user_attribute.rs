@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::{
     components::{
         form::{checkbox::CheckBox, field::Field, select::Select, submit::Submit},
@@ -12,6 +14,7 @@ use crate::{
 use anyhow::{bail, Result};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
+use validator::ValidationError;
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form_derive::Model;
@@ -37,11 +40,19 @@ pub struct CreateUserAttributeForm {
 pub struct CreateUserAttributeModel {
     #[validate(length(min = 1, message = "attribute_name is required"))]
     attribute_name: String,
-    #[validate(length(min = 1, message = "attribute_type is required"))]
+    #[validate(custom = "validate_attribute_type")]
     attribute_type: String,
     is_editable: bool,
     is_list: bool,
     is_visible: bool,
+}
+
+fn validate_attribute_type(attribute_type: &str) -> Result<(), ValidationError> {
+    let result = AttributeType::from_str(attribute_type);
+    match result {
+        Ok(_) => Ok(()),
+        _ => Err(ValidationError::new("Invalid attribute type")),
+    }
 }
 
 pub enum Msg {
