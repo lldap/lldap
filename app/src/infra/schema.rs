@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::{fmt::Display, str::FromStr};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttributeType {
     String,
     Integer,
@@ -55,5 +55,34 @@ macro_rules! convert_attribute_type {
                 }
             }
         }
+    };
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Attribute {
+  pub name: String,
+  pub value: Vec<String>,
+  pub attribute_type: AttributeType,
+  pub is_list: bool,
+  pub is_editable: bool,
+  pub is_hardcoded: bool,
+}
+
+// Macro to generate traits for converting between AttributeType and the
+// graphql generated equivalents.
+#[macro_export]
+macro_rules! combine_schema_and_values {
+    ($schema_list:ident, $value_list:ident, $output_list:ident) => {
+        let set_attributes = value_list.clone();
+        let mut attribute_schema = schema_list.clone();
+        attribute_schema.retain(|schema| !schema.is_hardcoded);
+        let $output_list = attribute_schema.into_iter().map(|schema| {
+            Attribute {
+                name: schema.name.clone(),
+                value: set_attributes.iter().find(|attribute_value| attribute_value.name == schema.name).unwrap().value.clone(),
+                attribute_type: AttributeType::from(schema.attribute_type),
+                is_list: schema.is_list,
+            }
+        }).collect();
     };
 }
