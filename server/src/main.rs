@@ -27,7 +27,7 @@ use actix::Actor;
 use actix_server::ServerBuilder;
 use anyhow::{anyhow, bail, Context, Result};
 use futures_util::TryFutureExt;
-use sea_orm::Database;
+use sea_orm::{Database, DatabaseConnection};
 use tracing::*;
 
 mod domain;
@@ -80,12 +80,9 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
     Ok(())
 }
 
-#[instrument(skip_all)]
-async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
-    info!("Starting LLDAP version {}", env!("CARGO_PKG_VERSION"));
-
+async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnection> {
     let sql_pool = {
-        let mut sql_opt = sea_orm::ConnectOptions::new(config.database_url.to_string());
+        let mut sql_opt = sea_orm::ConnectOptions::new(database_url.to_string());
         sql_opt
             .max_connections(5)
             .sqlx_logging(true)
@@ -94,7 +91,18 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     };
     domain::sql_tables::init_table(&sql_pool)
         .await
-        .context("while creating the tables")?;
+        .context("while creating base tables")?;
+    infra::jwt_sql_tables::init_table(&sql_pool)
+        .await
+        .context("while creating jwt tables")?;
+    Ok(sql_pool)
+}
+
+#[instrument(skip_all)]
+async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
+    info!("Starting LLDAP version {}", env!("CARGO_PKG_VERSION"));
+
+    let sql_pool = setup_sql_tables(&config.database_url).await?;
     let private_key_info = config.get_private_key_info();
     let force_update_private_key = config.force_update_private_key;
     match (
@@ -158,7 +166,6 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
         actix_server::Server::build(),
     )
     .context("while binding the LDAP server")?;
-    infra::jwt_sql_tables::init_table(&sql_pool).await?;
     let server_builder =
         infra::tcp_server::build_tcp_server(&config, backend_handler, server_builder)
             .await
@@ -169,70 +176,42 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     Ok(server_builder)
 }
 
-async fn run_server(config: Configuration) -> Result<()> {
-    set_up_server(config)
-        .await?
-        .workers(1)
-        .run()
-        .await
-        .context("while starting the server")?;
-    Ok(())
-}
-
-fn run_server_command(opts: RunOpts) -> Result<()> {
+async fn run_server_command(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
 
     let config = infra::configuration::init(opts)?;
     infra::logging::init(&config)?;
 
-    use std::sync::{Arc, Mutex};
-    let result = Arc::new(Mutex::new(Ok(())));
-    let result_async = Arc::clone(&result);
-    actix::run(run_server(config).unwrap_or_else(move |e| *result_async.lock().unwrap() = Err(e)))?;
-    if let Err(e) = result.lock().unwrap().as_ref() {
-        anyhow::bail!(format!("Could not set up servers: {:#}", e));
-    }
+    let server = set_up_server(config).await?.workers(1);
 
-    info!("End.");
-    Ok(())
+    dbg!("here");
+    server.run().await.context("while starting the server")
 }
 
-fn send_test_email_command(opts: TestEmailOpts) -> Result<()> {
+async fn send_test_email_command(opts: TestEmailOpts) -> Result<()> {
     let to = opts.to.parse()?;
     let config = infra::configuration::init(opts)?;
     infra::logging::init(&config)?;
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-
-    runtime.block_on(
-        mail::send_test_email(to, &config.smtp_options)
-            .unwrap_or_else(|e| error!("Could not send email: {:#}", e)),
-    );
-    Ok(())
+    mail::send_test_email(to, &config.smtp_options)
+        .await
+        .context("Could not send email: {:#}")
 }
 
-fn run_healthcheck(opts: RunOpts) -> Result<()> {
+async fn run_healthcheck(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
     let config = infra::configuration::init(opts)?;
     infra::logging::init(&config)?;
-
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
 
     info!("Starting healthchecks");
 
     use tokio::time::timeout;
     let delay = Duration::from_millis(3000);
-    let (ldap, ldaps, api) = runtime.block_on(async {
-        tokio::join!(
-            timeout(delay, healthcheck::check_ldap(config.ldap_port)),
-            timeout(delay, healthcheck::check_ldaps(&config.ldaps_options)),
-            timeout(delay, healthcheck::check_api(config.http_port)),
-        )
-    });
+    let (ldap, ldaps, api) = tokio::join!(
+        timeout(delay, healthcheck::check_ldap(config.ldap_port)),
+        timeout(delay, healthcheck::check_ldaps(&config.ldaps_options)),
+        timeout(delay, healthcheck::check_api(config.http_port)),
+    );
 
     let failure = [ldap, ldaps, api]
         .into_iter()
@@ -244,50 +223,29 @@ fn run_healthcheck(opts: RunOpts) -> Result<()> {
         })
         .any(|r| r.is_err());
     if failure {
-        error!("Healthcheck failed");
+        bail!("Healthcheck failed")
+    } else {
+        Ok(())
     }
-    std::process::exit(i32::from(failure))
 }
 
-async fn create_schema(database_url: DatabaseUrl) -> Result<()> {
-    let sql_pool = {
-        let mut sql_opt = sea_orm::ConnectOptions::new(database_url.to_string());
-        sql_opt
-            .max_connections(1)
-            .sqlx_logging(true)
-            .sqlx_logging_level(log::LevelFilter::Debug);
-        Database::connect(sql_opt).await?
-    };
-    domain::sql_tables::init_table(&sql_pool)
-        .await
-        .context("while creating base tables")?;
-    infra::jwt_sql_tables::init_table(&sql_pool)
-        .await
-        .context("while creating jwt tables")?;
-    Ok(())
-}
-
-fn create_schema_command(opts: RunOpts) -> Result<()> {
+async fn create_schema_command(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
     let config = infra::configuration::init(opts)?;
     infra::logging::init(&config)?;
-    let database_url = config.database_url;
-
-    actix::run(
-        create_schema(database_url).unwrap_or_else(|e| error!("Could not create schema: {:#}", e)),
-    )?;
-
+    setup_sql_tables(&config.database_url).await?;
     info!("Schema created successfully.");
     Ok(())
 }
 
-fn main() -> Result<()> {
+#[actix::main]
+async fn main() -> Result<()> {
     let cli_opts = infra::cli::init();
     match cli_opts.command {
         Command::ExportGraphQLSchema(opts) => infra::graphql::api::export_schema(opts),
-        Command::Run(opts) => run_server_command(opts),
-        Command::HealthCheck(opts) => run_healthcheck(opts),
-        Command::SendTestEmail(opts) => send_test_email_command(opts),
-        Command::CreateSchema(opts) => create_schema_command(opts),
+        Command::Run(opts) => run_server_command(opts).await,
+        Command::HealthCheck(opts) => run_healthcheck(opts).await,
+        Command::SendTestEmail(opts) => send_test_email_command(opts).await,
+        Command::CreateSchema(opts) => create_schema_command(opts).await,
     }
 }
