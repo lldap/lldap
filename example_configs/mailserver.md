@@ -55,13 +55,13 @@ services:
       # >>> Postfix LDAP Integration
       - ACCOUNT_PROVISIONER=LDAP
       - LDAP_SERVER_HOST=lldap:3890
-      - LDAP_SEARCH_BASE=dc=example,dc=com
+      - LDAP_SEARCH_BASE=ou=people,dc=example,dc=com
       - LDAP_BIND_DN=uid=admin,ou=people,dc=example,dc=com
       - LDAP_BIND_PW=adminpassword
       - LDAP_QUERY_FILTER_USER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
       - LDAP_QUERY_FILTER_GROUP=(&(objectClass=groupOfUniqueNames)(uid=%s))
       - LDAP_QUERY_FILTER_ALIAS=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
-      - LDAP_QUERY_FILTER_DOMAIN=((mail=*@%s))
+      - LDAP_QUERY_FILTER_DOMAIN=(mail=*@%s)
       # <<< Postfix LDAP Integration
       # >>> Dovecot LDAP Integration
       - DOVECOT_AUTH_BIND=yes
