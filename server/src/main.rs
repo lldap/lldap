@@ -184,7 +184,6 @@ async fn run_server_command(opts: RunOpts) -> Result<()> {
 
     let server = set_up_server(config).await?.workers(1);
 
-    dbg!("here");
     server.run().await.context("while starting the server")
 }
 
