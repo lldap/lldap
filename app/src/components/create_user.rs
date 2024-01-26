@@ -1,5 +1,8 @@
 use crate::{
-    components::router::AppRoute,
+    components::{
+        form::{field::Field, submit::Submit},
+        router::AppRoute,
+    },
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
@@ -187,163 +190,57 @@ impl Component for CreateUserForm {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let link = &ctx.link();
-        type Field = yew_form::Field<CreateUserModel>;
         html! {
           <div class="row justify-content-center">
             <form class="form py-3" style="max-width: 636px">
-              <div class="row mb-3">
-                <h5 class="fw-bold">{"Create a user"}</h5>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="username"
-                  class="form-label col-4 col-form-label">
-                  {"User name"}
-                  <span class="text-danger">{"*"}</span>
-                  {":"}
-                </label>
-                <div class="col-8">
-                  <Field
-                    form={&self.form}
-                    field_name="username"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    autocomplete="username"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("username")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="email"
-                  class="form-label col-4 col-form-label">
-                  {"Email"}
-                  <span class="text-danger">{"*"}</span>
-                  {":"}
-                </label>
-                <div class="col-8">
-                  <Field
-                    form={&self.form}
-                    input_type="email"
-                    field_name="email"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    autocomplete="email"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("email")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="display_name"
-                  class="form-label col-4 col-form-label">
-                  {"Display name:"}
-                </label>
-                <div class="col-8">
-                  <Field
-                    form={&self.form}
-                    autocomplete="name"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    field_name="display_name"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("display_name")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="first_name"
-                  class="form-label col-4 col-form-label">
-                  {"First name:"}
-                </label>
-                <div class="col-8">
-                  <Field
-                    form={&self.form}
-                    autocomplete="given-name"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    field_name="first_name"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("first_name")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="last_name"
-                  class="form-label col-4 col-form-label">
-                  {"Last name:"}
-                </label>
-                <div class="col-8">
-                  <Field
-                    form={&self.form}
-                    autocomplete="family-name"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    field_name="last_name"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("last_name")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="password"
-                  class="form-label col-4 col-form-label">
-                  {"Password:"}
-                </label>
-                <div class="col-8">
-                  <Field
-                    form={&self.form}
-                    input_type="password"
-                    field_name="password"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    autocomplete="new-password"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("password")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="confirm_password"
-                  class="form-label col-4 col-form-label">
-                  {"Confirm password:"}
-                </label>
-                <div class="col-8">
-                  <Field
-                    form={&self.form}
-                    input_type="password"
-                    field_name="confirm_password"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    autocomplete="new-password"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("confirm_password")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row justify-content-center">
-                <button
-                  class="btn btn-primary col-auto col-form-label mt-4"
-                  disabled={self.common.is_task_running()}
-                  type="submit"
-                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})}>
-                  <i class="bi-save me-2"></i>
-                  {"Submit"}
-                </button>
-              </div>
+              <Field<CreateUserModel>
+                form={&self.form}
+                required=true
+                label="User name"
+                field_name="username"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Field<CreateUserModel>
+                form={&self.form}
+                required=true
+                label="Email"
+                field_name="email"
+                input_type="email"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Field<CreateUserModel>
+                form={&self.form}
+                label="Display name"
+                field_name="display_name"
+                autocomplete="name"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Field<CreateUserModel>
+                form={&self.form}
+                label="First name"
+                field_name="first_name"
+                autocomplete="given-name"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Field<CreateUserModel>
+                form={&self.form}
+                label="Last name"
+                field_name="last_name"
+                autocomplete="family-name"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Field<CreateUserModel>
+                form={&self.form}
+                label="Password"
+                field_name="password"
+                input_type="password"
+                autocomplete="new-password"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Field<CreateUserModel>
+                form={&self.form}
+                label="Confirm password"
+                field_name="confirm_password"
+                input_type="password"
+                autocomplete="new-password"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Submit
+                disabled={self.common.is_task_running()}
+                onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})} />
             </form>
             {
               if let Some(e) = &self.common.error {

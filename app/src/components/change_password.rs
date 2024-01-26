@@ -1,5 +1,8 @@
 use crate::{
-    components::router::{AppRoute, Link},
+    components::{
+        form::{field::Field, submit::Submit},
+        router::{AppRoute, Link},
+    },
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
@@ -207,7 +210,6 @@ impl Component for ChangePasswordForm {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let is_admin = ctx.props().is_admin;
         let link = ctx.link();
-        type Field = yew_form::Field<FormModel>;
         html! {
           <>
             <div class="mb-2 mt-2">
@@ -224,90 +226,44 @@ impl Component for ChangePasswordForm {
                 }
               } else { html! {} }
             }
-            <form
-              class="form">
+            <form class="form">
               {if !is_admin { html! {
-                <div class="form-group row">
-                  <label for="old_password"
-                    class="form-label col-sm-2 col-form-label">
-                    {"Current password*:"}
-                  </label>
-                  <div class="col-sm-10">
-                    <Field
-                      form={&self.form}
-                      field_name="old_password"
-                      input_type="password"
-                      class="form-control"
-                      class_invalid="is-invalid has-error"
-                      class_valid="has-success"
-                      autocomplete="current-password"
-                      oninput={link.callback(|_| Msg::FormUpdate)} />
-                    <div class="invalid-feedback">
-                      {&self.form.field_message("old_password")}
-                    </div>
-                  </div>
-                </div>
+                <Field<FormModel>
+                  form={&self.form}
+                  required=true
+                  label="Current password"
+                  field_name="old_password"
+                  input_type="password"
+                  autocomplete="current-password"
+                  oninput={link.callback(|_| Msg::FormUpdate)} />
               }} else { html! {} }}
-              <div class="form-group row mb-3">
-                <label for="new_password"
-                  class="form-label col-sm-2 col-form-label">
-                   {"New Password"}
-                   <span class="text-danger">{"*"}</span>
-                   {":"}
-                </label>
-                <div class="col-sm-10">
-                  <Field
-                    form={&self.form}
-                    field_name="password"
-                    input_type="password"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    autocomplete="new-password"
-                    oninput={link.callback(|_| Msg::FormUpdate)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("password")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="confirm_password"
-                  class="form-label col-sm-2 col-form-label">
-                  {"Confirm Password"}
-                  <span class="text-danger">{"*"}</span>
-                  {":"}
-                </label>
-                <div class="col-sm-10">
-                  <Field
-                    form={&self.form}
-                    field_name="confirm_password"
-                    input_type="password"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    autocomplete="new-password"
-                    oninput={link.callback(|_| Msg::FormUpdate)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("confirm_password")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row justify-content-center">
-                <button
-                  class="btn btn-primary col-auto col-form-label"
-                  type="submit"
-                  disabled={self.common.is_task_running()}
-                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
-                  <i class="bi-save me-2"></i>
-                  {"Save changes"}
-                </button>
+              <Field<FormModel>
+                form={&self.form}
+                required=true
+                label="New password"
+                field_name="password"
+                input_type="password"
+                autocomplete="new-password"
+                oninput={link.callback(|_| Msg::FormUpdate)} />
+              <Field<FormModel>
+                form={&self.form}
+                required=true
+                label="Confirm password"
+                field_name="confirm_password"
+                input_type="password"
+                autocomplete="new-password"
+                oninput={link.callback(|_| Msg::FormUpdate)} />
+              <Submit
+                disabled={self.common.is_task_running()}
+                onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}
+                text="Save changes" >
                 <Link
                   classes="btn btn-secondary ms-2 col-auto col-form-label"
                   to={AppRoute::UserDetails{user_id: ctx.props().username.clone()}}>
                   <i class="bi-arrow-return-left me-2"></i>
                   {"Back"}
                 </Link>
-              </div>
+              </Submit>
             </form>
           </>
         }
