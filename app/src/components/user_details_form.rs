@@ -1,7 +1,10 @@
 use std::str::FromStr;
 
 use crate::{
-    components::user_details::User,
+    components::{
+        form::{field::Field, static_value::StaticValue, submit::Submit},
+        user_details::User,
+    },
     infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{bail, Error, Result};
@@ -190,7 +193,6 @@ impl Component for UserDetailsForm {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        type Field = yew_form::Field<UserModel>;
         let link = &ctx.link();
 
         let avatar_string = match &self.avatar {

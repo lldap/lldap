@@ -1,5 +1,8 @@
 use crate::{
-    components::router::{AppRoute, Link},
+    components::{
+        form::{field::Field, submit::Submit},
+        router::{AppRoute, Link},
+    },
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
@@ -164,61 +167,29 @@ impl Component for ResetPasswordStep2Form {
             }
             _ => (),
         };
-        type Field = yew_form::Field<FormModel>;
         html! {
           <>
             <h2>{"Reset your password"}</h2>
-            <form
-              class="form">
-              <div class="form-group row">
-                <label for="new_password"
-                  class="form-label col-sm-2 col-form-label">
-                  {"New password*:"}
-                </label>
-                <div class="col-sm-10">
-                  <Field
-                    form={&self.form}
-                    field_name="password"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    autocomplete="new-password"
-                    input_type="password"
-                    oninput={link.callback(|_| Msg::FormUpdate)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("password")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row">
-                <label for="confirm_password"
-                  class="form-label col-sm-2 col-form-label">
-                  {"Confirm password*:"}
-                </label>
-                <div class="col-sm-10">
-                  <Field
-                    form={&self.form}
-                    field_name="confirm_password"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    autocomplete="new-password"
-                    input_type="password"
-                    oninput={link.callback(|_| Msg::FormUpdate)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("confirm_password")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mt-2">
-                <button
-                  class="btn btn-primary col-sm-1 col-form-label"
-                  type="submit"
-                  disabled={self.common.is_task_running()}
-                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
-                  {"Submit"}
-                </button>
-              </div>
+            <form class="form">
+              <Field<FormModel>
+                label="New password"
+                required=true
+                form={&self.form}
+                field_name="password"
+                autocomplete="new-password"
+                input_type="password"
+                oninput={link.callback(|_| Msg::FormUpdate)} />
+              <Field<FormModel>
+                label="Confirm password"
+                required=true
+                form={&self.form}
+                field_name="confirm_password"
+                autocomplete="new-password"
+                input_type="password"
+                oninput={link.callback(|_| Msg::FormUpdate)} />
+              <Submit
+                disabled={self.common.is_task_running()}
+                onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})} />
             </form>
             { if let Some(e) = &self.common.error {
                 html! {
