@@ -1,5 +1,8 @@
 use crate::{
-    components::router::{AppRoute, Link},
+    components::{
+        form::submit::Submit,
+        router::{AppRoute, Link},
+    },
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
@@ -155,68 +158,62 @@ impl Component for LoginForm {
             }
         } else {
             html! {
-              <form
-                class="form center-block col-sm-4 col-offset-4">
-                  <div class="input-group">
-                    <div class="input-group-prepend">
-                      <span class="input-group-text">
-                        <i class="bi-person-fill"/>
-                      </span>
-                    </div>
-                    <Field
-                      class="form-control"
-                      class_invalid="is-invalid has-error"
-                      class_valid="has-success"
-                      form={&self.form}
-                      field_name="username"
-                      placeholder="Username"
-                      autocomplete="username"
-                      oninput={link.callback(|_| Msg::Update)} />
+              <form class="form center-block col-sm-4 col-offset-4">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">
+                      <i class="bi-person-fill"/>
+                    </span>
                   </div>
-                  <div class="input-group">
-                    <div class="input-group-prepend">
-                      <span class="input-group-text">
-                        <i class="bi-lock-fill"/>
-                      </span>
-                    </div>
-                    <Field
-                      class="form-control"
-                      class_invalid="is-invalid has-error"
-                      class_valid="has-success"
-                      form={&self.form}
-                      field_name="password"
-                      input_type="password"
-                      placeholder="Password"
-                      autocomplete="current-password" />
+                  <Field
+                    class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    form={&self.form}
+                    field_name="username"
+                    placeholder="Username"
+                    autocomplete="username"
+                    oninput={link.callback(|_| Msg::Update)} />
+                </div>
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">
+                      <i class="bi-lock-fill"/>
+                    </span>
                   </div>
-                  <div class="form-group mt-3">
-                    <button
-                      type="submit"
-                      class="btn btn-primary"
-                      disabled={self.common.is_task_running()}
-                      onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
-                      <i class="bi-box-arrow-in-right me-2"/>
-                      {"Login"}
-                    </button>
-                    { if password_reset_enabled {
-                      html! {
-                        <Link
-                          classes="btn-link btn"
-                          disabled={self.common.is_task_running()}
-                          to={AppRoute::StartResetPassword}>
-                          {"Forgot your password?"}
-                        </Link>
-                      }
-                    } else {
-                      html!{}
-                    }}
-                  </div>
-                  <div class="form-group">
-                  { if let Some(e) = &self.common.error {
-                      html! { e.to_string() }
-                    } else { html! {} }
-                  }
-                  </div>
+                  <Field
+                    class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    form={&self.form}
+                    field_name="password"
+                    input_type="password"
+                    placeholder="Password"
+                    autocomplete="current-password" />
+                </div>
+                <Submit
+                  text="Login"
+                  disabled={self.common.is_task_running()}
+                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
+                  { if password_reset_enabled {
+                    html! {
+                      <Link
+                        classes="btn-link btn"
+                        disabled={self.common.is_task_running()}
+                        to={AppRoute::StartResetPassword}>
+                        {"Forgot your password?"}
+                      </Link>
+                    }
+                  } else {
+                    html!{}
+                  }}
+                </Submit>
+                <div class="form-group">
+                { if let Some(e) = &self.common.error {
+                    html! { e.to_string() }
+                  } else { html! {} }
+                }
+                </div>
               </form>
             }
         }

@@ -1,5 +1,8 @@
 use crate::{
-    components::router::AppRoute,
+    components::{
+        form::{field::Field, submit::Submit},
+        router::AppRoute,
+    },
     infra::common_component::{CommonComponent, CommonComponentParts},
 };
 use anyhow::{bail, Result};
@@ -93,44 +96,21 @@ impl Component for CreateGroupForm {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let link = ctx.link();
-        type Field = yew_form::Field<CreateGroupModel>;
         html! {
           <div class="row justify-content-center">
             <form class="form py-3" style="max-width: 636px">
               <div class="row mb-3">
                 <h5 class="fw-bold">{"Create a group"}</h5>
               </div>
-              <div class="form-group row mb-3">
-                <label for="groupname"
-                  class="form-label col-4 col-form-label">
-                  {"Group name"}
-                  <span class="text-danger">{"*"}</span>
-                  {":"}
-                </label>
-                <div class="col-8">
-                  <Field
-                    form={&self.form}
-                    field_name="groupname"
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    autocomplete="groupname"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("groupname")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row justify-content-center">
-                <button
-                  class="btn btn-primary col-auto col-form-label"
-                  type="submit"
-                  disabled={self.common.is_task_running()}
-                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})}>
-                  <i class="bi-save me-2"></i>
-                  {"Submit"}
-                </button>
-              </div>
+              <Field<CreateGroupModel>
+                form={&self.form}
+                required=true
+                label="Group name"
+                field_name="groupname"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Submit
+                disabled={self.common.is_task_running()}
+                onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitForm})} />
             </form>
             { if let Some(e) = &self.common.error {
                 html! {
