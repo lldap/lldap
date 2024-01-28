@@ -6,7 +6,7 @@
 
 # Radicale config file v0.3 (inside docker container /etc/radicale/config https://radicale.org/v3.html#configuration)
 
-```
+```toml
 [auth]
 type = radicale_auth_ldap
 ldap_url = ldap://lldap:3890  
