@@ -26,6 +26,10 @@ pub enum AppRoute {
     ListUserSchema,
     #[at("/user-attributes/create")]
     CreateUserAttribute,
+    #[at("/group-attributes")]
+    ListGroupSchema,
+    #[at("/group-attributes/create")]
+    CreateGroupAttribute,
     #[at("/")]
     Index,
 }

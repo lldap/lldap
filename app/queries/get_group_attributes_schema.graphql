@@ -1,0 +1,13 @@
+query GetGroupAttributesSchema {
+  schema {
+    groupSchema {
+      attributes {
+        name
+        attributeType
+        isList
+        isVisible
+        isHardcoded
+      }
+    }
+  }
+}
