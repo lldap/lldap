@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::{fmt::Display, str::FromStr};
+use validator::ValidationError;
 
 #[derive(Debug)]
 pub enum AttributeType {
@@ -56,4 +57,10 @@ macro_rules! convert_attribute_type {
             }
         }
     };
+}
+
+pub fn validate_attribute_type(attribute_type: &str) -> Result<(), ValidationError> {
+    AttributeType::from_str(attribute_type)
+        .map_err(|_| ValidationError::new("Invalid attribute type"))?;
+    Ok(())
 }

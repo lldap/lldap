@@ -20,37 +20,36 @@ use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
-    query_path = "queries/create_user_attribute.graphql",
+    query_path = "queries/create_group_attribute.graphql",
     response_derives = "Debug",
     custom_scalars_module = "crate::infra::graphql"
 )]
-pub struct CreateUserAttribute;
+pub struct CreateGroupAttribute;
 
-convert_attribute_type!(create_user_attribute::AttributeType);
+convert_attribute_type!(create_group_attribute::AttributeType);
 
-pub struct CreateUserAttributeForm {
+pub struct CreateGroupAttributeForm {
     common: CommonComponentParts<Self>,
-    form: yew_form::Form<CreateUserAttributeModel>,
+    form: yew_form::Form<CreateGroupAttributeModel>,
 }
 
 #[derive(Model, Validate, PartialEq, Eq, Clone, Default, Debug)]
-pub struct CreateUserAttributeModel {
+pub struct CreateGroupAttributeModel {
     #[validate(length(min = 1, message = "attribute_name is required"))]
     attribute_name: String,
     #[validate(custom = "validate_attribute_type")]
     attribute_type: String,
-    is_editable: bool,
     is_list: bool,
-    is_visible: bool,
+    is_visible: bool, // remove when backend doesn't return group attributes for normal users
 }
 
 pub enum Msg {
     Update,
     SubmitForm,
-    CreateUserAttributeResponse(Result<create_user_attribute::ResponseData>),
+    CreateGroupAttributeResponse(Result<create_group_attribute::ResponseData>),
 }
 
-impl CommonComponent<CreateUserAttributeForm> for CreateUserAttributeForm {
+impl CommonComponent<CreateGroupAttributeForm> for CreateGroupAttributeForm {
     fn handle_msg(
         &mut self,
         ctx: &Context<Self>,
@@ -63,33 +62,32 @@ impl CommonComponent<CreateUserAttributeForm> for CreateUserAttributeForm {
                     bail!("Check the form for errors");
                 }
                 let model = self.form.model();
-                if model.is_editable && !model.is_visible {
-                    bail!("Editable attributes must also be visible");
-                }
                 let attribute_type = model.attribute_type.parse::<AttributeType>().unwrap();
-                let req = create_user_attribute::Variables {
+                let req = create_group_attribute::Variables {
                     name: model.attribute_name,
-                    attribute_type: create_user_attribute::AttributeType::from(attribute_type),
-                    is_editable: model.is_editable,
+                    attribute_type: create_group_attribute::AttributeType::from(attribute_type),
                     is_list: model.is_list,
                     is_visible: model.is_visible,
                 };
-                self.common.call_graphql::<CreateUserAttribute, _>(
+                self.common.call_graphql::<CreateGroupAttribute, _>(
                     ctx,
                     req,
-                    Msg::CreateUserAttributeResponse,
-                    "Error trying to create user attribute",
+                    Msg::CreateGroupAttributeResponse,
+                    "Error trying to create group attribute",
                 );
                 Ok(true)
             }
-            Msg::CreateUserAttributeResponse(response) => {
+            Msg::CreateGroupAttributeResponse(response) => {
                 response?;
                 let model = self.form.model();
                 log!(&format!(
-                    "Created user attribute '{}'",
+                    "Created group attribute '{}'",
                     model.attribute_name
                 ));
-                ctx.link().history().unwrap().push(AppRoute::ListUserSchema);
+                ctx.link()
+                    .history()
+                    .unwrap()
+                    .push(AppRoute::ListGroupSchema);
                 Ok(true)
             }
         }
@@ -100,18 +98,18 @@ impl CommonComponent<CreateUserAttributeForm> for CreateUserAttributeForm {
     }
 }
 
-impl Component for CreateUserAttributeForm {
+impl Component for CreateGroupAttributeForm {
     type Message = Msg;
     type Properties = ();
 
     fn create(_: &Context<Self>) -> Self {
-        let model = CreateUserAttributeModel {
+        let model = CreateGroupAttributeModel {
             attribute_type: AttributeType::String.to_string(),
             ..Default::default()
         };
         Self {
             common: CommonComponentParts::<Self>::create(),
-            form: yew_form::Form::<CreateUserAttributeModel>::new(model),
+            form: yew_form::Form::<CreateGroupAttributeModel>::new(model),
         }
     }
 
@@ -124,14 +122,14 @@ impl Component for CreateUserAttributeForm {
         html! {
           <div class="row justify-content-center">
             <form class="form py-3" style="max-width: 636px">
-              <h5 class="fw-bold">{"Create a user attribute"}</h5>
-              <Field<CreateUserAttributeModel>
+              <h5 class="fw-bold">{"Create a group attribute"}</h5>
+              <Field<CreateGroupAttributeModel>
                 label="Name"
                 required={true}
                 form={&self.form}
                 field_name="attribute_name"
                 oninput={link.callback(|_| Msg::Update)} />
-              <Select<CreateUserAttributeModel>
+              <Select<CreateGroupAttributeModel>
                 label="Type"
                 required={true}
                 form={&self.form}
@@ -141,21 +139,16 @@ impl Component for CreateUserAttributeForm {
                 <option value="Integer">{"Integer"}</option>
                 <option value="Jpeg">{"Jpeg"}</option>
                 <option value="DateTime">{"DateTime"}</option>
-              </Select<CreateUserAttributeModel>>
-              <CheckBox<CreateUserAttributeModel>
+              </Select<CreateGroupAttributeModel>>
+              <CheckBox<CreateGroupAttributeModel>
                 label="Multiple values"
                 form={&self.form}
                 field_name="is_list"
                 ontoggle={link.callback(|_| Msg::Update)} />
-              <CheckBox<CreateUserAttributeModel>
+              <CheckBox<CreateGroupAttributeModel>
                 label="Visible to users"
                 form={&self.form}
                 field_name="is_visible"
-                ontoggle={link.callback(|_| Msg::Update)} />
-              <CheckBox<CreateUserAttributeModel>
-                label="Editable by users"
-                form={&self.form}
-                field_name="is_editable"
                 ontoggle={link.callback(|_| Msg::Update)} />
               <Submit
                 disabled={self.common.is_task_running()}
