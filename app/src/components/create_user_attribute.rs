@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use crate::{
     components::{
         form::{checkbox::CheckBox, field::Field, select::Select, submit::Submit},
@@ -14,7 +12,6 @@ use crate::{
 use anyhow::{bail, Result};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
-use validator::ValidationError;
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form_derive::Model;
