@@ -1,0 +1,5 @@
+mutation DeleteGroupAttributeQuery($name: String!) {
+    deleteGroupAttribute(name: $name) {
+        ok
+    }
+}

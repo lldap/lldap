@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::{fmt::Display, str::FromStr};
+use validator::ValidationError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttributeType {
@@ -58,6 +59,7 @@ macro_rules! convert_attribute_type {
     };
 }
 
+<<<<<<< HEAD
 #[derive(Clone, PartialEq, Eq)]
 pub struct Attribute {
   pub name: String,
@@ -85,4 +87,10 @@ macro_rules! combine_schema_and_values {
             }
         }).collect();
     };
+=======
+pub fn validate_attribute_type(attribute_type: &str) -> Result<(), ValidationError> {
+    AttributeType::from_str(attribute_type)
+        .map_err(|_| ValidationError::new("Invalid attribute type"))?;
+    Ok(())
+>>>>>>> 8f2391a (app: create group attribute schema page (#825))
 }

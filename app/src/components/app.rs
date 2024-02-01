@@ -2,9 +2,11 @@ use crate::{
     components::{
         change_password::ChangePasswordForm,
         create_group::CreateGroupForm,
+        create_group_attribute::CreateGroupAttributeForm,
         create_user::CreateUserForm,
         create_user_attribute::CreateUserAttributeForm,
         group_details::GroupDetails,
+        group_schema_table::ListGroupSchema,
         group_table::GroupTable,
         login::LoginForm,
         logout::LogoutButton,
@@ -232,6 +234,9 @@ impl App {
             AppRoute::CreateUserAttribute => html! {
                 <CreateUserAttributeForm/>
             },
+            AppRoute::CreateGroupAttribute => html! {
+                <CreateGroupAttributeForm/>
+            },
             AppRoute::ListGroups => html! {
                 <div>
                   <GroupTable />
@@ -243,6 +248,9 @@ impl App {
             },
             AppRoute::ListUserSchema => html! {
                 <ListUserSchema />
+            },
+            AppRoute::ListGroupSchema => html! {
+                <ListGroupSchema />
             },
             AppRoute::GroupDetails { group_id } => html! {
                 <GroupDetails group_id={*group_id} />
@@ -305,6 +313,14 @@ impl App {
                           to={AppRoute::ListUserSchema}>
                           <i class="bi-list-ul me-2"></i>
                           {"User schema"}
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          classes="nav-link px-2 h6"
+                          to={AppRoute::ListGroupSchema}>
+                          <i class="bi-list-ul me-2"></i>
+                          {"Group schema"}
                         </Link>
                       </li>
                     </>
