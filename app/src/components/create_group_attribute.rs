@@ -95,7 +95,10 @@ impl CommonComponent<CreateGroupAttributeForm> for CreateGroupAttributeForm {
                     "Created group attribute '{}'",
                     model.attribute_name
                 ));
-                ctx.link().history().unwrap().push(AppRoute::ListGroupSchema);
+                ctx.link()
+                    .history()
+                    .unwrap()
+                    .push(AppRoute::ListGroupSchema);
                 Ok(true)
             }
         }

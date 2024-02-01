@@ -25,7 +25,8 @@ pub struct GetGroupAttributesSchema;
 
 use get_group_attributes_schema::ResponseData;
 
-pub type Attribute = get_group_attributes_schema::GetGroupAttributesSchemaSchemaGroupSchemaAttributes;
+pub type Attribute =
+    get_group_attributes_schema::GetGroupAttributesSchemaSchemaGroupSchemaAttributes;
 
 convert_attribute_type!(get_group_attributes_schema::AttributeType);
 
@@ -49,7 +50,8 @@ impl CommonComponent<GroupSchemaTable> for GroupSchemaTable {
     fn handle_msg(&mut self, _: &Context<Self>, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::ListAttributesResponse(schema) => {
-                self.attributes = Some(schema?.schema.group_schema.attributes.into_iter().collect());
+                self.attributes =
+                    Some(schema?.schema.group_schema.attributes.into_iter().collect());
                 Ok(true)
             }
             Msg::OnError(e) => Err(e),
