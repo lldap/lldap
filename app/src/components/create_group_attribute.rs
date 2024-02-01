@@ -8,7 +8,7 @@ use crate::{
     convert_attribute_type,
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
-        schema::AttributeType,
+        schema::{validate_attribute_type, AttributeType},
     },
 };
 use anyhow::{bail, Result};
@@ -43,15 +43,7 @@ pub struct CreateGroupAttributeModel {
     #[validate(custom = "validate_attribute_type")]
     attribute_type: String,
     is_list: bool,
-    is_visible: bool,
-}
-
-fn validate_attribute_type(attribute_type: &str) -> Result<(), ValidationError> {
-    let result = AttributeType::from_str(attribute_type);
-    match result {
-        Ok(_) => Ok(()),
-        _ => Err(ValidationError::new("Invalid attribute type")),
-    }
+    is_visible: bool, // remove when backend doesn't return group attributes for normal users
 }
 
 pub enum Msg {

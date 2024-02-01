@@ -8,7 +8,7 @@ use crate::{
     convert_attribute_type,
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
-        schema::AttributeType,
+        schema::{validate_attribute_type, AttributeType},
     },
 };
 use anyhow::{bail, Result};
@@ -45,14 +45,6 @@ pub struct CreateUserAttributeModel {
     is_editable: bool,
     is_list: bool,
     is_visible: bool,
-}
-
-fn validate_attribute_type(attribute_type: &str) -> Result<(), ValidationError> {
-    let result = AttributeType::from_str(attribute_type);
-    match result {
-        Ok(_) => Ok(()),
-        _ => Err(ValidationError::new("Invalid attribute type")),
-    }
 }
 
 pub enum Msg {

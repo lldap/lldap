@@ -57,3 +57,9 @@ macro_rules! convert_attribute_type {
         }
     };
 }
+
+pub fn validate_attribute_type(attribute_type: &str) -> Result<(), ValidationError> {
+    let result = AttributeType::from_str(attribute_type)
+        .map_err(|| ValidationError::new("Invalid attribute type"))?;
+    Ok(())
+}
