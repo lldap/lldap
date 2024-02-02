@@ -101,16 +101,10 @@ jobs:
         run: cargo llvm-cov  --workspace --no-report
       - name: Aggregate reports
         run: cargo llvm-cov --no-run --lcov --output-path lcov.info
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        if: github.ref != 'refs/heads/main' || github.event_name != 'push'
-        with:
-          files: lcov.info
-          fail_ci_if_error: true
       - name: Upload coverage to Codecov (main)
-        uses: codecov/codecov-action@v3
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: codecov/codecov-action@v4
         with:
           files: lcov.info
           fail_ci_if_error: true
+          codecov_yml_path: .github/codecov.yml
           token: ${{ secrets.CODECOV_TOKEN }}
