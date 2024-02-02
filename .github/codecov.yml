@@ -1,10 +1,19 @@
 codecov:
   require_ci_to_pass: yes
 comment:
-  layout: "diff,flags"
+  layout: "header,diff,files"
   require_changes: true
   require_base: true
   require_head: true
+coverage:
+  status:
+    project:
+      default:
+        target: "75%"
+        threshold: "0.1%"
+        removed_code_behavior: adjust_base
+github_checks:
+  annotations: true
 ignore:
   - "app"
   - "docs"
