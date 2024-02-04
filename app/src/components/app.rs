@@ -1,5 +1,6 @@
 use crate::{
     components::{
+        banner::Banner,
         change_password::ChangePasswordForm,
         create_group::CreateGroupForm,
         create_group_attribute::CreateGroupAttributeForm,
@@ -33,25 +34,6 @@ use yew_router::{
     scope_ext::RouterScopeExt,
     BrowserRouter, Switch,
 };
-
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = darkmode)]
-    fn toggleDarkMode(doSave: bool);
-
-    #[wasm_bindgen]
-    fn inDarkMode() -> bool;
-}
-
-#[function_component(DarkModeToggle)]
-pub fn dark_mode_toggle() -> Html {
-    html! {
-      <div class="form-check form-switch">
-        <input class="form-check-input" onclick={|_| toggleDarkMode(true)} type="checkbox" id="darkModeToggle" checked={inDarkMode()}/>
-        <label class="form-check-label" for="darkModeToggle">{"Dark mode"}</label>
-      </div>
-    }
-}
 
 #[function_component(AppContainer)]
 pub fn app_container() -> Html {
@@ -139,10 +121,11 @@ impl Component for App {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let link = ctx.link().clone();
         let is_admin = self.is_admin();
+        let username = self.user_info.clone().map(|(username, _)| username);
         let password_reset_enabled = self.password_reset_enabled;
         html! {
           <div>
-            {self.view_banner(ctx)}
+            <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
             <div class="container py-3 bg-kug">
               <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <main class="py-3" style="max-width: 1000px">
@@ -276,107 +259,6 @@ impl App {
                 }
                 None => html! {},
             },
-        }
-    }
-
-    fn view_banner(&self, ctx: &Context<Self>) -> Html {
-        html! {
-          <header class="p-2 mb-3 border-bottom">
-            <div class="container">
-              <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
-                <a href={yew_router::utils::base_url().unwrap_or("/".to_string())} class="d-flex align-items-center mt-2 mb-lg-0 me-md-5 text-decoration-none">
-                  <h2>{"LLDAP"}</h2>
-                </a>
-
-                <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0">
-                  {if self.is_admin() { html! {
-                    <>
-                      <li>
-                        <Link
-                          classes="nav-link px-2 h6"
-                          to={AppRoute::ListUsers}>
-                          <i class="bi-people me-2"></i>
-                          {"Users"}
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          classes="nav-link px-2 h6"
-                          to={AppRoute::ListGroups}>
-                          <i class="bi-collection me-2"></i>
-                          {"Groups"}
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          classes="nav-link px-2 h6"
-                          to={AppRoute::ListUserSchema}>
-                          <i class="bi-list-ul me-2"></i>
-                          {"User schema"}
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          classes="nav-link px-2 h6"
-                          to={AppRoute::ListGroupSchema}>
-                          <i class="bi-list-ul me-2"></i>
-                          {"Group schema"}
-                        </Link>
-                      </li>
-                    </>
-                  } } else { html!{} } }
-                </ul>
-                { self.view_user_menu(ctx) }
-                <DarkModeToggle />
-              </div>
-            </div>
-          </header>
-        }
-    }
-
-    fn view_user_menu(&self, ctx: &Context<Self>) -> Html {
-        if let Some((user_id, _)) = &self.user_info {
-            let link = ctx.link();
-            html! {
-              <div class="dropdown text-end">
-                <a href="#"
-                  class="d-block nav-link text-decoration-none dropdown-toggle"
-                  id="dropdownUser"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false">
-                  <svg xmlns="http://www.w3.org/2000/svg"
-                    width="32"
-                    height="32"
-                    fill="currentColor"
-                    class="bi bi-person-circle"
-                    viewBox="0 0 16 16">
-                    <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
-                    <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
-                  </svg>
-                  <span class="ms-2">
-                    {user_id}
-                  </span>
-                </a>
-                <ul
-                  class="dropdown-menu text-small dropdown-menu-lg-end"
-                  aria-labelledby="dropdownUser1"
-                  style="">
-                  <li>
-                    <Link
-                      classes="dropdown-item"
-                      to={AppRoute::UserDetails{ user_id: user_id.clone() }}>
-                      {"View details"}
-                    </Link>
-                  </li>
-                  <li><hr class="dropdown-divider" /></li>
-                  <li>
-                    <LogoutButton on_logged_out={link.callback(|_| Msg::Logout)} />
-                  </li>
-                </ul>
-              </div>
-            }
-        } else {
-            html! {}
         }
     }
 
