@@ -65,6 +65,7 @@ struct BlankAvatarDisplayProps {
     pub width: i32,
     pub height: i32,
 }
+
 #[function_component(BlankAvatarDisplay)]
 fn blank_avatar_display(props: &BlankAvatarDisplayProps) -> Html {
     let fill = match &props.error {
