@@ -10,7 +10,6 @@ use crate::{
         group_schema_table::ListGroupSchema,
         group_table::GroupTable,
         login::LoginForm,
-        logout::LogoutButton,
         reset_password_step1::ResetPasswordStep1Form,
         reset_password_step2::ResetPasswordStep2Form,
         router::{AppRoute, Link, Redirect},
@@ -22,7 +21,6 @@ use crate::{
 };
 
 use gloo_console::error;
-use wasm_bindgen::prelude::*;
 use yew::{
     function_component,
     html::Scope,

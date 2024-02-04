@@ -31,29 +31,29 @@ pub fn avatar(props: &Props) -> Html {
             let avatar = response.user.avatar.clone();
             match &avatar {
                 Some(data) => html! {
-                    <img
-                            id="avatarDisplay"
-                            src={format!("data:image/jpeg;base64, {}", data)}
-                            style={format!("max-height:{}px;max-width:{}px;height:auto;width:auto;", props.height, props.width)}
-                            alt="Avatar" />
+                  <img
+                    id="avatarDisplay"
+                    src={format!("data:image/jpeg;base64, {}", data)}
+                    style={format!("max-height:{}px;max-width:{}px;height:auto;width:auto;", props.height, props.width)}
+                    alt="Avatar" />
                 },
                 None => html! {
-                    <BlankAvatarDisplay error="SOME FAKE ERROR"
-                        width={props.width}
-                        height={props.height} />
+                  <BlankAvatarDisplay
+                    width={props.width}
+                    height={props.height} />
                 },
             }
         }
         LoadableResult::Loaded(Err(error)) => html! {
-            <BlankAvatarDisplay
-                error={error.to_string()}
-                width={props.width}
-                height={props.height} />
+          <BlankAvatarDisplay
+            error={error.to_string()}
+            width={props.width}
+            height={props.height} />
         },
         LoadableResult::Loading => html! {
-            <BlankAvatarDisplay
-                width={props.width}
-                height={props.height} />
+          <BlankAvatarDisplay
+            width={props.width}
+            height={props.height} />
         },
     }
 }
@@ -72,15 +72,15 @@ fn blank_avatar_display(props: &BlankAvatarDisplayProps) -> Html {
         None => "currentColor",
     };
     html! {
-        <svg xmlns="http://www.w3.org/2000/svg"
-                  width={props.width.to_string()}
-                  height={props.height.to_string()}
-                  fill={fill}
-                  class="bi bi-person-circle"
-                  viewBox="0 0 16 16">
-                  <title>{props.error.clone().unwrap_or(AttrValue::Static("Avatar"))}</title>
-                  <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
-                  <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
-                </svg>
+      <svg xmlns="http://www.w3.org/2000/svg"
+        width={props.width.to_string()}
+        height={props.height.to_string()}
+        fill={fill}
+        class="bi bi-person-circle"
+        viewBox="0 0 16 16">
+        <title>{props.error.clone().unwrap_or(AttrValue::Static("Avatar"))}</title>
+        <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+        <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
+      </svg>
     }
 }
