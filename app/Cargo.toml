@@ -38,11 +38,13 @@ features = [
   "Document",
   "Element",
   "FileReader",
+  "FormData",
   "HtmlDocument",
   "HtmlInputElement",
   "HtmlOptionElement",
   "HtmlOptionsCollection",
   "HtmlSelectElement",
+  "SubmitEvent",
   "console",
 ]
 

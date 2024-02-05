@@ -11,9 +11,10 @@ use gloo_file::{
 };
 use graphql_client::GraphQLQuery;
 use validator_derive::Validate;
-use web_sys::{FileList, HtmlInputElement, InputEvent};
+use web_sys::{FileList, HtmlInputElement, InputEvent, SubmitEvent};
 use yew::prelude::*;
 use yew_form_derive::Model;
+use gloo_console::log;
 
 #[derive(Default)]
 struct JsFile {
@@ -85,6 +86,8 @@ pub enum Msg {
     FileLoaded(String, Result<Vec<u8>>),
     /// We got the response from the server about our update message.
     UserUpdated(Result<update_user::ResponseData>),
+    /// The "Submit" button was clicked.
+    OnSubmit(SubmitEvent),
 }
 
 #[derive(yew::Properties, Clone, PartialEq, Eq)]
@@ -148,6 +151,10 @@ impl CommonComponent<UserDetailsForm> for UserDetailsForm {
                 self.reader = None;
                 Ok(false)
             }
+            Msg::OnSubmit(e) => {
+                log!(format!("{:#?}", e));
+                Ok(true)
+            }
         }
     }
 
@@ -195,108 +202,41 @@ impl Component for UserDetailsForm {
         };
         html! {
           <div class="py-3">
-            <form class="form">
-              <div class="form-group row mb-3">
-                <label for="userId"
-                  class="form-label col-4 col-form-label">
-                  {"User ID: "}
-                </label>
-                <div class="col-8">
-                  <span id="userId" class="form-control-static"><i>{&self.user.id}</i></span>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="creationDate"
-                  class="form-label col-4 col-form-label">
-                  {"Creation date: "}
-                </label>
-                <div class="col-8">
-                  <span id="creationDate" class="form-control-static">{&self.user.creation_date.naive_local().date()}</span>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="uuid"
-                  class="form-label col-4 col-form-label">
-                  {"UUID: "}
-                </label>
-                <div class="col-8">
-                  <span id="creationDate" class="form-control-static">{&self.user.uuid}</span>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="email"
-                  class="form-label col-4 col-form-label">
-                  {"Email"}
-                  <span class="text-danger">{"*"}</span>
-                  {":"}
-                </label>
-                <div class="col-8">
-                  <Field
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    form={&self.form}
-                    field_name="email"
-                    autocomplete="email"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("email")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="display_name"
-                  class="form-label col-4 col-form-label">
-                  {"Display Name: "}
-                </label>
-                <div class="col-8">
-                  <Field
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    form={&self.form}
-                    field_name="display_name"
-                    autocomplete="name"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("display_name")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="first_name"
-                  class="form-label col-4 col-form-label">
-                  {"First Name: "}
-                </label>
-                <div class="col-8">
-                  <Field
-                    class="form-control"
-                    form={&self.form}
-                    field_name="first_name"
-                    autocomplete="given-name"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("first_name")}
-                  </div>
-                </div>
-              </div>
-              <div class="form-group row mb-3">
-                <label for="last_name"
-                  class="form-label col-4 col-form-label">
-                  {"Last Name: "}
-                </label>
-                <div class="col-8">
-                  <Field
-                    class="form-control"
-                    form={&self.form}
-                    field_name="last_name"
-                    autocomplete="family-name"
-                    oninput={link.callback(|_| Msg::Update)} />
-                  <div class="invalid-feedback">
-                    {&self.form.field_message("last_name")}
-                  </div>
-                </div>
-              </div>
+            <form class="form" onsubmit={link.callback(|e: SubmitEvent| {e.prevent_default(); Msg::OnSubmit(e)})}>
+              <StaticValue label="User ID" id="userId">
+                <i>{&self.user.id}</i>
+              </StaticValue>
+              <StaticValue label="Creation date" id="creationDate">
+                {&self.user.creation_date.naive_local().date()}
+              </StaticValue>
+              <StaticValue label="UUID" id="uuid">
+                {&self.user.uuid}
+              </StaticValue>
+              <Field<UserModel>
+                form={&self.form}
+                required=true
+                label="Email"
+                field_name="email"
+                input_type="email"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Field<UserModel>
+                form={&self.form}
+                label="Display name"
+                field_name="display_name"
+                autocomplete="name"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Field<UserModel>
+                form={&self.form}
+                label="First name"
+                field_name="first_name"
+                autocomplete="given-name"
+                oninput={link.callback(|_| Msg::Update)} />
+              <Field<UserModel>
+                form={&self.form}
+                label="Last name"
+                field_name="last_name"
+                autocomplete="family-name"
+                oninput={link.callback(|_| Msg::Update)} />
               <div class="form-group row align-items-center mb-3">
                 <label for="avatar"
                   class="form-label col-4 col-form-label">
@@ -340,16 +280,10 @@ impl Component for UserDetailsForm {
                   </div>
                 </div>
               </div>
-              <div class="form-group row justify-content-center mt-3">
-                <button
-                  type="submit"
-                  class="btn btn-primary col-auto col-form-label"
-                  disabled={self.common.is_task_running()}
-                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})}>
-                  <i class="bi-save me-2"></i>
-                  {"Save changes"}
-                </button>
-              </div>
+              <Submit
+                text="Save changes"
+                disabled={self.common.is_task_running()}
+                onclick={link.callback(|e: MouseEvent| {Msg::SubmitClicked})} />
             </form>
             {
               if let Some(e) = &self.common.error {
