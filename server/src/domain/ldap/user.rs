@@ -28,12 +28,22 @@ pub fn get_user_attribute(
 ) -> Option<Vec<Vec<u8>>> {
     let attribute = AttributeName::from(attribute);
     let attribute_values = match map_user_field(&attribute, schema) {
-        UserFieldType::ObjectClass => vec![
-            b"inetOrgPerson".to_vec(),
-            b"posixAccount".to_vec(),
-            b"mailAccount".to_vec(),
-            b"person".to_vec(),
-        ],
+        UserFieldType::ObjectClass => {
+            let mut classes = vec![
+                b"inetOrgPerson".to_vec(),
+                b"posixAccount".to_vec(),
+                b"mailAccount".to_vec(),
+                b"person".to_vec(),
+            ];
+            classes.extend(
+                schema
+                    .get_schema()
+                    .extra_user_object_classes
+                    .iter()
+                    .map(|c| c.as_str().as_bytes().to_vec()),
+            );
+            classes
+        }
         // dn is always returned as part of the base response.
         UserFieldType::Dn => return None,
         UserFieldType::EntryDn => {

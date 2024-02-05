@@ -30,7 +30,17 @@ pub fn get_group_attribute(
 ) -> Option<Vec<Vec<u8>>> {
     let attribute = AttributeName::from(attribute);
     let attribute_values = match map_group_field(&attribute, schema) {
-        GroupFieldType::ObjectClass => vec![b"groupOfUniqueNames".to_vec()],
+        GroupFieldType::ObjectClass => {
+            let mut classes = vec![b"groupOfUniqueNames".to_vec()];
+            classes.extend(
+                schema
+                    .get_schema()
+                    .extra_group_object_classes
+                    .iter()
+                    .map(|c| c.as_str().as_bytes().to_vec()),
+            );
+            classes
+        }
         // Always returned as part of the base response.
         GroupFieldType::Dn => return None,
         GroupFieldType::EntryDn => {

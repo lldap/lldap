@@ -47,6 +47,10 @@ mockall::mock! {
         async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
         async fn delete_user_attribute(&self, name: &AttributeName) -> Result<()>;
         async fn delete_group_attribute(&self, name: &AttributeName) -> Result<()>;
+        async fn add_user_object_class(&self, request: &LdapObjectClass) -> Result<()>;
+        async fn add_group_object_class(&self, request: &LdapObjectClass) -> Result<()>;
+        async fn delete_user_object_class(&self, name: &LdapObjectClass) -> Result<()>;
+        async fn delete_group_object_class(&self, name: &LdapObjectClass) -> Result<()>;
     }
     #[async_trait]
     impl BackendHandler for TestBackendHandler {}
@@ -102,6 +106,8 @@ pub fn setup_default_schema(mock: &mut MockTestBackendHandler) {
             group_attributes: AttributeList {
                 attributes: Vec::new(),
             },
+            extra_user_object_classes: vec![LdapObjectClass::from("customUserClass")],
+            extra_group_object_classes: Vec::new(),
         })
     });
 }

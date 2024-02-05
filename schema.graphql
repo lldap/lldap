@@ -162,6 +162,7 @@ enum AttributeType {
 
 type AttributeList {
   attributes: [AttributeSchema!]!
+  extraLdapObjectClasses: [String!]!
 }
 
 type Success {
