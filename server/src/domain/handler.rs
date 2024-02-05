@@ -2,7 +2,8 @@ use crate::domain::{
     error::Result,
     types::{
         AttributeName, AttributeType, AttributeValue, Email, Group, GroupDetails, GroupId,
-        GroupName, JpegPhoto, Serialized, User, UserAndGroups, UserColumn, UserId, Uuid,
+        GroupName, JpegPhoto, LdapObjectClass, Serialized, User, UserAndGroups, UserColumn, UserId,
+        Uuid,
     },
 };
 use async_trait::async_trait;
@@ -175,6 +176,8 @@ impl AttributeList {
 pub struct Schema {
     pub user_attributes: AttributeList,
     pub group_attributes: AttributeList,
+    pub extra_user_object_classes: Vec<LdapObjectClass>,
+    pub extra_group_object_classes: Vec<LdapObjectClass>,
 }
 
 #[async_trait]
@@ -227,6 +230,11 @@ pub trait SchemaBackendHandler: ReadSchemaBackendHandler {
     // Note: It's up to the caller to make sure that the attribute is not hardcoded.
     async fn delete_user_attribute(&self, name: &AttributeName) -> Result<()>;
     async fn delete_group_attribute(&self, name: &AttributeName) -> Result<()>;
+
+    async fn add_user_object_class(&self, name: &LdapObjectClass) -> Result<()>;
+    async fn add_group_object_class(&self, name: &LdapObjectClass) -> Result<()>;
+    async fn delete_user_object_class(&self, name: &LdapObjectClass) -> Result<()>;
+    async fn delete_group_object_class(&self, name: &LdapObjectClass) -> Result<()>;
 }
 
 #[async_trait]

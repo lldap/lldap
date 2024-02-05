@@ -1290,7 +1290,8 @@ mod tests {
                                 b"inetOrgPerson".to_vec(),
                                 b"posixAccount".to_vec(),
                                 b"mailAccount".to_vec(),
-                                b"person".to_vec()
+                                b"person".to_vec(),
+                                b"customUserClass".to_vec(),
                             ]
                         },
                         LdapPartialAttribute {
@@ -1332,7 +1333,8 @@ mod tests {
                                 b"inetOrgPerson".to_vec(),
                                 b"posixAccount".to_vec(),
                                 b"mailAccount".to_vec(),
-                                b"person".to_vec()
+                                b"person".to_vec(),
+                                b"customUserClass".to_vec(),
                             ]
                         },
                         LdapPartialAttribute {
@@ -1919,7 +1921,8 @@ mod tests {
                             b"inetOrgPerson".to_vec(),
                             b"posixAccount".to_vec(),
                             b"mailAccount".to_vec(),
-                            b"person".to_vec()
+                            b"person".to_vec(),
+                            b"customUserClass".to_vec(),
                         ]
                     },]
                 }),
@@ -1983,7 +1986,8 @@ mod tests {
                                 b"inetOrgPerson".to_vec(),
                                 b"posixAccount".to_vec(),
                                 b"mailAccount".to_vec(),
-                                b"person".to_vec()
+                                b"person".to_vec(),
+                                b"customUserClass".to_vec(),
                             ]
                         },
                         LdapPartialAttribute {
@@ -2068,6 +2072,7 @@ mod tests {
                             b"posixAccount".to_vec(),
                             b"mailAccount".to_vec(),
                             b"person".to_vec(),
+                            b"customUserClass".to_vec(),
                         ],
                     },
                     LdapPartialAttribute {
@@ -2849,6 +2854,11 @@ mod tests {
                         is_hardcoded: false,
                     }],
                 },
+                extra_user_object_classes: vec![
+                    LdapObjectClass::from("customUserClass"),
+                    LdapObjectClass::from("myUserClass"),
+                ],
+                extra_group_object_classes: vec![LdapObjectClass::from("customGroupClass")],
             })
         });
         let mut ldap_handler = setup_bound_readonly_handler(mock).await;
