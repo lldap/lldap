@@ -15,7 +15,10 @@ use crate::domain::{
         },
     },
     schema::{PublicSchema, SchemaUserAttributeExtractor},
-    types::{AttributeName, AttributeType, GroupDetails, User, UserAndGroups, UserColumn, UserId},
+    types::{
+        AttributeName, AttributeType, GroupDetails, LdapObjectClass, User, UserAndGroups,
+        UserColumn, UserId,
+    },
 };
 
 pub fn get_user_attribute(
@@ -206,10 +209,15 @@ fn convert_user_filter(
                     }
                     Ok(UserRequestFilter::from(false))
                 }
-                UserFieldType::ObjectClass => Ok(UserRequestFilter::from(matches!(
-                    value.as_str(),
-                    "person" | "inetorgperson" | "posixaccount" | "mailaccount"
-                ))),
+                UserFieldType::ObjectClass => Ok(UserRequestFilter::from(
+                    matches!(
+                        value.as_str(),
+                        "person" | "inetorgperson" | "posixaccount" | "mailaccount"
+                    ) || schema
+                        .get_schema()
+                        .extra_user_object_classes
+                        .contains(&LdapObjectClass::from(value)),
+                )),
                 UserFieldType::MemberOf => Ok(UserRequestFilter::MemberOf(
                     get_group_id_from_distinguished_name(
                         &value,
