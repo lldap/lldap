@@ -9,7 +9,7 @@ use crate::{
         },
         types::{
             AttributeName, AttributeType, AttributeValue as DomainAttributeValue, GroupId,
-            JpegPhoto, UserId,
+            JpegPhoto, LdapObjectClass, UserId,
         },
     },
     infra::{
@@ -486,6 +486,90 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         }
         handler
             .delete_group_attribute(&name)
+            .instrument(span)
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn add_user_object_class(
+        context: &Context<Handler>,
+        name: String,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] add_user_object_class");
+        span.in_scope(|| {
+            debug!(?name);
+        });
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized object class addition",
+            ))?;
+        handler
+            .add_user_object_class(&LdapObjectClass::from(name))
+            .instrument(span)
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn add_group_object_class(
+        context: &Context<Handler>,
+        name: String,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] add_group_object_class");
+        span.in_scope(|| {
+            debug!(?name);
+        });
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized object class addition",
+            ))?;
+        handler
+            .add_group_object_class(&LdapObjectClass::from(name))
+            .instrument(span)
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn delete_user_object_class(
+        context: &Context<Handler>,
+        name: String,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] delete_user_object_class");
+        span.in_scope(|| {
+            debug!(?name);
+        });
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized object class deletion",
+            ))?;
+        handler
+            .delete_user_object_class(&LdapObjectClass::from(name))
+            .instrument(span)
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn delete_group_object_class(
+        context: &Context<Handler>,
+        name: String,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] delete_group_object_class");
+        span.in_scope(|| {
+            debug!(?name);
+        });
+        let handler = context
+            .get_admin_handler()
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized object class deletion",
+            ))?;
+        handler
+            .delete_group_object_class(&LdapObjectClass::from(name))
             .instrument(span)
             .await?;
         Ok(Success::new())
