@@ -1932,6 +1932,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_search_filters_custom_object_class() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::from(true))), eq(false))
+            .times(1)
+            .return_once(|_, _| {
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("bob_1"),
+                        ..Default::default()
+                    },
+                    groups: None,
+                }])
+            });
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_user_search_request(
+            LdapFilter::Equality("objectClass".to_owned(), "CUSTOMuserCLASS".to_owned()),
+            vec!["objectclass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![LdapPartialAttribute {
+                        atype: "objectclass".to_string(),
+                        vals: vec![
+                            b"inetOrgPerson".to_vec(),
+                            b"posixAccount".to_vec(),
+                            b"mailAccount".to_vec(),
+                            b"person".to_vec(),
+                            b"customUserClass".to_vec(),
+                        ]
+                    },]
+                }),
+                make_search_success()
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn test_search_both() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users().times(1).return_once(|_, _| {

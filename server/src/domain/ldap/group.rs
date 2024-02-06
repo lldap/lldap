@@ -9,7 +9,7 @@ use crate::domain::{
     handler::{GroupListerBackendHandler, GroupRequestFilter},
     ldap::error::LdapError,
     schema::{PublicSchema, SchemaGroupAttributeExtractor},
-    types::{AttributeName, AttributeType, Group, UserId, Uuid},
+    types::{AttributeName, AttributeType, Group, LdapObjectClass, UserId, Uuid},
 };
 
 use super::{
@@ -177,10 +177,13 @@ fn convert_group_filter(
                     )?;
                     Ok(GroupRequestFilter::Member(user_name))
                 }
-                GroupFieldType::ObjectClass => Ok(GroupRequestFilter::from(matches!(
-                    value.as_str(),
-                    "groupofuniquenames" | "groupofnames"
-                ))),
+                GroupFieldType::ObjectClass => Ok(GroupRequestFilter::from(
+                    matches!(value.as_str(), "groupofuniquenames" | "groupofnames")
+                        || schema
+                            .get_schema()
+                            .extra_group_object_classes
+                            .contains(&LdapObjectClass::from(value)),
+                )),
                 GroupFieldType::Dn | GroupFieldType::EntryDn => {
                     Ok(get_group_id_from_distinguished_name(
                         value.as_str(),
