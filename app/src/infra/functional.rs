@@ -2,7 +2,7 @@ use crate::infra::api::HostService;
 use anyhow::Result;
 use graphql_client::GraphQLQuery;
 use wasm_bindgen_futures::spawn_local;
-use yew::{use_effect, use_state, UseStateHandle};
+use yew::{use_effect, use_state_eq, UseStateHandle};
 
 // Enum to represent a result that is fetched asynchronously.
 #[derive(Debug)]
@@ -13,14 +13,28 @@ pub enum LoadableResult<T> {
     Loaded(Result<T>),
 }
 
+impl<T: PartialEq> PartialEq for LoadableResult<T> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (LoadableResult::Loading, LoadableResult::Loading) => true,
+            (LoadableResult::Loaded(Ok(d1)), LoadableResult::Loaded(Ok(d2))) => d1.eq(d2),
+            (LoadableResult::Loaded(Err(e1)), LoadableResult::Loaded(Err(e2))) => {
+                e1.to_string().eq(&e2.to_string())
+            }
+            _ => false,
+        }
+    }
+}
+
 pub fn use_graphql_call<QueryType>(
     variables: QueryType::Variables,
 ) -> UseStateHandle<LoadableResult<QueryType::ResponseData>>
 where
     QueryType: GraphQLQuery + 'static,
+    <QueryType as graphql_client::GraphQLQuery>::ResponseData: std::cmp::PartialEq,
 {
     let loadable_result: UseStateHandle<LoadableResult<QueryType::ResponseData>> =
-        use_state(|| LoadableResult::Loading);
+        use_state_eq(|| LoadableResult::Loading);
     {
         let loadable_result = loadable_result.clone();
         use_effect(move || {
