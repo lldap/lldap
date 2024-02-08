@@ -16,21 +16,26 @@ fn get_claims_from_jwt(jwt: &str) -> Result<JWTClaims> {
     Ok(token.claims().clone())
 }
 
-const NO_BODY: Option<()> = None;
+enum RequestType<Body: Serialize> {
+    Get,
+    Post(Body),
+}
+
+const GET_REQUEST: RequestType<()> = RequestType::Get;
 
 fn base_url() -> String {
     yew_router::utils::base_url().unwrap_or_default()
 }
 
-async fn call_server(
+async fn call_server<Body: Serialize>(
     url: &str,
-    body: Option<impl Serialize>,
+    body: RequestType<Body>,
     error_message: &'static str,
 ) -> Result<String> {
     let mut request = Request::new(url)
         .header("Content-Type", "application/json")
         .credentials(RequestCredentials::SameOrigin);
-    if let Some(b) = body {
+    if let RequestType::Post(b) = body {
         request = request
             .body(serde_json::to_string(&b)?)
             .method(Method::POST);
@@ -51,7 +56,7 @@ async fn call_server(
 
 async fn call_server_json_with_error_message<CallbackResult, Body: Serialize>(
     url: &str,
-    request: Option<Body>,
+    request: RequestType<Body>,
     error_message: &'static str,
 ) -> Result<CallbackResult>
 where
@@ -63,7 +68,7 @@ where
 
 async fn call_server_empty_response_with_error_message<Body: Serialize>(
     url: &str,
-    request: Option<Body>,
+    request: RequestType<Body>,
     error_message: &'static str,
 ) -> Result<()> {
     call_server(url, request, error_message).await.map(|_| ())
@@ -102,7 +107,7 @@ impl HostService {
         let request_body = QueryType::build_query(variables);
         call_server_json_with_error_message::<graphql_client::Response<_>, _>(
             &(base_url() + "/api/graphql"),
-            Some(request_body),
+            RequestType::Post(request_body),
             error_message,
         )
         .await
@@ -114,7 +119,7 @@ impl HostService {
     ) -> Result<Box<login::ServerLoginStartResponse>> {
         call_server_json_with_error_message(
             &(base_url() + "/auth/opaque/login/start"),
-            Some(request),
+            RequestType::Post(request),
             "Could not start authentication: ",
         )
         .await
@@ -123,7 +128,7 @@ impl HostService {
     pub async fn login_finish(request: login::ClientLoginFinishRequest) -> Result<(String, bool)> {
         call_server_json_with_error_message::<login::ServerLoginResponse, _>(
             &(base_url() + "/auth/opaque/login/finish"),
-            Some(request),
+            RequestType::Post(request),
             "Could not finish authentication",
         )
         .await
@@ -135,7 +140,7 @@ impl HostService {
     ) -> Result<Box<registration::ServerRegistrationStartResponse>> {
         call_server_json_with_error_message(
             &(base_url() + "/auth/opaque/register/start"),
-            Some(request),
+            RequestType::Post(request),
             "Could not start registration: ",
         )
         .await
@@ -146,7 +151,7 @@ impl HostService {
     ) -> Result<()> {
         call_server_empty_response_with_error_message(
             &(base_url() + "/auth/opaque/register/finish"),
-            Some(request),
+            RequestType::Post(request),
             "Could not finish registration",
         )
         .await
@@ -155,7 +160,7 @@ impl HostService {
     pub async fn refresh() -> Result<(String, bool)> {
         call_server_json_with_error_message::<login::ServerLoginResponse, _>(
             &(base_url() + "/auth/refresh"),
-            NO_BODY,
+            GET_REQUEST,
             "Could not start authentication: ",
         )
         .await
@@ -166,7 +171,7 @@ impl HostService {
     pub async fn logout() -> Result<()> {
         call_server_empty_response_with_error_message(
             &(base_url() + "/auth/logout"),
-            NO_BODY,
+            GET_REQUEST,
             "Could not logout",
         )
         .await
@@ -179,7 +184,7 @@ impl HostService {
                 base_url(),
                 url_escape::encode_query(&username)
             ),
-            NO_BODY,
+            RequestType::Post(""),
             "Could not initiate password reset",
         )
         .await
@@ -190,7 +195,7 @@ impl HostService {
     ) -> Result<lldap_auth::password_reset::ServerPasswordResetResponse> {
         call_server_json_with_error_message(
             &format!("{}/auth/reset/step2/{}", base_url(), token),
-            NO_BODY,
+            GET_REQUEST,
             "Could not validate token",
         )
         .await

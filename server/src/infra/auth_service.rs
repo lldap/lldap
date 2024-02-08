@@ -677,7 +677,7 @@ where
     if enable_password_reset {
         cfg.service(
             web::resource("/reset/step1/{user_id}")
-                .route(web::get().to(get_password_reset_step1_handler::<Backend>)),
+                .route(web::post().to(get_password_reset_step1_handler::<Backend>)),
         )
         .service(
             web::resource("/reset/step2/{token}")
