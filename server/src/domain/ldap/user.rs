@@ -15,7 +15,10 @@ use crate::domain::{
         },
     },
     schema::{PublicSchema, SchemaUserAttributeExtractor},
-    types::{AttributeName, AttributeType, GroupDetails, User, UserAndGroups, UserColumn, UserId},
+    types::{
+        AttributeName, AttributeType, GroupDetails, LdapObjectClass, User, UserAndGroups,
+        UserColumn, UserId,
+    },
 };
 
 pub fn get_user_attribute(
@@ -28,12 +31,22 @@ pub fn get_user_attribute(
 ) -> Option<Vec<Vec<u8>>> {
     let attribute = AttributeName::from(attribute);
     let attribute_values = match map_user_field(&attribute, schema) {
-        UserFieldType::ObjectClass => vec![
-            b"inetOrgPerson".to_vec(),
-            b"posixAccount".to_vec(),
-            b"mailAccount".to_vec(),
-            b"person".to_vec(),
-        ],
+        UserFieldType::ObjectClass => {
+            let mut classes = vec![
+                b"inetOrgPerson".to_vec(),
+                b"posixAccount".to_vec(),
+                b"mailAccount".to_vec(),
+                b"person".to_vec(),
+            ];
+            classes.extend(
+                schema
+                    .get_schema()
+                    .extra_user_object_classes
+                    .iter()
+                    .map(|c| c.as_str().as_bytes().to_vec()),
+            );
+            classes
+        }
         // dn is always returned as part of the base response.
         UserFieldType::Dn => return None,
         UserFieldType::EntryDn => {
@@ -196,10 +209,15 @@ fn convert_user_filter(
                     }
                     Ok(UserRequestFilter::from(false))
                 }
-                UserFieldType::ObjectClass => Ok(UserRequestFilter::from(matches!(
-                    value.as_str(),
-                    "person" | "inetorgperson" | "posixaccount" | "mailaccount"
-                ))),
+                UserFieldType::ObjectClass => Ok(UserRequestFilter::from(
+                    matches!(
+                        value.as_str(),
+                        "person" | "inetorgperson" | "posixaccount" | "mailaccount"
+                    ) || schema
+                        .get_schema()
+                        .extra_user_object_classes
+                        .contains(&LdapObjectClass::from(value)),
+                )),
                 UserFieldType::MemberOf => Ok(UserRequestFilter::MemberOf(
                     get_group_id_from_distinguished_name(
                         &value,

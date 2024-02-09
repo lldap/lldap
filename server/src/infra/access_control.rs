@@ -12,7 +12,10 @@ use crate::domain::{
         UpdateUserRequest, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
     },
     schema::PublicSchema,
-    types::{AttributeName, Group, GroupDetails, GroupId, GroupName, User, UserAndGroups, UserId},
+    types::{
+        AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, User,
+        UserAndGroups, UserId,
+    },
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -112,6 +115,10 @@ pub trait AdminBackendHandler:
     async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()>;
     async fn delete_user_attribute(&self, name: &AttributeName) -> Result<()>;
     async fn delete_group_attribute(&self, name: &AttributeName) -> Result<()>;
+    async fn add_user_object_class(&self, name: &LdapObjectClass) -> Result<()>;
+    async fn add_group_object_class(&self, name: &LdapObjectClass) -> Result<()>;
+    async fn delete_user_object_class(&self, name: &LdapObjectClass) -> Result<()>;
+    async fn delete_group_object_class(&self, name: &LdapObjectClass) -> Result<()>;
 }
 
 #[async_trait]
@@ -186,6 +193,18 @@ impl<Handler: BackendHandler> AdminBackendHandler for Handler {
     }
     async fn delete_group_attribute(&self, name: &AttributeName) -> Result<()> {
         <Handler as SchemaBackendHandler>::delete_group_attribute(self, name).await
+    }
+    async fn add_user_object_class(&self, name: &LdapObjectClass) -> Result<()> {
+        <Handler as SchemaBackendHandler>::add_user_object_class(self, name).await
+    }
+    async fn add_group_object_class(&self, name: &LdapObjectClass) -> Result<()> {
+        <Handler as SchemaBackendHandler>::add_group_object_class(self, name).await
+    }
+    async fn delete_user_object_class(&self, name: &LdapObjectClass) -> Result<()> {
+        <Handler as SchemaBackendHandler>::delete_user_object_class(self, name).await
+    }
+    async fn delete_group_object_class(&self, name: &LdapObjectClass) -> Result<()> {
+        <Handler as SchemaBackendHandler>::delete_group_object_class(self, name).await
     }
 }
 

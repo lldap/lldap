@@ -7,7 +7,7 @@ use crate::{
         ldap::utils::{map_user_field, UserFieldType},
         model::UserColumn,
         schema::PublicSchema,
-        types::{AttributeType, GroupDetails, GroupId, JpegPhoto, UserId},
+        types::{AttributeType, GroupDetails, GroupId, JpegPhoto, LdapObjectClass, UserId},
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
@@ -523,26 +523,32 @@ impl<Handler: BackendHandler> From<DomainAttributeSchema> for AttributeSchema<Ha
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct AttributeList<Handler: BackendHandler> {
-    schema: DomainAttributeList,
+    attributes: DomainAttributeList,
+    extra_classes: Vec<LdapObjectClass>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
 
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> AttributeList<Handler> {
     fn attributes(&self) -> Vec<AttributeSchema<Handler>> {
-        self.schema
+        self.attributes
             .attributes
             .clone()
             .into_iter()
             .map(Into::into)
             .collect()
     }
+
+    fn extra_ldap_object_classes(&self) -> Vec<String> {
+        self.extra_classes.iter().map(|c| c.to_string()).collect()
+    }
 }
 
-impl<Handler: BackendHandler> From<DomainAttributeList> for AttributeList<Handler> {
-    fn from(value: DomainAttributeList) -> Self {
+impl<Handler: BackendHandler> AttributeList<Handler> {
+    fn new(attributes: DomainAttributeList, extra_classes: Vec<LdapObjectClass>) -> Self {
         Self {
-            schema: value,
+            attributes,
+            extra_classes,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -557,10 +563,16 @@ pub struct Schema<Handler: BackendHandler> {
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> Schema<Handler> {
     fn user_schema(&self) -> AttributeList<Handler> {
-        self.schema.get_schema().user_attributes.clone().into()
+        AttributeList::<Handler>::new(
+            self.schema.get_schema().user_attributes.clone(),
+            self.schema.get_schema().extra_user_object_classes.clone(),
+        )
     }
     fn group_schema(&self) -> AttributeList<Handler> {
-        self.schema.get_schema().group_attributes.clone().into()
+        AttributeList::<Handler>::new(
+            self.schema.get_schema().group_attributes.clone(),
+            self.schema.get_schema().extra_group_object_classes.clone(),
+        )
     }
 }
 
@@ -670,7 +682,7 @@ mod tests {
     use crate::{
         domain::{
             handler::AttributeList,
-            types::{AttributeName, AttributeType, Serialized},
+            types::{AttributeName, AttributeType, LdapObjectClass, Serialized},
         },
         infra::{
             access_control::{Permission, ValidationResults},
@@ -755,6 +767,11 @@ mod tests {
                         is_hardcoded: false,
                     }],
                 },
+                extra_user_object_classes: vec![
+                    LdapObjectClass::from("customUserClass"),
+                    LdapObjectClass::from("myUserClass"),
+                ],
+                extra_group_object_classes: vec![LdapObjectClass::from("customGroupClass")],
             })
         });
         mock.expect_get_user_details()
@@ -946,6 +963,7 @@ mod tests {
                     isEditable
                     isHardcoded
                 }
+                extraLdapObjectClasses
             }
             groupSchema {
                 attributes {
@@ -956,6 +974,7 @@ mod tests {
                     isEditable
                     isHardcoded
                 }
+                extraLdapObjectClasses
             }
           }
         }"#;
@@ -1040,7 +1059,8 @@ mod tests {
                                     "isEditable": false,
                                     "isHardcoded": true,
                                 },
-                            ]
+                            ],
+                            "extraLdapObjectClasses": ["customUserClass"],
                         },
                         "groupSchema": {
                             "attributes": [
@@ -1076,7 +1096,8 @@ mod tests {
                                     "isEditable": false,
                                     "isHardcoded": true,
                                 },
-                            ]
+                            ],
+                            "extraLdapObjectClasses": [],
                         }
                     }
                 }),
@@ -1093,6 +1114,7 @@ mod tests {
                 attributes {
                     name
                 }
+                extraLdapObjectClasses
             }
           }
         }"#;
@@ -1114,6 +1136,8 @@ mod tests {
                 group_attributes: AttributeList {
                     attributes: Vec::new(),
                 },
+                extra_user_object_classes: vec![LdapObjectClass::from("customUserClass")],
+                extra_group_object_classes: Vec::new(),
             })
         });
 
@@ -1139,7 +1163,8 @@ mod tests {
                                 {"name": "mail"},
                                 {"name": "user_id"},
                                 {"name": "uuid"},
-                            ]
+                            ],
+                            "extraLdapObjectClasses": ["customUserClass"],
                         }
                     }
                 } ),

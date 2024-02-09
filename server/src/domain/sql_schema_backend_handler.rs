@@ -6,7 +6,7 @@ use crate::domain::{
     },
     model,
     sql_backend_handler::SqlBackendHandler,
-    types::AttributeName,
+    types::{AttributeName, LdapObjectClass},
 };
 use async_trait::async_trait;
 use sea_orm::{
@@ -66,6 +66,44 @@ impl SchemaBackendHandler for SqlBackendHandler {
             .await?;
         Ok(())
     }
+
+    async fn add_user_object_class(&self, name: &LdapObjectClass) -> Result<()> {
+        let mut name_key = name.to_string();
+        name_key.make_ascii_lowercase();
+        model::user_object_classes::ActiveModel {
+            lower_object_class: Set(name_key),
+            object_class: Set(name.clone()),
+        }
+        .insert(&self.sql_pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn add_group_object_class(&self, name: &LdapObjectClass) -> Result<()> {
+        let mut name_key = name.to_string();
+        name_key.make_ascii_lowercase();
+        model::group_object_classes::ActiveModel {
+            lower_object_class: Set(name_key),
+            object_class: Set(name.clone()),
+        }
+        .insert(&self.sql_pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn delete_user_object_class(&self, name: &LdapObjectClass) -> Result<()> {
+        model::UserObjectClasses::delete_by_id(name.as_str().to_ascii_lowercase())
+            .exec(&self.sql_pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn delete_group_object_class(&self, name: &LdapObjectClass) -> Result<()> {
+        model::GroupObjectClasses::delete_by_id(name.as_str().to_ascii_lowercase())
+            .exec(&self.sql_pool)
+            .await?;
+        Ok(())
+    }
 }
 
 impl SqlBackendHandler {
@@ -79,6 +117,8 @@ impl SqlBackendHandler {
             group_attributes: AttributeList {
                 attributes: Self::get_group_attributes(transaction).await?,
             },
+            extra_user_object_classes: Self::get_user_object_classes(transaction).await?,
+            extra_group_object_classes: Self::get_group_object_classes(transaction).await?,
         })
     }
 
@@ -103,6 +143,30 @@ impl SqlBackendHandler {
             .await?
             .into_iter()
             .map(|m| m.into())
+            .collect())
+    }
+
+    async fn get_user_object_classes(
+        transaction: &DatabaseTransaction,
+    ) -> Result<Vec<LdapObjectClass>> {
+        Ok(model::UserObjectClasses::find()
+            .order_by_asc(model::UserObjectClassesColumn::ObjectClass)
+            .all(transaction)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    async fn get_group_object_classes(
+        transaction: &DatabaseTransaction,
+    ) -> Result<Vec<LdapObjectClass>> {
+        Ok(model::GroupObjectClasses::find()
+            .order_by_asc(model::GroupObjectClassesColumn::ObjectClass)
+            .all(transaction)
+            .await?
+            .into_iter()
+            .map(Into::into)
             .collect())
     }
 }
@@ -151,7 +215,9 @@ mod tests {
                 },
                 group_attributes: AttributeList {
                     attributes: Vec::new()
-                }
+                },
+                extra_user_object_classes: Vec::new(),
+                extra_group_object_classes: Vec::new(),
             }
         );
     }
@@ -246,5 +312,51 @@ mod tests {
             .group_attributes
             .attributes
             .contains(&expected_value));
+    }
+
+    #[tokio::test]
+    async fn test_user_object_class_add_and_delete() {
+        let fixture = TestFixture::new().await;
+        let new_object_class = LdapObjectClass::new("newObjectClass");
+        fixture
+            .handler
+            .add_user_object_class(&new_object_class)
+            .await
+            .unwrap();
+        assert_eq!(
+            fixture
+                .handler
+                .get_schema()
+                .await
+                .unwrap()
+                .extra_user_object_classes,
+            vec![new_object_class.clone()]
+        );
+        fixture
+            .handler
+            .add_user_object_class(&LdapObjectClass::new("newobjEctclass"))
+            .await
+            .expect_err("Should not be able to add the same object class twice");
+        assert_eq!(
+            fixture
+                .handler
+                .get_schema()
+                .await
+                .unwrap()
+                .extra_user_object_classes,
+            vec![new_object_class.clone()]
+        );
+        fixture
+            .handler
+            .delete_user_object_class(&new_object_class)
+            .await
+            .unwrap();
+        assert!(fixture
+            .handler
+            .get_schema()
+            .await
+            .unwrap()
+            .extra_user_object_classes
+            .is_empty());
     }
 }

@@ -1290,7 +1290,8 @@ mod tests {
                                 b"inetOrgPerson".to_vec(),
                                 b"posixAccount".to_vec(),
                                 b"mailAccount".to_vec(),
-                                b"person".to_vec()
+                                b"person".to_vec(),
+                                b"customUserClass".to_vec(),
                             ]
                         },
                         LdapPartialAttribute {
@@ -1332,7 +1333,8 @@ mod tests {
                                 b"inetOrgPerson".to_vec(),
                                 b"posixAccount".to_vec(),
                                 b"mailAccount".to_vec(),
-                                b"person".to_vec()
+                                b"person".to_vec(),
+                                b"customUserClass".to_vec(),
                             ]
                         },
                         LdapPartialAttribute {
@@ -1919,7 +1921,49 @@ mod tests {
                             b"inetOrgPerson".to_vec(),
                             b"posixAccount".to_vec(),
                             b"mailAccount".to_vec(),
-                            b"person".to_vec()
+                            b"person".to_vec(),
+                            b"customUserClass".to_vec(),
+                        ]
+                    },]
+                }),
+                make_search_success()
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_filters_custom_object_class() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::from(true))), eq(false))
+            .times(1)
+            .return_once(|_, _| {
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("bob_1"),
+                        ..Default::default()
+                    },
+                    groups: None,
+                }])
+            });
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_user_search_request(
+            LdapFilter::Equality("objectClass".to_owned(), "CUSTOMuserCLASS".to_owned()),
+            vec!["objectclass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![LdapPartialAttribute {
+                        atype: "objectclass".to_string(),
+                        vals: vec![
+                            b"inetOrgPerson".to_vec(),
+                            b"posixAccount".to_vec(),
+                            b"mailAccount".to_vec(),
+                            b"person".to_vec(),
+                            b"customUserClass".to_vec(),
                         ]
                     },]
                 }),
@@ -1983,7 +2027,8 @@ mod tests {
                                 b"inetOrgPerson".to_vec(),
                                 b"posixAccount".to_vec(),
                                 b"mailAccount".to_vec(),
-                                b"person".to_vec()
+                                b"person".to_vec(),
+                                b"customUserClass".to_vec(),
                             ]
                         },
                         LdapPartialAttribute {
@@ -2068,6 +2113,7 @@ mod tests {
                             b"posixAccount".to_vec(),
                             b"mailAccount".to_vec(),
                             b"person".to_vec(),
+                            b"customUserClass".to_vec(),
                         ],
                     },
                     LdapPartialAttribute {
@@ -2849,6 +2895,11 @@ mod tests {
                         is_hardcoded: false,
                     }],
                 },
+                extra_user_object_classes: vec![
+                    LdapObjectClass::from("customUserClass"),
+                    LdapObjectClass::from("myUserClass"),
+                ],
+                extra_group_object_classes: vec![LdapObjectClass::from("customGroupClass")],
             })
         });
         let mut ldap_handler = setup_bound_readonly_handler(mock).await;

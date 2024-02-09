@@ -271,6 +271,8 @@ impl TryFromU64 for AttributeName {
         ))
     }
 }
+
+make_case_insensitive_comparable_string!(LdapObjectClass);
 make_case_insensitive_comparable_string!(Email);
 make_case_insensitive_comparable_string!(GroupName);
 

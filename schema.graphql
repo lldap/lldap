@@ -18,6 +18,10 @@ type Mutation {
   addGroupAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
   deleteUserAttribute(name: String!): Success!
   deleteGroupAttribute(name: String!): Success!
+  addUserObjectClass(name: String!): Success!
+  addGroupObjectClass(name: String!): Success!
+  deleteUserObjectClass(name: String!): Success!
+  deleteGroupObjectClass(name: String!): Success!
 }
 
 type Group {
@@ -162,6 +166,7 @@ enum AttributeType {
 
 type AttributeList {
   attributes: [AttributeSchema!]!
+  extraLdapObjectClasses: [String!]!
 }
 
 type Success {

@@ -88,6 +88,20 @@ pub enum GroupAttributes {
     GroupAttributeValue,
 }
 
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum UserObjectClasses {
+    Table,
+    LowerObjectClass,
+    ObjectClass,
+}
+
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum GroupObjectClasses {
+    Table,
+    LowerObjectClass,
+    ObjectClass,
+}
+
 // Metadata about the SQL DB.
 #[derive(DeriveIden)]
 pub enum Metadata {
@@ -1031,6 +1045,51 @@ async fn migrate_to_v8(transaction: DatabaseTransaction) -> Result<DatabaseTrans
     Ok(transaction)
 }
 
+async fn migrate_to_v9(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
+    transaction
+        .execute(
+            builder.build(
+                Table::create()
+                    .table(UserObjectClasses::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(UserObjectClasses::LowerObjectClass)
+                            .string_len(255)
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(UserObjectClasses::ObjectClass)
+                            .string_len(255)
+                            .not_null(),
+                    ),
+            ),
+        )
+        .await?;
+    transaction
+        .execute(
+            builder.build(
+                Table::create()
+                    .table(GroupObjectClasses::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(GroupObjectClasses::LowerObjectClass)
+                            .string_len(255)
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupObjectClasses::ObjectClass)
+                            .string_len(255)
+                            .not_null(),
+                    ),
+            ),
+        )
+        .await?;
+    Ok(transaction)
+}
+
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -1059,6 +1118,7 @@ pub async fn migrate_from_version(
         to_sync!(migrate_to_v6),
         to_sync!(migrate_to_v7),
         to_sync!(migrate_to_v8),
+        to_sync!(migrate_to_v9),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {
