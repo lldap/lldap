@@ -8,6 +8,7 @@ query GetUserAttributesSchema {
         isVisible
         isEditable
         isHardcoded
+        isReadonly
       }
     }
   }
