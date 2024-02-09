@@ -2,10 +2,9 @@ use std::{fmt::Display, str::FromStr};
 
 use crate::{
     components::{
-        form::{field::Field, static_value::StaticValue, submit::Submit},
+        form::{attribute_input::SingleAttributeInput, field::Field, static_value::StaticValue, submit::Submit},
         user_details::{AttributeSchema, User},
-    },
-    infra::common_component::{CommonComponent, CommonComponentParts},
+    }, convert_attribute_type, infra::{common_component::{CommonComponent, CommonComponentParts}, schema::AttributeType}
 };
 use anyhow::{anyhow, bail, Error, Ok, Result};
 use gloo_console::log;
@@ -19,6 +18,8 @@ use validator_derive::Validate;
 use web_sys::{FileList, FormData, HtmlFormElement, HtmlInputElement, InputEvent};
 use yew::prelude::*;
 use yew_form_derive::Model;
+
+use super::user_details::Attribute;
 
 #[derive(Default)]
 struct JsFile {
@@ -290,6 +291,7 @@ impl Component for UserDetailsForm {
                   </div>
                 </div>
               </div>
+              {self.user.attributes.iter().map(get_custom_attribute_input).collect::<Vec<_>>()}
               <Submit
                 text="Save changes"
                 disabled={self.common.is_task_running()}
@@ -336,6 +338,19 @@ fn get_values_from_form_data(
             Ok((attr.name.clone(), val))
         })
         .collect()
+}
+
+fn get_custom_attribute_input(attribute: &Attribute) -> Html {
+    if attribute.schema.is_list {
+        html!{<p>{"list attr"}</p>}
+    } else {
+        let value = if attribute.value.is_empty() {
+            None
+        } else {
+            Some(attribute.value[0].clone())
+        };
+        html!{<SingleAttributeInput name={attribute.name.clone()} attribute_type={Into::<AttributeType>::into(attribute.schema.attribute_type.clone())} value={value}/>}
+    }
 }
 
 impl UserDetailsForm {

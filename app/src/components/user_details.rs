@@ -4,8 +4,8 @@ use crate::{
         remove_user_from_group::RemoveUserFromGroupComponent,
         router::{AppRoute, Link},
         user_details_form::UserDetailsForm,
-    },
-    infra::common_component::{CommonComponent, CommonComponentParts},
+    }, infra::{schema::AttributeType, common_component::{CommonComponent, CommonComponentParts}},
+    convert_attribute_type
 };
 use anyhow::{bail, Error, Result};
 use graphql_client::GraphQLQuery;
@@ -24,6 +24,8 @@ pub type User = get_user_details::GetUserDetailsUser;
 pub type Group = get_user_details::GetUserDetailsUserGroups;
 pub type Attribute = get_user_details::GetUserDetailsUserAttributes;
 pub type AttributeSchema = get_user_details::GetUserDetailsUserAttributesSchema;
+
+convert_attribute_type!(get_user_details::AttributeType);
 
 pub struct UserDetails {
     common: CommonComponentParts<Self>,

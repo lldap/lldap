@@ -45,7 +45,7 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
 
 #[derive(Properties, PartialEq)]
 pub struct SingleAttributeInputProps {
-    pub name: AttrValue,
+    pub name: String,
     pub attribute_type: AttributeType,
     #[prop_or(None)]
     pub value: Option<String>,
