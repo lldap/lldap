@@ -2,15 +2,30 @@ query GetUserDetails($id: String!) {
   user(userId: $id) {
     id
     email
-    displayName
-    firstName
-    lastName
     avatar
+    displayName
     creationDate
     uuid
     groups {
       id
       displayName
+    }
+    attributes {
+      name
+      value
+    }
+  }
+  schema {
+    userSchema {
+      attributes {
+        name
+        attributeType
+        isList
+        isVisible
+        isEditable
+        isHardcoded
+        isReadonly
+      }
     }
   }
 }

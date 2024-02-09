@@ -7,7 +7,9 @@ use crate::{
         ldap::utils::{map_user_field, UserFieldType},
         model::UserColumn,
         schema::PublicSchema,
-        types::{AttributeType, GroupDetails, GroupId, JpegPhoto, LdapObjectClass, UserId},
+        types::{
+            AttributeType, GroupDetails, GroupId, JpegPhoto, LdapObjectClass, Serialized, UserId,
+        },
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
@@ -16,7 +18,7 @@ use crate::{
 };
 use anyhow::Context as AnyhowContext;
 use chrono::{NaiveDateTime, TimeZone};
-use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject};
+use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument, Span};
 
@@ -247,15 +249,10 @@ pub struct User<Handler: BackendHandler> {
 
 impl<Handler: BackendHandler> User<Handler> {
     pub fn from_user(mut user: DomainUser, schema: Arc<PublicSchema>) -> FieldResult<Self> {
-        let attributes = std::mem::take(&mut user.attributes);
+        let attributes = AttributeValue::<Handler>::user_attributes_from_schema(&mut user, &schema);
         Ok(Self {
             user,
-            attributes: attributes
-                .into_iter()
-                .map(|a| {
-                    AttributeValue::<Handler>::from_schema(a, &schema.get_schema().user_attributes)
-                })
-                .collect::<FieldResult<Vec<_>>>()?,
+            attributes,
             schema,
             groups: None,
             _phantom: std::marker::PhantomData,
@@ -370,42 +367,36 @@ pub struct Group<Handler: BackendHandler> {
 
 impl<Handler: BackendHandler> Group<Handler> {
     pub fn from_group(
-        group: DomainGroup,
+        mut group: DomainGroup,
         schema: Arc<PublicSchema>,
     ) -> FieldResult<Group<Handler>> {
+        let attributes =
+            AttributeValue::<Handler>::group_attributes_from_schema(&mut group, &schema);
         Ok(Self {
             group_id: group.id.0,
             display_name: group.display_name.to_string(),
             creation_date: group.creation_date,
             uuid: group.uuid.into_string(),
-            attributes: group
-                .attributes
-                .into_iter()
-                .map(|a| {
-                    AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
-                })
-                .collect::<FieldResult<Vec<_>>>()?,
+            attributes,
             schema,
             _phantom: std::marker::PhantomData,
         })
     }
 
     pub fn from_group_details(
-        group_details: GroupDetails,
+        mut group_details: GroupDetails,
         schema: Arc<PublicSchema>,
     ) -> FieldResult<Group<Handler>> {
+        let attributes = AttributeValue::<Handler>::group_details_attributes_from_schema(
+            &mut group_details,
+            &schema,
+        );
         Ok(Self {
             group_id: group_details.group_id.0,
             display_name: group_details.display_name.to_string(),
             creation_date: group_details.creation_date,
             uuid: group_details.uuid.into_string(),
-            attributes: group_details
-                .attributes
-                .into_iter()
-                .map(|a| {
-                    AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
-                })
-                .collect::<FieldResult<Vec<_>>>()?,
+            attributes,
             schema,
             _phantom: std::marker::PhantomData,
         })
@@ -607,6 +598,19 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
     }
 }
 
+impl<Handler: BackendHandler> AttributeValue<Handler> {
+    fn from_domain(value: DomainAttributeValue, schema: DomainAttributeSchema) -> Self {
+        Self {
+            attribute: value,
+            schema: AttributeSchema::<Handler> {
+                schema,
+                _phantom: std::marker::PhantomData,
+            },
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
 impl<Handler: BackendHandler> Clone for AttributeValue<Handler> {
     fn clone(&self) -> Self {
         Self {
@@ -661,18 +665,136 @@ pub fn serialize_attribute(
 }
 
 impl<Handler: BackendHandler> AttributeValue<Handler> {
-    fn from_schema(a: DomainAttributeValue, schema: &DomainAttributeList) -> FieldResult<Self> {
-        match schema.get_attribute_schema(&a.name) {
-            Some(s) => Ok(AttributeValue::<Handler> {
-                attribute: a,
-                schema: AttributeSchema::<Handler> {
-                    schema: s.clone(),
-                    _phantom: std::marker::PhantomData,
-                },
-                _phantom: std::marker::PhantomData,
-            }),
-            None => Err(FieldError::from(format!("Unknown attribute {}", &a.name))),
-        }
+    fn from_schema(a: DomainAttributeValue, schema: &DomainAttributeList) -> Option<Self> {
+        schema
+            .get_attribute_schema(&a.name)
+            .map(|s| AttributeValue::<Handler>::from_domain(a, s.clone()))
+    }
+
+    fn user_attributes_from_schema(
+        user: &mut DomainUser,
+        schema: &PublicSchema,
+    ) -> Vec<AttributeValue<Handler>> {
+        let user_attributes = std::mem::take(&mut user.attributes);
+        let mut all_attributes = schema
+            .get_schema()
+            .user_attributes
+            .attributes
+            .iter()
+            .filter(|a| a.is_hardcoded)
+            .flat_map(|attribute| {
+                let value = match attribute.name.as_str() {
+                    "user_id" => Some(Serialized::from(&user.user_id)),
+                    "creation_date" => Some(Serialized::from(&user.creation_date)),
+                    "mail" => Some(Serialized::from(&user.email)),
+                    "uuid" => Some(Serialized::from(&user.uuid)),
+                    "display_name" => user.display_name.as_ref().map(Serialized::from),
+                    "avatar" | "first_name" | "last_name" => None,
+                    _ => panic!("Unexpected hardcoded attribute: {}", attribute.name),
+                };
+                value.map(|v| (attribute, v))
+            })
+            .map(|(attribute, value)| {
+                AttributeValue::<Handler>::from_domain(
+                    DomainAttributeValue {
+                        name: attribute.name.clone(),
+                        value,
+                    },
+                    attribute.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        user_attributes
+            .into_iter()
+            .flat_map(|a| {
+                AttributeValue::<Handler>::from_schema(a, &schema.get_schema().user_attributes)
+            })
+            .for_each(|value| all_attributes.push(value));
+        all_attributes
+    }
+
+    fn group_attributes_from_schema(
+        group: &mut DomainGroup,
+        schema: &PublicSchema,
+    ) -> Vec<AttributeValue<Handler>> {
+        let group_attributes = std::mem::take(&mut group.attributes);
+        let mut all_attributes = schema
+            .get_schema()
+            .group_attributes
+            .attributes
+            .iter()
+            .filter(|a| a.is_hardcoded)
+            .map(|attribute| {
+                (
+                    attribute,
+                    match attribute.name.as_str() {
+                        "group_id" => Serialized::from(&(group.id.0 as i64)),
+                        "creation_date" => Serialized::from(&group.creation_date),
+                        "uuid" => Serialized::from(&group.uuid),
+                        "display_name" => Serialized::from(&group.display_name),
+                        _ => panic!("Unexpected hardcoded attribute: {}", attribute.name),
+                    },
+                )
+            })
+            .map(|(attribute, value)| {
+                AttributeValue::<Handler>::from_domain(
+                    DomainAttributeValue {
+                        name: attribute.name.clone(),
+                        value,
+                    },
+                    attribute.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        group_attributes
+            .into_iter()
+            .flat_map(|a| {
+                AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
+            })
+            .for_each(|value| all_attributes.push(value));
+        all_attributes
+    }
+
+    fn group_details_attributes_from_schema(
+        group: &mut GroupDetails,
+        schema: &PublicSchema,
+    ) -> Vec<AttributeValue<Handler>> {
+        let group_attributes = std::mem::take(&mut group.attributes);
+        let mut all_attributes = schema
+            .get_schema()
+            .group_attributes
+            .attributes
+            .iter()
+            .filter(|a| a.is_hardcoded)
+            .map(|attribute| {
+                (
+                    attribute,
+                    match attribute.name.as_str() {
+                        "group_id" => Serialized::from(&(group.group_id.0 as i64)),
+                        "creation_date" => Serialized::from(&group.creation_date),
+                        "uuid" => Serialized::from(&group.uuid),
+                        "display_name" => Serialized::from(&group.display_name),
+                        _ => panic!("Unexpected hardcoded attribute: {}", attribute.name),
+                    },
+                )
+            })
+            .map(|(attribute, value)| {
+                AttributeValue::<Handler>::from_domain(
+                    DomainAttributeValue {
+                        name: attribute.name.clone(),
+                        value,
+                    },
+                    attribute.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        group_attributes
+            .into_iter()
+            .flat_map(|a| {
+                AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
+            })
+            .for_each(|value| all_attributes.push(value));
+        all_attributes
     }
 }
 
@@ -827,7 +949,6 @@ mod tests {
 
         let schema = schema(Query::<MockTestBackendHandler>::new());
         assert_eq!(
-            execute(QUERY, None, &schema, &Variables::new(), &context).await,
             Ok((
                 graphql_value!(
                 {
@@ -835,10 +956,26 @@ mod tests {
                         "id": "bob",
                         "email": "bob@bobbers.on",
                         "creationDate": "1970-01-01T00:00:00.042+00:00",
-                        "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
                         "firstName": "Bob",
                         "lastName": "Bobberson",
+                        "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
                         "attributes": [{
+                            "name": "creation_date",
+                            "value": ["1970-01-01T00:00:00.042+00:00"],
+                          },
+                          {
+                            "name": "mail",
+                            "value": ["bob@bobbers.on"],
+                          },
+                          {
+                            "name": "user_id",
+                            "value": ["bob"],
+                          },
+                          {
+                            "name": "uuid",
+                            "value": ["b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"],
+                          },
+                          {
                             "name": "first_name",
                             "value": ["Bob"],
                           },
@@ -852,6 +989,22 @@ mod tests {
                             "creationDate": "1970-01-01T00:00:00.000000042+00:00",
                             "uuid": "a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
                             "attributes": [{
+                                "name": "creation_date",
+                                "value": ["1970-01-01T00:00:00.000000042+00:00"],
+                              },
+                              {
+                                "name": "display_name",
+                                "value": ["Bobbersons"],
+                              },
+                              {
+                                "name": "group_id",
+                                "value": ["3"],
+                              },
+                              {
+                                "name": "uuid",
+                                "value": ["a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"],
+                              },
+                              {
                                 "name": "club_name",
                                 "value": ["Gang of Four"],
                               },
@@ -862,12 +1015,29 @@ mod tests {
                             "displayName": "Jefferees",
                             "creationDate": "1970-01-01T00:00:00.000000012+00:00",
                             "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
-                            "attributes": [],
+                            "attributes": [{
+                                "name": "creation_date",
+                                "value": ["1970-01-01T00:00:00.000000012+00:00"],
+                              },
+                              {
+                                "name": "display_name",
+                                "value": ["Jefferees"],
+                              },
+                              {
+                                "name": "group_id",
+                                "value": ["7"],
+                              },
+                              {
+                                "name": "uuid",
+                                "value": ["b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"],
+                              },
+                            ],
                         }]
                     }
                 }),
                 vec![]
-            ))
+            )),
+            execute(QUERY, None, &schema, &Variables::new(), &context).await
         );
     }
 
