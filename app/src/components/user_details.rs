@@ -22,6 +22,8 @@ pub struct GetUserDetails;
 
 pub type User = get_user_details::GetUserDetailsUser;
 pub type Group = get_user_details::GetUserDetailsUserGroups;
+pub type Attribute = get_user_details::GetUserDetailsUserAttributes;
+pub type AttributeSchema = get_user_details::GetUserDetailsUserAttributesSchema;
 
 pub struct UserDetails {
     common: CommonComponentParts<Self>,
