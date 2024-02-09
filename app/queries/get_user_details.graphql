@@ -12,5 +12,17 @@ query GetUserDetails($id: String!) {
       id
       displayName
     }
+    attributes {
+      name
+      value
+      schema {
+        name
+        attributeType
+        isList
+        isVisible
+        isEditable
+        isHardcoded
+      }
+    }
   }
 }

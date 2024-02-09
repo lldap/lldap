@@ -3,18 +3,20 @@ use std::str::FromStr;
 use crate::{
     components::{
         form::{field::Field, static_value::StaticValue, submit::Submit},
-        user_details::User,
+        user_details::{AttributeSchema, User},
     },
     infra::common_component::{CommonComponent, CommonComponentParts},
 };
-use anyhow::{bail, Error, Result};
+use anyhow::{anyhow, bail, Error, Ok, Result};
+use gloo_console::log;
 use gloo_file::{
     callbacks::{read_as_bytes, FileReader},
     File,
 };
 use graphql_client::GraphQLQuery;
+use validator::HasLen;
 use validator_derive::Validate;
-use web_sys::{FileList, HtmlInputElement, InputEvent};
+use web_sys::{FileList, FormData, HtmlFormElement, HtmlInputElement, InputEvent};
 use yew::prelude::*;
 use yew_form_derive::Model;
 
@@ -73,6 +75,7 @@ pub struct UserDetailsForm {
     /// True if we just successfully updated the user, to display a success message.
     just_updated: bool,
     user: User,
+    form_ref: NodeRef,
 }
 
 pub enum Msg {
@@ -150,7 +153,14 @@ impl CommonComponent<UserDetailsForm> for UserDetailsForm {
                 }
                 self.reader = None;
                 Ok(false)
-            }
+            } // Msg::OnSubmit(e) => {
+              //     e.prevent_default();
+              //     let form: HtmlFormElement = e.target_unchecked_into();
+              //     let data = FormData::new_with_form(&form).unwrap();
+              //     log!(format!("form data{:#?}", data));
+              //     log!(format!("form data data{:#?}", *data));
+              //     Ok(true)
+              // }
         }
     }
 
@@ -177,6 +187,7 @@ impl Component for UserDetailsForm {
             just_updated: false,
             reader: None,
             user: ctx.props().user.clone(),
+            form_ref: NodeRef::default(),
         }
     }
 
@@ -278,7 +289,7 @@ impl Component for UserDetailsForm {
               <Submit
                 text="Save changes"
                 disabled={self.common.is_task_running()}
-                onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})} />
+                onclick={link.callback(|e: MouseEvent| {Msg::SubmitClicked})} />
             </form>
             {
               if let Some(e) = &self.common.error {
@@ -297,6 +308,32 @@ impl Component for UserDetailsForm {
     }
 }
 
+type AttributeValue = (String, Vec<String>);
+
+fn get_values_from_form_data(
+    schema: Vec<AttributeSchema>,
+    form: &FormData,
+) -> Result<Vec<AttributeValue>> {
+    schema
+        .into_iter()
+        .map(|attr| -> Result<AttributeValue> {
+            let val = form
+                .get_all(attr.name.as_str())
+                .iter()
+                .map(|js_val| js_val.as_string().unwrap())
+                .filter(|val| !val.is_empty())
+                .collect::<Vec<String>>();
+            if val.length() > 1 && !attr.is_list {
+                return Err(anyhow!(
+                    "Multiple values supplied for non-list attribute {}",
+                    attr.name
+                ));
+            }
+            Ok((attr.name.clone(), val))
+        })
+        .collect()
+}
+
 impl UserDetailsForm {
     fn submit_user_update_form(&mut self, ctx: &Context<Self>) -> Result<bool> {
         if !self.form.validate() {
@@ -309,7 +346,40 @@ impl UserDetailsForm {
         {
             bail!("Image file hasn't finished loading, try again");
         }
+        let form = self.form_ref.cast::<HtmlFormElement>().unwrap();
+        let form_data = FormData::new_with_form(&form)
+            .map_err(|e| anyhow!("Failed to get FormData: {:#?}", e.as_string()))?;
+        let mut all_values = get_values_from_form_data(
+            self.user
+                .attributes
+                .iter()
+                .map(|attr| attr.schema.clone())
+                .filter(|attr| !attr.is_hardcoded)
+                .filter(|attr| attr.is_editable)
+                .collect(),
+            &form_data,
+        )?;
         let base_user = &self.user;
+        let base_attrs = &self.user.attributes;
+        all_values.retain(|(name, val)| {
+            let name = name.clone();
+            let base_val = base_attrs
+                .into_iter()
+                .find(|base_val| base_val.name == name)
+                .unwrap();
+            let new_values = val.clone();
+            base_val.value != new_values
+        });
+        let remove_names: Option<Vec<String>> = if all_values.is_empty() {
+            None
+        } else {
+            Some(all_values.iter().map(|(name, _)| name.clone()).collect())
+        };
+        let insert_attrs: Option<Vec<update_user::AttributeValueInput>> = if remove_names.is_none() {
+            None
+        } else {
+            Some(all_values.into_iter().map(|(name, value)| update_user::AttributeValueInput{name, value}).collect())
+        };
         let mut user_input = update_user::UpdateUserInput {
             id: self.user.id.clone(),
             email: None,
@@ -317,8 +387,8 @@ impl UserDetailsForm {
             firstName: None,
             lastName: None,
             avatar: None,
-            removeAttributes: None,
-            insertAttributes: None,
+            removeAttributes: remove_names,
+            insertAttributes: insert_attrs,
         };
         let default_user_input = user_input.clone();
         let model = self.form.model();
