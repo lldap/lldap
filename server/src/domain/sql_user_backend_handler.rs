@@ -67,8 +67,8 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
             }
         }
         AttributeEquality(column, value) => attribute_condition(column, value),
-        MemberOf(group) => Expr::col((group_table, GroupColumn::DisplayName))
-            .eq(group)
+        MemberOf(group) => Expr::col((group_table, GroupColumn::LowercaseDisplayName))
+            .eq(group.as_str().to_lowercase())
             .into_condition(),
         MemberOfId(group_id) => Expr::col((group_table, GroupColumn::GroupId))
             .eq(group_id)
@@ -539,6 +539,12 @@ mod tests {
         let users = get_user_names(
             &fixture.handler,
             Some(UserRequestFilter::MemberOf("Best Group".into())),
+        )
+        .await;
+        assert_eq!(users, vec!["bob", "patrick"]);
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::MemberOf("best grOUp".into())),
         )
         .await;
         assert_eq!(users, vec!["bob", "patrick"]);
@@ -1120,5 +1126,30 @@ mod tests {
             .remove_user_from_group(&UserId::new("not found"), GroupId(16242))
             .await
             .expect_err("Should have failed");
+    }
+
+    #[tokio::test]
+    async fn test_create_user_duplicate_email() {
+        let fixture = TestFixture::new().await;
+
+        fixture
+            .handler
+            .create_user(CreateUserRequest {
+                user_id: UserId::new("james"),
+                email: "email".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        fixture
+            .handler
+            .create_user(CreateUserRequest {
+                user_id: UserId::new("john"),
+                email: "eMail".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap_err();
     }
 }

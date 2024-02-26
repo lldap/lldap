@@ -195,6 +195,10 @@ fn convert_user_filter(
                 UserFieldType::PrimaryField(UserColumn::UserId) => {
                     Ok(UserRequestFilter::UserId(UserId::new(&value)))
                 }
+                UserFieldType::PrimaryField(UserColumn::Email) => Ok(UserRequestFilter::Equality(
+                    UserColumn::LowercaseEmail,
+                    value,
+                )),
                 UserFieldType::PrimaryField(field) => Ok(UserRequestFilter::Equality(field, value)),
                 UserFieldType::Attribute(field, typ, is_list) => {
                     get_user_attribute_equality_filter(&field, typ, is_list, &value)
@@ -269,6 +273,10 @@ fn convert_user_filter(
                     ),
                 }),
                 UserFieldType::NoMatch => Ok(UserRequestFilter::from(false)),
+                UserFieldType::PrimaryField(UserColumn::Email) => Ok(UserRequestFilter::SubString(
+                    UserColumn::LowercaseEmail,
+                    substring_filter.clone().into(),
+                )),
                 UserFieldType::PrimaryField(field) => Ok(UserRequestFilter::SubString(
                     field,
                     substring_filter.clone().into(),
