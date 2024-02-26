@@ -67,7 +67,7 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
             .into_condition(),
         DisplayNameSubString(filter) => SimpleExpr::FunctionCall(Func::lower(Expr::col((
             group_table,
-            GroupColumn::DisplayName,
+            GroupColumn::LowercaseDisplayName,
         ))))
         .like(filter.to_sql_filter())
         .into_condition(),
@@ -605,5 +605,26 @@ mod tests {
             .unwrap();
         let details = fixture.handler.get_group_details(group_id).await.unwrap();
         assert_eq!(details.attributes, Vec::new());
+    }
+
+    #[tokio::test]
+    async fn test_create_group_duplicate_name() {
+        let fixture = TestFixture::new().await;
+        fixture
+            .handler
+            .create_group(CreateGroupRequest {
+                display_name: "New Group".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        fixture
+            .handler
+            .create_group(CreateGroupRequest {
+                display_name: "neW group".into(),
+                ..Default::default()
+            })
+            .await
+            .unwrap_err();
     }
 }
