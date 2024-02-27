@@ -104,7 +104,11 @@ impl Component for ResetPasswordStep1Form {
                 </div>
                 { if self.just_succeeded {
                     html! {
-                      {"A reset token has been sent to your email."}
+                      {"If a user with this username or email exists, a password reset email will \
+                          be sent to the associated email address. Please check your email and \
+                          follow the instructions. If you don't receive an email, please check \
+                          your spam folder. If you still don't receive an email, please contact \
+                          your administrator."}
                     }
                 } else {
                     html! {
