@@ -155,8 +155,13 @@ impl Component for AddGroupMemberComponent {
             let to_add_user_list = self.get_selectable_user_list(ctx, user_list);
             #[allow(unused_braces)]
             let make_select_option = |user: User| {
+                let name = if user.display_name.is_empty() {
+                    user.id.clone()
+                } else {
+                    user.display_name.clone()
+                };
                 html_nested! {
-                    <SelectOption value={user.id.clone()} text={user.display_name.clone()} key={user.id} />
+                    <SelectOption value={user.id.clone()} text={name} key={user.id} />
                 }
             };
             html! {
