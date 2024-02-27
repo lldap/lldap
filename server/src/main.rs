@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 #![forbid(non_ascii_idents)]
-// TODO: Remove next line once ubuntu upgrades rustc to >=1.67.1
-#![allow(clippy::uninlined_format_args)]
+// TODO: Remove next line after upgrade to 1.77
+#![allow(clippy::blocks_in_conditions)]
 
 use std::time::Duration;
 
