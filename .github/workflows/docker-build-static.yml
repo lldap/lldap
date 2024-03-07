@@ -34,7 +34,7 @@ env:
 ### upload artifacts
 
 # build-bin
-## build-armhf, build-aarch64, build-amd64 , create binary for respective arch
+## build-armhf, build-aarch64, build-amd64 , x86_64-unknown-freebsd create binary for respective arch
 #######################################################################################
 # GitHub actions randomly timeout when downloading musl-gcc, using custom dev image   #
 # Look into .github/workflows/Dockerfile.dev for development image details            #
@@ -44,7 +44,7 @@ env:
 # Cargo build
 ### armv7, aarch64 and amd64 is musl based
 
-# build-ui,builds-armhf, build-aarch64, build-amd64 will upload artifacts will be used next job
+# build-ui,builds-armhf, build-aarch64, build-amd64 x86_64-unknown-freebsd will upload artifacts will be used next job
 
 # lldap-test
 ### will run lldap with postgres, mariadb and sqlite backend, do selfcheck command.
@@ -123,7 +123,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [armv7-unknown-linux-musleabihf, aarch64-unknown-linux-musl, x86_64-unknown-linux-musl]
+        target: [armv7-unknown-linux-musleabihf, aarch64-unknown-linux-musl, x86_64-unknown-linux-musl, x86_64-unknown-freebsd]
     container:
       image: lldap/rust-dev:latest
       env:
@@ -676,12 +676,15 @@ jobs:
         run: |
              mv bin/aarch64-unknown-linux-musl-lldap-bin/lldap bin/aarch64-lldap
              mv bin/x86_64-unknown-linux-musl-lldap-bin/lldap bin/amd64-lldap
+             mv bin/x86_64-unknown-freebsd-lldap-bin/lldap bin/amd64fb-lldap
              mv bin/armv7-unknown-linux-musleabihf-lldap-bin/lldap bin/armhf-lldap
              mv bin/aarch64-unknown-linux-musl-lldap_migration_tool-bin/lldap_migration_tool bin/aarch64-lldap_migration_tool
              mv bin/x86_64-unknown-linux-musl-lldap_migration_tool-bin/lldap_migration_tool bin/amd64-lldap_migration_tool
+             mv bin/x86_64-unknown-freebsd-lldap_migration_tool-bin/lldap_migration_tool bin/amd64fb-lldap_migration_tool
              mv bin/armv7-unknown-linux-musleabihf-lldap_migration_tool-bin/lldap_migration_tool bin/armhf-lldap_migration_tool
              mv bin/aarch64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password bin/aarch64-lldap_set_password
              mv bin/x86_64-unknown-linux-musl-lldap_set_password-bin/lldap_set_password bin/amd64-lldap_set_password
+             mv bin/x86_64-unknown-freebsd-musl-lldap_set_password-bin/lldap_set_password bin/amd64fb-lldap_set_password
              mv bin/armv7-unknown-linux-musleabihf-lldap_set_password-bin/lldap_set_password bin/armhf-lldap_set_password
              chmod +x bin/*-lldap
              chmod +x bin/*-lldap_migration_tool
@@ -706,27 +709,34 @@ jobs:
         run: |
              mkdir aarch64-lldap
              mkdir amd64-lldap
+             mkdir amd64-freebsd-lldap
              mkdir armhf-lldap
              mv bin/aarch64-lldap aarch64-lldap/lldap
              mv bin/amd64-lldap amd64-lldap/lldap
+             mv bin/amd64fb-lldap amd64-freebsd-lldap/lldap
              mv bin/armhf-lldap armhf-lldap/lldap
              mv bin/aarch64-lldap_migration_tool aarch64-lldap/lldap_migration_tool
              mv bin/amd64-lldap_migration_tool amd64-lldap/lldap_migration_tool
+             mv bin/amd64fb-lldap_migration_tool amd64-freebsd-lldap/lldap_migration_tool
              mv bin/armhf-lldap_migration_tool armhf-lldap/lldap_migration_tool
              mv bin/aarch64-lldap_set_password aarch64-lldap/lldap_set_password
              mv bin/amd64-lldap_set_password amd64-lldap/lldap_set_password
+             mv bin/amd64fb-lldap_set_password amd64-freebsdlldap/lldap_set_password
              mv bin/armhf-lldap_set_password armhf-lldap/lldap_set_password
              cp -r app aarch64-lldap/
              cp -r app amd64-lldap/
+             cp -r app amd64-freebsd-lldap/
              cp -r app armhf-lldap/
              ls -alR aarch64-lldap/
              ls -alR amd64-lldap/
+             ls -alR amd64-freebsd-lldap/
              ls -alR armhf-lldap/
 
       - name: Packing LLDAP and Web UI
         run: |
              tar -czvf aarch64-lldap.tar.gz aarch64-lldap/
              tar -czvf amd64-lldap.tar.gz amd64-lldap/
+             tar -czvf amd64-freebsd-lldap.tar.gz amd64-freebsd-lldap/
              tar -czvf armhf-lldap.tar.gz armhf-lldap/
 
 
@@ -737,6 +747,7 @@ jobs:
           allowUpdates: true
           artifacts:  aarch64-lldap.tar.gz,
                       amd64-lldap.tar.gz,
+                      amd64-freebsd-lldap.tar.gz,
                       armhf-lldap.tar.gz
         env:
          GITHUB_TOKEN: ${{ github.token }}
