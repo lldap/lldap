@@ -34,7 +34,7 @@ env:
 ### upload artifacts
 
 # build-bin
-## build-armhf, build-aarch64, build-amd64 , x86_64-unknown-freebsd create binary for respective arch
+## build-armhf, build-aarch64, build-amd64 , build_x86_freebsd create binary for respective arch
 #######################################################################################
 # GitHub actions randomly timeout when downloading musl-gcc, using custom dev image   #
 # Look into .github/workflows/Dockerfile.dev for development image details            #
