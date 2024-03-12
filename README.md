@@ -379,6 +379,7 @@ folder for help with:
 - [Mastodon](example_configs/mastodon.env.example)
 - [Matrix](example_configs/matrix_synapse.yml)
 - [Mealie](example_configs/mealie.md)
+- [MegaRAC-BMC](example_configs/MegaRAC-SP-X-BMC.md)
 - [MinIO](example_configs/minio.md)
 - [Nextcloud](example_configs/nextcloud.md)
 - [Nexus](example_configs/nexus.md)
