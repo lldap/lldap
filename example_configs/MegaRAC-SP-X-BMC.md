@@ -7,7 +7,7 @@ This enables administrators to manage systems remotely for tasks such as updates
 ## Setting up LLDAP with MegaRAC SP-X BMC IPMI
 
 ### Pre-requisites
-- Create and assign the `ipmi` group in LDAP to a (test) user.
+- Create and assign the `ipmi` group in LLDAP to a (test) user.
 - Bind User: It is recommended that you create a separate user account (e.g, `bind_user`) instead of admin for sharing Bind credentials with other services. The bind_user should be a member of the lldap_strict_readonly group to limit access to your LDAP configuration in LLDAP.
 - Bind Password: password of the user specified above
 
