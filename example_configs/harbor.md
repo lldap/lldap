@@ -26,4 +26,6 @@ core:
 > ``ldap_search_dn`` needs to be able to bind and search. The ``lldap_strict_readonly`` group is sufficient.
 
 > [!NOTE]  
-> Members of the ``ldap_group_admin_dn`` group will receive harbor admin privledges. Users outside this group or omitting the property will grant standard access.
+> Members of the ``ldap_group_admin_dn`` group will receive harbor admin privledges.
+> Users outside this group will have their ldap group(s) imported into harbor (under "groups" with type "ldap").
+> These groups can be used for permissions assigned to a harbor "project".
