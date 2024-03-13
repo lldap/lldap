@@ -29,7 +29,7 @@ This enables administrators to manage systems remotely for tasks such as updates
     - **Search Base**: `ou=people,dc=example,dc=com`
     - **Attribute of User Login**: `uid`
 
-![image](https://github.com/lldap/lldap/blob/main/example_configs/images/megarac_user.png)
+![General LDAP Settings](images/megarac_user.png)
 
 5. **Navigate**: Go to `Settings > External User Settings > LDAP/E-Directory Settings > Role groups`.
 
@@ -44,5 +44,5 @@ This enables administrators to manage systems remotely for tasks such as updates
     - KVM Access: Enabled (adjust as needed)
     - VMedia Access: Enabled (adjust as needed)
 
-![image](https://github.com/lldap/lldap/blob/main/example_configs/images/megarac_group.png)
+![Role Groups](images/megarac_group.png)
 
