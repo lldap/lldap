@@ -41,8 +41,8 @@ authentication_backend:
     mail_attribute: mail
     # The attribute holding the display name of the user. This will be used to greet an authenticated user.
     display_name_attribute: displayName
-    # The username and password of the admin user.
-    # "admin" should be the admin username you set in the LLDAP configuration
+    # The username and password of the authentication user.
+    # "admin" should be the username you created for authenitcation only with the "lldap_strict_readonly" permission. It is not recommended to use an actual admin account here
     user: uid=admin,ou=people,dc=example,dc=com
     # Password can also be set using a secret: https://www.authelia.com/docs/configuration/secrets.html
     password: 'REPLACE_ME'
