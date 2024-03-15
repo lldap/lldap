@@ -19,7 +19,7 @@ Click `Verify connection` if successful click `Next`
 * Select a template: Generic ldap server
 * User Relative DN: `ou=people`
 * User subtree: Leave unchecked
-* Object class: person
+* Object class: `person`
 * User Filter:  Leave empty to allow all users to log in or `(memberOf=uid=nexus_users,ou=groups,dc=example,dc=com)` for a specific group
 * Username Attribute: `uid`
 * Real Name Attribute: `cn`
