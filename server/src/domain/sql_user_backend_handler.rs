@@ -35,6 +35,19 @@ fn attribute_condition(name: AttributeName, value: Serialized) -> Cond {
     .into_condition()
 }
 
+fn user_id_subcondition(filter: Cond) -> Cond {
+    Expr::in_subquery(
+        Expr::col(UserColumn::UserId.as_column_ref()),
+        model::User::find()
+            .find_also_linked(model::memberships::UserToGroup)
+            .select_only()
+            .column(UserColumn::UserId)
+            .filter(filter)
+            .into_query(),
+    )
+    .into_condition()
+}
+
 fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
     use UserRequestFilter::*;
     let group_table = Alias::new("r1");
@@ -67,12 +80,16 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
             }
         }
         AttributeEquality(column, value) => attribute_condition(column, value),
-        MemberOf(group) => Expr::col((group_table, GroupColumn::LowercaseDisplayName))
-            .eq(group.as_str().to_lowercase())
-            .into_condition(),
-        MemberOfId(group_id) => Expr::col((group_table, GroupColumn::GroupId))
-            .eq(group_id)
-            .into_condition(),
+        MemberOf(group) => user_id_subcondition(
+            Expr::col((group_table, GroupColumn::LowercaseDisplayName))
+                .eq(group.as_str().to_lowercase())
+                .into_condition(),
+        ),
+        MemberOfId(group_id) => user_id_subcondition(
+            Expr::col((group_table, GroupColumn::GroupId))
+                .eq(group_id)
+                .into_condition(),
+        ),
         UserIdSubString(filter) => UserColumn::UserId
             .like(filter.to_sql_filter())
             .into_condition(),
@@ -105,18 +122,7 @@ impl UserListerBackendHandler for SqlBackendHandler {
         _get_groups: bool,
     ) -> Result<Vec<UserAndGroups>> {
         let filters = filters
-            .map(|f| {
-                UserColumn::UserId
-                    .in_subquery(
-                        model::User::find()
-                            .find_also_linked(model::memberships::UserToGroup)
-                            .select_only()
-                            .column(UserColumn::UserId)
-                            .filter(get_user_filter_expr(f))
-                            .into_query(),
-                    )
-                    .into_condition()
-            })
+            .map(get_user_filter_expr)
             .unwrap_or_else(|| SimpleExpr::Value(true.into()).into_condition());
         let mut users: Vec<_> = model::User::find()
             .filter(filters.clone())
@@ -573,6 +579,34 @@ mod tests {
         )
         .await;
         assert_eq!(users, vec!["bob", "patrick"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_users_filter_several_member_of() {
+        let fixture = TestFixture::new().await;
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::And(vec![
+                UserRequestFilter::MemberOf("Best Group".into()),
+                UserRequestFilter::MemberOf("Worst Group".into()),
+            ])),
+        )
+        .await;
+        assert_eq!(users, vec!["patrick"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_users_filter_several_member_of_id() {
+        let fixture = TestFixture::new().await;
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::And(vec![
+                UserRequestFilter::MemberOfId(fixture.groups[0]),
+                UserRequestFilter::MemberOfId(fixture.groups[1]),
+            ])),
+        )
+        .await;
+        assert_eq!(users, vec!["patrick"]);
     }
 
     #[tokio::test]
