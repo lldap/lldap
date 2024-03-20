@@ -145,7 +145,10 @@ jobs:
           restore-keys: |
             lldap-bin-${{ matrix.target }}-
       - name: Compile ${{ matrix.target }} lldap and tools
+        if: "contains(${{ matrix.target }}, 'linux-musl')"
         run: cargo build --target=${{ matrix.target }} --release -p lldap -p lldap_migration_tool -p lldap_set_password
+        if: "[${{ matrix.target }} == 'x86_64-unknown-freebsd']"
+        run: cross build --target=${{ matrix.target }} --release -p lldap -p lldap_migration_tool -p lldap_set_password        
       - name: Check path
         run: ls -al target/release
       - name: Upload ${{ matrix.target}} lldap artifacts
