@@ -37,5 +37,19 @@ RUN rustup target add x86_64-unknown-linux-musl && \
     rustup target add armv7-unknown-linux-musleabihf && \
     rustup target add x86_64-unknown-freebsd
 
+### Install Docker inside Docker
+RUN apt update;apt install -y docker.io && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/*
+##  Error starting systemctl daemon, lack of PID 1 cause of docker.
+##  But docker cli commands works cause of host running with -v /var/run/docker.sock:/var/run/docker.sock
+#   systemctl start docker && \
+
+### Add cross with Docker-in-Docker
+
+ENV CROSS_CONTAINER_IN_CONTAINER=true
+RUN cargo install cross && \
+    cargo install wasm-pack
+
 
 CMD ["bash"]
