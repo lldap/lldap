@@ -80,6 +80,7 @@ COPY --from=builder /app/app/static app/static
 COPY --from=builder /app/app/pkg app/pkg
 COPY --from=builder /app/target/release/lldap /app/target/release/lldap_migration_tool /app/target/release/lldap_set_password ./
 COPY docker-entrypoint.sh lldap_config.docker_template.toml ./
+COPY example_configs/bootstrap/bootstrap.sh ./
 
 RUN set -x \
     && apk add --no-cache bash tzdata \
