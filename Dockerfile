@@ -41,7 +41,7 @@ RUN cargo build --release -p lldap -p lldap_migration_tool -p lldap_set_password
     && ./app/build.sh
 
 # Final image
-FROM alpine:3.16
+FROM alpine:3.19
 
 ENV GOSU_VERSION 1.14
 # Fetch gosu from git

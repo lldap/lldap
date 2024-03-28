@@ -59,7 +59,7 @@ RUN set -x \
     && for file in $(cat /lldap/app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
     && chmod a+r -R .
 
-FROM alpine:3.16
+FROM alpine:3.19
 WORKDIR /app
 ENV UID=1000
 ENV GID=1000
