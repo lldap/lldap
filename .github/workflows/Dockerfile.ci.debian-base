@@ -72,9 +72,9 @@ RUN apt update && \
     mkdir -p /data && chown $USER:$USER /data
 COPY --from=lldap --chown=$USER:$USER /lldap /app
 COPY --from=lldap --chown=$USER:$USER /docker-entrypoint.sh /docker-entrypoint.sh
-COPY example_configs/bootstrap/bootstrap.sh ./
 VOLUME ["/data"]
 WORKDIR /app
+COPY example_configs/bootstrap/bootstrap.sh ./
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
 CMD ["run", "--config-file", "/data/lldap_config.toml"]
 HEALTHCHECK CMD ["/app/lldap", "healthcheck", "--config-file", "/data/lldap_config.toml"]
