@@ -80,6 +80,6 @@ COPY --from=lldap --chown=$USER:$USER /lldap /app
 VOLUME ["/data"]
 HEALTHCHECK CMD ["/app/lldap", "healthcheck", "--config-file", "/data/lldap_config.toml"]
 WORKDIR /app
-COPY example_configs/bootstrap/bootstrap.sh ./
+COPY scripts/bootstrap.sh ./
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
 CMD ["run", "--config-file", "/data/lldap_config.toml"]
