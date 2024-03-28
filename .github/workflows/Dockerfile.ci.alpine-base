@@ -77,6 +77,7 @@ RUN apk add --no-cache tini ca-certificates bash tzdata && \
     mkdir -p /data && \
     chown $USER:$USER /data
 COPY --from=lldap --chown=$USER:$USER /lldap /app
+COPY example_configs/bootstrap/bootstrap.sh ./
 VOLUME ["/data"]
 HEALTHCHECK CMD ["/app/lldap", "healthcheck", "--config-file", "/data/lldap_config.toml"]
 WORKDIR /app
