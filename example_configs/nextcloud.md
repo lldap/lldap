@@ -114,7 +114,10 @@ Enter a valid username in lldap and check if your filter is working.
 ### Groups
 
 You can use the menus for this part : select `groupOfUniqueNames` in the first menu and check every group you want members to be allowed to view their group member / share files with.
-
+For example:
+```
+(&(|(objectclass=groupOfUniqueNames))(|(cn=family)(cn=friends)))
+```
 ![groups configuration page](images/nextcloud_groups.png)
 
 ## Sharing restrictions
