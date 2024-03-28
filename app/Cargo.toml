@@ -37,12 +37,16 @@ version = "0.3"
 features = [
   "Document",
   "Element",
+  "Event",
   "FileReader",
+  "FormData",
   "HtmlDocument",
+  "HtmlFormElement",
   "HtmlInputElement",
   "HtmlOptionElement",
   "HtmlOptionsCollection",
   "HtmlSelectElement",
+  "SubmitEvent",
   "console",
 ]
 
