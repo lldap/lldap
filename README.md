@@ -162,6 +162,15 @@ services:
       # You can also set a different database:
       # - LLDAP_DATABASE_URL=mysql://mysql-user:password@mysql-server/my-database
       # - LLDAP_DATABASE_URL=postgres://postgres-user:password@postgres-server/my-database
+      # If useing SMTP, set the following variables
+      # - LLDAP_SMTP_OPTIONS__ENABLE_PASSWORD_RESET=true
+      # - LLDAP_SMTP_OPTIONS__SERVER=smtp.example.com
+      # - LLDAP_SMTP_OPTIONS__PORT=465 #Check your smtp providor's documentation for this setting 
+      # - LLDAP_SMTP_OPTIONS__SMTP_ENCRYPTION=TLS #How the connection is encrypted, either "NONE" (no encryption), "TLS" or "STARTTLS".
+      # - LLDAP_SMTP_OPTIONS__USER=no-reply@example.com #The SMTP user, usually your email address
+      # - LLDAP_SMTP_OPTIONS__PASSWORD=PasswordGoesHere #The SMTP password
+      # - LLDAP_SMTP_OPTIONS__FROM=no-reply <no-reply@example.com> #The header field, optional: how the sender appears in the email. The first is a free-form name, followed by an email between <>.
+      # - LLDAP_SMTP_OPTIONS__TO=admin <admin@example.com> # Same for reply-to, optional.
 ```
 
 Then the service will listen on two ports, one for LDAP and one for the web
