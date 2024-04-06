@@ -162,7 +162,7 @@ services:
       # You can also set a different database:
       # - LLDAP_DATABASE_URL=mysql://mysql-user:password@mysql-server/my-database
       # - LLDAP_DATABASE_URL=postgres://postgres-user:password@postgres-server/my-database
-      # If useing SMTP, set the following variables
+      # If using SMTP, set the following variables
       # - LLDAP_SMTP_OPTIONS__ENABLE_PASSWORD_RESET=true
       # - LLDAP_SMTP_OPTIONS__SERVER=smtp.example.com
       # - LLDAP_SMTP_OPTIONS__PORT=465 #Check your smtp providor's documentation for this setting 
