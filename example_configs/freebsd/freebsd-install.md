@@ -3,7 +3,7 @@ Extract lldap's [FreeBSD tar.gz](https://github.com/n-connect/rustd-hbbx/blob/ma
 `tar -xvf x86_64-freebsd_lldap-0.5.1.tar.gz -C /usr/local/`
 
 Move rc.d script into the right place:
-`mv /usr/local/lldap_server/rc.d_lldap /usr/local/etc/rc.d/`
+`mv /usr/local/lldap_server/rc.d_lldap /usr/local/etc/rc.d/lldap`
 
 Make your config, if your want to enable LDAPS, copy your server key and certification files, and set the owneship (currently www):
 
