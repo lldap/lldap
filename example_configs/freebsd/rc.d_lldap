@@ -4,11 +4,6 @@
 # REQUIRE: DAEMON NETWORKING
 # KEYWORD: shutdown
 
-# LLDAP Use: extract theFreeBSD release package into /usr/local/ -> so your files will be under /usr/local/lldap_server/
-# Save/copy this rc.d script file into /usr/local/etc/rc.d/
-# The service script set to run the lldap server as "www" user - make sure the whole lldap_server directory is accessible/runnable by "www".
-# Simplest to run chown -R www:www /usr/local/lldap_server
-
 # Add the following lines to /etc/rc.conf to enable lldap:
 # lldap_enable : set to "YES" to enable the daemon, default is "NO"
 
