@@ -215,7 +215,7 @@ You can also install it as a rc.d service in FreeBSD, see
 [FreeBSD-install.md](example_configs/freebsd/freebsd-install.md).
 
 The rc.d script file 
-[rcd_lldap](example_configs/freebsd/rcd_lldap).
+[rc.d_lldap](example_configs/freebsd/rc.d_lldap).
 
 ### From source
 
