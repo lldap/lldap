@@ -38,6 +38,7 @@
   - [With Docker](#with-docker)
   - [With Kubernetes](#with-kubernetes)
   - [From a package repository](#from-a-package-repository)
+  - [With FreeBSD](#with-freebsd)
   - [From source](#from-source)
     - [Backend](#backend)
     - [Frontend](#frontend)
@@ -207,6 +208,14 @@ The package descriptions can be used
 Each package places lldap's configuration file at `/etc/lldap.toml` and offers
 [systemd service](https://wiki.archlinux.org/title/systemd#Using_units)
 `lldap.service` to (auto-)start and stop lldap.
+
+### With FreeBSD
+
+You can also install it as a rc.d service in FreeBSD, see
+[FreeBSD-install.md](example_configs/freebsd/freebsd-install.md).
+
+The rc.d script file 
+[rc.d_lldap](example_configs/freebsd/rc.d_lldap).
 
 ### From source
 

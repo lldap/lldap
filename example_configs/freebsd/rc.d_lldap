@@ -1,0 +1,27 @@
+#!/bin/sh
+
+# PROVIDE: lldap
+# REQUIRE: DAEMON NETWORKING
+# KEYWORD: shutdown
+
+# Add the following lines to /etc/rc.conf to enable lldap:
+# lldap_enable : set to "YES" to enable the daemon, default is "NO"
+
+. /etc/rc.subr
+
+name=lldap
+rcvar=lldap_enable
+
+lldap_chdir="/usr/local/lldap_server"
+
+load_rc_config $name
+
+lldap_enable=${lldap_enable:-"NO"}
+
+logfile="/var/log/${name}.log"
+
+procname=/usr/local/lldap_server/lldap
+command="/usr/sbin/daemon"
+command_args="-u www -o ${logfile} -t ${name} /usr/local/lldap_server/lldap run"
+
+run_rc_command "$1"
