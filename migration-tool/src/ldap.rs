@@ -182,7 +182,7 @@ impl TryFrom<ResultEntry> for User {
             .attrs
             .get("jpegPhoto")
             .map(|v| v.iter().map(|s| s.as_bytes().to_vec()).collect::<Vec<_>>())
-            .or_else(|| entry.bin_attrs.get("jpegPhoto").map(Clone::clone))
+            .or_else(|| entry.bin_attrs.get("jpegPhoto").cloned())
             .and_then(|v| v.into_iter().next().filter(|s| !s.is_empty()));
         let password =
             get_optional_attribute("userPassword").or_else(|| get_optional_attribute("password"));
