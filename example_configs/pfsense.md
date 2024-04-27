@@ -40,7 +40,11 @@ ou=people
 
 > [!Note]
 > The `Select a container` seach fuction will not work for selecting containers. You enter the `Authentication containers` directly into the text field.
-> This is do to Pfsense running the following filter `"(|(ou=*)(cn=Users))"`, and `Organizational Units` is currently not supported.
+> This is due to Pfsense running the following filter `"(|(ou=*)(cn=Users))"`, and `Organizational Units` is currently not supported.Could not connect to the LDAP server. Please check the LDAP configuration.
+
+> [!WARNING] 
+> if search button is pressed a warning will show on the bottom of the page: `Could not connect to the LDAP server. Please check the LDAP configuration.`
+
 
 ### Extended Query
 
@@ -127,7 +131,7 @@ Go to `System > User Manager > Settings` page. Add your LLDAP server configurati
 pfSense includes a built-in feature for testing user authentication at `Diagnostics > Authentication`. Select your LLDAP server configuration in the `Authentication Server` to test logins for your LLDAP users. The groups (only the ones you added to pfSense) should show up when tested.
 
 > [!WARNING] 
-> When running `Save and test`, the `Attempting to fetch Organizational Units from` will fail. This is do to Pfsense running the following filter `"(|(ou=*)(cn=Users))"`, and `Organizational Units` is currently not supported.
+> When running `Save and test`, the `Attempting to fetch Organizational Units from` will fail. This is due to Pfsense running the following filter `"(|(ou=*)(cn=Users))"`, and `Organizational Units` is currently not supported.
 
 ## More Information
 
