@@ -1,5 +1,8 @@
 # Configuration for pfSense
 
+> [!NOTE]  
+> Replace `dc=example,dc=com` with the same LDAP Base DN that you set via the *LLDAP_LDAP_BASE_DN* environment variable or in `lldap_config.toml`.
+
 ## Create a LDAP Server
 
 - Login to pfSense
@@ -16,7 +19,9 @@
 - Protocol version: `3`
 - Server Timeout: `25`
 
-(Make sure the host running LLDAP is accessible to pfSense and that you mapped the LLDAP port to the LLDAP host)
+> [!NOTE]
+> Make sure the host running LLDAP is accessible to pfSense and that you mapped the LLDAP port to the LLDAP host
+
 ### Search Scope
 ```
 Entire Subtree
@@ -27,18 +32,25 @@ Entire Subtree
 dc=example,dc=com
 ```
 
-This is the same LDAP Base DN that you set via the *LLDAP_LDAP_BASE_DN* environment variable or in `lldap_config.toml`.
 ### Authentication containers
 
 ```
 ou=people
 ```
 
-Note: The `Select a container` box may not work for selecting containers. You can just enter the `Authentication containers` directly into the text field.
+> [!Note]
+> The `Select a container` seach fuction will not work for selecting containers. You enter the `Authentication containers` directly into the text field.
+> This is due to Pfsense running the following filter `"(|(ou=*)(cn=Users))"`, and `Organizational Units` is currently not supported.Could not connect to the LDAP server. Please check the LDAP configuration.
+
+> [!WARNING] 
+> if search button is pressed a warning will show on the bottom of the page: `Could not connect to the LDAP server. Please check the LDAP configuration.`
+
 
 ### Extended Query
 
-Enable extended query: `Checked`
+Enable extended query: 
+
+- [X] `Checked`
 
 ### Query:
 
@@ -49,7 +61,8 @@ Enable extended query: `Checked`
 This example gives you two groups in LLDAP, one for pfSense admin access (`pfsense_admin`) and one for guest access (`pfsense_guest`). You **must** create these exact same groups in both LLDAP and pfSense, then give them the correct permissions in pfSense.
 
 ### Bind Anonymous
-`Unchecked`
+
+- [ ] `Unchecked`
 
 ### Bind credentials
 
@@ -80,13 +93,18 @@ cn
 memberof
 ```
 ### RFC 2307 Groups
-`Unchecked`
+
+- [ ] `Unchecked`
 
 ### Group Object Class
-`groupOfUniqueNames`
+```
+groupOfUniqueNames
+```
 
 ### Shell Authentication Group DN
-`cn=pfsense_admin,ou=groups,dc=example,dc=com`
+```
+cn=pfsense_admin,ou=groups,dc=example,dc=com
+```
 
 (This is only if you want to give a group shell access through LDAP. Leave blank and only the pfSense admin user will have shell access.
 
@@ -94,9 +112,9 @@ memberof
 
 Enable the following options on the pfSense configuration page for your LLDAP server (the same page where you entered the prior configuration):
 
-- UTF8 Encodes: `Checked`
-- Username Alterations: `Unchecked`
-- Allow unauthenticated bind: `Unchecked`
+- [X] UTF8 Encodes: `Checked`
+- [ ] Username Alterations: `Unchecked`
+- [ ] Allow unauthenticated bind: `Unchecked`
 
 ### Create pfSense Groups
 
@@ -111,6 +129,9 @@ Go to `System > User Manager > Settings` page. Add your LLDAP server configurati
 ## Testing LLDAP
 
 pfSense includes a built-in feature for testing user authentication at `Diagnostics > Authentication`. Select your LLDAP server configuration in the `Authentication Server` to test logins for your LLDAP users. The groups (only the ones you added to pfSense) should show up when tested.
+
+> [!WARNING] 
+> When running `Save and test`, the `Attempting to fetch Organizational Units from` will fail. This is due to Pfsense running the following filter `"(|(ou=*)(cn=Users))"`, and `Organizational Units` is currently not supported.
 
 ## More Information
 
