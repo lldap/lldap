@@ -54,7 +54,7 @@ services:
       - ENABLE_OPENDMARC=0
       # >>> Postfix LDAP Integration
       - ACCOUNT_PROVISIONER=LDAP
-      - LDAP_SERVER_HOST=lldap:3890
+      - LDAP_SERVER_HOST=ldap://lldap:3890
       - LDAP_SEARCH_BASE=ou=people,dc=example,dc=com
       - LDAP_BIND_DN=uid=admin,ou=people,dc=example,dc=com
       - LDAP_BIND_PW=adminpassword
