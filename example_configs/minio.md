@@ -35,3 +35,38 @@ Creating MinIO policies is outside of the scope for this document, but it is wel
 
 - Alias your MinIO instance: `mc alias set myMinIO http://<your-minio-address>:<your-minio-api-port> admin <your-admin-password>`
 - Attach a policy to your LDAP group: `mc admin policy attach myMinIO consoleAdmin --group='cn=minio_admin,ou=groups,dc=example,dc=com'`
+
+## Alternative configuration
+
+The above options didn't work for me (thielj; 2024-6-10; latest lldap and minio docker images). In particular, having a User DN search base of `ou=people,dc=example,dc=com` conflicted with the condition `memberOf=cn=admins,ou=groups,dc=example,dc=com` due to the groups being outside the 'ou=people' search base. Using just `dc=example,dc=com` as search base was frowned upon by MinIO due to duplicate results. 
+
+The following environment variables made both MinIO and LLDAP happy:
+
+```yaml
+    environment:
+      MINIO_ROOT_USER: "admin"
+      MINIO_ROOT_PASSWORD: "${ADMIN_PASSWORD:?error}"
+      
+      MINIO_IDENTITY_LDAP_SERVER_ADDR: "ldap.${TOP_DOMAIN}:636"
+      #MINIO_IDENTITY_LDAP_TLS_SKIP_VERIFY: "off"
+      #MINIO_IDENTITY_LDAP_SERVER_INSECURE: "off"
+      #MINIO_IDENTITY_LDAP_SERVER_STARTTLS: "off"
+
+      # https://github.com/lldap/lldap/blob/main/example_configs/minio.md
+      MINIO_IDENTITY_LDAP_LOOKUP_BIND_DN: "${LDAP_AUTH_BIND_USER}"
+      MINIO_IDENTITY_LDAP_LOOKUP_BIND_PASSWORD: "${LDAP_AUTH_BIND_PASSWORD}"
+      MINIO_IDENTITY_LDAP_USER_DN_SEARCH_BASE_DN: "ou=people,${LDAP_BASE_DN}"
+      # allow all users to login; they need a policy attached before they can actually do anything
+      MINIO_IDENTITY_LDAP_USER_DN_SEARCH_FILTER: "(&(objectclass=posixAccount)(uid=%s))"
+      #MINIO_IDENTITY_LDAP_USER_DN_ATTRIBUTES: "uid,cn,mail"
+      MINIO_IDENTITY_LDAP_GROUP_SEARCH_BASE_DN: "ou=groups,${LDAP_BASE_DN}"
+      MINIO_IDENTITY_LDAP_GROUP_SEARCH_FILTER: "(&(objectclass=groupOfUniqueNames)(member=%d))"
+```
+
+Another tip, there's no need to download or install the MinIO CLI. Assuming your running container is named `minio`, this does the trick:
+
+```
+$ docker exec minio mc alias set localhost http://localhost:9000 admin "${ADMIN_PASSWORD}"
+$ docker exec minio mc ready localhost
+$ docker exec minio mc admin policy attach localhost consoleAdmin --group="cn=admins,ou=groups,${LDAP_BASE_DN}"
+```
