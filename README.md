@@ -364,6 +364,7 @@ folder for help with:
 - [Authentik](example_configs/authentik.md)
 - [Bookstack](example_configs/bookstack.env.example)
 - [Calibre-Web](example_configs/calibre_web.md)
+- [Carpal](example_configs/carpal.md)
 - [Dell iDRAC](example_configs/dell_idrac.md)
 - [Dex](example_configs/dex_config.yml)
 - [Dokuwiki](example_configs/dokuwiki.md)
