@@ -29,9 +29,9 @@ impl std::fmt::Debug for DatabaseUrl {
     }
 }
 
-impl ToString for DatabaseUrl {
-    fn to_string(&self) -> String {
-        self.0.to_string()
+impl std::fmt::Display for DatabaseUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.0))
     }
 }
 

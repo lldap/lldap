@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use crate::{
     components::{
@@ -24,9 +24,13 @@ struct JsFile {
     contents: Option<Vec<u8>>,
 }
 
-impl ToString for JsFile {
-    fn to_string(&self) -> String {
-        self.file.as_ref().map(File::name).unwrap_or_default()
+impl Display for JsFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.file.as_ref().map(File::name).unwrap_or_default()
+        )
     }
 }
 
