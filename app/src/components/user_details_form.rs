@@ -2,9 +2,17 @@ use std::{fmt::Display, str::FromStr};
 
 use crate::{
     components::{
-        form::{attribute_input::SingleAttributeInput, field::Field, static_value::StaticValue, submit::Submit},
+        form::{
+            attribute_input::SingleAttributeInput, field::Field, static_value::StaticValue,
+            submit::Submit,
+        },
         user_details::{AttributeSchema, User},
-    }, convert_attribute_type, infra::{common_component::{CommonComponent, CommonComponentParts}, schema::AttributeType}
+    },
+    convert_attribute_type,
+    infra::{
+        common_component::{CommonComponent, CommonComponentParts},
+        schema::AttributeType,
+    },
 };
 use anyhow::{anyhow, bail, Error, Ok, Result};
 use gloo_console::log;
@@ -295,7 +303,7 @@ impl Component for UserDetailsForm {
               <Submit
                 text="Save changes"
                 disabled={self.common.is_task_running()}
-                onclick={link.callback(|e: MouseEvent| {Msg::SubmitClicked})} />
+                onclick={link.callback(|_: MouseEvent| {Msg::SubmitClicked})} />
             </form>
             {
               if let Some(e) = &self.common.error {
@@ -342,14 +350,10 @@ fn get_values_from_form_data(
 
 fn get_custom_attribute_input(attribute: &Attribute) -> Html {
     if attribute.schema.is_list {
-        html!{<p>{"list attr"}</p>}
+        html! {<p>{"list attributes are not supported yet"}</p>}
     } else {
-        let value = if attribute.value.is_empty() {
-            None
-        } else {
-            Some(attribute.value[0].clone())
-        };
-        html!{<SingleAttributeInput name={attribute.name.clone()} attribute_type={Into::<AttributeType>::into(attribute.schema.attribute_type.clone())} value={value}/>}
+        let value = attribute.value.first().cloned().unwrap_or_default();
+        html! {<SingleAttributeInput name={attribute.name.clone()} attribute_type={Into::<AttributeType>::into(attribute.schema.attribute_type.clone())} value={value}/>}
     }
 }
 
@@ -379,26 +383,33 @@ impl UserDetailsForm {
             &form_data,
         )?;
         let base_user = &self.user;
-        let base_attrs = &self.user.attributes;
+        let base_attributes = &self.user.attributes;
+        gloo_console::log!(format!("base_attributes: {:#?}", base_attributes));
         all_values.retain(|(name, val)| {
             let name = name.clone();
-            let base_val = base_attrs
-                .into_iter()
+            let base_val = base_attributes
+                .iter()
                 .find(|base_val| base_val.name == name)
                 .unwrap();
             let new_values = val.clone();
             base_val.value != new_values
         });
-        let remove_names: Option<Vec<String>> = if all_values.is_empty() {
+        let remove_attributes: Option<Vec<String>> = if all_values.is_empty() {
             None
         } else {
             Some(all_values.iter().map(|(name, _)| name.clone()).collect())
         };
-        let insert_attrs: Option<Vec<update_user::AttributeValueInput>> = if remove_names.is_none() {
-            None
-        } else {
-            Some(all_values.into_iter().map(|(name, value)| update_user::AttributeValueInput{name, value}).collect())
-        };
+        let insert_attributes: Option<Vec<update_user::AttributeValueInput>> =
+            if remove_attributes.is_none() {
+                None
+            } else {
+                Some(
+                    all_values
+                        .into_iter()
+                        .map(|(name, value)| update_user::AttributeValueInput { name, value })
+                        .collect(),
+                )
+            };
         let mut user_input = update_user::UpdateUserInput {
             id: self.user.id.clone(),
             email: None,
@@ -406,8 +417,8 @@ impl UserDetailsForm {
             firstName: None,
             lastName: None,
             avatar: None,
-            removeAttributes: remove_names,
-            insertAttributes: insert_attrs,
+            removeAttributes: remove_attributes,
+            insertAttributes: insert_attributes,
         };
         let default_user_input = user_input.clone();
         let model = self.form.model();
