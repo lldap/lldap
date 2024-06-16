@@ -31,9 +31,6 @@ use ldap3_proto::proto::{
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-struct LdapDn(String);
-
 #[derive(Debug)]
 enum SearchScope {
     Global,

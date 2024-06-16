@@ -445,10 +445,10 @@ impl ConfigOverrider for LdapsOpts {
             config.ldaps_options.port = port;
         }
         if let Some(path) = self.ldaps_cert_file.as_ref() {
-            config.ldaps_options.cert_file = path.clone();
+            config.ldaps_options.cert_file.clone_from(path);
         }
         if let Some(path) = self.ldaps_key_file.as_ref() {
-            config.ldaps_options.key_file = path.clone();
+            config.ldaps_options.key_file.clone_from(path);
         }
     }
 }
@@ -470,13 +470,13 @@ impl ConfigOverrider for SmtpOpts {
             config.smtp_options.reply_to = Some(reply_to.clone());
         }
         if let Some(server) = &self.smtp_server {
-            config.smtp_options.server = server.clone();
+            config.smtp_options.server.clone_from(server);
         }
         if let Some(port) = self.smtp_port {
             config.smtp_options.port = port;
         }
         if let Some(user) = &self.smtp_user {
-            config.smtp_options.user = user.clone();
+            config.smtp_options.user.clone_from(user);
         }
         if let Some(password) = &self.smtp_password {
             config.smtp_options.password = SecUtf8::from(password.clone());

@@ -53,9 +53,9 @@ impl<'a> std::convert::TryFrom<&'a str> for Uuid {
     }
 }
 
-impl std::string::ToString for Uuid {
-    fn to_string(&self) -> String {
-        self.0.clone()
+impl std::fmt::Display for Uuid {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_str())
     }
 }
 
@@ -559,14 +559,8 @@ mod tests {
     #[test]
     fn test_serialized_i64_len() {
         assert_eq!(SERIALIZED_I64_LEN, Serialized::from(&0i64).0.len());
-        assert_eq!(
-            SERIALIZED_I64_LEN,
-            Serialized::from(&i64::max_value()).0.len()
-        );
-        assert_eq!(
-            SERIALIZED_I64_LEN,
-            Serialized::from(&i64::min_value()).0.len()
-        );
+        assert_eq!(SERIALIZED_I64_LEN, Serialized::from(&i64::MAX).0.len());
+        assert_eq!(SERIALIZED_I64_LEN, Serialized::from(&i64::MIN).0.len());
         assert_eq!(SERIALIZED_I64_LEN, Serialized::from(&-1000i64).0.len());
     }
 }
