@@ -252,7 +252,7 @@ get_users_list() {
 }
 
 user_exists() {
-  if [[ "$(get_users_list | jq --raw-output --arg id "$1" '.data.users | any(.[]; contains({"id": $id}))')" == 'true' ]]; then
+  if [[ "$(get_users_list | jq --raw-output --arg id "$1" '.data.users | any(.[]; .id == $id)')" == 'true' ]]; then
     return 0
   else
     return 1
