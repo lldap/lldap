@@ -36,10 +36,6 @@ uid
 ```
 uid
 ```
-### LDAP Password Attribute
-```
-userPassword
-```
 
 ### LDAP Admin Base DN
 The DN to search for your admins.
