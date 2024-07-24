@@ -15,7 +15,7 @@ authentication_backend:
     implementation: custom
     # Pattern is ldap://HOSTNAME-OR-IP:PORT
     # Normal ldap port is 389, standard in LLDAP is 3890
-    url: ldap://lldap:3890
+    address: ldap://lldap:3890
     # The dial timeout for LDAP.
     timeout: 5s
     # Use StartTLS with the LDAP connection, TLS not supported right now
@@ -25,7 +25,6 @@ authentication_backend:
     #  minimum_version: TLS1.2
     # Set base dn, like dc=google,dc.com
     base_dn: dc=example,dc=com
-    username_attribute: uid
     # You need to set this to ou=people, because all users are stored in this ou!
     additional_users_dn: ou=people
     # To allow sign in both with username and email, one can use a filter like
@@ -36,11 +35,14 @@ authentication_backend:
     # The groups are not displayed in the UI, but this filter works.
     groups_filter: "(member={dn})"
     # The attribute holding the name of the group.
-    group_name_attribute: cn
-    # Email attribute
-    mail_attribute: mail
-    # The attribute holding the display name of the user. This will be used to greet an authenticated user.
-    display_name_attribute: displayName
+    attributes:
+      display_name: displayName
+      username: uid
+      group_name: cn
+      mail: mail
+      # distinguished_name: distinguishedName
+      # member_of: memberOf
+
     # The username and password of the bind user.
     # "bind_user" should be the username you created for authentication with the "lldap_strict_readonly" permission. It is not recommended to use an actual admin account here.
     # If you are configuring Authelia to change user passwords, then the account used here needs the "lldap_password_manager" permission instead.
