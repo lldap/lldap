@@ -1,10 +1,12 @@
 # Configuration for Jellyfin
 
-Replace `dc=example,dc=com` with your LLDAP configured domain.
+Replace all instances of `dc=example,dc=com` with your LLDAP configured domain.
 
+## LDAP Server Settings
 ### LDAP Bind User
+Create an ldap user for Jellyfin to run search queries (and optionally reset passwords). For example `jellyfin_bind_user`
 ```
-uid=admin,ou=people,dc=example,dc=com
+uid=jellyfin_bind_user,ou=people,dc=example,dc=com
 ```
 
 ### LDAP Base DN for searches
@@ -12,31 +14,30 @@ uid=admin,ou=people,dc=example,dc=com
 ou=people,dc=example,dc=com
 ```
 
-### LDAP Attributes
-
-```
-uid, mail
-```
-
-### LDAP Name Attribute
-
-```
-uid
-```
-
-### User Filter
-
+## LDAP User Settings
+### LDAP Search Filter
 If you have a `media` group, you can use:
 ```
 (memberof=cn=media,ou=groups,dc=example,dc=com)
 ```
-
 Otherwise, just use:
 ```
 (uid=*)
 ```
-### Admin Base DN
+### LDAP Search Attributes
+```
+uid, mail
+```
+### LDAP Uid Attribute
+```
+uid
+```
+### LDAP Username Attribute
+```
+uid
+```
 
+### LDAP Admin Base DN
 The DN to search for your admins.
 ```
 ou=people,dc=example,dc=com
