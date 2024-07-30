@@ -3,8 +3,8 @@ use std::{fmt::Display, str::FromStr};
 use crate::{
     components::{
         form::{
-            attribute_input::SingleAttributeInput, field::Field, static_value::StaticValue,
-            submit::Submit,
+            attribute_input::{SingleAttributeInput, ListAttributeInput},
+            field::Field, static_value::StaticValue, submit::Submit,
         },
         user_details::{Attribute, AttributeSchema, User},
     },
@@ -330,7 +330,12 @@ fn get_custom_attribute_input(
     user_attributes: &[Attribute],
 ) -> Html {
     if attribute_schema.is_list {
-        html! {<p>{"list attributes are not supported yet"}</p>}
+        let values = user_attributes
+            .iter()
+            .find(|a| a.name == attribute_schema.name)
+            .map(|attribute| attribute.value.clone())
+            .unwrap_or_default();
+        html! {<ListAttributeInput name={attribute_schema.name.clone()} attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())} values={values}/>}
     } else {
         let value = user_attributes
             .iter()
