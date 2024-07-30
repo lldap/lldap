@@ -373,7 +373,7 @@ impl UserDetailsForm {
                 .iter()
                 .find(|base_val| base_val.name == name);
             let new_values = val.clone();
-            base_val.map(|v| v.value != new_values).unwrap_or(true)
+            base_val.map(|v| v.value != new_values).unwrap_or(!new_values.is_empty())
         });
         let remove_attributes: Option<Vec<String>> = if all_values.is_empty() {
             None
@@ -398,8 +398,8 @@ impl UserDetailsForm {
             firstName: None,
             lastName: None,
             avatar: None,
-            removeAttributes: remove_attributes,
-            insertAttributes: insert_attributes,
+            removeAttributes: None,
+            insertAttributes: None,
         };
         let default_user_input = user_input.clone();
         let model = self.form.model();
@@ -413,6 +413,8 @@ impl UserDetailsForm {
         if let Some(avatar) = &self.avatar {
             user_input.avatar = Some(to_base64(avatar)?);
         }
+        user_input.removeAttributes = remove_attributes;
+        user_input.insertAttributes = insert_attributes;
         // Nothing changed.
         if user_input == default_user_input {
             return Ok(false);
