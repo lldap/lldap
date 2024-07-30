@@ -56,8 +56,9 @@ pub fn single_attribute_input(props: &SingleAttributeInputProps) -> Html {
     html! {
         <div class="row mb-3">
             <label for={props.name.clone()}
-                class="form-label col-4 col-form-label">
-                {&props.name}{":"}
+                class="form-label col-4 col-form-label"
+                title={props.name.clone()}>
+                {props.name[0..1].to_uppercase() + &props.name[1..].replace("_", " ")}{":"}
             </label>
             <div class="col-8">
             <AttributeInput
