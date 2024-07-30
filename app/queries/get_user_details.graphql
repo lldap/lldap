@@ -2,10 +2,8 @@ query GetUserDetails($id: String!) {
   user(userId: $id) {
     id
     email
-    displayName
-    firstName
-    lastName
     avatar
+    displayName
     creationDate
     uuid
     groups {
@@ -15,7 +13,11 @@ query GetUserDetails($id: String!) {
     attributes {
       name
       value
-      schema {
+    }
+  }
+  schema {
+    userSchema {
+      attributes {
         name
         attributeType
         isList

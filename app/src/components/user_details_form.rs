@@ -6,9 +6,8 @@ use crate::{
             attribute_input::SingleAttributeInput, field::Field, static_value::StaticValue,
             submit::Submit,
         },
-        user_details::{AttributeSchema, User},
+        user_details::{Attribute, AttributeSchema, User},
     },
-    convert_attribute_type,
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
         schema::AttributeType,
@@ -26,8 +25,6 @@ use validator_derive::Validate;
 use web_sys::{FileList, FormData, HtmlFormElement, HtmlInputElement, InputEvent};
 use yew::prelude::*;
 use yew_form_derive::Model;
-
-use super::user_details::Attribute;
 
 #[derive(Default)]
 struct JsFile {
@@ -63,8 +60,6 @@ pub struct UserModel {
     #[validate(email)]
     email: String,
     display_name: String,
-    first_name: String,
-    last_name: String,
 }
 
 /// The GraphQL query sent to the server to update the user details.
@@ -110,6 +105,7 @@ pub enum Msg {
 pub struct Props {
     /// The current user details.
     pub user: User,
+    pub user_attributes_schema: Vec<AttributeSchema>,
 }
 
 impl CommonComponent<UserDetailsForm> for UserDetailsForm {
@@ -166,14 +162,7 @@ impl CommonComponent<UserDetailsForm> for UserDetailsForm {
                 }
                 self.reader = None;
                 Ok(false)
-            } // Msg::OnSubmit(e) => {
-              //     e.prevent_default();
-              //     let form: HtmlFormElement = e.target_unchecked_into();
-              //     let data = FormData::new_with_form(&form).unwrap();
-              //     log!(format!("form data{:#?}", data));
-              //     log!(format!("form data data{:#?}", *data));
-              //     Ok(true)
-              // }
+            }
         }
     }
 
@@ -190,8 +179,6 @@ impl Component for UserDetailsForm {
         let model = UserModel {
             email: ctx.props().user.email.clone(),
             display_name: ctx.props().user.display_name.clone(),
-            first_name: ctx.props().user.first_name.clone(),
-            last_name: ctx.props().user.last_name.clone(),
         };
         Self {
             common: CommonComponentParts::<Self>::create(),
@@ -217,11 +204,13 @@ impl Component for UserDetailsForm {
                 let avatar_base64 = to_base64(avatar);
                 avatar_base64.as_deref().unwrap_or("").to_owned()
             }
-            None => self.user.avatar.as_deref().unwrap_or("").to_owned(),
+            None => String::new(), //self.user.avatar.as_deref().unwrap_or("").to_owned(),
         };
         html! {
           <div class="py-3">
-            <form class="form">
+            <form
+              class="form"
+              ref={self.form_ref.clone()}>
               <StaticValue label="User ID" id="userId">
                 <i>{&self.user.id}</i>
               </StaticValue>
@@ -243,18 +232,6 @@ impl Component for UserDetailsForm {
                 label="Display name"
                 field_name="display_name"
                 autocomplete="name"
-                oninput={link.callback(|_| Msg::Update)} />
-              <Field<UserModel>
-                form={&self.form}
-                label="First name"
-                field_name="first_name"
-                autocomplete="given-name"
-                oninput={link.callback(|_| Msg::Update)} />
-              <Field<UserModel>
-                form={&self.form}
-                label="Last name"
-                field_name="last_name"
-                autocomplete="family-name"
                 oninput={link.callback(|_| Msg::Update)} />
               <div class="form-group row align-items-center mb-3">
                 <label for="avatar"
@@ -299,11 +276,11 @@ impl Component for UserDetailsForm {
                   </div>
                 </div>
               </div>
-              {self.user.attributes.iter().map(get_custom_attribute_input).collect::<Vec<_>>()}
+              {ctx.props().user_attributes_schema.iter().filter(|a| a.is_editable).map(|s| get_custom_attribute_input(s, &self.user.attributes)).collect::<Vec<_>>()}
               <Submit
                 text="Save changes"
                 disabled={self.common.is_task_running()}
-                onclick={link.callback(|_: MouseEvent| {Msg::SubmitClicked})} />
+                onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitClicked})} />
             </form>
             {
               if let Some(e) = &self.common.error {
@@ -325,7 +302,7 @@ impl Component for UserDetailsForm {
 type AttributeValue = (String, Vec<String>);
 
 fn get_values_from_form_data(
-    schema: Vec<AttributeSchema>,
+    schema: Vec<&AttributeSchema>,
     form: &FormData,
 ) -> Result<Vec<AttributeValue>> {
     schema
@@ -334,7 +311,7 @@ fn get_values_from_form_data(
             let val = form
                 .get_all(attr.name.as_str())
                 .iter()
-                .map(|js_val| js_val.as_string().unwrap())
+                .map(|js_val| js_val.as_string().unwrap_or_default())
                 .filter(|val| !val.is_empty())
                 .collect::<Vec<String>>();
             if val.length() > 1 && !attr.is_list {
@@ -348,12 +325,19 @@ fn get_values_from_form_data(
         .collect()
 }
 
-fn get_custom_attribute_input(attribute: &Attribute) -> Html {
-    if attribute.schema.is_list {
+fn get_custom_attribute_input(
+    attribute_schema: &AttributeSchema,
+    user_attributes: &[Attribute],
+) -> Html {
+    if attribute_schema.is_list {
         html! {<p>{"list attributes are not supported yet"}</p>}
     } else {
-        let value = attribute.value.first().cloned().unwrap_or_default();
-        html! {<SingleAttributeInput name={attribute.name.clone()} attribute_type={Into::<AttributeType>::into(attribute.schema.attribute_type.clone())} value={value}/>}
+        let value = user_attributes
+            .iter()
+            .find(|a| a.name == attribute_schema.name)
+            .and_then(|attribute| attribute.value.first().cloned())
+            .unwrap_or_default();
+        html! {<SingleAttributeInput name={attribute_schema.name.clone()} attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())} value={value}/>}
     }
 }
 
@@ -373,26 +357,23 @@ impl UserDetailsForm {
         let form_data = FormData::new_with_form(&form)
             .map_err(|e| anyhow!("Failed to get FormData: {:#?}", e.as_string()))?;
         let mut all_values = get_values_from_form_data(
-            self.user
-                .attributes
+            ctx.props()
+                .user_attributes_schema
                 .iter()
-                .map(|attr| attr.schema.clone())
-                .filter(|attr| !attr.is_hardcoded)
                 .filter(|attr| attr.is_editable)
                 .collect(),
             &form_data,
         )?;
         let base_user = &self.user;
         let base_attributes = &self.user.attributes;
-        gloo_console::log!(format!("base_attributes: {:#?}", base_attributes));
+        log!(format!("base_attributes: {:#?}\nall_values: {:#?}", base_attributes, all_values));
         all_values.retain(|(name, val)| {
             let name = name.clone();
             let base_val = base_attributes
                 .iter()
-                .find(|base_val| base_val.name == name)
-                .unwrap();
+                .find(|base_val| base_val.name == name);
             let new_values = val.clone();
-            base_val.value != new_values
+            base_val.map(|v| v.value != new_values).unwrap_or(true)
         });
         let remove_attributes: Option<Vec<String>> = if all_values.is_empty() {
             None
@@ -429,12 +410,6 @@ impl UserDetailsForm {
         if base_user.display_name != model.display_name {
             user_input.displayName = Some(model.display_name);
         }
-        if base_user.first_name != model.first_name {
-            user_input.firstName = Some(model.first_name);
-        }
-        if base_user.last_name != model.last_name {
-            user_input.lastName = Some(model.last_name);
-        }
         if let Some(avatar) = &self.avatar {
             user_input.avatar = Some(to_base64(avatar)?);
         }
@@ -457,10 +432,8 @@ impl UserDetailsForm {
         let model = self.form.model();
         self.user.email = model.email;
         self.user.display_name = model.display_name;
-        self.user.first_name = model.first_name;
-        self.user.last_name = model.last_name;
         if let Some(avatar) = &self.avatar {
-            self.user.avatar = Some(to_base64(avatar)?);
+            //self.user.avatar = Some(to_base64(avatar)?);
         }
         self.just_updated = true;
         Ok(true)
