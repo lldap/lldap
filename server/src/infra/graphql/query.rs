@@ -296,29 +296,26 @@ impl<Handler: BackendHandler> User<Handler> {
     }
 
     fn first_name(&self) -> &str {
-        self.user
-            .attributes
+        self.attributes
             .iter()
-            .find(|a| a.name.as_str() == "first_name")
-            .map(|a| a.value.unwrap())
+            .find(|a| a.attribute.name.as_str() == "first_name")
+            .map(|a| a.attribute.value.unwrap())
             .unwrap_or("")
     }
 
     fn last_name(&self) -> &str {
-        self.user
-            .attributes
+        self.attributes
             .iter()
-            .find(|a| a.name.as_str() == "last_name")
-            .map(|a| a.value.unwrap())
+            .find(|a| a.attribute.name.as_str() == "last_name")
+            .map(|a| a.attribute.value.unwrap())
             .unwrap_or("")
     }
 
     fn avatar(&self) -> Option<String> {
-        self.user
-            .attributes
+        self.attributes
             .iter()
-            .find(|a| a.name.as_str() == "avatar")
-            .map(|a| String::from(&a.value.unwrap::<JpegPhoto>()))
+            .find(|a| a.attribute.name.as_str() == "avatar")
+            .map(|a| String::from(&a.attribute.value.unwrap::<JpegPhoto>()))
     }
 
     fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
@@ -716,6 +713,8 @@ mod tests {
             id
             email
             creationDate
+            firstName
+            lastName
             uuid
             attributes {
               name
@@ -831,6 +830,8 @@ mod tests {
                         "email": "bob@bobbers.on",
                         "creationDate": "1970-01-01T00:00:00.042+00:00",
                         "uuid": "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
+                        "firstName": "Bob",
+                        "lastName": "Bobberson",
                         "attributes": [{
                             "name": "first_name",
                             "value": ["Bob"],
