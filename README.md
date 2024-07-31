@@ -398,6 +398,7 @@ folder for help with:
 - [Organizr](example_configs/Organizr.md)
 - [Portainer](example_configs/portainer.md)
 - [PowerDNS Admin](example_configs/powerdns_admin.md)
+- [Prosody](example_configs/prosody.md)
 - [Proxmox VE](example_configs/proxmox.md)
 - [Radicale](example_configs/radicale.md)
 - [Rancher](example_configs/rancher.md)
