@@ -6,7 +6,7 @@ In `prosody.cfg.lua` you need to set `authentication` to `ldap` and the followin
 
 ```authentication = "ldap"
 ldap_base = "dc=example,dc=com"
-ldap_server = "localhost:3890"
+ldap_server = "lldap_ip:3890"
 ldap_rootdn = "uid=query,ou=people,dc=example,dc=com"
 ldap_password = "query-password"
 ldap_filter = "(&(uid=$user)(memberOf=cn=xmpp-$host,ou=groups,dc=example,dc=com)(objectclass=person))"
