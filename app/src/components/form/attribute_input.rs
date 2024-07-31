@@ -1,6 +1,7 @@
-use crate::infra::schema::AttributeType;
+use crate::infra::{schema::AttributeType, tooltip::Tooltip};
+use web_sys::Element;
 use yew::{
-    function_component, html, use_mut_ref, use_state, virtual_dom::AttrValue, Callback, InputEvent, NodeRef, Properties, Html
+    function_component, html, use_effect_with_deps, use_mut_ref, use_node_ref, use_state, virtual_dom::AttrValue, Html, Properties
 };
 
 /*
@@ -44,6 +45,45 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
 }
 
 #[derive(Properties, PartialEq)]
+struct AttributeLabelProps {
+    pub name: String,
+}
+#[function_component(AttributeLabel)]
+fn attribute_label(props: &AttributeLabelProps) -> Html {
+    let tooltip_ref = use_node_ref();
+    let tooltip_js = use_mut_ref(|| None);
+
+    {
+        let tooltip_js = tooltip_js.clone();
+        use_effect_with_deps(move |tooltip_ref| {
+            let tooltip_ref = tooltip_ref
+                .cast::<Element>()
+                .expect("Tooltip element should exist");
+            *tooltip_js.borrow_mut() = Some(Tooltip::new(tooltip_ref));
+            || {}
+        }, tooltip_ref.clone());
+    }
+
+    html! {
+        <label for={props.name.clone()}
+            class="form-label col-4 col-form-label"
+            >
+            {props.name[0..1].to_uppercase() + &props.name[1..].replace("_", " ")}{":"}
+            <button
+                class="btn btn-sm btn-link"
+                type="button"
+                data-bs-placement="right"
+                title={props.name.clone()}
+                // onclick={move |_| tooltip_js.borrow().as_ref().expect("Tooltip should have initialized").toggle()}
+                ref={tooltip_ref}>
+                <i class="bi bi-info-circle" aria-label="Info" />
+            </button>
+        </label>
+    }
+
+}
+
+#[derive(Properties, PartialEq)]
 pub struct SingleAttributeInputProps {
     pub name: String,
     pub attribute_type: AttributeType,
@@ -55,11 +95,7 @@ pub struct SingleAttributeInputProps {
 pub fn single_attribute_input(props: &SingleAttributeInputProps) -> Html {
     html! {
         <div class="row mb-3">
-            <label for={props.name.clone()}
-                class="form-label col-4 col-form-label"
-                title={props.name.clone()}>
-                {props.name[0..1].to_uppercase() + &props.name[1..].replace("_", " ")}{":"}
-            </label>
+            <AttributeLabel name={props.name.clone()} />
             <div class="col-8">
             <AttributeInput
                 attribute_type={props.attribute_type.clone()}
@@ -86,11 +122,7 @@ pub fn list_attribute_input(props: &ListAttributeInputProps) -> Html {
 
     html! {
         <div class="row mb-3">
-            <label for={props.name.clone()}
-                class="form-label col-4 col-form-label"
-                title={props.name.clone()}>
-                {props.name[0..1].to_uppercase() + &props.name[1..].replace("_", " ")}{":"}
-            </label>
+            <AttributeLabel name={props.name.clone()} />
             <div class="col-8">
             {value_indices.iter().map(|i| {let i = *i; html! {
                 <div class="input-group mb-2" key={i}>

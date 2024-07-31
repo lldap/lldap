@@ -4,4 +4,5 @@ pub mod cookies;
 pub mod functional;
 pub mod graphql;
 pub mod modal;
+pub mod tooltip;
 pub mod schema;
