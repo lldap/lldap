@@ -1,7 +1,7 @@
 use crate::infra::{schema::AttributeType, tooltip::Tooltip};
 use web_sys::Element;
 use yew::{
-    function_component, html, use_effect_with_deps, use_mut_ref, use_node_ref, use_state, virtual_dom::AttrValue, Html, Properties
+    function_component, html, use_effect_with_deps, use_mut_ref, use_node_ref, virtual_dom::AttrValue, Component, Context, Html, Properties
 };
 
 /*
@@ -113,47 +113,82 @@ pub struct ListAttributeInputProps {
     pub values: Vec<String>,
 }
 
-#[function_component(ListAttributeInput)]
-pub fn list_attribute_input(props: &ListAttributeInputProps) -> Html {
+pub enum ListAttributeInputMsg {
+    Remove(usize),
+    Append,
+}
 
-    // let value_indices = use_memo(props.values, |vals| use_state(|| (0..(vals.len() as isize)).collect::<Vec<_>>()));
-    let value_indices = use_state(|| (0..(props.values.len() as isize)).collect::<Vec<_>>() ); // use_memo(props.values)
-    let new_index = use_mut_ref::<isize>(|| 0);
+pub struct ListAttributeInput {
+    indices: Vec<usize>,
+    next_index: usize,
+    values: Vec<String>,
 
-    html! {
-        <div class="row mb-3">
-            <AttributeLabel name={props.name.clone()} />
-            <div class="col-8">
-            {value_indices.iter().map(|i| {let i = *i; html! {
-                <div class="input-group mb-2" key={i}>
-                <AttributeInput
-                    attribute_type={props.attribute_type.clone()}
-                    name={props.name.clone()}
-                    value={usize::try_from(i).ok().and_then(|i| props.values.get(i)).cloned().unwrap_or_else(|| String::from(""))} />
+}
+impl Component for ListAttributeInput {
+    type Message = ListAttributeInputMsg;
+    type Properties = ListAttributeInputProps;
+
+     fn create(ctx: &Context<Self>) -> Self {
+        let values = ctx.props().values.clone();
+        Self {
+            indices: (0..values.len()).collect(),
+            next_index: values.len(),
+            values,
+        }
+    }
+
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            ListAttributeInputMsg::Remove(removed) => {
+                self.indices.retain_mut(|x| *x != removed);
+            }
+            ListAttributeInputMsg::Append => {
+                self.indices.push(self.next_index);
+                self.next_index += 1;
+            }
+        };
+        true
+    }
+
+    fn changed(&mut self, ctx: &Context<Self>) -> bool {
+        if ctx.props().values != self.values {
+            self.values = ctx.props().values.clone();
+            self.indices = (0..self.values.len()).collect();
+            self.next_index = self.values.len();
+        }
+        true
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let props = &ctx.props();
+        let link = &ctx.link();
+        html! {
+            <div class="row mb-3">
+                <AttributeLabel name={props.name.clone()} />
+                <div class="col-8">
+                {self.indices.iter().map(|&i| html! {
+                    <div class="input-group mb-2" key={i}>
+                    <AttributeInput
+                        attribute_type={props.attribute_type.clone()}
+                        name={props.name.clone()}
+                        value={props.values.get(i).cloned().unwrap_or_default()} />
+                    <button
+                        class="btn btn-danger"
+                        type="button"
+                        onclick={link.callback(move |_| ListAttributeInputMsg::Remove(i))}>
+                        <i class="bi-x-circle-fill" aria-label="Remove value" />
+                    </button>
+                    </div>
+                }).collect::<Html>()}
                 <button
-                    class="btn btn-danger"
+                    class="btn btn-secondary"
                     type="button"
-                    onclick={
-                        let value_indices = value_indices.clone();
-                        move |_| value_indices.set((*value_indices).clone().into_iter().filter(|x| *x != i).collect())
-                    }>
-                    <i class="bi-x-circle-fill" aria-label="Remove value" />
+                    onclick={link.callback(|_| ListAttributeInputMsg::Append)}>
+                    <i class="bi-plus-circle me-2"></i>
+                    {"Add value"}
                 </button>
                 </div>
-            }}).collect::<Html>()}
-            <button
-                class="btn btn-secondary"
-                type="button"
-                onclick={
-                    let value_indices = value_indices.clone();
-                    move |_| {
-                        *new_index.borrow_mut() -= 1;
-                        value_indices.set((*value_indices).clone().into_iter().chain(std::iter::once(*new_index.borrow())).collect())
-                    }}>
-                <i class="bi-plus-circle me-2"></i>
-                {"Add value"}
-            </button>
             </div>
-        </div>
+        }
     }
 }
