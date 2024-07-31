@@ -1,9 +1,7 @@
-use std::{fmt::Display, str::FromStr};
-
 use crate::{
     components::{
         form::{
-            attribute_input::{SingleAttributeInput, ListAttributeInput},
+            attribute_input::{ListAttributeInput, SingleAttributeInput},
             field::Field, static_value::StaticValue, submit::Submit,
         },
         user_details::{Attribute, AttributeSchema, User},
@@ -13,46 +11,14 @@ use crate::{
         schema::AttributeType,
     },
 };
-use anyhow::{anyhow, bail, Error, Ok, Result};
+use anyhow::{anyhow, bail, Ok, Result};
 use gloo_console::log;
-use gloo_file::{
-    callbacks::{read_as_bytes, FileReader},
-    File,
-};
 use graphql_client::GraphQLQuery;
 use validator::HasLen;
 use validator_derive::Validate;
-use web_sys::{FileList, FormData, HtmlFormElement, HtmlInputElement, InputEvent};
+use web_sys::{FormData, HtmlFormElement};
 use yew::prelude::*;
 use yew_form_derive::Model;
-
-#[derive(Default)]
-struct JsFile {
-    file: Option<File>,
-    contents: Option<Vec<u8>>,
-}
-
-impl Display for JsFile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.file.as_ref().map(File::name).unwrap_or_default()
-        )
-    }
-}
-
-impl FromStr for JsFile {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        if s.is_empty() {
-            Ok(JsFile::default())
-        } else {
-            bail!("Building file from non-empty string")
-        }
-    }
-}
 
 /// The fields of the form, with the editable details and the constraints.
 #[derive(Model, Validate, PartialEq, Eq, Clone)]
@@ -77,9 +43,6 @@ pub struct UpdateUser;
 pub struct UserDetailsForm {
     common: CommonComponentParts<Self>,
     form: yew_form::Form<UserModel>,
-    // None means that the avatar hasn't changed.
-    avatar: Option<JsFile>,
-    reader: Option<FileReader>,
     /// True if we just successfully updated the user, to display a success message.
     just_updated: bool,
     user: User,
@@ -89,14 +52,8 @@ pub struct UserDetailsForm {
 pub enum Msg {
     /// A form field changed.
     Update,
-    /// A new file was selected.
-    FileSelected(File),
     /// The "Submit" button was clicked.
     SubmitClicked,
-    /// The "Clear" button for the avatar was clicked.
-    ClearAvatarClicked,
-    /// A picked file finished loading.
-    FileLoaded(String, Result<Vec<u8>>),
     /// We got the response from the server about our update message.
     UserUpdated(Result<update_user::ResponseData>),
 }
@@ -116,53 +73,8 @@ impl CommonComponent<UserDetailsForm> for UserDetailsForm {
     ) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
-            Msg::FileSelected(new_avatar) => {
-                if self
-                    .avatar
-                    .as_ref()
-                    .and_then(|f| f.file.as_ref().map(|f| f.name()))
-                    != Some(new_avatar.name())
-                {
-                    let file_name = new_avatar.name();
-                    let link = ctx.link().clone();
-                    self.reader = Some(read_as_bytes(&new_avatar, move |res| {
-                        link.send_message(Msg::FileLoaded(
-                            file_name,
-                            res.map_err(|e| anyhow::anyhow!("{:#}", e)),
-                        ))
-                    }));
-                    self.avatar = Some(JsFile {
-                        file: Some(new_avatar),
-                        contents: None,
-                    });
-                }
-                Ok(true)
-            }
             Msg::SubmitClicked => self.submit_user_update_form(ctx),
-            Msg::ClearAvatarClicked => {
-                self.avatar = Some(JsFile::default());
-                Ok(true)
-            }
             Msg::UserUpdated(response) => self.user_update_finished(response),
-            Msg::FileLoaded(file_name, data) => {
-                if let Some(avatar) = &mut self.avatar {
-                    if let Some(file) = &avatar.file {
-                        if file.name() == file_name {
-                            let data = data?;
-                            if !is_valid_jpeg(data.as_slice()) {
-                                // Clear the selection.
-                                self.avatar = None;
-                                bail!("Chosen image is not a valid JPEG");
-                            } else {
-                                avatar.contents = Some(data);
-                                return Ok(true);
-                            }
-                        }
-                    }
-                }
-                self.reader = None;
-                Ok(false)
-            }
         }
     }
 
@@ -183,9 +95,7 @@ impl Component for UserDetailsForm {
         Self {
             common: CommonComponentParts::<Self>::create(),
             form: yew_form::Form::new(model),
-            avatar: None,
             just_updated: false,
-            reader: None,
             user: ctx.props().user.clone(),
             form_ref: NodeRef::default(),
         }
@@ -199,13 +109,6 @@ impl Component for UserDetailsForm {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let link = &ctx.link();
 
-        let avatar_string = match &self.avatar {
-            Some(avatar) => {
-                let avatar_base64 = to_base64(avatar);
-                avatar_base64.as_deref().unwrap_or("").to_owned()
-            }
-            None => String::new(), //self.user.avatar.as_deref().unwrap_or("").to_owned(),
-        };
         html! {
           <div class="py-3">
             <form
@@ -233,49 +136,6 @@ impl Component for UserDetailsForm {
                 field_name="display_name"
                 autocomplete="name"
                 oninput={link.callback(|_| Msg::Update)} />
-              <div class="form-group row align-items-center mb-3">
-                <label for="avatar"
-                  class="form-label col-4 col-form-label">
-                  {"Avatar: "}
-                </label>
-                <div class="col-8">
-                  <div class="row align-items-center">
-                    <div class="col-5">
-                      <input
-                        class="form-control"
-                        id="avatarInput"
-                        type="file"
-                        accept="image/jpeg"
-                        oninput={link.callback(|e: InputEvent| {
-                            let input: HtmlInputElement = e.target_unchecked_into();
-                            Self::upload_files(input.files())
-                        })} />
-                    </div>
-                    <div class="col-3">
-                      <button
-                        class="btn btn-secondary col-auto"
-                        id="avatarClear"
-                        disabled={self.common.is_task_running()}
-                        onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::ClearAvatarClicked})}>
-                      {"Clear"}
-                      </button>
-                    </div>
-                    <div class="col-4">
-                    {
-                      if !avatar_string.is_empty() {
-                        html!{
-                          <img
-                            id="avatarDisplay"
-                            src={format!("data:image/jpeg;base64, {}", avatar_string)}
-                            style="max-height:128px;max-width:128px;height:auto;width:auto;"
-                            alt="Avatar" />
-                        }
-                      } else { html! {} }
-                    }
-                    </div>
-                  </div>
-                </div>
-              </div>
               {ctx.props().user_attributes_schema.iter().filter(|a| a.is_editable).map(|s| get_custom_attribute_input(s, &self.user.attributes)).collect::<Vec<_>>()}
               <Submit
                 text="Save changes"
@@ -351,13 +211,13 @@ impl UserDetailsForm {
         if !self.form.validate() {
             bail!("Invalid inputs");
         }
-        if let Some(JsFile {
-            file: Some(_),
-            contents: None,
-        }) = &self.avatar
-        {
-            bail!("Image file hasn't finished loading, try again");
-        }
+        // if let Some(JsFile {
+        //     file: Some(_),
+        //     contents: None,
+        // }) = &self.avatar
+        // {
+        //     bail!("Image file hasn't finished loading, try again");
+        // }
         let form = self.form_ref.cast::<HtmlFormElement>().unwrap();
         let form_data = FormData::new_with_form(&form)
             .map_err(|e| anyhow!("Failed to get FormData: {:#?}", e.as_string()))?;
@@ -392,6 +252,7 @@ impl UserDetailsForm {
                 Some(
                     all_values
                         .into_iter()
+                        .filter(|(_, value)| !value.is_empty())
                         .map(|(name, value)| update_user::AttributeValueInput { name, value })
                         .collect(),
                 )
@@ -415,9 +276,6 @@ impl UserDetailsForm {
         if base_user.display_name != model.display_name {
             user_input.displayName = Some(model.display_name);
         }
-        if let Some(avatar) = &self.avatar {
-            user_input.avatar = Some(to_base64(avatar)?);
-        }
         user_input.removeAttributes = remove_attributes;
         user_input.insertAttributes = insert_attributes;
         // Nothing changed.
@@ -439,50 +297,7 @@ impl UserDetailsForm {
         let model = self.form.model();
         self.user.email = model.email;
         self.user.display_name = model.display_name;
-        if let Some(avatar) = &self.avatar {
-            //self.user.avatar = Some(to_base64(avatar)?);
-        }
         self.just_updated = true;
         Ok(true)
-    }
-
-    fn upload_files(files: Option<FileList>) -> Msg {
-        if let Some(files) = files {
-            if files.length() > 0 {
-                Msg::FileSelected(File::from(files.item(0).unwrap()))
-            } else {
-                Msg::Update
-            }
-        } else {
-            Msg::Update
-        }
-    }
-}
-
-fn is_valid_jpeg(bytes: &[u8]) -> bool {
-    image::io::Reader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Jpeg)
-        .decode()
-        .is_ok()
-}
-
-fn to_base64(file: &JsFile) -> Result<String> {
-    match file {
-        JsFile {
-            file: None,
-            contents: _,
-        } => Ok(String::new()),
-        JsFile {
-            file: Some(_),
-            contents: None,
-        } => bail!("Image file hasn't finished loading, try again"),
-        JsFile {
-            file: Some(_),
-            contents: Some(data),
-        } => {
-            if !is_valid_jpeg(data.as_slice()) {
-                bail!("Chosen image is not a valid JPEG");
-            }
-            Ok(base64::encode(data))
-        }
     }
 }
