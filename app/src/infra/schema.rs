@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::{fmt::Display, str::FromStr};
 use validator::ValidationError;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttributeType {
     String,
     Integer,
