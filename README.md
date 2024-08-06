@@ -392,6 +392,7 @@ folder for help with:
 - [Metabase](example_configs/metabase.md)
 - [MegaRAC-BMC](example_configs/MegaRAC-SP-X-BMC.md)
 - [MinIO](example_configs/minio.md)
+- [Netbox](example_configs/netbox.md)
 - [Nextcloud](example_configs/nextcloud.md)
 - [Nexus](example_configs/nexus.md)
 - [OCIS (OwnCloud Infinite Scale)](example_configs/ocis.md)
