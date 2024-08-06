@@ -2,6 +2,33 @@
 
 Netbox LDAP configuration is located [here](https://netboxlabs.com/docs/netbox/en/stable/installation/6-ldap/)
 
+## Prerequisites
+
+1. Install requirements
+    
+    **Debian/Ubuntu:** `sudo apt install -y libldap2-dev libsasl2-dev libssl-dev`
+
+    **CentOS:** `sudo yum install -y openldap-devel python3-devel`
+
+2. Install django-auth-ldap
+
+    `source /opt/netbox/venv/bin/activatepip3 install django-auth-ldap`
+
+3. Add package to local requirements
+
+    `sudo sh -c "echo 'django-auth-ldap' >> /opt/netbox/local_requirements.txt"`
+
+4. Enable LDAP backend in configuration.py (*default: /opt/netbox/netbox/netbox/configuration.py*)
+
+    `REMOTE_AUTH_BACKEND = 'netbox.authentication.LDAPBackend'`
+
+## LDAP Configuration
+
+1. Create ldap_config.py file
+
+    `touch /opt/netbox/netbox/netbox/ldap_config.py`
+
+2. Copy and modify the configuration below
 
 ```python
 import ldap
@@ -77,4 +104,46 @@ AUTH_LDAP_CACHE_TIMEOUT = 3600
 
 # Always update user information from LDAP on login
 AUTH_LDAP_ALWAYS_UPDATE_USER = True
+```
+
+3. Restart netbox and netbox-rq
+
+    `sudo systemctl restart netbox netbox-rq`
+
+## Troubleshoot LDAP
+
+1. Make logging directory
+
+    `sudo mkdir -p /opt/netbox/local/logs/`
+
+2. Make log file
+
+    `sudo touch /opt/netbox/local/logs/django-ldap-debug.log`
+
+3. Set permissions
+
+    `sudo chown -R netbox:root /opt/netbox/local`
+
+4. Add the following to */opt/netbox/netbox/netbox/configuration.py*
+
+```py
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'netbox_auth_log': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': '/opt/netbox/local/logs/django-ldap-debug.log',
+            'maxBytes': 1024 * 500,
+            'backupCount': 5,
+        },
+    },
+    'loggers': {
+        'django_auth_ldap': {
+            'handlers': ['netbox_auth_log'],
+            'level': 'DEBUG',
+        },
+    },
+}
 ```
