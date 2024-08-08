@@ -184,7 +184,7 @@ Depending on the distribution you use, it might be possible to install lldap
 from a package repository, officially supported by the distribution or
 community contributed.
 
-Each package offers a [systemd service](https://wiki.archlinux.org/title/systemd#Using_units) `lldap.service` to (auto-)start and stop lldap.
+Each package offers a [systemd service](https://wiki.archlinux.org/title/systemd#Using_units) `lldap.service` to (auto-)start and stop lldap.<br>
 When using the distributed packages, the default login is `admin/password`. You can change that from the web UI after starting the service.
 
 <details>
