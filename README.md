@@ -217,7 +217,7 @@ LLDPA configuration file: /etc/lldap.toml<br>
 <details>
 <summary><b>Debian</b></summary>
 <br>
-  Unofficial Debian support is offerd through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
+  Unofficial Debian support is offered through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
   Maintainer: <a href="https://github.com/Masgalor">@Masgalor</a><br>
   Support: <a href="https://codeberg.org/Masgalor/LLDAP-Packaging/issues">Codeberg</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
   Package repository: <a href="https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap">SUSE openBuildService</a><br>
@@ -230,7 +230,7 @@ LLDPA configuration file: /etc/lldap.toml<br>
   <tr>
     <td></td>
     <td>lldap-extras</td>
-    <td>Meta-Package for LLDAP and it's tools and extensions.</td>
+    <td>Meta-Package for LLDAP and its tools and extensions.</td>
   </tr>
   <tr>
     <td></td>
@@ -245,7 +245,7 @@ LLDPA configuration file: /etc/lldap.toml<br>
   <tr>
     <td></td>
     <td>lldap-cli</td>
-    <td>LLDAP-CLI is a command line interface for LLDAP.</td>
+    <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
   </tr>
 </table>
 LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
@@ -253,7 +253,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
 <details>
 <summary><b>CentOS</b></summary>
 <br>
-  Unofficial CentOS support is offerd through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
+  Unofficial CentOS support is offered through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
   Maintainer: <a href="https://github.com/Masgalor">@Masgalor</a><br>
   Support: <a href="https://codeberg.org/Masgalor/LLDAP-Packaging/issues">Codeberg</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
   Package repository: <a href="https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap">SUSE openBuildService</a><br>
@@ -266,7 +266,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
   <tr>
     <td></td>
     <td>lldap-extras</td>
-    <td>Meta-Package for LLDAP and it's tools and extensions.</td>
+    <td>Meta-Package for LLDAP and its tools and extensions.</td>
   </tr>
   <tr>
     <td></td>
@@ -281,7 +281,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
   <tr>
     <td></td>
     <td>lldap-cli</td>
-    <td>LLDAP-CLI is a command line interface for LLDAP.</td>
+    <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
   </tr>
 </table>
 LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
@@ -289,7 +289,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
 <details>
 <summary><b>Fedora</b></summary>
 <br>
-  Unofficial Fedora support is offerd through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
+  Unofficial Fedora support is offered through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
   Maintainer: <a href="https://github.com/Masgalor">@Masgalor</a><br>
   Support: <a href="https://codeberg.org/Masgalor/LLDAP-Packaging/issues">Codeberg</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
   Package repository: <a href="https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap">SUSE openBuildService</a><br>
@@ -302,7 +302,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
   <tr>
     <td></td>
     <td>lldap-extras</td>
-    <td>Meta-Package for LLDAP and it's tools and extensions.</td>
+    <td>Meta-Package for LLDAP and its tools and extensions.</td>
   </tr>
   <tr>
     <td></td>
@@ -317,7 +317,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
   <tr>
     <td></td>
     <td>lldap-cli</td>
-    <td>LLDAP-CLI is a command line interface for LLDAP.</td>
+    <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
   </tr>
 </table>
 LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
@@ -325,7 +325,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
 <details>
 <summary><b>OpenSUSE</b></summary>
 <br>
-  Unofficial OpenSUSE support is offerd through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
+  Unofficial OpenSUSE support is offered through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
   Maintainer: <a href="https://github.com/Masgalor">@Masgalor</a><br>
   Support: <a href="https://codeberg.org/Masgalor/LLDAP-Packaging/issues">Codeberg</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
   Package repository: <a href="https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap">SUSE openBuildService</a><br>
@@ -338,7 +338,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
   <tr>
     <td></td>
     <td>lldap-extras</td>
-    <td>Meta-Package for LLDAP and it's tools and extensions.</td>
+    <td>Meta-Package for LLDAP and its tools and extensions.</td>
   </tr>
   <tr>
     <td></td>
@@ -353,7 +353,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
   <tr>
     <td></td>
     <td>lldap-cli</td>
-    <td>LLDAP-CLI is a command line interface for LLDAP.</td>
+    <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
   </tr>
 </table>
 LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
@@ -361,7 +361,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
 <details>
 <summary><b>Ubuntu</b></summary>
 <br>
-  Unofficial Ubuntu support is offerd through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
+  Unofficial Ubuntu support is offered through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
   Maintainer: <a href="https://github.com/Masgalor">@Masgalor</a><br>
   Support: <a href="https://codeberg.org/Masgalor/LLDAP-Packaging/issues">Codeberg</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
   Package repository: <a href="https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap">SUSE openBuildService</a><br>
@@ -374,7 +374,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
   <tr>
     <td></td>
     <td>lldap-extras</td>
-    <td>Meta-Package for LLDAP and it's tools and extensions.</td>
+    <td>Meta-Package for LLDAP and its tools and extensions.</td>
   </tr>
   <tr>
     <td></td>
@@ -389,7 +389,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
   <tr>
     <td></td>
     <td>lldap-cli</td>
-    <td>LLDAP-CLI is a command line interface for LLDAP.</td>
+    <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
   </tr>
 </table>
 LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
