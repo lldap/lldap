@@ -184,30 +184,217 @@ Depending on the distribution you use, it might be possible to install lldap
 from a package repository, officially supported by the distribution or
 community contributed.
 
-#### Debian, CentOS Fedora, OpenSUSE, Ubuntu
+Each package offers a [systemd service](https://wiki.archlinux.org/title/systemd#Using_units) `lldap.service` to (auto-)start and stop lldap.<br>
+When using the distributed packages, the default login is `admin/password`. You can change that from the web UI after starting the service.
 
-The package for these distributions can be found at [LLDAP OBS](https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap).
-- When using the distributed package, the default login is `admin/password`. You can change that from the web UI after starting the service.
-
-#### Arch Linux
-
-Arch Linux offers unofficial support through the [Arch User Repository
-(AUR)](https://wiki.archlinux.org/title/Arch_User_Repository).
-Available package descriptions in AUR are:
-
-- [lldap](https://aur.archlinux.org/packages/lldap) -  Builds the latest stable version.
-- [lldap-bin](https://aur.archlinux.org/packages/lldap-bin) - Uses the latest
-  pre-compiled binaries from the [releases in this repository](https://github.com/lldap/lldap/releases).
-  This package is recommended if you want to run lldap on a system with
-  limited resources.
-- [lldap-git](https://aur.archlinux.org/packages/lldap-git) - Builds the
-  latest main branch code.
-
-The package descriptions can be used
-[to create and install packages](https://wiki.archlinux.org/title/Arch_User_Repository#Getting_started).
-Each package places lldap's configuration file at `/etc/lldap.toml` and offers
-[systemd service](https://wiki.archlinux.org/title/systemd#Using_units)
-`lldap.service` to (auto-)start and stop lldap.
+<details>
+<summary><b>Arch</b></summary>
+<br>
+  Arch Linux offers unofficial support through the <a href="https://wiki.archlinux.org/title/Arch_User_Repository">Arch User Repository (AUR)</a>.<br>
+  The package descriptions can be used <a href="https://wiki.archlinux.org/title/Arch_User_Repository#Getting_started">to create and install packages</a>.<br><br>
+  Maintainer: <a href="https://github.com/Zepmann">@Zepmann</a><br>
+  Support: <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
+  Package repository: <a href="https://aur.archlinux.org/packages">Arch user repository</a><br>
+<table>
+  <tr>
+    <td>Available packages:</td>
+    <td><a href="https://aur.archlinux.org/packages/lldap">lldap</a></td>
+    <td>Builds the latest stable version.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td><a href="https://aur.archlinux.org/packages/lldap-bin">lldap-bin</a></td>
+    <td>Uses the latest pre-compiled binaries from the <a href="https://aur.archlinux.org/packages/lldap-bin">releases in this repository</a>.<br>
+        This package is recommended if you want to run lldap on a system with limited resources.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td><a href="https://aur.archlinux.org/packages/lldap-git">lldap-git</a></td>
+    <td>Builds the latest main branch code.</td>
+  </tr>
+</table>
+LLDPA configuration file: /etc/lldap.toml<br>
+</details>
+<details>
+<summary><b>Debian</b></summary>
+<br>
+  Unofficial Debian support is offered through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
+  Maintainer: <a href="https://github.com/Masgalor">@Masgalor</a><br>
+  Support: <a href="https://codeberg.org/Masgalor/LLDAP-Packaging/issues">Codeberg</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
+  Package repository: <a href="https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap">SUSE openBuildService</a><br>
+<table>
+  <tr>
+    <td>Available packages:</td>
+    <td>lldap</td>
+    <td>Light LDAP server for authentication.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-extras</td>
+    <td>Meta-Package for LLDAP and its tools and extensions.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-migration-tool</td>
+    <td>CLI migration tool to go from OpenLDAP to LLDAP.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-set-password</td>
+    <td>CLI tool to set a user password in LLDAP.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-cli</td>
+    <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
+  </tr>
+</table>
+LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
+</details>
+<details>
+<summary><b>CentOS</b></summary>
+<br>
+  Unofficial CentOS support is offered through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
+  Maintainer: <a href="https://github.com/Masgalor">@Masgalor</a><br>
+  Support: <a href="https://codeberg.org/Masgalor/LLDAP-Packaging/issues">Codeberg</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
+  Package repository: <a href="https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap">SUSE openBuildService</a><br>
+<table>
+  <tr>
+    <td>Available packages:</td>
+    <td>lldap</td>
+    <td>Light LDAP server for authentication.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-extras</td>
+    <td>Meta-Package for LLDAP and its tools and extensions.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-migration-tool</td>
+    <td>CLI migration tool to go from OpenLDAP to LLDAP.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-set-password</td>
+    <td>CLI tool to set a user password in LLDAP.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-cli</td>
+    <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
+  </tr>
+</table>
+LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
+</details>
+<details>
+<summary><b>Fedora</b></summary>
+<br>
+  Unofficial Fedora support is offered through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
+  Maintainer: <a href="https://github.com/Masgalor">@Masgalor</a><br>
+  Support: <a href="https://codeberg.org/Masgalor/LLDAP-Packaging/issues">Codeberg</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
+  Package repository: <a href="https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap">SUSE openBuildService</a><br>
+<table>
+  <tr>
+    <td>Available packages:</td>
+    <td>lldap</td>
+    <td>Light LDAP server for authentication.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-extras</td>
+    <td>Meta-Package for LLDAP and its tools and extensions.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-migration-tool</td>
+    <td>CLI migration tool to go from OpenLDAP to LLDAP.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-set-password</td>
+    <td>CLI tool to set a user password in LLDAP.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-cli</td>
+    <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
+  </tr>
+</table>
+LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
+</details>
+<details>
+<summary><b>OpenSUSE</b></summary>
+<br>
+  Unofficial OpenSUSE support is offered through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
+  Maintainer: <a href="https://github.com/Masgalor">@Masgalor</a><br>
+  Support: <a href="https://codeberg.org/Masgalor/LLDAP-Packaging/issues">Codeberg</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
+  Package repository: <a href="https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap">SUSE openBuildService</a><br>
+<table>
+  <tr>
+    <td>Available packages:</td>
+    <td>lldap</td>
+    <td>Light LDAP server for authentication.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-extras</td>
+    <td>Meta-Package for LLDAP and its tools and extensions.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-migration-tool</td>
+    <td>CLI migration tool to go from OpenLDAP to LLDAP.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-set-password</td>
+    <td>CLI tool to set a user password in LLDAP.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-cli</td>
+    <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
+  </tr>
+</table>
+LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
+</details>
+<details>
+<summary><b>Ubuntu</b></summary>
+<br>
+  Unofficial Ubuntu support is offered through the <a href="https://build.opensuse.org/">openSUSE Build Service</a>.<br><br>
+  Maintainer: <a href="https://github.com/Masgalor">@Masgalor</a><br>
+  Support: <a href="https://codeberg.org/Masgalor/LLDAP-Packaging/issues">Codeberg</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
+  Package repository: <a href="https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap">SUSE openBuildService</a><br>
+<table>
+  <tr>
+    <td>Available packages:</td>
+    <td>lldap</td>
+    <td>Light LDAP server for authentication.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-extras</td>
+    <td>Meta-Package for LLDAP and its tools and extensions.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-migration-tool</td>
+    <td>CLI migration tool to go from OpenLDAP to LLDAP.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-set-password</td>
+    <td>CLI tool to set a user password in LLDAP.</td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>lldap-cli</td>
+    <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
+  </tr>
+</table>
+LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
+</details>
 
 ### With FreeBSD
 
