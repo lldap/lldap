@@ -189,7 +189,8 @@ Each package offers a [systemd service](https://wiki.archlinux.org/title/systemd
 <details>
 <summary><b>Arch</b></summary>
 <br>
-  Arch Linux offers unofficial support through the <a href="https://wiki.archlinux.org/title/Arch_User_Repository">Arch User Repository (AUR)</a>.<br><br>
+  Arch Linux offers unofficial support through the <a href="https://wiki.archlinux.org/title/Arch_User_Repository">Arch User Repository (AUR)</a>.<br>
+  The package descriptions can be used <a href="https://wiki.archlinux.org/title/Arch_User_Repository#Getting_started">to create and install packages.<br><br>
   Maintainer: <a href="https://github.com/Zepmann">@Zepmann</a><br>
   Support: <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
   Package repository: <a href="https://aur.archlinux.org/packages">Arch user repository</a><br>
@@ -212,7 +213,6 @@ Each package offers a [systemd service](https://wiki.archlinux.org/title/systemd
   </tr>
 </table>
 LLDPA configuration file: /etc/lldap.toml<br>
-The package descriptions can be used [to create and install packages](https://wiki.archlinux.org/title/Arch_User_Repository#Getting_started).<br>
 </details>
 <details>
 <summary><b>Debian</b></summary>
