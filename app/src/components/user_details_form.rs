@@ -2,19 +2,27 @@ use std::{fmt::Display, str::FromStr};
 
 use crate::{
     components::{
-        form::{field::Field, static_value::StaticValue, submit::Submit},
-        user_details::User,
+        form::{
+            attribute_input::SingleAttributeInput, field::Field, static_value::StaticValue,
+            submit::Submit,
+        },
+        user_details::{Attribute, AttributeSchema, User},
     },
-    infra::common_component::{CommonComponent, CommonComponentParts},
+    infra::{
+        common_component::{CommonComponent, CommonComponentParts},
+        schema::AttributeType,
+    },
 };
-use anyhow::{bail, Error, Result};
+use anyhow::{anyhow, bail, Error, Ok, Result};
+use gloo_console::log;
 use gloo_file::{
     callbacks::{read_as_bytes, FileReader},
     File,
 };
 use graphql_client::GraphQLQuery;
+use validator::HasLen;
 use validator_derive::Validate;
-use web_sys::{FileList, HtmlInputElement, InputEvent};
+use web_sys::{FileList, FormData, HtmlFormElement, HtmlInputElement, InputEvent};
 use yew::prelude::*;
 use yew_form_derive::Model;
 
@@ -52,8 +60,6 @@ pub struct UserModel {
     #[validate(email)]
     email: String,
     display_name: String,
-    first_name: String,
-    last_name: String,
 }
 
 /// The GraphQL query sent to the server to update the user details.
@@ -77,6 +83,7 @@ pub struct UserDetailsForm {
     /// True if we just successfully updated the user, to display a success message.
     just_updated: bool,
     user: User,
+    form_ref: NodeRef,
 }
 
 pub enum Msg {
@@ -98,6 +105,7 @@ pub enum Msg {
 pub struct Props {
     /// The current user details.
     pub user: User,
+    pub user_attributes_schema: Vec<AttributeSchema>,
 }
 
 impl CommonComponent<UserDetailsForm> for UserDetailsForm {
@@ -171,8 +179,6 @@ impl Component for UserDetailsForm {
         let model = UserModel {
             email: ctx.props().user.email.clone(),
             display_name: ctx.props().user.display_name.clone(),
-            first_name: ctx.props().user.first_name.clone(),
-            last_name: ctx.props().user.last_name.clone(),
         };
         Self {
             common: CommonComponentParts::<Self>::create(),
@@ -181,6 +187,7 @@ impl Component for UserDetailsForm {
             just_updated: false,
             reader: None,
             user: ctx.props().user.clone(),
+            form_ref: NodeRef::default(),
         }
     }
 
@@ -197,11 +204,13 @@ impl Component for UserDetailsForm {
                 let avatar_base64 = to_base64(avatar);
                 avatar_base64.as_deref().unwrap_or("").to_owned()
             }
-            None => self.user.avatar.as_deref().unwrap_or("").to_owned(),
+            None => String::new(), //self.user.avatar.as_deref().unwrap_or("").to_owned(),
         };
         html! {
           <div class="py-3">
-            <form class="form">
+            <form
+              class="form"
+              ref={self.form_ref.clone()}>
               <StaticValue label="User ID" id="userId">
                 <i>{&self.user.id}</i>
               </StaticValue>
@@ -223,18 +232,6 @@ impl Component for UserDetailsForm {
                 label="Display name"
                 field_name="display_name"
                 autocomplete="name"
-                oninput={link.callback(|_| Msg::Update)} />
-              <Field<UserModel>
-                form={&self.form}
-                label="First name"
-                field_name="first_name"
-                autocomplete="given-name"
-                oninput={link.callback(|_| Msg::Update)} />
-              <Field<UserModel>
-                form={&self.form}
-                label="Last name"
-                field_name="last_name"
-                autocomplete="family-name"
                 oninput={link.callback(|_| Msg::Update)} />
               <div class="form-group row align-items-center mb-3">
                 <label for="avatar"
@@ -279,6 +276,7 @@ impl Component for UserDetailsForm {
                   </div>
                 </div>
               </div>
+              {ctx.props().user_attributes_schema.iter().filter(|a| a.is_editable).map(|s| get_custom_attribute_input(s, &self.user.attributes)).collect::<Vec<_>>()}
               <Submit
                 text="Save changes"
                 disabled={self.common.is_task_running()}
@@ -301,6 +299,48 @@ impl Component for UserDetailsForm {
     }
 }
 
+type AttributeValue = (String, Vec<String>);
+
+fn get_values_from_form_data(
+    schema: Vec<&AttributeSchema>,
+    form: &FormData,
+) -> Result<Vec<AttributeValue>> {
+    schema
+        .into_iter()
+        .map(|attr| -> Result<AttributeValue> {
+            let val = form
+                .get_all(attr.name.as_str())
+                .iter()
+                .map(|js_val| js_val.as_string().unwrap_or_default())
+                .filter(|val| !val.is_empty())
+                .collect::<Vec<String>>();
+            if val.length() > 1 && !attr.is_list {
+                return Err(anyhow!(
+                    "Multiple values supplied for non-list attribute {}",
+                    attr.name
+                ));
+            }
+            Ok((attr.name.clone(), val))
+        })
+        .collect()
+}
+
+fn get_custom_attribute_input(
+    attribute_schema: &AttributeSchema,
+    user_attributes: &[Attribute],
+) -> Html {
+    if attribute_schema.is_list {
+        html! {<p>{"list attributes are not supported yet"}</p>}
+    } else {
+        let value = user_attributes
+            .iter()
+            .find(|a| a.name == attribute_schema.name)
+            .and_then(|attribute| attribute.value.first().cloned())
+            .unwrap_or_default();
+        html! {<SingleAttributeInput name={attribute_schema.name.clone()} attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())} value={value}/>}
+    }
+}
+
 impl UserDetailsForm {
     fn submit_user_update_form(&mut self, ctx: &Context<Self>) -> Result<bool> {
         if !self.form.validate() {
@@ -313,7 +353,44 @@ impl UserDetailsForm {
         {
             bail!("Image file hasn't finished loading, try again");
         }
+        let form = self.form_ref.cast::<HtmlFormElement>().unwrap();
+        let form_data = FormData::new_with_form(&form)
+            .map_err(|e| anyhow!("Failed to get FormData: {:#?}", e.as_string()))?;
+        let mut all_values = get_values_from_form_data(
+            ctx.props()
+                .user_attributes_schema
+                .iter()
+                .filter(|attr| attr.is_editable)
+                .collect(),
+            &form_data,
+        )?;
         let base_user = &self.user;
+        let base_attributes = &self.user.attributes;
+        log!(format!("base_attributes: {:#?}\nall_values: {:#?}", base_attributes, all_values));
+        all_values.retain(|(name, val)| {
+            let name = name.clone();
+            let base_val = base_attributes
+                .iter()
+                .find(|base_val| base_val.name == name);
+            let new_values = val.clone();
+            base_val.map(|v| v.value != new_values).unwrap_or(true)
+        });
+        let remove_attributes: Option<Vec<String>> = if all_values.is_empty() {
+            None
+        } else {
+            Some(all_values.iter().map(|(name, _)| name.clone()).collect())
+        };
+        let insert_attributes: Option<Vec<update_user::AttributeValueInput>> =
+            if remove_attributes.is_none() {
+                None
+            } else {
+                Some(
+                    all_values
+                        .into_iter()
+                        .map(|(name, value)| update_user::AttributeValueInput { name, value })
+                        .collect(),
+                )
+            };
         let mut user_input = update_user::UpdateUserInput {
             id: self.user.id.clone(),
             email: None,
@@ -321,8 +398,8 @@ impl UserDetailsForm {
             firstName: None,
             lastName: None,
             avatar: None,
-            removeAttributes: None,
-            insertAttributes: None,
+            removeAttributes: remove_attributes,
+            insertAttributes: insert_attributes,
         };
         let default_user_input = user_input.clone();
         let model = self.form.model();
@@ -332,12 +409,6 @@ impl UserDetailsForm {
         }
         if base_user.display_name != model.display_name {
             user_input.displayName = Some(model.display_name);
-        }
-        if base_user.first_name != model.first_name {
-            user_input.firstName = Some(model.first_name);
-        }
-        if base_user.last_name != model.last_name {
-            user_input.lastName = Some(model.last_name);
         }
         if let Some(avatar) = &self.avatar {
             user_input.avatar = Some(to_base64(avatar)?);
@@ -361,10 +432,8 @@ impl UserDetailsForm {
         let model = self.form.model();
         self.user.email = model.email;
         self.user.display_name = model.display_name;
-        self.user.first_name = model.first_name;
-        self.user.last_name = model.last_name;
         if let Some(avatar) = &self.avatar {
-            self.user.avatar = Some(to_base64(avatar)?);
+            //self.user.avatar = Some(to_base64(avatar)?);
         }
         self.just_updated = true;
         Ok(true)
