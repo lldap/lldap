@@ -250,13 +250,13 @@ fn convert_user_filter(
         }
         LdapFilter::Present(field) => {
             let field = AttributeName::from(field.as_str());
-            // Check that it's a field we support.
-            Ok(UserRequestFilter::from(
-                field.as_str() == "objectclass"
-                    || field.as_str() == "dn"
-                    || field.as_str() == "distinguishedname"
-                    || !matches!(map_user_field(&field, schema), UserFieldType::NoMatch),
-            ))
+            Ok(match map_user_field(&field, schema) {
+                UserFieldType::Attribute(name, _, _) => {
+                    UserRequestFilter::CustomAttributePresent(name)
+                }
+                UserFieldType::NoMatch => UserRequestFilter::from(false),
+                _ => UserRequestFilter::from(true),
+            })
         }
         LdapFilter::Substring(field, substring_filter) => {
             let field = AttributeName::from(field.as_str());
