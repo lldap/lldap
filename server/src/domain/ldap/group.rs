@@ -15,8 +15,10 @@ use crate::domain::{
 use super::{
     error::LdapResult,
     utils::{
-        expand_attribute_wildcards, get_custom_attribute, get_group_id_from_distinguished_name,
-        get_user_id_from_distinguished_name, map_group_field, GroupFieldType, LdapInfo,
+        expand_attribute_wildcards, get_custom_attribute,
+        get_group_id_from_distinguished_name_or_plain_name,
+        get_user_id_from_distinguished_name_or_plain_name, map_group_field, GroupFieldType,
+        LdapInfo,
     },
 };
 
@@ -142,13 +144,13 @@ fn get_group_attribute_equality_filter(
     typ: AttributeType,
     is_list: bool,
     value: &str,
-) -> LdapResult<GroupRequestFilter> {
+) -> GroupRequestFilter {
     deserialize_attribute_value(&[value.to_owned()], typ, is_list)
-        .map_err(|e| LdapError {
-            code: LdapResultCode::Other,
-            message: format!("Invalid value for attribute {}: {}", field, e),
-        })
         .map(|v| GroupRequestFilter::AttributeEquality(field.clone(), v))
+        .unwrap_or_else(|e| {
+            warn!("Invalid value for attribute {}: {}", field, e);
+            GroupRequestFilter::from(false)
+        })
 }
 
 fn convert_group_filter(
@@ -163,20 +165,22 @@ fn convert_group_filter(
             let value = value.to_ascii_lowercase();
             match map_group_field(&field, schema) {
                 GroupFieldType::DisplayName => Ok(GroupRequestFilter::DisplayName(value.into())),
-                GroupFieldType::Uuid => Ok(GroupRequestFilter::Uuid(
-                    Uuid::try_from(value.as_str()).map_err(|e| LdapError {
-                        code: LdapResultCode::InappropriateMatching,
+                GroupFieldType::Uuid => Uuid::try_from(value.as_str())
+                    .map(GroupRequestFilter::Uuid)
+                    .map_err(|e| LdapError {
+                        code: LdapResultCode::Other,
                         message: format!("Invalid UUID: {:#}", e),
-                    })?,
-                )),
-                GroupFieldType::Member => {
-                    let user_name = get_user_id_from_distinguished_name(
-                        &value,
-                        &ldap_info.base_dn,
-                        &ldap_info.base_dn_str,
-                    )?;
-                    Ok(GroupRequestFilter::Member(user_name))
-                }
+                    }),
+                GroupFieldType::Member => Ok(get_user_id_from_distinguished_name_or_plain_name(
+                    &value,
+                    &ldap_info.base_dn,
+                    &ldap_info.base_dn_str,
+                )
+                .map(GroupRequestFilter::Member)
+                .unwrap_or_else(|e| {
+                    warn!("Invalid member filter on group: {}", e);
+                    GroupRequestFilter::from(false)
+                })),
                 GroupFieldType::ObjectClass => Ok(GroupRequestFilter::from(
                     matches!(value.as_str(), "groupofuniquenames" | "groupofnames")
                         || schema
@@ -185,7 +189,7 @@ fn convert_group_filter(
                             .contains(&LdapObjectClass::from(value)),
                 )),
                 GroupFieldType::Dn | GroupFieldType::EntryDn => {
-                    Ok(get_group_id_from_distinguished_name(
+                    Ok(get_group_id_from_distinguished_name_or_plain_name(
                         value.as_str(),
                         &ldap_info.base_dn,
                         &ldap_info.base_dn_str,
@@ -206,9 +210,9 @@ fn convert_group_filter(
                     }
                     Ok(GroupRequestFilter::from(false))
                 }
-                GroupFieldType::Attribute(field, typ, is_list) => {
-                    get_group_attribute_equality_filter(&field, typ, is_list, &value)
-                }
+                GroupFieldType::Attribute(field, typ, is_list) => Ok(
+                    get_group_attribute_equality_filter(&field, typ, is_list, &value),
+                ),
                 GroupFieldType::CreationDate => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
                     message: "Creation date filter for groups not supported".to_owned(),
