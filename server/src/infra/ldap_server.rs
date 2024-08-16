@@ -33,6 +33,11 @@ where
 {
     use futures_util::SinkExt;
     let msg = msg.context("while receiving LDAP op")?;
+    for control in msg.ctrl.iter() {
+        if let LdapControl::Unknown { oid, .. } = control {
+            info!("Received unknown control: {}, ignoring", oid);
+        }
+    }
     debug!(?msg);
     match session.handle_ldap_message(msg.op).await {
         None => return Ok(false),
