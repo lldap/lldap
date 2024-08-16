@@ -10,8 +10,10 @@ use crate::domain::{
     ldap::{
         error::{LdapError, LdapResult},
         utils::{
-            expand_attribute_wildcards, get_custom_attribute, get_group_id_from_distinguished_name,
-            get_user_id_from_distinguished_name, map_user_field, LdapInfo, UserFieldType,
+            expand_attribute_wildcards, get_custom_attribute,
+            get_group_id_from_distinguished_name_or_plain_name,
+            get_user_id_from_distinguished_name_or_plain_name, map_user_field, LdapInfo,
+            UserFieldType,
         },
     },
     schema::{PublicSchema, SchemaUserAttributeExtractor},
@@ -165,13 +167,13 @@ fn get_user_attribute_equality_filter(
     typ: AttributeType,
     is_list: bool,
     value: &str,
-) -> LdapResult<UserRequestFilter> {
+) -> UserRequestFilter {
     deserialize_attribute_value(&[value.to_owned()], typ, is_list)
-        .map_err(|e| LdapError {
-            code: LdapResultCode::Other,
-            message: format!("Invalid value for attribute {}: {}", field, e),
-        })
         .map(|v| UserRequestFilter::AttributeEquality(field.clone(), v))
+        .unwrap_or_else(|e| {
+            warn!("Invalid value for attribute {}: {}", field, e);
+            UserRequestFilter::from(false)
+        })
 }
 
 fn convert_user_filter(
@@ -200,9 +202,9 @@ fn convert_user_filter(
                     value,
                 )),
                 UserFieldType::PrimaryField(field) => Ok(UserRequestFilter::Equality(field, value)),
-                UserFieldType::Attribute(field, typ, is_list) => {
-                    get_user_attribute_equality_filter(&field, typ, is_list, &value)
-                }
+                UserFieldType::Attribute(field, typ, is_list) => Ok(
+                    get_user_attribute_equality_filter(&field, typ, is_list, &value),
+                ),
                 UserFieldType::NoMatch => {
                     if !ldap_info.ignored_user_attributes.contains(&field) {
                         warn!(
@@ -222,15 +224,18 @@ fn convert_user_filter(
                         .extra_user_object_classes
                         .contains(&LdapObjectClass::from(value)),
                 )),
-                UserFieldType::MemberOf => Ok(UserRequestFilter::MemberOf(
-                    get_group_id_from_distinguished_name(
-                        &value,
-                        &ldap_info.base_dn,
-                        &ldap_info.base_dn_str,
-                    )?,
-                )),
+                UserFieldType::MemberOf => Ok(get_group_id_from_distinguished_name_or_plain_name(
+                    &value,
+                    &ldap_info.base_dn,
+                    &ldap_info.base_dn_str,
+                )
+                .map(UserRequestFilter::MemberOf)
+                .unwrap_or_else(|e| {
+                    warn!("Invalid memberOf filter: {}", e);
+                    UserRequestFilter::from(false)
+                })),
                 UserFieldType::EntryDn | UserFieldType::Dn => {
-                    Ok(get_user_id_from_distinguished_name(
+                    Ok(get_user_id_from_distinguished_name_or_plain_name(
                         value.as_str(),
                         &ldap_info.base_dn,
                         &ldap_info.base_dn_str,

@@ -1837,8 +1837,8 @@ mod tests {
                 eq(Some(UserRequestFilter::MemberOf("group_1".into()))),
                 eq(false),
             )
-            .times(1)
-            .return_once(|_, _| Ok(vec![]));
+            .times(2)
+            .returning(|_, _| Ok(vec![]));
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality(
@@ -1857,11 +1857,17 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            Err(LdapError {
-                code: LdapResultCode::InvalidDNSyntax,
-                message: "Missing DN value".to_string()
-            })
+            Ok(vec![make_search_success()])
         );
+    }
+    #[tokio::test]
+    async fn test_search_member_of_filter_error() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::from(false))), eq(false))
+            .times(1)
+            .returning(|_, _| Ok(vec![]));
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality(
                 "memberOf".to_string(),
@@ -1871,10 +1877,8 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            Err(LdapError{
-                code: LdapResultCode::InvalidDNSyntax,
-                message: r#"Unexpected DN format. Got "cn=mygroup,dc=example,dc=com", expected: "uid=id,ou=groups,dc=example,dc=com""#.to_string()
-            })
+            // The error is ignored, a warning is printed.
+            Ok(vec![make_search_success()])
         );
     }
 

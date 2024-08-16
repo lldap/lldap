@@ -109,6 +109,34 @@ pub fn get_group_id_from_distinguished_name(
     get_id_from_distinguished_name(dn, base_tree, base_dn_str, true).map(GroupName::from)
 }
 
+fn looks_like_distinguished_name(dn: &str) -> bool {
+    dn.contains('=') || dn.contains(',')
+}
+
+pub fn get_user_id_from_distinguished_name_or_plain_name(
+    dn: &str,
+    base_tree: &[(String, String)],
+    base_dn_str: &str,
+) -> LdapResult<UserId> {
+    if !looks_like_distinguished_name(dn) {
+        Ok(UserId::from(dn))
+    } else {
+        get_user_id_from_distinguished_name(dn, base_tree, base_dn_str)
+    }
+}
+
+pub fn get_group_id_from_distinguished_name_or_plain_name(
+    dn: &str,
+    base_tree: &[(String, String)],
+    base_dn_str: &str,
+) -> LdapResult<GroupName> {
+    if !looks_like_distinguished_name(dn) {
+        Ok(GroupName::from(dn))
+    } else {
+        get_group_id_from_distinguished_name(dn, base_tree, base_dn_str)
+    }
+}
+
 #[instrument(skip(all_attribute_keys), level = "debug")]
 pub fn expand_attribute_wildcards<'a>(
     ldap_attributes: &'a [String],
