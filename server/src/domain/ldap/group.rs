@@ -228,10 +228,13 @@ fn convert_group_filter(
         LdapFilter::Not(filter) => Ok(GroupRequestFilter::Not(Box::new(rec(filter)?))),
         LdapFilter::Present(field) => {
             let field = AttributeName::from(field.as_str());
-            Ok(GroupRequestFilter::from(!matches!(
-                map_group_field(&field, schema),
-                GroupFieldType::NoMatch
-            )))
+            Ok(match map_group_field(&field, schema) {
+                GroupFieldType::Attribute(name, _, _) => {
+                    GroupRequestFilter::CustomAttributePresent(name)
+                }
+                GroupFieldType::NoMatch => GroupRequestFilter::from(false),
+                _ => GroupRequestFilter::from(true),
+            })
         }
         LdapFilter::Substring(field, substring_filter) => {
             let field = AttributeName::from(field.as_str());

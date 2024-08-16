@@ -16,14 +16,18 @@ use sea_orm::{
 };
 use tracing::instrument;
 
-fn attribute_condition(name: AttributeName, value: Serialized) -> Cond {
+fn attribute_condition(name: AttributeName, value: Option<Serialized>) -> Cond {
     Expr::in_subquery(
         Expr::col(GroupColumn::GroupId.as_column_ref()),
         model::GroupAttributes::find()
             .select_only()
             .column(model::GroupAttributesColumn::GroupId)
             .filter(model::GroupAttributesColumn::AttributeName.eq(name))
-            .filter(model::GroupAttributesColumn::Value.eq(value))
+            .filter(
+                value
+                    .map(|value| model::GroupAttributesColumn::Value.eq(value))
+                    .unwrap_or_else(|| SimpleExpr::Value(true.into())),
+            )
             .into_query(),
     )
     .into_condition()
@@ -71,7 +75,8 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
         ))))
         .like(filter.to_sql_filter())
         .into_condition(),
-        AttributeEquality(name, value) => attribute_condition(name, value),
+        AttributeEquality(name, value) => attribute_condition(name, Some(value)),
+        CustomAttributePresent(name) => attribute_condition(name, None),
     }
 }
 

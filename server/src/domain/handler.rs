@@ -61,6 +61,7 @@ pub enum UserRequestFilter {
     MemberOf(GroupName),
     // Same, by id.
     MemberOfId(GroupId),
+    CustomAttributePresent(AttributeName),
 }
 
 impl From<bool> for UserRequestFilter {
@@ -85,6 +86,7 @@ pub enum GroupRequestFilter {
     // Check if the group contains a user identified by uid.
     Member(UserId),
     AttributeEquality(AttributeName, Serialized),
+    CustomAttributePresent(AttributeName),
 }
 
 impl From<bool> for GroupRequestFilter {
