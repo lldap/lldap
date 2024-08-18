@@ -229,16 +229,22 @@ fn generate_random_private_key() -> ServerSetup {
     ServerSetup::new(&mut rng)
 }
 
+#[cfg(unix)]
+fn set_mode(permissions: &mut std::fs::Permissions) {
+    use std::os::unix::fs::PermissionsExt;
+    permissions.set_mode(0o400);
+}
+
+#[cfg(not(unix))]
+fn set_mode(_: &mut std::fs::Permissions) {}
+
 fn write_to_readonly_file(path: &std::path::Path, buffer: &[u8]) -> Result<()> {
     use std::{fs::File, io::Write};
     assert!(!path.exists());
     let mut file = File::create(path)?;
     let mut permissions = file.metadata()?.permissions();
     permissions.set_readonly(true);
-    if cfg!(unix) {
-        use std::os::unix::fs::PermissionsExt;
-        permissions.set_mode(0o400);
-    }
+    set_mode(&mut permissions);
     file.set_permissions(permissions)?;
     Ok(file.write_all(buffer)?)
 }
