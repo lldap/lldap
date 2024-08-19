@@ -4,6 +4,8 @@ use lettre::{
     message::Mailbox, transport::smtp::authentication::Credentials, AsyncSmtpTransport,
     AsyncTransport, Message, Tokio1Executor,
 };
+use std::time::Duration;
+use tokio::time::sleep;
 use tracing::debug;
 
 async fn send_email(
@@ -58,11 +60,16 @@ async fn send_email(
     }
 
     if let Err(e) = mailer.port(options.port).build().send(email).await {
-        if e.to_string().contains("CorruptMessage") {
-            Err(anyhow!("CorruptMessage returned by lettre, this usually means the SMTP encryption setting is wrong.").context(e))
-        } else {
-            Err(e.into())
-        }
+        debug!("Error sending email: {:?}", e);
+        Err(anyhow!(
+            "{}: SMTP error {}",
+            if e.to_string().contains("CorruptMessage") {
+                "CorruptMessage returned by lettre, this usually means the SMTP encryption setting is wrong"
+            } else {
+                "Error sending email"
+            },
+            e.status().map(|s| s.to_string()).unwrap_or_default()
+        ))
     } else {
         Ok(())
     }
@@ -92,14 +99,18 @@ To reset your password please visit the following URL: {}
 Please contact an administrator if you did not initiate the process.",
         username, reset_url
     );
-    send_email(
+    let res = send_email(
         to,
         "[LLDAP] Password reset requested",
         body,
         options,
         server_url,
     )
-    .await
+    .await;
+    if res.is_err() {
+        sleep(Duration::from_secs(3)).await;
+    }
+    res
 }
 
 pub async fn send_test_email(to: Mailbox, options: &MailOptions) -> Result<()> {
