@@ -48,6 +48,7 @@
 - [Client configuration](#client-configuration)
   - [Compatible services](#compatible-services)
   - [General configuration guide](#general-configuration-guide)
+  - [Integration with OS's](#integration-with-os-s)
   - [Sample client configurations](#sample-client-configurations)
   - [Incompatible services](#incompatible-services)
 - [Migrating from SQLite](#migrating-from-sqlite)
@@ -401,7 +402,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
 You can also install it as a rc.d service in FreeBSD, see
 [FreeBSD-install.md](example_configs/freebsd/freebsd-install.md).
 
-The rc.d script file 
+The rc.d script file
 [rc.d_lldap](example_configs/freebsd/rc.d_lldap).
 
 ### From source
@@ -537,6 +538,13 @@ The administrator group for LLDAP is `lldap_admin`: anyone in this group has
 admin rights in the Web UI. Most LDAP integrations should instead use a user in
 the `lldap_strict_readonly` or `lldap_password_manager` group, to avoid granting full
 administration access to many services.
+
+### Integration with OS's
+
+Integration with Linux accounts is possible, through PAM and nslcd. See [PAM
+configuration guide](example_configs/pam/README.md).
+
+Integration with Windows (e.g. Samba) is WIP.
 
 ### Sample client configurations
 
