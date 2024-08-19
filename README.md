@@ -48,7 +48,7 @@
 - [Client configuration](#client-configuration)
   - [Compatible services](#compatible-services)
   - [General configuration guide](#general-configuration-guide)
-  - [Integration with OS's](#integration-with-os-s)
+  - [Integration with OS's](#integration-with-oss)
   - [Sample client configurations](#sample-client-configurations)
   - [Incompatible services](#incompatible-services)
 - [Migrating from SQLite](#migrating-from-sqlite)
