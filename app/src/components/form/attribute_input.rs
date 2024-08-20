@@ -6,6 +6,8 @@ use yew::{
 
 use super::file_input::JpegFileInput;
 
+use super::date_input::DateTimeInput;
+
 /*
  <input
                 ref={&ctx.props().input_ref}
@@ -29,21 +31,21 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
     let input_type = match props.attribute_type {
         AttributeType::String => "text",
         AttributeType::Integer => "number",
-        AttributeType::DateTime => "datetime-local",
+        AttributeType::DateTime => {
+            return html! {
+                <DateTimeInput name={props.name.clone()} value={props.value.clone()} />
+            }
+        },
         AttributeType::Jpeg => {
             return html! {
                 <JpegFileInput name={props.name.clone()} value={props.value.clone()} />
             }
         },
     };
-    let accept = match props.attribute_type {
-        AttributeType::Jpeg => Some("image/jpeg"),
-        _ => None,
-    };
+
     html! {
         <input
             type={input_type}
-            accept={accept}
             name={props.name.clone()}
             class="form-control"
             value={props.value.clone()} />
