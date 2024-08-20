@@ -37,12 +37,12 @@ pub struct UserDetails {
 }
 
 impl UserDetails {
-    fn user(&self) -> Option<&User> {
-        self.user_and_schema.as_ref().map(|t| &t.0)
-    }
-    fn schema(&self) -> Option<&Vec<AttributeSchema>> {
-        self.user_and_schema.as_ref().map(|t| &t.1)
-    }
+    // fn user(&self) -> Option<&User> {
+    //     self.user_and_schema.as_ref().map(|t| &t.0)
+    // }
+    // fn schema(&self) -> Option<&Vec<AttributeSchema>> {
+    //     self.user_and_schema.as_ref().map(|t| &t.1)
+    // }
     fn mut_groups(&mut self) -> &mut Vec<Group> {
         &mut self.user_and_schema.as_mut().unwrap().0.groups
     }
