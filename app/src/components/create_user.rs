@@ -1,11 +1,18 @@
 use crate::{
     components::{
-        form::{attribute_input::{ListAttributeInput, SingleAttributeInput}, field::Field, submit::Submit},
+        form::{
+            attribute_input::{ListAttributeInput, SingleAttributeInput},
+            field::Field,
+            submit::Submit,
+        },
         router::AppRoute,
-    }, convert_attribute_type, infra::{
+    },
+    convert_attribute_type,
+    infra::{
         api::HostService,
-        common_component::{CommonComponent, CommonComponentParts}, schema::AttributeType,
-    }
+        common_component::{CommonComponent, CommonComponentParts},
+        schema::AttributeType,
+    },
 };
 use anyhow::{anyhow, bail, Result};
 use gloo_console::log;
@@ -95,7 +102,8 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
         match msg {
             Msg::Update => Ok(true),
             Msg::ListAttributesResponse(schema) => {
-                self.attributes_schema = Some(schema?.schema.user_schema.attributes.into_iter().collect());
+                self.attributes_schema =
+                    Some(schema?.schema.user_schema.attributes.into_iter().collect());
                 Ok(true)
             }
             Msg::SubmitForm => {
@@ -114,7 +122,7 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                         .collect(),
                     &form_data,
                 )?;
-                let attributes =  if all_values.is_empty() {
+                let attributes = if all_values.is_empty() {
                     None
                 } else {
                     Some(
@@ -251,7 +259,7 @@ impl Component for CreateUserForm {
                 label="User name"
                 field_name="username"
                 oninput={link.callback(|_| Msg::Update)} />
-              {self.attributes_schema.iter().flatten().filter(|a| !a.is_hardcoded || a.is_editable).map(|a| get_custom_attribute_input(a)).collect::<Vec<_>>()}
+              {self.attributes_schema.iter().flatten().filter(|a| !a.is_hardcoded || a.is_editable).map(get_custom_attribute_input).collect::<Vec<_>>()}
               <Field<CreateUserModel>
                 form={&self.form}
                 label="Password"
@@ -284,9 +292,7 @@ impl Component for CreateUserForm {
     }
 }
 
-pub fn get_custom_attribute_input(
-    attribute_schema: &Attribute,
-) -> Html {
+pub fn get_custom_attribute_input(attribute_schema: &Attribute) -> Html {
     if attribute_schema.is_list {
         html! {<ListAttributeInput name={attribute_schema.name.clone()} attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())}/>}
     } else {

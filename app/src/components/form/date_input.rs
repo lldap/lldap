@@ -1,11 +1,9 @@
 use std::str::FromStr;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use web_sys::HtmlInputElement;
-use yew::{
-    function_component, html, use_state, virtual_dom::AttrValue, Event, Properties
-};
 use wasm_bindgen::JsCast;
+use web_sys::HtmlInputElement;
+use yew::{function_component, html, use_state, virtual_dom::AttrValue, Event, Properties};
 
 #[derive(Properties, PartialEq)]
 pub struct DateTimeInputProps {
@@ -15,7 +13,12 @@ pub struct DateTimeInputProps {
 
 #[function_component(DateTimeInput)]
 pub fn date_time_input(props: &DateTimeInputProps) -> Html {
-    let value = use_state(|| props.value.as_ref().and_then(|x| DateTime::<Utc>::from_str(x).ok()));
+    let value = use_state(|| {
+        props
+            .value
+            .as_ref()
+            .and_then(|x| DateTime::<Utc>::from_str(x).ok())
+    });
 
     html! {
         <div class="input-group">

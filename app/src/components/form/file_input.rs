@@ -6,8 +6,8 @@ use gloo_file::{
     File,
 };
 use web_sys::{FileList, HtmlInputElement, InputEvent};
-use yew::{prelude::*, virtual_dom::AttrValue};
 use yew::Properties;
+use yew::{prelude::*, virtual_dom::AttrValue};
 
 #[derive(Default)]
 struct JsFile {
@@ -94,14 +94,25 @@ impl Component for JpegFileInput {
         Self {
             avatar: Some(JsFile {
                 file: None,
-                contents: ctx.props().value.as_ref().and_then(|x| base64::decode(x).ok())
+                contents: ctx
+                    .props()
+                    .value
+                    .as_ref()
+                    .and_then(|x| base64::decode(x).ok()),
             }),
             reader: None,
         }
     }
 
     fn changed(&mut self, ctx: &Context<Self>) -> bool {
-        self.avatar = Some(JsFile { file: None, contents: ctx.props().value.as_ref().and_then(|x| base64::decode(x).ok()) });
+        self.avatar = Some(JsFile {
+            file: None,
+            contents: ctx
+                .props()
+                .value
+                .as_ref()
+                .and_then(|x| base64::decode(x).ok()),
+        });
         self.reader = None;
         true
     }

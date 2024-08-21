@@ -38,16 +38,22 @@ where
         use_state_eq(|| LoadableResult::Loading);
     {
         let loadable_result = loadable_result.clone();
-        use_effect_with_deps(move |variables| {
-            let task = HostService::graphql_query::<QueryType>(variables.clone(), "Failed graphql query");
+        use_effect_with_deps(
+            move |variables| {
+                let task = HostService::graphql_query::<QueryType>(
+                    variables.clone(),
+                    "Failed graphql query",
+                );
 
-            spawn_local(async move {
-                let response = task.await;
-                loadable_result.set(LoadableResult::Loaded(response));
-            });
+                spawn_local(async move {
+                    let response = task.await;
+                    loadable_result.set(LoadableResult::Loaded(response));
+                });
 
-            || ()
-        }, variables)
+                || ()
+            },
+            variables,
+        )
     }
     loadable_result.clone()
 }

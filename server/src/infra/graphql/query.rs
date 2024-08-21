@@ -663,14 +663,16 @@ pub fn serialize_attribute(
 
 impl<Handler: BackendHandler> AttributeValue<Handler> {
     fn from_schema(a: DomainAttributeValue, schema: &DomainAttributeList) -> Option<Self> {
-        schema.get_attribute_schema(&a.name).map(|s| (AttributeValue::<Handler> {
-            attribute: a,
-            schema: AttributeSchema::<Handler> {
-                schema: s.clone(),
+        schema
+            .get_attribute_schema(&a.name)
+            .map(|s| AttributeValue::<Handler> {
+                attribute: a,
+                schema: AttributeSchema::<Handler> {
+                    schema: s.clone(),
+                    _phantom: std::marker::PhantomData,
+                },
                 _phantom: std::marker::PhantomData,
-            },
-            _phantom: std::marker::PhantomData,
-        }))
+            })
         // None => Err(FieldError::from(format!("Unknown attribute {}", &a.name))),
     }
 }

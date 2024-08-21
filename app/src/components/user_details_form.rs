@@ -2,7 +2,8 @@ use crate::{
     components::{
         form::{
             attribute_input::{ListAttributeInput, SingleAttributeInput},
-            static_value::StaticValue, submit::Submit,
+            static_value::StaticValue,
+            submit::Submit,
         },
         user_details::{Attribute, AttributeSchema, User},
     },
@@ -235,14 +236,19 @@ impl UserDetailsForm {
             &form_data,
         )?;
         let base_attributes = &self.user.attributes;
-        log!(format!("base_attributes: {:#?}\nall_values: {:#?}", base_attributes, all_values));
+        log!(format!(
+            "base_attributes: {:#?}\nall_values: {:#?}",
+            base_attributes, all_values
+        ));
         all_values.retain(|(name, val)| {
             let name = name.clone();
             let base_val = base_attributes
                 .iter()
                 .find(|base_val| base_val.name == name);
             let new_values = val.clone();
-            base_val.map(|v| v.value != new_values).unwrap_or(!new_values.is_empty())
+            base_val
+                .map(|v| v.value != new_values)
+                .unwrap_or(!new_values.is_empty())
         });
         let remove_attributes: Option<Vec<String>> = if all_values.is_empty() {
             None

@@ -1,7 +1,8 @@
 use crate::infra::{schema::AttributeType, tooltip::Tooltip};
 use web_sys::Element;
 use yew::{
-    function_component, html, use_effect_with_deps, use_mut_ref, use_node_ref, virtual_dom::AttrValue, Component, Context, Html, Properties
+    function_component, html, use_effect_with_deps, use_mut_ref, use_node_ref,
+    virtual_dom::AttrValue, Component, Context, Html, Properties,
 };
 
 use super::file_input::JpegFileInput;
@@ -35,12 +36,12 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
             return html! {
                 <DateTimeInput name={props.name.clone()} value={props.value.clone()} />
             }
-        },
+        }
         AttributeType::Jpeg => {
             return html! {
                 <JpegFileInput name={props.name.clone()} value={props.value.clone()} />
             }
-        },
+        }
     };
 
     html! {
@@ -63,13 +64,16 @@ fn attribute_label(props: &AttributeLabelProps) -> Html {
 
     {
         let tooltip_js = tooltip_js.clone();
-        use_effect_with_deps(move |tooltip_ref| {
-            let tooltip_ref = tooltip_ref
-                .cast::<Element>()
-                .expect("Tooltip element should exist");
-            *tooltip_js.borrow_mut() = Some(Tooltip::new(tooltip_ref));
-            || {}
-        }, tooltip_ref.clone());
+        use_effect_with_deps(
+            move |tooltip_ref| {
+                let tooltip_ref = tooltip_ref
+                    .cast::<Element>()
+                    .expect("Tooltip element should exist");
+                *tooltip_js.borrow_mut() = Some(Tooltip::new(tooltip_ref));
+                || {}
+            },
+            tooltip_ref.clone(),
+        );
     }
 
     html! {
@@ -88,7 +92,6 @@ fn attribute_label(props: &AttributeLabelProps) -> Html {
             </button>
         </label>
     }
-
 }
 
 #[derive(Properties, PartialEq)]
@@ -131,13 +134,12 @@ pub struct ListAttributeInput {
     indices: Vec<usize>,
     next_index: usize,
     values: Vec<String>,
-
 }
 impl Component for ListAttributeInput {
     type Message = ListAttributeInputMsg;
     type Properties = ListAttributeInputProps;
 
-     fn create(ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         let values = ctx.props().values.clone();
         Self {
             indices: (0..values.len()).collect(),

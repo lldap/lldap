@@ -162,8 +162,9 @@ impl UserListerBackendHandler for SqlBackendHandler {
                 &user.user,
                 attributes_iter
                     .take_while_ref(|u| u.user_id == user.user.user_id)
-                    .map(AttributeValue::from))
-                .collect();
+                    .map(AttributeValue::from),
+            )
+            .collect();
         }
         Ok(users)
     }
@@ -177,18 +178,24 @@ impl SqlBackendHandler {
         let mut delete_attributes = request.delete_attributes;
         let mut insert_attributes = request.insert_attributes;
 
-        let email = if let Some(_) = request.email {
+        let email = if request.email.is_some() {
             request.email
-        } else if let Some(attribute_index) = insert_attributes.iter().position(|x| x.name == "mail".into()) {
+        } else if let Some(attribute_index) = insert_attributes
+            .iter()
+            .position(|x| x.name == "mail".into())
+        {
             delete_attributes.retain(|x| x.as_str() != "mail");
             Some(insert_attributes.remove(attribute_index).value.unwrap())
         } else {
             None
         };
 
-        let display_name = if let Some(_) = request.display_name {
+        let display_name = if request.display_name.is_some() {
             request.display_name
-        } else if let Some(attribute_index) = insert_attributes.iter().position(|x| x.name == "display_name".into()) {
+        } else if let Some(attribute_index) = insert_attributes
+            .iter()
+            .position(|x| x.name == "display_name".into())
+        {
             delete_attributes.retain(|x| x.as_str() != "display_name");
             Some(insert_attributes.remove(attribute_index).value.unwrap())
         } else {
@@ -286,10 +293,23 @@ impl SqlBackendHandler {
         Ok(())
     }
 
-    fn enrich_user_attributes(user: &User, attributes: impl Iterator<Item = AttributeValue>) -> impl Iterator<Item = AttributeValue> {
+    fn enrich_user_attributes(
+        user: &User,
+        attributes: impl Iterator<Item = AttributeValue>,
+    ) -> impl Iterator<Item = AttributeValue> {
         attributes
-            .chain(Some(AttributeValue {name: "mail".into(), value: Serialized::from(user.email.as_str())}))
-            .chain(user.display_name.as_ref().map(|display_name| AttributeValue {name: "display_name".into(), value: Serialized::from(display_name.as_str())}))
+            .chain(Some(AttributeValue {
+                name: "mail".into(),
+                value: Serialized::from(user.email.as_str()),
+            }))
+            .chain(
+                user.display_name
+                    .as_ref()
+                    .map(|display_name| AttributeValue {
+                        name: "display_name".into(),
+                        value: Serialized::from(display_name.as_str()),
+                    }),
+            )
     }
 }
 
@@ -308,7 +328,11 @@ impl UserBackendHandler for SqlBackendHandler {
             .order_by_asc(model::UserAttributesColumn::AttributeName)
             .all(&self.sql_pool)
             .await?;
-        user.attributes = SqlBackendHandler::enrich_user_attributes(&user, attributes.into_iter().map(AttributeValue::from)).collect();
+        user.attributes = SqlBackendHandler::enrich_user_attributes(
+            &user,
+            attributes.into_iter().map(AttributeValue::from),
+        )
+        .collect();
         Ok(user)
     }
 
@@ -336,18 +360,23 @@ impl UserBackendHandler for SqlBackendHandler {
 
         let email = if let Some(email) = request.email {
             email
-        } else if let Some(attribute_index) = attributes.iter().position(|x| x.name == "mail".into()) {
+        } else if let Some(attribute_index) =
+            attributes.iter().position(|x| x.name == "mail".into())
+        {
             attributes.remove(attribute_index).value.unwrap()
         } else {
-            return Err(DomainError::InternalError("Supplying an email or the mail attribute is required.".into()));
+            return Err(DomainError::InternalError(
+                "Supplying an email or the mail attribute is required.".into(),
+            ));
         };
 
-        let display_name = if let Some(_) = request.display_name {
+        let display_name = if request.display_name.is_some() {
             request.display_name
-        } else if let Some(attribute_index) = attributes.iter().position(|x| x.name == "display_name".into()) {
-            Some(attributes.remove(attribute_index).value.unwrap())
         } else {
-            None
+            attributes
+                .iter()
+                .position(|x| x.name == "display_name".into())
+                .map(|attribute_index| attributes.remove(attribute_index).value.unwrap())
         };
 
         let lower_email = email.as_str().to_lowercase();
@@ -1131,10 +1160,11 @@ mod tests {
                     AttributeValue {
                         name: "mail".into(),
                         value: Serialized::from("new mail"),
-                    }, AttributeValue {
+                    },
+                    AttributeValue {
                         name: "display_name".into(),
                         value: Serialized::from("new display"),
-                    }
+                    },
                 ],
                 ..Default::default()
             })
