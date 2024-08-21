@@ -58,7 +58,7 @@ struct AttributeValue {
 /// The details required to create a user.
 pub struct CreateUserInput {
     id: String,
-    email: String,
+    email: Option<String>,
     display_name: Option<String>,
     first_name: Option<String>,
     last_name: Option<String>,
@@ -143,16 +143,18 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .transpose()
             .context("Provided image is not a valid JPEG")?;
         let schema = handler.get_schema().await?;
+
         let attributes = user
             .attributes
             .unwrap_or_default()
             .into_iter()
             .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, true))
             .collect::<Result<Vec<_>, _>>()?;
+
         handler
             .create_user(CreateUserRequest {
                 user_id: user_id.clone(),
-                email: user.email.into(),
+                email: user.email.map(Into::into),
                 display_name: user.display_name,
                 first_name: user.first_name,
                 last_name: user.last_name,

@@ -727,12 +727,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         backend_handler
             .create_user(CreateUserRequest {
                 user_id,
-                email: Email::from(
+                email: Some(Email::from(
                     get_attribute("mail")
                         .or_else(|| get_attribute("email"))
                         .transpose()?
                         .unwrap_or_default(),
-                ),
+                )),
                 display_name: get_attribute("cn").transpose()?,
                 first_name: get_attribute("givenname").transpose()?,
                 last_name: get_attribute("sn").transpose()?,
@@ -2547,7 +2547,7 @@ mod tests {
         mock.expect_create_user()
             .with(eq(CreateUserRequest {
                 user_id: UserId::new("bob"),
-                email: "".into(),
+                email: Some("".into()),
                 display_name: Some("Bob".to_string()),
                 ..Default::default()
             }))
@@ -2589,7 +2589,7 @@ mod tests {
         mock.expect_create_user()
             .with(eq(CreateUserRequest {
                 user_id: UserId::new("bob"),
-                email: "".into(),
+                email: Some("".into()),
                 display_name: Some("Bob".to_string()),
                 ..Default::default()
             }))

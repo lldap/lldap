@@ -16,7 +16,7 @@ use crate::{
 };
 use anyhow::Context as AnyhowContext;
 use chrono::{NaiveDateTime, TimeZone};
-use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject};
+use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument, Span};
 
@@ -248,14 +248,15 @@ pub struct User<Handler: BackendHandler> {
 impl<Handler: BackendHandler> User<Handler> {
     pub fn from_user(mut user: DomainUser, schema: Arc<PublicSchema>) -> FieldResult<Self> {
         let attributes = std::mem::take(&mut user.attributes);
+        let attributes = attributes
+            .into_iter()
+            .flat_map(|a| {
+                AttributeValue::<Handler>::from_schema(a, &schema.get_schema().user_attributes)
+            })
+            .collect::<Vec<_>>();
         Ok(Self {
             user,
-            attributes: attributes
-                .into_iter()
-                .flat_map(|a| {
-                    AttributeValue::<Handler>::from_schema(a, &schema.get_schema().user_attributes)
-                })
-                .collect::<Vec<_>>();
+            attributes,
             schema,
             groups: None,
             _phantom: std::marker::PhantomData,

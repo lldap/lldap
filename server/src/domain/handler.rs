@@ -101,7 +101,7 @@ impl From<bool> for GroupRequestFilter {
 pub struct CreateUserRequest {
     // Same fields as User, but no creation_date, and with password.
     pub user_id: UserId,
-    pub email: Email,
+    pub email: Option<Email>, // Required, but could be passed in attributes
     pub display_name: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,

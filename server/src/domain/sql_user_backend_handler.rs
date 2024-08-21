@@ -158,9 +158,11 @@ impl UserListerBackendHandler for SqlBackendHandler {
         let mut attributes_iter = attributes.into_iter().peekable();
         use itertools::Itertools; // For take_while_ref
         for user in users.iter_mut() {
-            user.user.attributes = attributes_iter
-                .take_while_ref(|u| u.user_id == user.user.user_id)
-                .map(AttributeValue::from)
+            user.user.attributes = SqlBackendHandler::enrich_user_attributes(
+                &user.user,
+                attributes_iter
+                    .take_while_ref(|u| u.user_id == user.user.user_id)
+                    .map(AttributeValue::from))
                 .collect();
         }
         Ok(users)
@@ -172,12 +174,33 @@ impl SqlBackendHandler {
         transaction: &DatabaseTransaction,
         request: UpdateUserRequest,
     ) -> Result<()> {
-        let lower_email = request.email.as_ref().map(|s| s.as_str().to_lowercase());
+        let mut delete_attributes = request.delete_attributes;
+        let mut insert_attributes = request.insert_attributes;
+
+        let email = if let Some(_) = request.email {
+            request.email
+        } else if let Some(attribute_index) = insert_attributes.iter().position(|x| x.name == "mail".into()) {
+            delete_attributes.retain(|x| x.as_str() != "mail");
+            Some(insert_attributes.remove(attribute_index).value.unwrap())
+        } else {
+            None
+        };
+
+        let display_name = if let Some(_) = request.display_name {
+            request.display_name
+        } else if let Some(attribute_index) = insert_attributes.iter().position(|x| x.name == "display_name".into()) {
+            delete_attributes.retain(|x| x.as_str() != "display_name");
+            Some(insert_attributes.remove(attribute_index).value.unwrap())
+        } else {
+            None
+        };
+
+        let lower_email = email.as_ref().map(|s| s.as_str().to_lowercase());
         let update_user = model::users::ActiveModel {
             user_id: ActiveValue::Set(request.user_id.clone()),
-            email: request.email.map(ActiveValue::Set).unwrap_or_default(),
+            email: email.map(ActiveValue::Set).unwrap_or_default(),
             lowercase_email: lower_email.map(ActiveValue::Set).unwrap_or_default(),
-            display_name: to_value(&request.display_name),
+            display_name: to_value(&display_name),
             ..Default::default()
         };
         let to_serialized_value = |s: &Option<String>| match s.as_ref().map(|s| s.as_str()) {
@@ -211,7 +234,7 @@ impl SqlBackendHandler {
             process_serialized(avatar.into_active_value(), "avatar".into());
         }
         let schema = Self::get_schema_with_transaction(transaction).await?;
-        for attribute in request.insert_attributes {
+        for attribute in insert_attributes {
             if schema
                 .user_attributes
                 .get_attribute_type(&attribute.name)
@@ -225,7 +248,7 @@ impl SqlBackendHandler {
                 )));
             }
         }
-        for attribute in request.delete_attributes {
+        for attribute in delete_attributes {
             if schema
                 .user_attributes
                 .get_attribute_type(&attribute)
@@ -262,6 +285,12 @@ impl SqlBackendHandler {
         }
         Ok(())
     }
+
+    fn enrich_user_attributes(user: &User, attributes: impl Iterator<Item = AttributeValue>) -> impl Iterator<Item = AttributeValue> {
+        attributes
+            .chain(Some(AttributeValue {name: "mail".into(), value: Serialized::from(user.email.as_str())}))
+            .chain(user.display_name.as_ref().map(|display_name| AttributeValue {name: "display_name".into(), value: Serialized::from(display_name.as_str())}))
+    }
 }
 
 #[async_trait]
@@ -279,7 +308,7 @@ impl UserBackendHandler for SqlBackendHandler {
             .order_by_asc(model::UserAttributesColumn::AttributeName)
             .all(&self.sql_pool)
             .await?;
-        user.attributes = attributes.into_iter().map(AttributeValue::from).collect();
+        user.attributes = SqlBackendHandler::enrich_user_attributes(&user, attributes.into_iter().map(AttributeValue::from)).collect();
         Ok(user)
     }
 
@@ -302,12 +331,31 @@ impl UserBackendHandler for SqlBackendHandler {
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
         let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(request.user_id.as_str(), &now);
-        let lower_email = request.email.as_str().to_lowercase();
+
+        let mut attributes = request.attributes;
+
+        let email = if let Some(email) = request.email {
+            email
+        } else if let Some(attribute_index) = attributes.iter().position(|x| x.name == "mail".into()) {
+            attributes.remove(attribute_index).value.unwrap()
+        } else {
+            return Err(DomainError::InternalError("Supplying an email or the mail attribute is required.".into()));
+        };
+
+        let display_name = if let Some(_) = request.display_name {
+            request.display_name
+        } else if let Some(attribute_index) = attributes.iter().position(|x| x.name == "display_name".into()) {
+            Some(attributes.remove(attribute_index).value.unwrap())
+        } else {
+            None
+        };
+
+        let lower_email = email.as_str().to_lowercase();
         let new_user = model::users::ActiveModel {
             user_id: Set(request.user_id.clone()),
-            email: Set(request.email),
+            email: Set(email),
             lowercase_email: Set(lower_email),
-            display_name: to_value(&request.display_name),
+            display_name: to_value(&display_name),
             creation_date: ActiveValue::Set(now),
             uuid: ActiveValue::Set(uuid),
             ..Default::default()
@@ -338,7 +386,7 @@ impl UserBackendHandler for SqlBackendHandler {
             .transaction::<_, (), DomainError>(|transaction| {
                 Box::pin(async move {
                     let schema = Self::get_schema_with_transaction(transaction).await?;
-                    for attribute in request.attributes {
+                    for attribute in attributes {
                         if schema
                             .user_attributes
                             .get_attribute_type(&attribute.name)
@@ -871,7 +919,15 @@ mod tests {
                 AttributeValue {
                     name: "last_name".into(),
                     value: Serialized::from("last_name")
-                }
+                },
+                AttributeValue {
+                    name: "mail".into(),
+                    value: Serialized::from("email")
+                },
+                AttributeValue {
+                    name: "display_name".into(),
+                    value: Serialized::from("display_name")
+                },
             ]
         );
     }
@@ -908,7 +964,15 @@ mod tests {
                 AttributeValue {
                     name: "first_name".into(),
                     value: Serialized::from("first bob")
-                }
+                },
+                AttributeValue {
+                    name: "mail".into(),
+                    value: Serialized::from("bob@bob.bob")
+                },
+                AttributeValue {
+                    name: "display_name".into(),
+                    value: Serialized::from("display bob")
+                },
             ]
         );
     }
@@ -948,7 +1012,15 @@ mod tests {
                 AttributeValue {
                     name: "last_name".into(),
                     value: Serialized::from("last bob")
-                }
+                },
+                AttributeValue {
+                    name: "mail".into(),
+                    value: Serialized::from("bob@bob.bob")
+                },
+                AttributeValue {
+                    name: "display_name".into(),
+                    value: Serialized::from("display bob")
+                },
             ]
         );
     }
@@ -977,10 +1049,20 @@ mod tests {
             .unwrap();
         assert_eq!(
             user.attributes,
-            vec![AttributeValue {
-                name: "last_name".into(),
-                value: Serialized::from("last bob")
-            }]
+            vec![
+                AttributeValue {
+                    name: "last_name".into(),
+                    value: Serialized::from("last bob")
+                },
+                AttributeValue {
+                    name: "mail".into(),
+                    value: Serialized::from("bob@bob.bob")
+                },
+                AttributeValue {
+                    name: "display_name".into(),
+                    value: Serialized::from("display bob")
+                },
+            ]
         );
     }
 
@@ -1020,6 +1102,70 @@ mod tests {
                 AttributeValue {
                     name: "last_name".into(),
                     value: Serialized::from("last bob")
+                },
+                AttributeValue {
+                    name: "mail".into(),
+                    value: Serialized::from("bob@bob.bob")
+                },
+                AttributeValue {
+                    name: "display_name".into(),
+                    value: Serialized::from("display bob")
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_user_replace_attributes_hardcoded() {
+        let fixture = TestFixture::new().await;
+
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                first_name: None,
+                last_name: None,
+                avatar: None,
+                delete_attributes: vec!["mail".into(), "display_name".into()],
+                insert_attributes: vec![
+                    AttributeValue {
+                        name: "mail".into(),
+                        value: Serialized::from("new mail"),
+                    }, AttributeValue {
+                        name: "display_name".into(),
+                        value: Serialized::from("new display"),
+                    }
+                ],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("bob"))
+            .await
+            .unwrap();
+        assert_eq!(user.email, "new mail".into());
+        assert_eq!(user.display_name.unwrap(), "new display");
+        assert_eq!(
+            user.attributes,
+            vec![
+                AttributeValue {
+                    name: "first_name".into(),
+                    value: Serialized::from("first bob")
+                },
+                AttributeValue {
+                    name: "last_name".into(),
+                    value: Serialized::from("last bob")
+                },
+                AttributeValue {
+                    name: "mail".into(),
+                    value: Serialized::from("new mail")
+                },
+                AttributeValue {
+                    name: "display_name".into(),
+                    value: Serialized::from("new display")
                 },
             ]
         );
@@ -1075,7 +1221,7 @@ mod tests {
             .handler
             .create_user(CreateUserRequest {
                 user_id: UserId::new("james"),
-                email: "email".into(),
+                email: Some("email".into()),
                 display_name: Some("display_name".to_string()),
                 first_name: None,
                 last_name: Some("last_name".to_string()),
@@ -1109,7 +1255,15 @@ mod tests {
                 AttributeValue {
                     name: "last_name".into(),
                     value: Serialized::from("last_name")
-                }
+                },
+                AttributeValue {
+                    name: "mail".into(),
+                    value: Serialized::from("email")
+                },
+                AttributeValue {
+                    name: "display_name".into(),
+                    value: Serialized::from("display_name")
+                },
             ]
         );
     }
@@ -1170,7 +1324,7 @@ mod tests {
             .handler
             .create_user(CreateUserRequest {
                 user_id: UserId::new("james"),
-                email: "email".into(),
+                email: Some("email".into()),
                 ..Default::default()
             })
             .await
@@ -1180,7 +1334,7 @@ mod tests {
             .handler
             .create_user(CreateUserRequest {
                 user_id: UserId::new("john"),
-                email: "eMail".into(),
+                email: Some("eMail".into()),
                 ..Default::default()
             })
             .await

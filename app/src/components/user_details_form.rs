@@ -2,7 +2,7 @@ use crate::{
     components::{
         form::{
             attribute_input::{ListAttributeInput, SingleAttributeInput},
-            field::Field, static_value::StaticValue, submit::Submit,
+            static_value::StaticValue, submit::Submit,
         },
         user_details::{Attribute, AttributeSchema, User},
     },
@@ -124,19 +124,6 @@ impl Component for UserDetailsForm {
               <StaticValue label="UUID" id="uuid">
                 {&self.user.uuid}
               </StaticValue>
-              <Field<UserModel>
-                form={&self.form}
-                required=true
-                label="Email"
-                field_name="email"
-                input_type="email"
-                oninput={link.callback(|_| Msg::Update)} />
-              <Field<UserModel>
-                form={&self.form}
-                label="Display name"
-                field_name="display_name"
-                autocomplete="name"
-                oninput={link.callback(|_| Msg::Update)} />
               {ctx.props().user_attributes_schema.iter().filter(|a| (ctx.props().is_admin && !a.is_hardcoded) || a.is_editable).map(|s| get_custom_attribute_input(s, &self.user.attributes)).collect::<Vec<_>>()}
               {ctx.props().user_attributes_schema.iter().filter(|a| !ctx.props().is_admin && !a.is_hardcoded && !a.is_editable).map(|s| get_custom_attribute_static(s, &self.user.attributes)).collect::<Vec<_>>()}
               <Submit
@@ -247,7 +234,6 @@ impl UserDetailsForm {
                 .collect(),
             &form_data,
         )?;
-        let base_user = &self.user;
         let base_attributes = &self.user.attributes;
         log!(format!("base_attributes: {:#?}\nall_values: {:#?}", base_attributes, all_values));
         all_values.retain(|(name, val)| {
@@ -286,14 +272,6 @@ impl UserDetailsForm {
             insertAttributes: None,
         };
         let default_user_input = user_input.clone();
-        let model = self.form.model();
-        let email = model.email;
-        if base_user.email != email {
-            user_input.email = Some(email);
-        }
-        if base_user.display_name != model.display_name {
-            user_input.displayName = Some(model.display_name);
-        }
         user_input.removeAttributes = remove_attributes;
         user_input.insertAttributes = insert_attributes;
         // Nothing changed.

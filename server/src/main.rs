@@ -43,7 +43,7 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
     handler
         .create_user(CreateUserRequest {
             user_id: config.ldap_user_dn.clone(),
-            email: config.ldap_user_email.clone().into(),
+            email: Some(config.ldap_user_email.clone().into()),
             display_name: Some("Administrator".to_string()),
             ..Default::default()
         })
