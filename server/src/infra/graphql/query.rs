@@ -252,10 +252,10 @@ impl<Handler: BackendHandler> User<Handler> {
             user,
             attributes: attributes
                 .into_iter()
-                .map(|a| {
+                .flat_map(|a| {
                     AttributeValue::<Handler>::from_schema(a, &schema.get_schema().user_attributes)
                 })
-                .collect::<FieldResult<Vec<_>>>()?,
+                .collect::<Vec<_>>();
             schema,
             groups: None,
             _phantom: std::marker::PhantomData,
@@ -384,10 +384,10 @@ impl<Handler: BackendHandler> Group<Handler> {
             attributes: group
                 .attributes
                 .into_iter()
-                .map(|a| {
+                .flat_map(|a| {
                     AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
                 })
-                .collect::<FieldResult<Vec<_>>>()?,
+                .collect::<Vec<_>>(),
             schema,
             _phantom: std::marker::PhantomData,
         })
@@ -405,10 +405,10 @@ impl<Handler: BackendHandler> Group<Handler> {
             attributes: group_details
                 .attributes
                 .into_iter()
-                .map(|a| {
+                .flat_map(|a| {
                     AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
                 })
-                .collect::<FieldResult<Vec<_>>>()?,
+                .collect::<Vec<_>>(),
             schema,
             _phantom: std::marker::PhantomData,
         })
@@ -661,18 +661,16 @@ pub fn serialize_attribute(
 }
 
 impl<Handler: BackendHandler> AttributeValue<Handler> {
-    fn from_schema(a: DomainAttributeValue, schema: &DomainAttributeList) -> FieldResult<Self> {
-        match schema.get_attribute_schema(&a.name) {
-            Some(s) => Ok(AttributeValue::<Handler> {
-                attribute: a,
-                schema: AttributeSchema::<Handler> {
-                    schema: s.clone(),
-                    _phantom: std::marker::PhantomData,
-                },
+    fn from_schema(a: DomainAttributeValue, schema: &DomainAttributeList) -> Option<Self> {
+        schema.get_attribute_schema(&a.name).map(|s| (AttributeValue::<Handler> {
+            attribute: a,
+            schema: AttributeSchema::<Handler> {
+                schema: s.clone(),
                 _phantom: std::marker::PhantomData,
-            }),
-            None => Err(FieldError::from(format!("Unknown attribute {}", &a.name))),
-        }
+            },
+            _phantom: std::marker::PhantomData,
+        }))
+        // None => Err(FieldError::from(format!("Unknown attribute {}", &a.name))),
     }
 }
 

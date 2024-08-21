@@ -63,6 +63,7 @@ pub struct Props {
     /// The current user details.
     pub user: User,
     pub user_attributes_schema: Vec<AttributeSchema>,
+    pub is_admin: bool,
 }
 
 impl CommonComponent<UserDetailsForm> for UserDetailsForm {
@@ -136,7 +137,8 @@ impl Component for UserDetailsForm {
                 field_name="display_name"
                 autocomplete="name"
                 oninput={link.callback(|_| Msg::Update)} />
-              {ctx.props().user_attributes_schema.iter().filter(|a| a.is_editable).map(|s| get_custom_attribute_input(s, &self.user.attributes)).collect::<Vec<_>>()}
+              {ctx.props().user_attributes_schema.iter().filter(|a| (ctx.props().is_admin && !a.is_hardcoded) || a.is_editable).map(|s| get_custom_attribute_input(s, &self.user.attributes)).collect::<Vec<_>>()}
+              {ctx.props().user_attributes_schema.iter().filter(|a| !ctx.props().is_admin && !a.is_hardcoded && !a.is_editable).map(|s| get_custom_attribute_static(s, &self.user.attributes)).collect::<Vec<_>>()}
               <Submit
                 text="Save changes"
                 disabled={self.common.is_task_running()}
@@ -206,6 +208,22 @@ fn get_custom_attribute_input(
     }
 }
 
+fn get_custom_attribute_static(
+    attribute_schema: &AttributeSchema,
+    user_attributes: &[Attribute],
+) -> Html {
+    let values = user_attributes
+        .iter()
+        .find(|a| a.name == attribute_schema.name)
+        .map(|attribute| attribute.value.clone())
+        .unwrap_or_default();
+    html! {
+        <StaticValue label={attribute_schema.name.clone()} id={attribute_schema.name.clone()}>
+            {values.into_iter().map(|x| html!{<div>{x}</div>}).collect::<Vec<_>>()}
+        </StaticValue>
+    }
+}
+
 impl UserDetailsForm {
     fn submit_user_update_form(&mut self, ctx: &Context<Self>) -> Result<bool> {
         if !self.form.validate() {
@@ -225,7 +243,7 @@ impl UserDetailsForm {
             ctx.props()
                 .user_attributes_schema
                 .iter()
-                .filter(|attr| attr.is_editable)
+                .filter(|attr| (ctx.props().is_admin && !attr.is_hardcoded) || attr.is_editable)
                 .collect(),
             &form_data,
         )?;

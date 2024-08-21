@@ -221,7 +221,7 @@ impl Component for UserDetails {
                     <div>
                       <h5 class="row m-3 fw-bold">{"User details"}</h5>
                     </div>
-                    <UserDetailsForm user={u.clone()} user_attributes_schema={schema.clone()} />
+                    <UserDetailsForm user={u.clone()} user_attributes_schema={schema.clone()} is_admin={ctx.props().is_admin} />
                     {self.view_group_memberships(ctx, u)}
                     {self.view_add_group_button(ctx, u)}
                     {self.view_messages(error)}
