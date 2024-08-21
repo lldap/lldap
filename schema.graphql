@@ -63,7 +63,7 @@ type Query {
 "The details required to create a user."
 input CreateUserInput {
   id: String!
-  email: String!
+  email: String
   displayName: String
   firstName: String
   lastName: String

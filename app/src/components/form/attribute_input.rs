@@ -118,6 +118,7 @@ pub fn single_attribute_input(props: &SingleAttributeInputProps) -> Html {
 pub struct ListAttributeInputProps {
     pub name: String,
     pub attribute_type: AttributeType,
+    #[prop_or(vec!())]
     pub values: Vec<String>,
 }
 
