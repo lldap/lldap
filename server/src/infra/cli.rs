@@ -1,9 +1,77 @@
+use std::str::FromStr;
+
 use clap::{builder::EnumValueParser, Parser};
 use lettre::message::Mailbox;
 use serde::{Deserialize, Serialize};
+use strum::{EnumString, IntoStaticStr};
 use url::Url;
 
 use crate::infra::database_string::DatabaseUrl;
+
+// Can be deserialized from either a boolean or a string, to facilitate migration.
+#[derive(Copy, Clone, Debug, Serialize, Default, EnumString, IntoStaticStr)]
+#[strum(ascii_case_insensitive)]
+pub enum TrueFalseAlways {
+    #[default]
+    False,
+    True,
+    Always,
+}
+
+impl TrueFalseAlways {
+    pub fn is_positive(&self) -> bool {
+        matches!(self, TrueFalseAlways::True | TrueFalseAlways::Always)
+    }
+
+    pub fn is_yes(&self) -> bool {
+        matches!(self, TrueFalseAlways::True)
+    }
+}
+
+impl<'de> Deserialize<'de> for TrueFalseAlways {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{self};
+
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = TrueFalseAlways;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("true, false or always")
+            }
+
+            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if value {
+                    Ok(TrueFalseAlways::True)
+                } else {
+                    Ok(TrueFalseAlways::False)
+                }
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match TrueFalseAlways::from_str(value) {
+                    Ok(v) => Ok(v),
+                    Err(_) => Err(de::Error::unknown_variant(
+                        value,
+                        &["true", "false", "always"],
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
+}
 
 /// lldap is a lightweight LDAP server
 #[derive(Debug, Parser, Clone)]
@@ -92,8 +160,10 @@ pub struct RunOpts {
     pub database_url: Option<DatabaseUrl>,
 
     /// Force admin password reset to the config value.
-    #[clap(long, env = "LLDAP_FORCE_LADP_USER_PASS_RESET")]
-    pub force_ldap_user_pass_reset: Option<bool>,
+    /// If set to true, it will be a one-time reset that doesn't start the server.
+    /// You can set it to "always" to force a reset every time the server starts.
+    #[clap(long, env = "LLDAP_FORCE_LDAP_USER_PASS_RESET")]
+    pub force_ldap_user_pass_reset: Option<TrueFalseAlways>,
 
     /// Force update of the private key after a key change.
     #[clap(long, env = "LLDAP_FORCE_UPDATE_PRIVATE_KEY")]

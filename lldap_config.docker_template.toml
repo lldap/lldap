@@ -82,6 +82,7 @@
 ## Break glass in case of emergency: if you lost the admin password, you
 ## can set this to true to force a reset of the admin password to the value
 ## of ldap_user_pass above.
+## Alternatively, you can set it to "always" to reset every time the server starts.
 # force_ldap_user_pass_reset = false
 
 ## Database URL.
