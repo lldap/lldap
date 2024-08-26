@@ -4,7 +4,10 @@ use crate::{
         types::{AttributeName, UserId},
     },
     infra::{
-        cli::{GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts},
+        cli::{
+            GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts,
+            TrueFalseAlways,
+        },
         database_string::DatabaseUrl,
     },
 };
@@ -90,8 +93,8 @@ pub struct Configuration {
     pub ldap_user_email: String,
     #[builder(default = r#"SecUtf8::from("password")"#)]
     pub ldap_user_pass: SecUtf8,
-    #[builder(default = "false")]
-    pub force_ldap_user_pass_reset: bool,
+    #[builder(default)]
+    pub force_ldap_user_pass_reset: TrueFalseAlways,
     #[builder(default = "false")]
     pub force_update_private_key: bool,
     #[builder(default = r#"DatabaseUrl::from("sqlite://users.db?mode=rwc")"#)]
