@@ -189,7 +189,7 @@ impl TryFrom<ResultEntry> for User {
         Ok(User::new(
             crate::lldap::CreateUserInput {
                 id,
-                email,
+                email: Some(email),
                 display_name,
                 first_name,
                 last_name,
