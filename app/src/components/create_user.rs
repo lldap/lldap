@@ -88,7 +88,7 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                 let req = create_user::Variables {
                     user: create_user::CreateUserInput {
                         id: model.username,
-                        email: model.email,
+                        email: Some(model.email),
                         displayName: to_option(model.display_name),
                         firstName: to_option(model.first_name),
                         lastName: to_option(model.last_name),

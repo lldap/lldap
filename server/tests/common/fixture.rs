@@ -103,7 +103,7 @@ impl LLDAPFixture {
             create_user::Variables {
                 user: create_user::CreateUserInput {
                     id: user.clone(),
-                    email: format!("{}@lldap.test", user),
+                    email: Some(format!("{}@lldap.test", user)),
                     avatar: None,
                     display_name: None,
                     first_name: None,

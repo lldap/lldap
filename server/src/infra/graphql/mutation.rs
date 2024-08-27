@@ -7,8 +7,9 @@ use crate::{
             AttributeList, BackendHandler, CreateAttributeRequest, CreateGroupRequest,
             CreateUserRequest, UpdateGroupRequest, UpdateUserRequest,
         },
+        schema::PublicSchema,
         types::{
-            AttributeName, AttributeType, AttributeValue as DomainAttributeValue, GroupId,
+            AttributeName, AttributeType, AttributeValue as DomainAttributeValue, Email, GroupId,
             JpegPhoto, LdapObjectClass, UserId,
         },
     },
@@ -39,7 +40,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
+#[derive(Clone, PartialEq, Eq, Debug, GraphQLInputObject)]
 // This conflicts with the attribute values returned by the user/group queries.
 #[graphql(name = "AttributeValueInput")]
 struct AttributeValue {
@@ -58,7 +59,8 @@ struct AttributeValue {
 /// The details required to create a user.
 pub struct CreateUserInput {
     id: String,
-    email: String,
+    // The email can be specified as an attribute, but one of the two is required.
+    email: Option<String>,
     display_name: Option<String>,
     first_name: Option<String>,
     last_name: Option<String>,
@@ -120,6 +122,44 @@ impl Success {
     }
 }
 
+struct UnpackedAttributes {
+    email: Option<Email>,
+    display_name: Option<String>,
+    attributes: Vec<DomainAttributeValue>,
+}
+
+fn unpack_attributes(
+    attributes: Vec<AttributeValue>,
+    schema: &PublicSchema,
+    is_admin: bool,
+) -> FieldResult<UnpackedAttributes> {
+    let email = attributes
+        .iter()
+        .find(|attr| attr.name == "mail")
+        .cloned()
+        .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
+        .transpose()?
+        .map(|attr| attr.value.unwrap::<String>())
+        .map(Email::from);
+    let display_name = attributes
+        .iter()
+        .find(|attr| attr.name == "displayName")
+        .cloned()
+        .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
+        .transpose()?
+        .map(|attr| attr.value.unwrap::<String>());
+    let attributes = attributes
+        .into_iter()
+        .filter(|attr| attr.name != "mail" && attr.name != "displayName")
+        .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(UnpackedAttributes {
+        email,
+        display_name,
+        attributes,
+    })
+}
+
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> Mutation<Handler> {
     async fn create_user(
@@ -143,17 +183,20 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .transpose()
             .context("Provided image is not a valid JPEG")?;
         let schema = handler.get_schema().await?;
-        let attributes = user
-            .attributes
-            .unwrap_or_default()
-            .into_iter()
-            .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, true))
-            .collect::<Result<Vec<_>, _>>()?;
+        let UnpackedAttributes {
+            email,
+            display_name,
+            attributes,
+        } = unpack_attributes(user.attributes.unwrap_or_default(), &schema, true)?;
         handler
             .create_user(CreateUserRequest {
                 user_id: user_id.clone(),
-                email: user.email.into(),
-                display_name: user.display_name,
+                email: user
+                    .email
+                    .map(Email::from)
+                    .or(email)
+                    .ok_or_else(|| anyhow!("Email is required when creating a new user"))?,
+                display_name: user.display_name.or(display_name),
                 first_name: user.first_name,
                 last_name: user.last_name,
                 avatar,
@@ -216,17 +259,17 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .transpose()
             .context("Provided image is not a valid JPEG")?;
         let schema = handler.get_schema().await?;
-        let insert_attributes = user
-            .insert_attributes
-            .unwrap_or_default()
-            .into_iter()
-            .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
-            .collect::<Result<Vec<_>, _>>()?;
+        let user_insert_attributes = user.insert_attributes.unwrap_or_default();
+        let UnpackedAttributes {
+            email,
+            display_name,
+            attributes: insert_attributes,
+        } = unpack_attributes(user_insert_attributes, &schema, is_admin)?;
         handler
             .update_user(UpdateUserRequest {
                 user_id,
-                email: user.email.map(Into::into),
-                display_name: user.display_name,
+                email: user.email.map(Into::into).or(email),
+                display_name: user.display_name.or(display_name),
                 first_name: user.first_name,
                 last_name: user.last_name,
                 avatar,
