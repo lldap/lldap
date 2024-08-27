@@ -196,6 +196,7 @@ mod tests {
                             is_visible: true,
                             is_editable: true,
                             is_hardcoded: true,
+                            is_readonly: false,
                         },
                         AttributeSchema {
                             name: "first_name".into(),
@@ -204,6 +205,7 @@ mod tests {
                             is_visible: true,
                             is_editable: true,
                             is_hardcoded: true,
+                            is_readonly: false,
                         },
                         AttributeSchema {
                             name: "last_name".into(),
@@ -212,6 +214,7 @@ mod tests {
                             is_visible: true,
                             is_editable: true,
                             is_hardcoded: true,
+                            is_readonly: false,
                         }
                     ]
                 },
@@ -246,6 +249,7 @@ mod tests {
             is_visible: false,
             is_editable: false,
             is_hardcoded: false,
+            is_readonly: false,
         };
         assert!(fixture
             .handler
@@ -329,6 +333,7 @@ mod tests {
             is_visible: true,
             is_editable: false,
             is_hardcoded: false,
+            is_readonly: false,
         };
         assert!(fixture
             .handler

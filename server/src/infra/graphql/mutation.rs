@@ -609,6 +609,13 @@ fn deserialize_attribute(
     let attribute_schema = attribute_schema
         .get_attribute_schema(&attribute_name)
         .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", attribute.name))?;
+    if attribute_schema.is_readonly {
+        return Err(anyhow!(
+            "Permission denied: Attribute {} is read-only",
+            attribute.name
+        )
+        .into());
+    }
     if !is_admin && !attribute_schema.is_editable {
         return Err(anyhow!(
             "Permission denied: Attribute {} is not editable by regular users",

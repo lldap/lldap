@@ -84,6 +84,7 @@ pub fn setup_default_schema(mock: &mut MockTestBackendHandler) {
                         is_visible: true,
                         is_editable: true,
                         is_hardcoded: true,
+                        is_readonly: false,
                     },
                     AttributeSchema {
                         name: "first_name".into(),
@@ -92,6 +93,7 @@ pub fn setup_default_schema(mock: &mut MockTestBackendHandler) {
                         is_visible: true,
                         is_editable: true,
                         is_hardcoded: true,
+                        is_readonly: false,
                     },
                     AttributeSchema {
                         name: "last_name".into(),
@@ -100,6 +102,7 @@ pub fn setup_default_schema(mock: &mut MockTestBackendHandler) {
                         is_visible: true,
                         is_editable: true,
                         is_hardcoded: true,
+                        is_readonly: false,
                     },
                 ],
             },

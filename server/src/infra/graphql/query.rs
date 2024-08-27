@@ -498,6 +498,9 @@ impl<Handler: BackendHandler> AttributeSchema<Handler> {
     fn is_hardcoded(&self) -> bool {
         self.schema.is_hardcoded
     }
+    fn is_readonly(&self) -> bool {
+        self.schema.is_readonly
+    }
 }
 
 impl<Handler: BackendHandler> Clone for AttributeSchema<Handler> {
@@ -745,6 +748,7 @@ mod tests {
                             is_visible: true,
                             is_editable: true,
                             is_hardcoded: true,
+                            is_readonly: false,
                         },
                         DomainAttributeSchema {
                             name: "last_name".into(),
@@ -753,6 +757,7 @@ mod tests {
                             is_visible: true,
                             is_editable: true,
                             is_hardcoded: true,
+                            is_readonly: false,
                         },
                     ],
                 },
@@ -764,6 +769,7 @@ mod tests {
                         is_visible: true,
                         is_editable: true,
                         is_hardcoded: false,
+                        is_readonly: false,
                     }],
                 },
                 extra_user_object_classes: vec![
@@ -1125,13 +1131,14 @@ mod tests {
         mock.expect_get_schema().times(1).return_once(|| {
             Ok(crate::domain::handler::Schema {
                 user_attributes: AttributeList {
-                    attributes: vec![crate::domain::handler::AttributeSchema {
+                    attributes: vec![DomainAttributeSchema {
                         name: "invisible".into(),
                         attribute_type: AttributeType::JpegPhoto,
                         is_list: false,
                         is_visible: false,
                         is_editable: true,
                         is_hardcoded: true,
+                        is_readonly: false,
                     }],
                 },
                 group_attributes: AttributeList {

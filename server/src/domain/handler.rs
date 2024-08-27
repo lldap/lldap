@@ -147,6 +147,7 @@ pub struct AttributeSchema {
     pub is_visible: bool,
     pub is_editable: bool,
     pub is_hardcoded: bool,
+    pub is_readonly: bool,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
