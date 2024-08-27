@@ -43,6 +43,7 @@ impl From<Schema> for PublicSchema {
                 is_visible: true,
                 is_editable: false,
                 is_hardcoded: true,
+                is_readonly: true,
             },
             AttributeSchema {
                 name: "creation_date".into(),
@@ -51,6 +52,7 @@ impl From<Schema> for PublicSchema {
                 is_visible: true,
                 is_editable: false,
                 is_hardcoded: true,
+                is_readonly: true,
             },
             AttributeSchema {
                 name: "mail".into(),
@@ -59,6 +61,7 @@ impl From<Schema> for PublicSchema {
                 is_visible: true,
                 is_editable: true,
                 is_hardcoded: true,
+                is_readonly: false,
             },
             AttributeSchema {
                 name: "uuid".into(),
@@ -67,6 +70,7 @@ impl From<Schema> for PublicSchema {
                 is_visible: true,
                 is_editable: false,
                 is_hardcoded: true,
+                is_readonly: true,
             },
             AttributeSchema {
                 name: "display_name".into(),
@@ -75,6 +79,7 @@ impl From<Schema> for PublicSchema {
                 is_visible: true,
                 is_editable: true,
                 is_hardcoded: true,
+                is_readonly: false,
             },
         ]);
         schema
@@ -89,6 +94,7 @@ impl From<Schema> for PublicSchema {
                 is_visible: true,
                 is_editable: false,
                 is_hardcoded: true,
+                is_readonly: true,
             },
             AttributeSchema {
                 name: "creation_date".into(),
@@ -97,6 +103,7 @@ impl From<Schema> for PublicSchema {
                 is_visible: true,
                 is_editable: false,
                 is_hardcoded: true,
+                is_readonly: true,
             },
             AttributeSchema {
                 name: "uuid".into(),
@@ -105,6 +112,7 @@ impl From<Schema> for PublicSchema {
                 is_visible: true,
                 is_editable: false,
                 is_hardcoded: true,
+                is_readonly: true,
             },
             AttributeSchema {
                 name: "display_name".into(),
@@ -113,6 +121,7 @@ impl From<Schema> for PublicSchema {
                 is_visible: true,
                 is_editable: true,
                 is_hardcoded: true,
+                is_readonly: false,
             },
         ]);
         schema

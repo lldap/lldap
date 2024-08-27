@@ -78,6 +78,7 @@ type AttributeSchema {
   isVisible: Boolean!
   isEditable: Boolean!
   isHardcoded: Boolean!
+  isReadonly: Boolean!
 }
 
 "The fields that can be updated for a user."

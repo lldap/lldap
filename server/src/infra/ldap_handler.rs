@@ -2884,6 +2884,7 @@ mod tests {
                         is_visible: true,
                         is_editable: true,
                         is_hardcoded: false,
+                        is_readonly: false,
                     }],
                 },
                 group_attributes: AttributeList {
@@ -2894,6 +2895,7 @@ mod tests {
                         is_visible: true,
                         is_editable: true,
                         is_hardcoded: false,
+                        is_readonly: false,
                     }],
                 },
                 extra_user_object_classes: vec![
