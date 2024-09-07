@@ -143,14 +143,14 @@ fn unpack_attributes(
         .map(Email::from);
     let display_name = attributes
         .iter()
-        .find(|attr| attr.name == "displayName")
+        .find(|attr| attr.name == "display_name")
         .cloned()
         .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
         .transpose()?
         .map(|attr| attr.value.unwrap::<String>());
     let attributes = attributes
         .into_iter()
-        .filter(|attr| attr.name != "mail" && attr.name != "displayName")
+        .filter(|attr| attr.name != "mail" && attr.name != "display_name")
         .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(UnpackedAttributes {
