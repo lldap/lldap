@@ -17,13 +17,19 @@ use figment::{
     Figment,
 };
 use figment_file_provider_adapter::FileAdapter;
-use lettre::message::Mailbox;
 use lldap_auth::opaque::{server::ServerSetup, KeyPair};
 use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[derive(
+    Clone, Deserialize, Serialize, derive_more::FromStr, derive_more::Debug, derive_more::Display,
+)]
+#[debug(r#""{_0}""#)]
+#[display("{_0}")]
+pub struct Mailbox(pub lettre::message::Mailbox);
+
+#[derive(Clone, derive_more::Debug, Deserialize, Serialize, derive_builder::Builder)]
 #[builder(pattern = "owned")]
 pub struct MailOptions {
     #[builder(default = "false")]
@@ -43,6 +49,8 @@ pub struct MailOptions {
     #[builder(default = "SmtpEncryption::Tls")]
     pub smtp_encryption: SmtpEncryption,
     /// Deprecated.
+    #[debug(skip)]
+    #[serde(skip)]
     #[builder(default = "None")]
     pub tls_required: Option<bool>,
 }
@@ -72,7 +80,11 @@ impl std::default::Default for LdapsOptions {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[derive(Clone, Deserialize, Serialize, derive_more::Debug)]
+#[debug(r#""{_0}""#)]
+pub struct HttpUrl(pub Url);
+
+#[derive(Clone, Deserialize, Serialize, derive_builder::Builder, derive_more::Debug)]
 #[builder(pattern = "owned", build_fn(name = "private_build"))]
 pub struct Configuration {
     #[builder(default = r#"String::from("0.0.0.0")"#)]
@@ -115,8 +127,9 @@ pub struct Configuration {
     pub smtp_options: MailOptions,
     #[builder(default)]
     pub ldaps_options: LdapsOptions,
-    #[builder(default = r#"Url::parse("http://localhost").unwrap()"#)]
-    pub http_url: Url,
+    #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
+    pub http_url: HttpUrl,
+    #[debug(skip)]
     #[serde(skip)]
     #[builder(field(private), default = "None")]
     server_setup: Option<ServerSetupConfig>,
@@ -419,7 +432,7 @@ impl ConfigOverrider for RunOpts {
         }
 
         if let Some(url) = self.http_url.as_ref() {
-            config.http_url = url.clone();
+            config.http_url = HttpUrl(url.clone());
         }
 
         if let Some(database_url) = self.database_url.as_ref() {
@@ -473,10 +486,10 @@ impl ConfigOverrider for GeneralConfigOpts {
 impl ConfigOverrider for SmtpOpts {
     fn override_config(&self, config: &mut Configuration) {
         if let Some(from) = &self.smtp_from {
-            config.smtp_options.from = Some(from.clone());
+            config.smtp_options.from = Some(Mailbox(from.clone()));
         }
         if let Some(reply_to) = &self.smtp_reply_to {
-            config.smtp_options.reply_to = Some(reply_to.clone());
+            config.smtp_options.reply_to = Some(Mailbox(reply_to.clone()));
         }
         if let Some(server) = &self.smtp_server {
             config.smtp_options.server.clone_from(server);

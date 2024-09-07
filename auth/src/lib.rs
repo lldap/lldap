@@ -151,10 +151,22 @@ pub mod types {
     }
 
     #[derive(
-        PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default, Hash, Serialize, Deserialize,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Clone,
+        Default,
+        Hash,
+        Serialize,
+        Deserialize,
+        derive_more::Debug,
+        derive_more::Display,
     )]
     #[cfg_attr(feature = "sea_orm", derive(DeriveValueType))]
     #[serde(from = "CaseInsensitiveString")]
+    #[debug(r#""{}""#, _0.as_str())]
+    #[display("{}", _0.as_str())]
     pub struct UserId(CaseInsensitiveString);
 
     impl UserId {
@@ -174,11 +186,6 @@ pub mod types {
     {
         fn from(s: T) -> Self {
             Self(s.into())
-        }
-    }
-    impl std::fmt::Display for UserId {
-        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            write!(f, "{}", self.0.as_str())
         }
     }
 
