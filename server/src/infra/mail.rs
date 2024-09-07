@@ -61,14 +61,18 @@ async fn send_email(
 
     if let Err(e) = mailer.port(options.port).build().send(email).await {
         debug!("Error sending email: {:?}", e);
+        let message = e.to_string();
         Err(anyhow!(
-            "{}: SMTP error {}",
-            if e.to_string().contains("CorruptMessage") {
-                "CorruptMessage returned by lettre, this usually means the SMTP encryption setting is wrong"
+            "{}: {}",
+            if message.contains("CorruptMessage")
+                || message.contains("corrupt message")
+                || message.contains("incomplete response")
+            {
+                "SMTP protocol error, this usually means the SMTP encryption setting is wrong. Try TLS with port 465 or STARTTLS with port 587"
             } else {
                 "Error sending email"
             },
-            e.status().map(|s| s.to_string()).unwrap_or_default()
+            message
         ))
     } else {
         Ok(())
