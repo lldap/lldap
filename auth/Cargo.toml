@@ -25,6 +25,11 @@ serde = "*"
 sha2 = "0.9"
 thiserror = "*"
 
+[dependencies.derive_more]
+features = ["debug", "display"]
+default-features = false
+version = "1"
+
 [dependencies.opaque-ke]
 version = "0.6"
 

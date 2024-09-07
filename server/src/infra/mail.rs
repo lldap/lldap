@@ -33,8 +33,8 @@ async fn send_email(
             ),
             server_url.domain().unwrap_or_default()
         )))
-        .from(from)
-        .reply_to(reply_to)
+        .from(from.0)
+        .reply_to(reply_to.0)
         .to(to)
         .subject(subject)
         .singlepart(

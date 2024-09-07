@@ -14,9 +14,22 @@ use strum::{EnumString, IntoStaticStr};
 pub use super::model::UserColumn;
 pub use lldap_auth::types::UserId;
 
-#[derive(PartialEq, Hash, Eq, Clone, Debug, Default, Serialize, Deserialize, DeriveValueType)]
+#[derive(
+    PartialEq,
+    Hash,
+    Eq,
+    Clone,
+    Default,
+    Serialize,
+    Deserialize,
+    DeriveValueType,
+    derive_more::Debug,
+    derive_more::Display,
+)]
 #[serde(try_from = "&str")]
 #[sea_orm(column_type = "String(Some(36))")]
+#[debug(r#""{_0}""#)]
+#[display("{_0}")]
 pub struct Uuid(String);
 
 impl Uuid {
@@ -50,12 +63,6 @@ impl<'a> std::convert::TryFrom<&'a str> for Uuid {
     type Error = anyhow::Error;
     fn try_from(s: &'a str) -> anyhow::Result<Self> {
         Ok(Uuid(uuid::Uuid::parse_str(s)?.to_string()))
-    }
-}
-
-impl std::fmt::Display for Uuid {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.0.as_str())
     }
 }
 
@@ -144,7 +151,17 @@ fn compare_str_case_insensitive(s1: &str, s2: &str) -> Ordering {
 
 macro_rules! make_case_insensitive_comparable_string {
     ($c:ident) => {
-        #[derive(Clone, Debug, Default, Serialize, Deserialize, DeriveValueType)]
+        #[derive(
+            Clone,
+            Default,
+            Serialize,
+            Deserialize,
+            DeriveValueType,
+            derive_more::Debug,
+            derive_more::Display,
+        )]
+        #[debug(r#""{_0}""#)]
+        #[display("{_0}")]
         pub struct $c(String);
 
         impl PartialEq for $c {
@@ -196,12 +213,6 @@ macro_rules! make_case_insensitive_comparable_string {
         impl From<&str> for $c {
             fn from(s: &str) -> Self {
                 Self::new(s)
-            }
-        }
-
-        impl std::fmt::Display for $c {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "{}", self.0.as_str())
             }
         }
 
@@ -429,7 +440,6 @@ impl Default for User {
 }
 
 #[derive(
-    Debug,
     Copy,
     Clone,
     PartialEq,
@@ -440,7 +450,9 @@ impl Default for User {
     Serialize,
     Deserialize,
     DeriveValueType,
+    derive_more::Debug,
 )]
+#[debug("{_0}")]
 pub struct GroupId(pub i32);
 
 impl TryFromU64 for GroupId {
