@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{
     domain::{
         sql_tables::{ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation},
@@ -515,6 +517,55 @@ impl ConfigOverrider for SmtpOpts {
     }
 }
 
+fn expected_keys() -> HashSet<String> {
+    fn process_value(
+        value: &serde_json::Value,
+        keys: &mut HashSet<String>,
+        path: &mut Vec<String>,
+        parent: Option<&str>,
+    ) {
+        match value {
+            serde_json::Value::Object(map) => {
+                if let Some(parent) = parent {
+                    path.push(format!("{}__", parent.to_ascii_uppercase()));
+                }
+                for (key, value) in map {
+                    process_value(value, keys, path, Some(key));
+                }
+                if parent.is_some() {
+                    path.pop();
+                }
+            }
+            _ => {
+                let mut key = path.join("");
+                key.push_str(
+                    parent
+                        .expect("non-object at root")
+                        .to_ascii_uppercase()
+                        .as_str(),
+                );
+                keys.insert(key);
+            }
+        }
+    }
+    let mut keys = HashSet::new();
+    // CLI-only values.
+    keys.insert("LLDAP_CONFIG_FILE".to_string());
+    keys.insert("LLDAP_TEST_EMAIL_TO".to_string());
+    // Alternate spellings from clap.
+    keys.insert("LLDAP_SERVER_KEY_FILE".to_string());
+    keys.insert("LLDAP_SERVER_KEY_SEED".to_string());
+    keys.insert("LLDAP_SMTP_OPTIONS__TO".to_string());
+    // Deprecated
+    keys.insert("LLDAP_SMTP_OPTIONS__TLS_REQUIRED".to_string());
+    // From the config keys.
+    let mut path = Vec::new();
+    let json_value =
+        serde_json::to_value(ConfigurationBuilder::default().private_build().unwrap()).unwrap();
+    process_value(&json_value, &mut keys, &mut path, None);
+    keys
+}
+
 pub fn init<C>(overrides: C) -> Result<Configuration>
 where
     C: TopLevelCommandOpts + ConfigOverrider,
@@ -525,18 +576,31 @@ where
     );
 
     let ignore_keys = ["key_file", "cert_file"];
+    let env_variable_provider =
+        || FileAdapter::wrap(Env::prefixed("LLDAP_").split("__")).ignore(&ignore_keys);
     let figment_config = Figment::from(Serialized::defaults(
         ConfigurationBuilder::default().private_build().unwrap(),
     ))
     .merge(
         FileAdapter::wrap(Toml::file(&overrides.general_config().config_file)).ignore(&ignore_keys),
     )
-    .merge(FileAdapter::wrap(Env::prefixed("LLDAP_").split("__")).ignore(&ignore_keys));
+    .merge(env_variable_provider());
     let mut config: Configuration = figment_config.extract()?;
 
     overrides.override_config(&mut config);
     if config.verbose {
         println!("Configuration: {:#?}", &config);
+    }
+    {
+        let expected_keys = expected_keys();
+        use figment::{Profile, Provider};
+        env_variable_provider().data().unwrap()[&Profile::default()]
+            .keys()
+            .map(|k| k.to_ascii_uppercase())
+            .filter(|k| !expected_keys.contains(k.as_str()))
+            .for_each(|k| {
+                eprintln!("WARNING: Unknown environment variable: LLDAP_{}", k);
+            });
     }
     config.server_setup = Some(get_server_setup(
         &config.key_file,
