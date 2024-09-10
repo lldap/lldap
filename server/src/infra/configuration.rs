@@ -517,34 +517,23 @@ impl ConfigOverrider for SmtpOpts {
     }
 }
 
-fn expected_keys() -> HashSet<String> {
-    fn process_value(
-        value: &serde_json::Value,
-        keys: &mut HashSet<String>,
-        path: &mut Vec<String>,
-        parent: Option<&str>,
-    ) {
-        match value {
-            serde_json::Value::Object(map) => {
-                if let Some(parent) = parent {
-                    path.push(format!("{}__", parent.to_ascii_uppercase()));
-                }
-                for (key, value) in map {
-                    process_value(value, keys, path, Some(key));
-                }
-                if parent.is_some() {
+fn expected_keys(dict: &figment::value::Dict) -> HashSet<String> {
+    use figment::value::{Dict, Value};
+    fn process_value(value: &Dict, keys: &mut HashSet<String>, path: &mut Vec<String>) {
+        for (key, value) in value {
+            match value {
+                Value::Dict(_, dict) => {
+                    path.push(format!("{}__", key.to_ascii_uppercase()));
+                    process_value(dict, keys, path);
                     path.pop();
                 }
-            }
-            _ => {
-                let mut key = path.join("");
-                key.push_str(
-                    parent
-                        .expect("non-object at root")
-                        .to_ascii_uppercase()
-                        .as_str(),
-                );
-                keys.insert(key);
+                _ => {
+                    keys.insert(format!(
+                        "LLDAP_{}{}",
+                        path.join(""),
+                        key.to_ascii_uppercase()
+                    ));
+                }
             }
         }
     }
@@ -560,9 +549,7 @@ fn expected_keys() -> HashSet<String> {
     keys.insert("LLDAP_SMTP_OPTIONS__TLS_REQUIRED".to_string());
     // From the config keys.
     let mut path = Vec::new();
-    let json_value =
-        serde_json::to_value(ConfigurationBuilder::default().private_build().unwrap()).unwrap();
-    process_value(&json_value, &mut keys, &mut path, None);
+    process_value(dict, &mut keys, &mut path);
     keys
 }
 
@@ -592,8 +579,8 @@ where
         println!("Configuration: {:#?}", &config);
     }
     {
-        let expected_keys = expected_keys();
         use figment::{Profile, Provider};
+        let expected_keys = expected_keys(&figment_config.data()?[&Profile::Default]);
         env_variable_provider().data().unwrap()[&Profile::default()]
             .keys()
             .map(|k| k.to_ascii_uppercase())
