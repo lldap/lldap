@@ -263,6 +263,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
     pub async fn do_bind(&mut self, request: &LdapBindRequest) -> (LdapResultCode, String) {
+        if request.dn.is_empty() {
+            return (
+                LdapResultCode::InappropriateAuthentication,
+                "Anonymous bind not allowed".to_string(),
+            );
+        }
         let user_id = match get_user_id_from_distinguished_name(
             &request.dn.to_ascii_lowercase(),
             &self.ldap_info.base_dn,
