@@ -51,13 +51,11 @@ accounts of other services to have a matching unix user).
 > need to communicate with the API, see [scripting]. Example using lldap-cli:
 > `./lldap-cli user update set example-user unix-uid 5000`
 
-For users, you need to add an (integer) `is-unix-user` attribute, set manually
-to 1 for the users you want to enable. This could also be implemented as a
-group membership.
+For users, you need to add an (integer) `unix-uid` attribute to the schema, and
+manually set the value for the users you want to enable to login with PAM.
 
-For groups, you need an (integer) `is-unix-group` attribute, similarly set to 1
-(this cannot be replaced by group membership until LLDAP supports nested group
-memberships).
+For groups, you need an (integer) `unix-gid` attribute, similarly set manually
+to some value.
 
 If you want to change this representation, update the `filter passwd` and
 `filter group` accordingly.
