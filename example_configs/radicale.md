@@ -1,4 +1,4 @@
-# Configuration of Radicale authentication with LLDAP.
+# Configuration of Radicale authentication with LLDAP
 
 ## Native configuration (requires Radicale >=3.2.4)
 
