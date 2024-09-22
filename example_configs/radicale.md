@@ -1,6 +1,6 @@
 # Configuration of Radicale authentication with LLDAP
 
-## Native configuration (requires Radicale >=3.2.4)
+## Native configuration (requires Radicale >=3.3.0)
 
 ```ini
 [auth]
