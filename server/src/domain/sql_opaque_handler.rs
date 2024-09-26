@@ -9,10 +9,9 @@ use super::{
 use async_trait::async_trait;
 use base64::Engine;
 use lldap_auth::opaque;
-use log::info;
 use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, QuerySelect};
 use secstr::SecUtf8;
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument, warn};
 
 type SqlOpaqueHandler = SqlBackendHandler;
 
@@ -103,6 +102,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         request: login::ClientLoginStartRequest,
     ) -> Result<login::ServerLoginStartResponse> {
         let user_id = request.username;
+        info!(r#"OPAQUE login attempt for "{}""#, &user_id);
         let maybe_password_file = self
             .get_password_file_for_user(user_id.clone())
             .await?
@@ -147,9 +147,16 @@ impl OpaqueHandler for SqlOpaqueHandler {
         )?)?;
         // Finish the login: this makes sure the client data is correct, and gives a session key we
         // don't need.
-        let _session_key =
-            opaque::server::login::finish_login(server_login, request.credential_finalization)?
-                .session_key;
+        match opaque::server::login::finish_login(server_login, request.credential_finalization) {
+            Ok(session) => {
+                info!(r#"OPAQUE login successful for "{}""#, &username);
+                let _ = session.session_key;
+            }
+            Err(e) => {
+                warn!(r#"OPAQUE login attempt failed for "{}""#, &username);
+                return Err(e.into());
+            }
+        };
 
         Ok(username)
     }
@@ -191,11 +198,12 @@ impl OpaqueHandler for SqlOpaqueHandler {
             opaque::server::registration::get_password_file(request.registration_upload);
         // Set the user password to the new password.
         let user_update = model::users::ActiveModel {
-            user_id: ActiveValue::Set(username),
+            user_id: ActiveValue::Set(username.clone()),
             password_hash: ActiveValue::Set(Some(password_file.serialize())),
             ..Default::default()
         };
         user_update.update(&self.sql_pool).await?;
+        info!(r#"Successfully (re)set password for "{}""#, &username);
         Ok(())
     }
 }
