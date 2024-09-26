@@ -512,7 +512,7 @@ jobs:
           tags: ${{ matrix.container }}-base
 
       - name: Build ${{ matrix.container }} Base Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           # On PR will fail, force fully uncomment push: true, or docker image will fail for next steps
@@ -613,7 +613,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build ${{ matrix.container }}-rootless Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -627,7 +627,7 @@ jobs:
 
 ### This docker build always the last, due :latest tag pushed multiple times, for whatever variants may added in future add docker build above this
       - name: Build ${{ matrix.container }} Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
