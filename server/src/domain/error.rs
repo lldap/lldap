@@ -3,7 +3,7 @@ use thiserror::Error;
 #[allow(clippy::enum_variant_names)]
 #[derive(Error, Debug)]
 pub enum DomainError {
-    #[error("Authentication error: `{0}`")]
+    #[error("Authentication error {0}")]
     AuthenticationError(String),
     #[error("Database error: `{0}`")]
     DatabaseError(#[from] sea_orm::DbErr),
