@@ -345,7 +345,6 @@ async fn opaque_login_start<Backend>(
 where
     Backend: OpaqueHandler + 'static,
 {
-    info!(r#"OPAQUE login attempt for "{}""#, &request.username);
     data.get_opaque_handler()
         .login_start(request.into_inner())
         .await
@@ -407,14 +406,8 @@ where
         .login_finish(request.into_inner())
         .await
     {
-        Ok(name) => {
-            info!(r#"OPAQUE login successful"#);
-            get_login_successful_response(&data, &name).await
-        }
-        Err(e) => {
-            warn!(r#"OPAQUE login attempt failed"#);
-            Err(e.into())
-        }
+        Ok(name) => get_login_successful_response(&data, &name).await,
+        Err(e) => Err(e.into()),
     }
 }
 
