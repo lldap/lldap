@@ -9,6 +9,7 @@ use super::{
 use async_trait::async_trait;
 use base64::Engine;
 use lldap_auth::opaque;
+use log::info;
 use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, QuerySelect};
 use secstr::SecUtf8;
 use tracing::{debug, instrument};
@@ -70,14 +71,15 @@ impl LoginHandler for SqlBackendHandler {
             .get_password_file_for_user(request.name.clone())
             .await?
         {
-            if let Err(e) = passwords_match(
+            info!(r#"Login attempt for "{}""#, &request.name);
+            if passwords_match(
                 &password_hash,
                 &request.password,
                 self.config.get_server_setup(),
                 &request.name,
-            ) {
-                debug!(r#"Invalid password for "{}": {}"#, &request.name, e);
-            } else {
+            )
+            .is_ok()
+            {
                 return Ok(());
             }
         } else {
@@ -87,7 +89,7 @@ impl LoginHandler for SqlBackendHandler {
             );
         }
         Err(DomainError::AuthenticationError(format!(
-            " for user '{}'",
+            r#"for user "{}""#,
             request.name
         )))
     }
