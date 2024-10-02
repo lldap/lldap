@@ -9,25 +9,13 @@ use crate::{
     },
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
+        form_utils::{read_all_form_attributes, AttributeValue},
         schema::AttributeType,
     },
 };
-use anyhow::{anyhow, bail, ensure, Ok, Result};
-use gloo_console::log;
+use anyhow::{Ok, Result};
 use graphql_client::GraphQLQuery;
-use validator::HasLen;
-use validator_derive::Validate;
-use web_sys::{FormData, HtmlFormElement};
 use yew::prelude::*;
-use yew_form_derive::Model;
-
-/// The fields of the form, with the editable details and the constraints.
-#[derive(Model, Validate, PartialEq, Eq, Clone)]
-pub struct UserModel {
-    #[validate(email)]
-    email: String,
-    display_name: String,
-}
 
 /// The GraphQL query sent to the server to update the user details.
 #[derive(GraphQLQuery)]
@@ -43,7 +31,6 @@ pub struct UpdateUser;
 /// A [yew::Component] to display the user details, with a form allowing to edit them.
 pub struct UserDetailsForm {
     common: CommonComponentParts<Self>,
-    form: yew_form::Form<UserModel>,
     /// True if we just successfully updated the user, to display a success message.
     just_updated: bool,
     user: User,
@@ -65,6 +52,7 @@ pub struct Props {
     pub user: User,
     pub user_attributes_schema: Vec<AttributeSchema>,
     pub is_admin: bool,
+    pub is_edited_user_admin: bool,
 }
 
 impl CommonComponent<UserDetailsForm> for UserDetailsForm {
@@ -76,7 +64,11 @@ impl CommonComponent<UserDetailsForm> for UserDetailsForm {
         match msg {
             Msg::Update => Ok(true),
             Msg::SubmitClicked => self.submit_user_update_form(ctx),
-            Msg::UserUpdated(response) => self.user_update_finished(response),
+            Msg::UserUpdated(Err(e)) => Err(e),
+            Msg::UserUpdated(Result::Ok(_)) => {
+                self.just_updated = true;
+                Ok(true)
+            }
         }
     }
 
@@ -90,13 +82,8 @@ impl Component for UserDetailsForm {
     type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let model = UserModel {
-            email: ctx.props().user.email.clone(),
-            display_name: ctx.props().user.display_name.clone(),
-        };
         Self {
             common: CommonComponentParts::<Self>::create(),
-            form: yew_form::Form::new(model),
             just_updated: false,
             user: ctx.props().user.clone(),
             form_ref: NodeRef::default(),
@@ -168,59 +155,29 @@ impl Component for UserDetailsForm {
     }
 }
 
-type AttributeValue = (String, Vec<String>);
-
-fn get_values_from_form_data(
-    schema: Vec<&AttributeSchema>,
-    form: &FormData,
-) -> Result<Vec<AttributeValue>> {
-    schema
-        .into_iter()
-        .map(|attr| -> Result<AttributeValue> {
-            let val = form
-                .get_all(attr.name.as_str())
-                .iter()
-                .map(|js_val| js_val.as_string().unwrap_or_default())
-                .filter(|val| !val.is_empty())
-                .collect::<Vec<String>>();
-            ensure!(
-                val.length() <= 1 || attr.is_list,
-                "Multiple values supplied for non-list attribute {}",
-                attr.name
-            );
-            Ok((attr.name.clone(), val))
-        })
-        .collect()
-}
-
 fn get_custom_attribute_input(
     attribute_schema: &AttributeSchema,
     user_attributes: &[Attribute],
 ) -> Html {
+    let values = user_attributes
+        .iter()
+        .find(|a| a.name == attribute_schema.name)
+        .map(|attribute| attribute.value.clone())
+        .unwrap_or_default();
     if attribute_schema.is_list {
-        let values = user_attributes
-            .iter()
-            .find(|a| a.name == attribute_schema.name)
-            .map(|attribute| attribute.value.clone())
-            .unwrap_or_default();
         html! {
             <ListAttributeInput
-                name={attribute_schema.name.clone()}
+               name={attribute_schema.name.clone()}
                attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())}
                values={values}
             />
         }
     } else {
-        let value = user_attributes
-            .iter()
-            .find(|a| a.name == attribute_schema.name)
-            .and_then(|attribute| attribute.value.first().cloned())
-            .unwrap_or_default();
         html! {
             <SingleAttributeInput
                 name={attribute_schema.name.clone()}
                 attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())}
-                value={value}
+                value={values.first().cloned().unwrap_or_default()}
             />
         }
     }
@@ -244,9 +201,6 @@ fn get_custom_attribute_static(
 
 impl UserDetailsForm {
     fn submit_user_update_form(&mut self, ctx: &Context<Self>) -> Result<bool> {
-        if !self.form.validate() {
-            bail!("Invalid inputs");
-        }
         // TODO: Handle unloaded files.
         // if let Some(JsFile {
         //     file: Some(_),
@@ -255,36 +209,25 @@ impl UserDetailsForm {
         // {
         //     bail!("Image file hasn't finished loading, try again");
         // }
-        let form = self.form_ref.cast::<HtmlFormElement>().unwrap();
-        let form_data = FormData::new_with_form(&form)
-            .map_err(|e| anyhow!("Failed to get FormData: {:#?}", e.as_string()))?;
-        let mut all_values = get_values_from_form_data(
-            ctx.props()
-                .user_attributes_schema
-                .iter()
-                .filter(|attr| (ctx.props().is_admin && !attr.is_readonly) || attr.is_editable)
-                .collect(),
-            &form_data,
+        let mut all_values = read_all_form_attributes(
+            ctx.props().user_attributes_schema.iter(),
+            &self.form_ref,
+            ctx.props().is_admin,
+            !ctx.props().is_edited_user_admin,
         )?;
         let base_attributes = &self.user.attributes;
-        log!(format!(
-            "base_attributes: {:#?}\nall_values: {:#?}",
-            base_attributes, all_values
-        ));
-        all_values.retain(|(name, val)| {
-            let name = name.clone();
+        all_values.retain(|a| {
             let base_val = base_attributes
                 .iter()
-                .find(|base_val| base_val.name == name);
-            let new_values = val.clone();
+                .find(|base_val| base_val.name == a.name);
             base_val
-                .map(|v| v.value != new_values)
-                .unwrap_or(!new_values.is_empty())
+                .map(|v| v.value != a.values)
+                .unwrap_or(!a.values.is_empty())
         });
         let remove_attributes: Option<Vec<String>> = if all_values.is_empty() {
             None
         } else {
-            Some(all_values.iter().map(|(name, _)| name.clone()).collect())
+            Some(all_values.iter().map(|a| a.name.clone()).collect())
         };
         let insert_attributes: Option<Vec<update_user::AttributeValueInput>> =
             if remove_attributes.is_none() {
@@ -293,8 +236,13 @@ impl UserDetailsForm {
                 Some(
                     all_values
                         .into_iter()
-                        .filter(|(_, value)| !value.is_empty())
-                        .map(|(name, value)| update_user::AttributeValueInput { name, value })
+                        .filter(|a| !a.values.is_empty())
+                        .map(
+                            |AttributeValue { name, values }| update_user::AttributeValueInput {
+                                name,
+                                value: values,
+                            },
+                        )
                         .collect(),
                 )
             };
@@ -323,14 +271,5 @@ impl UserDetailsForm {
             "Error trying to update user",
         );
         Ok(false)
-    }
-
-    fn user_update_finished(&mut self, r: Result<update_user::ResponseData>) -> Result<bool> {
-        r?;
-        let model = self.form.model();
-        self.user.email = model.email;
-        self.user.display_name = model.display_name;
-        self.just_updated = true;
-        Ok(true)
     }
 }
