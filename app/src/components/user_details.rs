@@ -6,7 +6,10 @@ use crate::{
         user_details_form::UserDetailsForm,
     },
     convert_attribute_type,
-    infra::common_component::{CommonComponent, CommonComponentParts},
+    infra::{
+        common_component::{CommonComponent, CommonComponentParts},
+        form_utils::GraphQlAttributeSchema,
+    },
 };
 use anyhow::{bail, Error, Result};
 use graphql_client::GraphQLQuery;
@@ -28,6 +31,17 @@ pub type AttributeSchema = get_user_details::GetUserDetailsSchemaUserSchemaAttri
 pub type AttributeType = get_user_details::AttributeType;
 
 convert_attribute_type!(AttributeType);
+
+impl From<&AttributeSchema> for GraphQlAttributeSchema {
+    fn from(attr: &AttributeSchema) -> Self {
+        Self {
+            name: attr.name.clone(),
+            is_list: attr.is_list,
+            is_readonly: attr.is_readonly,
+            is_editable: attr.is_editable,
+        }
+    }
+}
 
 pub struct UserDetails {
     common: CommonComponentParts<Self>,
@@ -219,6 +233,7 @@ impl Component for UserDetails {
                       user={u.clone()}
                       user_attributes_schema={schema.clone()}
                       is_admin={ctx.props().is_admin}
+                      is_edited_user_admin={u.groups.iter().any(|g| g.display_name == "lldap_admin")}
                     />
                     {self.view_group_memberships(ctx, u)}
                     {self.view_add_group_button(ctx, u)}

@@ -11,16 +11,15 @@ use crate::{
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
+        form_utils::{read_all_form_attributes, AttributeValue, GraphQlAttributeSchema},
         schema::AttributeType,
     },
 };
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{ensure, Result};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use lldap_auth::{opaque, registration};
-use validator::validate_email;
 use validator_derive::Validate;
-use web_sys::{FormData, HtmlFormElement};
 use yew::prelude::*;
 use yew_form_derive::Model;
 use yew_router::{prelude::History, scope_ext::RouterScopeExt};
@@ -39,6 +38,17 @@ use get_user_attributes_schema::ResponseData;
 pub type Attribute = get_user_attributes_schema::GetUserAttributesSchemaSchemaUserSchemaAttributes;
 
 convert_attribute_type!(get_user_attributes_schema::AttributeType);
+
+impl From<&Attribute> for GraphQlAttributeSchema {
+    fn from(attr: &Attribute) -> Self {
+        Self {
+            name: attr.name.clone(),
+            is_list: attr.is_list,
+            is_readonly: attr.is_readonly,
+            is_editable: attr.is_editable,
+        }
+    }
+}
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -108,37 +118,24 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
             Msg::SubmitForm => {
                 ensure!(self.form.validate(), "Check the form for errors");
 
-                let form = self.form_ref.cast::<HtmlFormElement>().unwrap();
-                let form_data = FormData::new_with_form(&form)
-                    .map_err(|e| anyhow!("Failed to get FormData: {:#?}", e.as_string()))?;
-                let all_values = get_values_from_form_data(
-                    self.attributes_schema
-                        .iter()
-                        .flatten()
-                        .filter(|attr| !attr.is_readonly)
-                        .collect(),
-                    &form_data,
+                let all_values = read_all_form_attributes(
+                    self.attributes_schema.iter().flatten(),
+                    &self.form_ref,
+                    true,
+                    true,
                 )?;
-                {
-                    let email_values = &all_values
-                        .iter()
-                        .find(|(name, _)| name == "mail")
-                        .ok_or_else(|| anyhow!("Email is required"))?
-                        .1;
-                    ensure!(email_values.len() == 1, "Email is required");
-                    ensure!(validate_email(&email_values[0]), "Email is not valid");
-                }
-                let attributes = if all_values.is_empty() {
-                    None
-                } else {
-                    Some(
-                        all_values
-                            .into_iter()
-                            .filter(|(_, value)| !value.is_empty())
-                            .map(|(name, value)| create_user::AttributeValueInput { name, value })
-                            .collect(),
-                    )
-                };
+                let attributes = Some(
+                    all_values
+                        .into_iter()
+                        .filter(|a| !a.values.is_empty())
+                        .map(
+                            |AttributeValue { name, values }| create_user::AttributeValueInput {
+                                name,
+                                value: values,
+                            },
+                        )
+                        .collect(),
+                );
 
                 let model = self.form.model();
                 let req = create_user::Variables {
@@ -321,29 +318,4 @@ pub fn get_custom_attribute_input(attribute_schema: &Attribute) -> Html {
             />
         }
     }
-}
-
-type AttributeValue = (String, Vec<String>);
-
-fn get_values_from_form_data(
-    schema: Vec<&Attribute>,
-    form: &FormData,
-) -> Result<Vec<AttributeValue>> {
-    schema
-        .into_iter()
-        .map(|attr| -> Result<AttributeValue> {
-            let val = form
-                .get_all(attr.name.as_str())
-                .iter()
-                .map(|js_val| js_val.as_string().unwrap_or_default())
-                .filter(|val| !val.is_empty())
-                .collect::<Vec<String>>();
-            ensure!(
-                val.len() <= 1 || attr.is_list,
-                "Multiple values supplied for non-list attribute {}",
-                attr.name
-            );
-            Ok((attr.name.clone(), val))
-        })
-        .collect()
 }

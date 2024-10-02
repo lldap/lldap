@@ -1,6 +1,7 @@
 pub mod api;
 pub mod common_component;
 pub mod cookies;
+pub mod form_utils;
 pub mod functional;
 pub mod graphql;
 pub mod modal;

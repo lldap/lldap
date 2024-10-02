@@ -277,6 +277,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                     .remove_attributes
                     .unwrap_or_default()
                     .into_iter()
+                    .filter(|attr| attr != "mail") // mail can be sent when editing an admin user
                     .map(Into::into)
                     .collect(),
                 insert_attributes,
