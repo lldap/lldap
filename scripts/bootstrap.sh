@@ -3,13 +3,23 @@
 set -e
 set -o pipefail
 
-LLDAP_URL="${LLDAP_URL}"
-LLDAP_ADMIN_USERNAME="${LLDAP_ADMIN_USERNAME}"
-LLDAP_ADMIN_PASSWORD="${LLDAP_ADMIN_PASSWORD}"
-USER_CONFIGS_DIR="${USER_CONFIGS_DIR:-/user-configs}"
-GROUP_CONFIGS_DIR="${GROUP_CONFIGS_DIR:-/group-configs}"
+LLDAP_URL="${LLDAP_URL:-http://localhost:17170}"
+LLDAP_ADMIN_USERNAME="${LLDAP_ADMIN_USERNAME:-admin}"
+LLDAP_ADMIN_PASSWORD="${LLDAP_ADMIN_PASSWORD:-password}"
+USER_SCHEMAS_DIR="${USER_SCHEMAS_DIR:-/bootstrap/user-schemas}"
+GROUP_SCHEMAS_DIR="${GROUP_SCHEMAS_DIR:-/bootstrap/group-schemas}"
+USER_CONFIGS_DIR="${USER_CONFIGS_DIR:-/bootstrap/user-configs}"
+GROUP_CONFIGS_DIR="${GROUP_CONFIGS_DIR:-/bootstrap/group-configs}"
 LLDAP_SET_PASSWORD_PATH="${LLDAP_SET_PASSWORD_PATH:-/app/lldap_set_password}"
 DO_CLEANUP="${DO_CLEANUP:-false}"
+
+# Fallback to support legacy defaults
+if [[ ! -d $USER_CONFIGS_DIR ]] && [[ -d "/user-configs" ]]; then
+  USER_CONFIGS_DIR="/user-configs"
+fi
+if [[ ! -d $GROUP_CONFIGS_DIR ]] && [[ -d "/group-configs" ]]; then
+  GROUP_CONFIGS_DIR="/group-configs"
+fi
 
 check_install_dependencies() {
   local commands=('curl' 'jq' 'jo')
@@ -280,6 +290,80 @@ delete_user() {
   fi
 }
 
+get_group_property_list() {
+  local query='{"query":"query GetGroupAttributesSchema { schema { groupSchema { attributes { name }}}}","operationName":"GetGroupAttributesSchema"}'
+  make_query <(printf '%s' "$query") <(printf '{}')
+}
+group_property_exists() {
+  if [[ "$(get_group_property_list | jq --raw-output --arg name "$1" '.data.schema.groupSchema.attributes | any(.[]; select(.name == $name))')" == 'true' ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+create_group_schema_property() {
+  local name="$1"
+  local attributeType="$2"
+  local isEditable="$3"
+  local isList="$4"
+  local isVisible="$5"
+
+  if group_property_exists "$name"; then
+    printf 'Group property "%s" already exists\n' "$name"
+    return
+  fi
+
+  # shellcheck disable=SC2016
+  local query='{"query":"mutation CreateGroupAttribute($name: String!, $attributeType: AttributeType!, $isList: Boolean!, $isVisible: Boolean!, $isEditable: Boolean!) {addGroupAttribute(name: $name, attributeType: $attributeType, isList: $isList, isVisible: $isVisible, isEditable: $isEditable) {ok}}","operationName":"CreateGroupAttribute"}'
+
+  local response='' error=''
+  response="$(make_query <(printf '%s' "$query") <(jo -- name="$name" attributeType="$attributeType" isEditable="$isEditable" isList="$isList" isVisible="$isVisible"))"
+  error="$(printf '%s' "$response" | jq --raw-output '.errors | if . != null then .[].message else empty end')"
+  if [[ -n "$error" ]]; then
+    printf '%s\n' "$error"
+  else
+    printf 'Group attribute "%s" successfully created\n' "$name"
+  fi
+}
+
+get_user_property_list() {
+  local query='{"query":"query GetUserAttributesSchema { schema { userSchema { attributes { name }}}}","operationName":"GetUserAttributesSchema"}'
+  make_query <(printf '%s' "$query") <(printf '{}')
+}
+user_property_exists() {
+  if [[ "$(get_user_property_list | jq --raw-output --arg name "$1" '.data.schema.userSchema.attributes | any(.[]; select(.name == $name))')" == 'true' ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+create_user_schema_property() {
+  local name="$1"
+  local attributeType="$2"
+  local isEditable="$3"
+  local isList="$4"
+  local isVisible="$5"
+
+  if user_property_exists "$name"; then
+    printf 'User property "%s" already exists\n' "$name"
+    return
+  fi
+
+  # shellcheck disable=SC2016
+  local query='{"query":"mutation CreateUserAttribute($name: String!, $attributeType: AttributeType!, $isList: Boolean!, $isVisible: Boolean!, $isEditable: Boolean!) {addUserAttribute(name: $name, attributeType: $attributeType, isList: $isList, isVisible: $isVisible, isEditable: $isEditable) {ok}}","operationName":"CreateUserAttribute"}'
+
+  local response='' error=''
+  response="$(make_query <(printf '%s' "$query") <(jo -- name="$name" attributeType="$attributeType" isEditable="$isEditable" isList="$isList" isVisible="$isVisible"))"
+  error="$(printf '%s' "$response" | jq --raw-output '.errors | if . != null then .[].message else empty end')"
+  if [[ -n "$error" ]]; then
+    printf '%s\n' "$error"
+  else
+    printf 'User attribute "%s" successfully created\n' "$name"
+  fi
+}
+
 __common_user_mutation_query() {
   local \
     query="$1" \
@@ -387,8 +471,18 @@ main() {
 
   local user_config_files=("${USER_CONFIGS_DIR}"/*.json)
   local group_config_files=("${GROUP_CONFIGS_DIR}"/*.json)
+  local user_schema_files=()
+  local group_schema_files=()
 
-  if ! check_configs_validity "${group_config_files[@]}" "${user_config_files[@]}"; then
+  local file=''
+  [[ -d "$USER_SCHEMAS_DIR" ]] && for file in "${USER_SCHEMAS_DIR}"/*.json; do
+    user_schema_files+=("$file")
+  done
+  [[ -d "$GROUP_SCHEMAS_DIR" ]] && for file in "${GROUP_SCHEMAS_DIR}"/*.json; do
+    group_schema_files+=("$file")
+  done
+
+  if ! check_configs_validity "${group_config_files[@]}" "${user_config_files[@]}" "${group_schema_files[@]}" "${user_schema_files[@]}"; then
     exit 1
   fi
 
@@ -398,6 +492,28 @@ main() {
   done
 
   auth "$LLDAP_URL" "$LLDAP_ADMIN_USERNAME" "$LLDAP_ADMIN_PASSWORD"
+
+  printf -- '\n--- group schemas ---\n'
+  local group_schema_config_row=''
+  [[ ${#group_schema_files[@]} -gt 0 ]] && while read -r group_schema_config_row; do
+    local field='' name='' attributeType='' isEditable='' isList='' isVisible=''
+    for field in 'name' 'attributeType' 'isEditable' 'isList' 'isVisible'; do
+      declare "$field"="$(printf '%s' "$group_schema_config_row" | jq --raw-output --arg field "$field" '.[$field]')"
+    done
+    create_group_schema_property "$name" "$attributeType" "$isEditable" "$isList" "$isVisible"
+  done < <(jq --compact-output '.[]' -- "${group_schema_files[@]}")
+  printf -- '--- group schemas ---\n'
+
+  printf -- '\n--- user schemas ---\n'
+  local user_schema_config_row=''
+  [[ ${#user_schema_files[@]} -gt 0 ]] && while read -r user_schema_config_row; do
+    local field='' name='' attributeType='' isEditable='' isList='' isVisible=''
+    for field in 'name' 'attributeType' 'isEditable' 'isList' 'isVisible'; do
+      declare "$field"="$(printf '%s' "$user_schema_config_row" | jq --raw-output --arg field "$field" '.[$field]')"
+    done
+    create_user_schema_property "$name" "$attributeType" "$isEditable" "$isList" "$isVisible"
+  done < <(jq --compact-output '.[]' -- "${user_schema_files[@]}")
+  printf -- '--- user schemas ---\n'
 
   local redundant_groups=''
   redundant_groups="$(get_group_list | jq '[ .data.groups[].displayName ]' | jq --compact-output '. - ["lldap_admin","lldap_password_manager","lldap_strict_readonly"]')"
