@@ -1,4 +1,4 @@
-# Bootstrapping lldap using [bootstrap.sh](bootstrap.sh) script
+# Bootstrapping lldap using [bootstrap.sh](/scripts/bootstrap.sh) script
 
 bootstrap.sh allows managing your lldap in a git-ops, declarative way using JSON config files.
 
@@ -12,7 +12,7 @@ The script can:
 * create groups
 * delete redundant users and groups (when `DO_CLEANUP` env var is true)
 * maintain the desired state described in JSON config files
-
+* create user/group user-defined attributes
 
 ![](bootstrap-example-log-1.jpeg)
 
@@ -27,11 +27,13 @@ The script can:
 
 ## Environment variables
 
-- `LLDAP_URL` or `LLDAP_URL_FILE` - URL to your lldap instance or path to file that contains URL (**MANDATORY**)
-- `LLDAP_ADMIN_USERNAME` or `LLDAP_ADMIN_USERNAME_FILE` - admin username or path to file that contains username (**MANDATORY**)
-- `LLDAP_ADMIN_PASSWORD` or `LLDAP_ADMIN_PASSWORD_FILE` - admin password or path to file that contains password (**MANDATORY**)
-- `USER_CONFIGS_DIR` (default value: `/user-configs`) - directory where the user JSON configs could be found
-- `GROUP_CONFIGS_DIR` (default value: `/group-configs`) - directory where the group JSON configs could be found
+- `LLDAP_URL` or `LLDAP_URL_FILE` (default value: `http://localhost:17170`) - URL to your lldap instance or path to file that contains URL
+- `LLDAP_ADMIN_USERNAME` or `LLDAP_ADMIN_USERNAME_FILE` (default value: `admin`) - admin username or path to file that contains username
+- `LLDAP_ADMIN_PASSWORD` or `LLDAP_ADMIN_PASSWORD_FILE` (default value: `password`) - admin password or path to file that contains password
+- `USER_CONFIGS_DIR` (default value: `/bootstrap/user-configs`) - directory where the user JSON configs could be found
+- `GROUP_CONFIGS_DIR` (default value: `/bootstrap/group-configs`) - directory where the group JSON configs could be found
+- `USER_SCHEMAS_DIR` (default value: `/bootstrap/user-schemas`) - directory where the user schema JSON configs could be found
+- `GROUP_SCHEMAS_DIR` (default value: `/bootstrap/group-schemas`) - directory where the group schema JSON configs could be found
 - `LLDAP_SET_PASSWORD_PATH` - path to the `lldap_set_password` utility (default value: `/app/lldap_set_password`)
 - `DO_CLEANUP` (default value: `false`) - delete groups and users not specified in config files, also remove users from groups that they do not belong to
 
@@ -96,6 +98,44 @@ Fields description:
 
 ```
 
+### User and group schema config file example
+
+User and group schema have the same structure.
+
+Fields description:
+
+* `name`: name of field, case insensitve - you should use lowercase
+* `attributeType`: `STRING` / `INTEGER` / `JPEG` / `DATE_TIME`
+* `isList`: single on multiple value field
+* `isEditable`: self-explanatory
+* `isVisible`: self-explanatory
+
+```json
+[
+  {
+    "name": "uid",
+    "attributeType": "INTEGER",
+    "isEditable": false,
+    "isList": false,
+    "isVisible": true
+  },
+  {
+    "name": "mailbox",
+    "attributeType": "STRING",
+    "isEditable": false,
+    "isList": false,
+    "isVisible": true
+  },
+  {
+    "name": "mail_alias",
+    "attributeType": "STRING",
+    "isEditable": false,
+    "isList": true,
+    "isVisible": true
+  }
+]
+```
+
 ## Usage example
 
 ### Manually
@@ -110,9 +150,19 @@ export LLDAP_ADMIN_USERNAME=admin
 export LLDAP_ADMIN_PASSWORD=changeme
 export USER_CONFIGS_DIR="$(realpath ./configs/user)"
 export GROUP_CONFIGS_DIR="$(realpath ./configs/group)"
+export USER_SCHEMAS_DIR="$(realpath ./configs/user-schema)"
+export GROUP_SCHEMAS_DIR="$(realpath ./configs/group-schema)"
 export LLDAP_SET_PASSWORD_PATH="$(realpath ./lldap_set_password)"
 export DO_CLEANUP=false
 ./bootstrap.sh
+```
+
+### Manually from running docker container or service
+
+After setting a docker container you can bootstrap users using:
+
+```
+docker exec -e LLDAP_ADMIN_PASSWORD_FILE=password -v ./bootstrap:/bootstrap -it $(docker ps --filter name=lldap -q) /app/bootstrap.sh
 ```
 
 ### Docker compose
@@ -129,10 +179,17 @@ Let's suppose you have the next file structure:
    │  ├─ ...
    │  └─ user-n.json
    └─ group-configs
-      ├─ group-1.json
+   |  ├─ group-1.json
+   |  ├─ ...
+   |  └─ group-n.json
+   └─ user-schames
+   |  ├─ user-attrs-1.json
+   |  ├─ ...
+   |  └─ user-attrs-n.json
+   └─ group-schames
+      ├─ group-attrs-1.json
       ├─ ...
-      └─ group-n.json
-   
+      └─ group-attrs-n.json
 ```
 
 You should mount `bootstrap` dir to lldap container and set the corresponding `env` variables:
@@ -160,6 +217,8 @@ services:
       - LLDAP_ADMIN_PASSWORD=changeme # same as LLDAP_LDAP_USER_PASS
       - USER_CONFIGS_DIR=/bootstrap/user-configs
       - GROUP_CONFIGS_DIR=/bootstrap/group-configs
+      - USER_SCHEMAS_DIR=/bootstrap/user-schemas
+      - GROUP_SCHEMAS_DIR=/bootstrap/group-schemas
       - DO_CLEANUP=false
 ```
 
@@ -205,14 +264,15 @@ spec:
           volumeMounts:
             - name: bootstrap
               mountPath: /bootstrap/bootstrap.sh
+              readOnly: true
               subPath: bootstrap.sh
 
             - name: user-configs
-              mountPath: /user-configs
+              mountPath: /bootstrap/user-configs
               readOnly: true
 
             - name: group-configs
-              mountPath: /group-configs
+              mountPath: /bootstrap/group-configs
               readOnly: true
 
       volumes:
