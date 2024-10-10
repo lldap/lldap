@@ -471,8 +471,16 @@ main() {
 
   local user_config_files=("${USER_CONFIGS_DIR}"/*.json)
   local group_config_files=("${GROUP_CONFIGS_DIR}"/*.json)
-  local user_schema_files=("${USER_SCHEMAS_DIR}"/*.json)
-  local group_schema_files=("${GROUP_SCHEMAS_DIR}"/*.json)
+  local user_schema_files=()
+  local group_schema_files=()
+
+  local file=''
+  [[ -d "$USER_SCHEMAS_DIR" ]] && for file in "${USER_SCHEMAS_DIR}"/*.json; do
+    user_schema_files+=("$file")
+  done
+  [[ -d "$GROUP_SCHEMAS_DIR" ]] && for file in "${GROUP_SCHEMAS_DIR}"/*.json; do
+    group_schema_files+=("$file")
+  done
 
   if ! check_configs_validity "${group_config_files[@]}" "${user_config_files[@]}" "${group_schema_files[@]}" "${user_schema_files[@]}"; then
     exit 1
@@ -487,20 +495,18 @@ main() {
 
   printf -- '\n--- group schemas ---\n'
   local group_schema_config_row=''
-  local group_props=()
-  while read -r group_schema_config_row; do
+  [[ ${#group_schema_files[@]} -gt 0 ]] && while read -r group_schema_config_row; do
     local field='' name='' attributeType='' isEditable='' isList='' isVisible=''
     for field in 'name' 'attributeType' 'isEditable' 'isList' 'isVisible'; do
       declare "$field"="$(printf '%s' "$group_schema_config_row" | jq --raw-output --arg field "$field" '.[$field]')"
     done
-    group_props+=("$name")
     create_group_schema_property "$name" "$attributeType" "$isEditable" "$isList" "$isVisible"
   done < <(jq --compact-output '.[]' -- "${group_schema_files[@]}")
   printf -- '--- group schemas ---\n'
 
   printf -- '\n--- user schemas ---\n'
   local user_schema_config_row=''
-  while read -r user_schema_config_row; do
+  [[ ${#user_schema_files[@]} -gt 0 ]] && while read -r user_schema_config_row; do
     local field='' name='' attributeType='' isEditable='' isList='' isVisible=''
     for field in 'name' 'attributeType' 'isEditable' 'isList' 'isVisible'; do
       declare "$field"="$(printf '%s' "$user_schema_config_row" | jq --raw-output --arg field "$field" '.[$field]')"
