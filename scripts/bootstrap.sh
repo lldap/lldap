@@ -13,6 +13,14 @@ GROUP_CONFIGS_DIR="${GROUP_CONFIGS_DIR:-/bootstrap/group-configs}"
 LLDAP_SET_PASSWORD_PATH="${LLDAP_SET_PASSWORD_PATH:-/app/lldap_set_password}"
 DO_CLEANUP="${DO_CLEANUP:-false}"
 
+# Fallback to support legacy defaults
+if [[ ! -d $USER_CONFIGS_DIR ]] && [[ -d "/user-configs" ]]; then
+  USER_CONFIGS_DIR="/user-configs"
+fi
+if [[ ! -d $GROUP_CONFIGS_DIR ]] && [[ -d "/group-configs" ]]; then
+  GROUP_CONFIGS_DIR="/group-configs"
+fi
+
 check_install_dependencies() {
   local commands=('curl' 'jq' 'jo')
   local commands_not_found='false'
