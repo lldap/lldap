@@ -182,11 +182,11 @@ Let's suppose you have the next file structure:
    |  ├─ group-1.json
    |  ├─ ...
    |  └─ group-n.json
-   └─ user-schames
+   └─ user-schemas
    |  ├─ user-attrs-1.json
    |  ├─ ...
    |  └─ user-attrs-n.json
-   └─ group-schames
+   └─ group-schemas
       ├─ group-attrs-1.json
       ├─ ...
       └─ group-attrs-n.json
