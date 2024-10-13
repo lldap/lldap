@@ -131,12 +131,12 @@ impl Serialized {
     }
 }
 
-impl Into<Vec<String>> for Serialized {
-    fn into(self) -> Vec<String> {
-        if let Ok(values) = self.convert_to::<Vec<String>>() {
+impl From<Serialized> for Vec<String> {
+    fn from(val: Serialized) -> Self {
+        if let Ok(values) = val.convert_to::<Vec<String>>() {
             return values;
         }
-        if let Ok(value) = self.convert_to::<String>() {
+        if let Ok(value) = val.convert_to::<String>() {
             return vec![value];
         }
         vec![]

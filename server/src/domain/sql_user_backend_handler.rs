@@ -33,7 +33,7 @@ fn attribute_condition(name: AttributeName, value: Option<Serialized>) -> Cond {
                 value
                     .map(|value| {
                         let vec: Vec<String> = value.into();
-                        model::UserAttributesSearchColumn::Text.eq(vec.get(0).unwrap())
+                        model::UserAttributesSearchColumn::Text.eq(vec.first().unwrap())
                     })
                     .unwrap_or_else(|| SimpleExpr::Constant(true.into())),
             )
