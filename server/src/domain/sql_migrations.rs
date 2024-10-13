@@ -1197,6 +1197,31 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
     )
     .await?;
 
+    transaction
+            .execute(
+                builder.build(
+                    Query::insert()
+                        .into_table(UserAttributeSchema::Table)
+                        .columns([
+                            UserAttributeSchema::UserAttributeSchemaName,
+                            UserAttributeSchema::UserAttributeSchemaType,
+                            UserAttributeSchema::UserAttributeSchemaIsList,
+                            UserAttributeSchema::UserAttributeSchemaIsUserVisible,
+                            UserAttributeSchema::UserAttributeSchemaIsUserEditable,
+                            UserAttributeSchema::UserAttributeSchemaIsHardcoded,
+                        ])
+                        .values_panic([
+                            "mail".into(),
+                            AttributeType::String.into(),
+                            false.into(),
+                            true.into(),
+                            true.into(),
+                            true.into(),
+                        ])
+                ),
+            )
+            .await?;
+
     Ok(transaction)
 }
 

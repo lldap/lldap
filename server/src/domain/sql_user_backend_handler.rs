@@ -25,21 +25,23 @@ use tracing::instrument;
 fn attribute_condition(name: AttributeName, value: Option<Serialized>) -> Cond {
     Expr::in_subquery(
         Expr::col(UserColumn::UserId.as_column_ref()),
-        model::UserAttributesSearch::find()
-            .select_only()
-            .column(model::UserAttributesSearchColumn::UserId)
-            .filter(model::UserAttributesSearchColumn::AttributeName.eq(name))
-            .filter(
-                value
-                    .map(|value| {
-                        let vec: Vec<String> = value.into();
-                        model::UserAttributesSearchColumn::Text.eq(vec.first().unwrap())
-                    })
-                    .unwrap_or_else(|| SimpleExpr::Constant(true.into())),
-            )
-            .into_query(),
-    )
-    .into_condition()
+        value.map(|value| {
+            let vec: Vec<String> = value.into();
+            model::UserAttributesSearch::find()
+                .select_only()
+                .column(model::UserAttributesSearchColumn::UserId)
+                .filter(model::UserAttributesSearchColumn::AttributeName.eq(name.clone()))
+                .filter(model::UserAttributesSearchColumn::Text.eq(vec.first().unwrap()))
+                .into_query()
+        })
+        .unwrap_or_else(|| {
+            model::UserAttributes::find()
+                .select_only()
+                .column(model::UserAttributesColumn::UserId)
+                .filter(model::UserAttributesColumn::AttributeName.eq(name))
+                .into_query()
+        })
+    ).into_condition()
 }
 
 fn attribute_condition_substring(name: AttributeName, filter: SubStringFilter) -> Cond {
@@ -198,7 +200,7 @@ impl SqlBackendHandler {
         let update_user = model::users::ActiveModel {
             user_id: ActiveValue::Set(request.user_id.clone()),
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
-            lowercase_email: lower_email.map(ActiveValue::Set).unwrap_or_default(),
+            lowercase_email: lower_email.clone().map(ActiveValue::Set).unwrap_or_default(),
             display_name: to_value(&request.display_name),
             ..Default::default()
         };
@@ -309,6 +311,9 @@ impl SqlBackendHandler {
         if let Some(value) = &request.last_name {
             process_search_values(vec![value.into()], "last_name".into());
         }
+        if let Some(value) = lower_email {
+            process_search_values(vec![value], "mail".into());
+        }
         for attribute in request.insert_attributes {
             if schema
                 .user_attributes
@@ -380,21 +385,21 @@ impl UserBackendHandler for SqlBackendHandler {
         let new_user = model::users::ActiveModel {
             user_id: Set(request.user_id.clone()),
             email: Set(request.email),
-            lowercase_email: Set(lower_email),
+            lowercase_email: Set(lower_email.clone()),
             display_name: to_value(&request.display_name),
             creation_date: ActiveValue::Set(now),
             uuid: ActiveValue::Set(uuid),
             ..Default::default()
         };
         let mut new_user_attributes = Vec::new();
-        if let Some(first_name) = request.first_name {
+        if let Some(first_name) = &request.first_name {
             new_user_attributes.push(model::user_attributes::ActiveModel {
                 user_id: Set(request.user_id.clone()),
                 attribute_name: Set("first_name".into()),
                 value: Set(Serialized::from(&first_name)),
             });
         }
-        if let Some(last_name) = request.last_name {
+        if let Some(last_name) = &request.last_name {
             new_user_attributes.push(model::user_attributes::ActiveModel {
                 user_id: Set(request.user_id.clone()),
                 attribute_name: Set("last_name".into()),
@@ -412,7 +417,7 @@ impl UserBackendHandler for SqlBackendHandler {
             .transaction::<_, (), DomainError>(|transaction| {
                 Box::pin(async move {
                     let schema = Self::get_schema_with_transaction(transaction).await?;
-                    for attribute in request.attributes {
+                    for attribute in request.attributes.clone() {
                         if schema
                             .user_attributes
                             .get_attribute_type(&attribute.name)
@@ -437,6 +442,50 @@ impl UserBackendHandler for SqlBackendHandler {
                             .exec(transaction)
                             .await?;
                     }
+
+                    let mut insert_user_attributes_search = Vec::new();
+                    let mut process_search_values = |values: Vec<String>, attribute_name: AttributeName| {
+                            let mut no = 1;
+                            for text in values {
+                                insert_user_attributes_search.push(model::user_attributes_search::ActiveModel {
+                                    user_id: Set(request.user_id.clone()),
+                                    attribute_name: Set(attribute_name.clone()),
+                                    no: Set(no),
+                                    text: Set(text),
+                                });
+                                no += 1;
+                            }
+                        };
+                    if let Some(value) = &request.first_name {
+                        process_search_values(vec![value.into()], "first_name".into());
+                    }
+                    if let Some(value) = &request.last_name {
+                        process_search_values(vec![value.into()], "last_name".into());
+                    }
+                    if !lower_email.is_empty() {
+                        process_search_values(vec![lower_email], "mail".into());
+                    }
+                    for attribute in request.attributes {
+                        if schema
+                            .user_attributes
+                            .get_attribute_type(&attribute.name)
+                            .is_some()
+                        {
+                            process_search_values(attribute.value.into(), attribute.name.clone());
+                        } else {
+                            return Err(DomainError::InternalError(format!(
+                                "User attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
+                                &attribute.name
+                            )));
+                        }
+                    }
+
+                    if !insert_user_attributes_search.is_empty() {
+                        model::UserAttributesSearch::insert_many(insert_user_attributes_search)
+                            .exec(transaction)
+                            .await?;
+                    }
+
                     Ok(())
                 })
             })
@@ -549,6 +598,24 @@ mod tests {
         )
         .await;
         assert_eq!(users, vec!["bob"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_users_attribute_filter() {
+        let fixture = TestFixture::new().await;
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::AttributeSubString(
+                AttributeName::from("mail"),
+                SubStringFilter {
+                    initial: None,
+                    any: vec![],
+                    final_: Some("@bob.bob".to_owned()),
+                }
+            )),
+        )
+        .await;
+        assert_eq!(users, vec!["bob", "john", "nogroup", "patrick"]);
     }
 
     #[tokio::test]
