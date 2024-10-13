@@ -131,6 +131,18 @@ impl Serialized {
     }
 }
 
+impl Into<Vec<String>> for Serialized {
+    fn into(self) -> Vec<String> {
+        if let Ok(values) = self.convert_to::<Vec<String>>() {
+            return values;
+        }
+        if let Ok(value) = self.convert_to::<String>() {
+            return vec![value];
+        }
+        vec![]
+    }
+}
+
 fn compare_str_case_insensitive(s1: &str, s2: &str) -> Ordering {
     let mut it_1 = s1.chars().flat_map(|c| c.to_lowercase());
     let mut it_2 = s2.chars().flat_map(|c| c.to_lowercase());
@@ -412,6 +424,12 @@ impl IntoActiveValue<Serialized> for JpegPhoto {
 pub struct AttributeValue {
     pub name: AttributeName,
     pub value: Serialized,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
+pub struct AttributeValueSearch {
+    pub name: AttributeName,
+    pub text: String,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]

@@ -2,7 +2,7 @@ use crate::domain::{
     error::{DomainError, Result},
     handler::{
         CreateUserRequest, UpdateUserRequest, UserBackendHandler, UserListerBackendHandler,
-        UserRequestFilter,
+        UserRequestFilter, SubStringFilter
     },
     model::{self, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
@@ -25,15 +25,31 @@ use tracing::instrument;
 fn attribute_condition(name: AttributeName, value: Option<Serialized>) -> Cond {
     Expr::in_subquery(
         Expr::col(UserColumn::UserId.as_column_ref()),
-        model::UserAttributes::find()
+        model::UserAttributesSearch::find()
             .select_only()
-            .column(model::UserAttributesColumn::UserId)
-            .filter(model::UserAttributesColumn::AttributeName.eq(name))
+            .column(model::UserAttributesSearchColumn::UserId)
+            .filter(model::UserAttributesSearchColumn::AttributeName.eq(name))
             .filter(
                 value
-                    .map(|value| model::UserAttributesColumn::Value.eq(value))
+                    .map(|value| {
+                        let vec: Vec<String> = value.into();
+                        model::UserAttributesSearchColumn::Text.eq(vec.get(0).unwrap())
+                    })
                     .unwrap_or_else(|| SimpleExpr::Constant(true.into())),
             )
+            .into_query(),
+    )
+    .into_condition()
+}
+
+fn attribute_condition_substring(name: AttributeName, filter: SubStringFilter) -> Cond {
+    Expr::in_subquery(
+        Expr::col(UserColumn::UserId.as_column_ref()),
+        model::UserAttributesSearch::find()
+            .select_only()
+            .column(model::UserAttributesSearchColumn::UserId)
+            .filter(model::UserAttributesSearchColumn::AttributeName.eq(name))
+            .filter(model::UserAttributesSearchColumn::Text.like(filter.to_sql_filter()))
             .into_query(),
     )
     .into_condition()
@@ -102,6 +118,7 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
                 .like(filter.to_sql_filter())
                 .into_condition()
         }
+        AttributeSubString(column, filter) => attribute_condition_substring(column, filter),
         CustomAttributePresent(name) => attribute_condition(name, None),
     }
 }
@@ -216,7 +233,7 @@ impl SqlBackendHandler {
             process_serialized(avatar.into_active_value(), "avatar".into());
         }
         let schema = Self::get_schema_with_transaction(transaction).await?;
-        for attribute in request.insert_attributes {
+        for attribute in request.insert_attributes.clone() {
             if schema
                 .user_attributes
                 .get_attribute_type(&attribute.name)
@@ -246,6 +263,11 @@ impl SqlBackendHandler {
         }
         update_user.update(transaction).await?;
         if !remove_user_attributes.is_empty() {
+            model::UserAttributesSearch::delete_many()
+                .filter(model::UserAttributesSearchColumn::UserId.eq(&request.user_id))
+                .filter(model::UserAttributesSearchColumn::AttributeName.is_in(remove_user_attributes.clone()))
+                .exec(transaction)
+                .await?;
             model::UserAttributes::delete_many()
                 .filter(model::UserAttributesColumn::UserId.eq(&request.user_id))
                 .filter(model::UserAttributesColumn::AttributeName.is_in(remove_user_attributes))
@@ -262,6 +284,53 @@ impl SqlBackendHandler {
                     .update_column(model::UserAttributesColumn::Value)
                     .to_owned(),
                 )
+                .exec(transaction)
+                .await?;
+        }
+
+        let mut insert_user_attributes_search_names = Vec::new();
+        let mut insert_user_attributes_search = Vec::new();
+        let mut process_search_values = |values: Vec<String>, attribute_name: AttributeName| {
+                let mut no = 1;
+                for text in values {
+                    insert_user_attributes_search_names.push(attribute_name.clone());
+                    insert_user_attributes_search.push(model::user_attributes_search::ActiveModel {
+                        user_id: Set(request.user_id.clone()),
+                        attribute_name: Set(attribute_name.clone()),
+                        no: Set(no),
+                        text: Set(text),
+                    });
+                    no += 1;
+                }
+            };
+        if let Some(value) = &request.first_name {
+            process_search_values(vec![value.into()], "first_name".into());
+        }
+        if let Some(value) = &request.last_name {
+            process_search_values(vec![value.into()], "last_name".into());
+        }
+        for attribute in request.insert_attributes {
+            if schema
+                .user_attributes
+                .get_attribute_type(&attribute.name)
+                .is_some()
+            {
+                process_search_values(attribute.value.into(), attribute.name.clone());
+            } else {
+                return Err(DomainError::InternalError(format!(
+                    "User attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
+                    &attribute.name
+                )));
+            }
+        }
+
+        if !insert_user_attributes_search.is_empty() {
+            model::UserAttributesSearch::delete_many()
+                .filter(model::UserAttributesSearchColumn::UserId.eq(&request.user_id))
+                .filter(model::UserAttributesSearchColumn::AttributeName.is_in(insert_user_attributes_search_names))
+                .exec(transaction)
+                .await?;
+            model::UserAttributesSearch::insert_many(insert_user_attributes_search)
                 .exec(transaction)
                 .await?;
         }

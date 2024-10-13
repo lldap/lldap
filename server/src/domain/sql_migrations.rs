@@ -68,6 +68,15 @@ pub enum UserAttributes {
     UserAttributeValue,
 }
 
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum UserAttributesSearch {
+    Table,
+    UserAttributeSearchUserId,
+    UserAttributeSearchName,
+    UserAttributeSearchNo,
+    UserAttributeSearchText,
+}
+
 #[allow(clippy::enum_variant_names)] // The table names are generated from the enum.
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum GroupAttributeSchema {
@@ -1131,6 +1140,66 @@ async fn migrate_to_v10(transaction: DatabaseTransaction) -> Result<DatabaseTran
     Ok(transaction)
 }
 
+async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
+    
+    transaction
+    .execute(
+        builder.build(
+            Table::create()
+                .table(UserAttributesSearch::Table)
+                .col(
+                    ColumnDef::new(UserAttributesSearch::UserAttributeSearchUserId)
+                        .string_len(255)
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(UserAttributesSearch::UserAttributeSearchName)
+                        .string_len(64)
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(UserAttributesSearch::UserAttributeSearchNo)
+                        .integer()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(UserAttributesSearch::UserAttributeSearchText)
+                        .text()
+                        .not_null(),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .name("UserAttributeSearchUserIdForeignKey")
+                        .from(UserAttributesSearch::Table, UserAttributesSearch::UserAttributeSearchUserId)
+                        .to(Users::Table, Users::UserId)
+                        .on_delete(ForeignKeyAction::Cascade)
+                        .on_update(ForeignKeyAction::Cascade),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .name("UserAttributeSearchNameForeignKey")
+                        .from(UserAttributesSearch::Table, UserAttributesSearch::UserAttributeSearchName)
+                        .to(
+                            UserAttributeSchema::Table,
+                            UserAttributeSchema::UserAttributeSchemaName,
+                        )
+                        .on_delete(ForeignKeyAction::Cascade)
+                        .on_update(ForeignKeyAction::Cascade),
+                )
+                .primary_key(
+                    Index::create()
+                        .col(UserAttributesSearch::UserAttributeSearchUserId)
+                        .col(UserAttributesSearch::UserAttributeSearchName)
+                        .col(UserAttributesSearch::UserAttributeSearchNo),
+                ),
+        ),
+    )
+    .await?;
+
+    Ok(transaction)
+}
+
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -1161,6 +1230,7 @@ pub async fn migrate_from_version(
         to_sync!(migrate_to_v8),
         to_sync!(migrate_to_v9),
         to_sync!(migrate_to_v10),
+        to_sync!(migrate_to_v11),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {
