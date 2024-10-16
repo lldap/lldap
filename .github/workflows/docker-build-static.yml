@@ -39,7 +39,7 @@ env:
 # GitHub actions randomly timeout when downloading musl-gcc, using custom dev image   #
 # Look into .github/workflows/Dockerfile.dev for development image details            #
 # Using lldap dev image based on https://hub.docker.com/_/rust and musl-gcc bundled   #
-# lldap/rust-dev:latest                                                               #
+# lldap/rust-dev                                                                      #
 #######################################################################################
 # Cargo build
 ### armv7, aarch64 and amd64 is musl based
@@ -84,7 +84,7 @@ jobs:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.event_name == 'release' }}
     container:
-      image: lldap/rust-dev:latest
+      image: lldap/rust-dev:v81
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.2.1
@@ -125,7 +125,7 @@ jobs:
       matrix:
         target: [armv7-unknown-linux-musleabihf, aarch64-unknown-linux-musl, x86_64-unknown-linux-musl]
     container:
-      image: lldap/rust-dev:latest
+      image: lldap/rust-dev:v81
       env:
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
