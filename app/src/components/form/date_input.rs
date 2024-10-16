@@ -40,7 +40,7 @@ pub fn date_time_input(props: &DateTimeInputProps) -> Html {
                     value.set(
                         NaiveDateTime::from_str(&string_val)
                             .ok()
-                            .map(|x| DateTime::from_utc(x, Utc))
+                            .map(|x| DateTime::from_naive_utc_and_offset(x, Utc))
                     )
                 }} />
             <span class="input-group-text">{"UTC"}</span>

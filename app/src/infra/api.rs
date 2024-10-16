@@ -1,6 +1,6 @@
 use super::cookies::set_cookie;
 use anyhow::{anyhow, Context, Result};
-use gloo_net::http::{Method, Request};
+use gloo_net::http::{Method, RequestBuilder};
 use graphql_client::GraphQLQuery;
 use lldap_auth::{login, registration, JWTClaims};
 
@@ -32,14 +32,16 @@ async fn call_server<Body: Serialize>(
     body: RequestType<Body>,
     error_message: &'static str,
 ) -> Result<String> {
-    let mut request = Request::new(url)
+    let request_builder = RequestBuilder::new(url)
         .header("Content-Type", "application/json")
         .credentials(RequestCredentials::SameOrigin);
-    if let RequestType::Post(b) = body {
-        request = request
-            .body(serde_json::to_string(&b)?)
-            .method(Method::POST);
-    }
+    let request = if let RequestType::Post(b) = body {
+        request_builder
+            .method(Method::POST)
+            .body(serde_json::to_string(&b)?)?
+    } else {
+        request_builder.build()?
+    };
     let response = request.send().await?;
     if response.ok() {
         Ok(response.text().await?)

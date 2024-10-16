@@ -108,7 +108,7 @@ pub mod types {
     use serde::{Deserialize, Serialize};
 
     #[cfg(feature = "sea_orm")]
-    use sea_orm::{DbErr, DeriveValueType, QueryResult, TryFromU64, Value};
+    use sea_orm::{DbErr, DeriveValueType, TryFromU64, Value};
 
     #[derive(
         PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default, Hash, Serialize, Deserialize,
