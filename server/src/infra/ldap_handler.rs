@@ -1821,18 +1821,6 @@ mod tests {
             vec!["objectClass"],
         );
         ldap_handler.do_search_or_dse(&request).await.unwrap_err();
-        let request = make_user_search_request(
-            LdapFilter::Substring(
-                "givenname".to_owned(),
-                LdapSubstringFilter {
-                    initial: Some("iNIt".to_owned()),
-                    any: vec!["1".to_owned(), "2aA".to_owned()],
-                    final_: Some("finAl".to_owned()),
-                },
-            ),
-            vec!["objectClass"],
-        );
-        ldap_handler.do_search_or_dse(&request).await.unwrap_err();
     }
 
     #[tokio::test]
