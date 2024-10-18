@@ -69,4 +69,4 @@ Since Keycloak and LLDAP use different attributes for different parts of a user'
 
 Go back to "User Federation", edit your LDAP integration and click on the "Mappers" tab.
 
-Find or create the "first name" mapper (it should have type `user-attribute-ldap-mapper`) and ensure the "LDAP Attribute" setting is set to `givenname`. Keycloak may have defaulted to `cn` which LLDAP uses for the "Display Name" of a user.
+Find or create the "first name" mapper (it should have type `user-attribute-ldap-mapper`) and ensure the "LDAP Attribute" setting is set to `givenName`. Keycloak may have defaulted to `cn` which LLDAP uses for the "Display Name" of a user.
