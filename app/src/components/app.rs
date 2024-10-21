@@ -234,7 +234,7 @@ impl App {
                 <ListGroupSchema />
             },
             AppRoute::GroupDetails { group_id } => html! {
-                <GroupDetails group_id={*group_id} />
+                <GroupDetails group_id={*group_id} is_admin={is_admin} />
             },
             AppRoute::UserDetails { user_id } => html! {
                 <UserDetails username={user_id.clone()} is_admin={is_admin} />
