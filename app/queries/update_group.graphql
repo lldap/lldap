@@ -1,0 +1,6 @@
+mutation UpdateGroup($group: UpdateGroupInput!) {
+  updateGroup(group: $group) {
+    ok
+  }
+}
+

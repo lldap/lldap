@@ -1,10 +1,15 @@
 use crate::{
     components::{
         add_group_member::{self, AddGroupMemberComponent},
+        group_details_form::GroupDetailsForm,
         remove_user_from_group::RemoveUserFromGroupComponent,
         router::{AppRoute, Link},
     },
-    infra::common_component::{CommonComponent, CommonComponentParts},
+    convert_attribute_type,
+    infra::{
+        common_component::{CommonComponent, CommonComponentParts},
+        form_utils::GraphQlAttributeSchema,
+    },
 };
 use anyhow::{bail, Error, Result};
 use graphql_client::GraphQLQuery;
@@ -22,12 +27,28 @@ pub struct GetGroupDetails;
 pub type Group = get_group_details::GetGroupDetailsGroup;
 pub type User = get_group_details::GetGroupDetailsGroupUsers;
 pub type AddGroupMemberUser = add_group_member::User;
+pub type Attribute = get_group_details::GetGroupDetailsGroupAttributes;
+pub type AttributeSchema = get_group_details::GetGroupDetailsSchemaGroupSchemaAttributes;
+pub type AttributeType = get_group_details::AttributeType;
+
+convert_attribute_type!(AttributeType);
+
+impl From<&AttributeSchema> for GraphQlAttributeSchema {
+    fn from(attr: &AttributeSchema) -> Self {
+        Self {
+            name: attr.name.clone(),
+            is_list: attr.is_list,
+            is_readonly: attr.is_readonly,
+            is_editable: attr.is_editable,
+        }
+    }
+}
 
 pub struct GroupDetails {
     common: CommonComponentParts<Self>,
     /// The group info. If none, the error is in `error`. If `error` is None, then we haven't
     /// received the server response yet.
-    group: Option<Group>,
+    group_and_schema: Option<(Group, Vec<AttributeSchema>)>,
 }
 
 /// State machine describing the possible transitions of the component state.
@@ -38,11 +59,13 @@ pub enum Msg {
     OnError(Error),
     OnUserAddedToGroup(AddGroupMemberUser),
     OnUserRemovedFromGroup((String, i64)),
+    DisplayNameUpdated,
 }
 
 #[derive(yew::Properties, Clone, PartialEq, Eq)]
 pub struct Props {
     pub group_id: i64,
+    pub is_admin: bool,
 }
 
 impl GroupDetails {
@@ -69,41 +92,16 @@ impl GroupDetails {
         }
     }
 
-    fn view_details(&self, g: &Group) -> Html {
+    fn view_details(&self, ctx: &Context<Self>, g: &Group, schema: Vec<AttributeSchema>) -> Html {
         html! {
           <>
             <h3>{g.display_name.to_string()}</h3>
-            <div class="py-3">
-              <form class="form">
-                <div class="form-group row mb-3">
-                  <label for="displayName"
-                    class="form-label col-4 col-form-label">
-                    {"Group: "}
-                  </label>
-                  <div class="col-8">
-                    <span id="groupId" class="form-constrol-static">{g.display_name.to_string()}</span>
-                  </div>
-                </div>
-                <div class="form-group row mb-3">
-                  <label for="creationDate"
-                    class="form-label col-4 col-form-label">
-                    {"Creation date: "}
-                  </label>
-                  <div class="col-8">
-                    <span id="creationDate" class="form-constrol-static">{g.creation_date.naive_local().date()}</span>
-                  </div>
-                </div>
-                <div class="form-group row mb-3">
-                  <label for="uuid"
-                    class="form-label col-4 col-form-label">
-                    {"UUID: "}
-                  </label>
-                  <div class="col-8">
-                    <span id="uuid" class="form-constrol-static">{g.uuid.to_string()}</span>
-                  </div>
-                </div>
-              </form>
-            </div>
+            <GroupDetailsForm
+              group={g.clone()}
+              group_attributes_schema={schema}
+              is_admin={ctx.props().is_admin}
+              on_display_name_updated={ctx.link().callback(|_| Msg::DisplayNameUpdated)}
+            />
           </>
         }
     }
@@ -182,29 +180,38 @@ impl GroupDetails {
 }
 
 impl CommonComponent<GroupDetails> for GroupDetails {
-    fn handle_msg(&mut self, _: &Context<Self>, msg: <Self as Component>::Message) -> Result<bool> {
+    fn handle_msg(
+        &mut self,
+        ctx: &Context<Self>,
+        msg: <Self as Component>::Message,
+    ) -> Result<bool> {
         match msg {
             Msg::GroupDetailsResponse(response) => match response {
-                Ok(group) => self.group = Some(group.group),
+                Ok(group) => {
+                    self.group_and_schema =
+                        Some((group.group, group.schema.group_schema.attributes))
+                }
                 Err(e) => {
-                    self.group = None;
+                    self.group_and_schema = None;
                     bail!("Error getting user details: {}", e);
                 }
             },
             Msg::OnError(e) => return Err(e),
             Msg::OnUserAddedToGroup(user) => {
-                self.group.as_mut().unwrap().users.push(User {
+                self.group_and_schema.as_mut().unwrap().0.users.push(User {
                     id: user.id,
                     display_name: user.display_name,
                 });
             }
             Msg::OnUserRemovedFromGroup((user_id, _)) => {
-                self.group
+                self.group_and_schema
                     .as_mut()
                     .unwrap()
+                    .0
                     .users
                     .retain(|u| u.id != user_id);
             }
+            Msg::DisplayNameUpdated => self.get_group_details(ctx),
         }
         Ok(true)
     }
@@ -221,7 +228,7 @@ impl Component for GroupDetails {
     fn create(ctx: &Context<Self>) -> Self {
         let mut table = Self {
             common: CommonComponentParts::<Self>::create(),
-            group: None,
+            group_and_schema: None,
         };
         table.get_group_details(ctx);
         table
@@ -232,15 +239,15 @@ impl Component for GroupDetails {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        match (&self.group, &self.common.error) {
+        match (&self.group_and_schema, &self.common.error) {
             (None, None) => html! {{"Loading..."}},
             (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
-            (Some(u), error) => {
+            (Some((group, schema)), error) => {
                 html! {
                     <div>
-                      {self.view_details(u)}
-                      {self.view_user_list(ctx, u)}
-                      {self.view_add_user_button(ctx, u)}
+                      {self.view_details(ctx, group, schema.clone())}
+                      {self.view_user_list(ctx, group)}
+                      {self.view_add_user_button(ctx, group)}
                       {self.view_messages(error)}
                     </div>
                 }

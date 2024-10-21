@@ -298,7 +298,14 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized group update"))?;
-        if group.id == 1 && group.display_name.is_some() {
+        let new_display_name = group.display_name.clone().or_else(|| {
+            group.insert_attributes.as_ref().and_then(|a| {
+                a.iter()
+                    .find(|attr| attr.name == "display_name")
+                    .map(|attr| attr.value[0].clone())
+            })
+        });
+        if group.id == 1 && new_display_name.is_some() {
             span.in_scope(|| debug!("Cannot change lldap_admin group name"));
             return Err("Cannot change lldap_admin group name".into());
         }
@@ -307,16 +314,18 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .insert_attributes
             .unwrap_or_default()
             .into_iter()
+            .filter(|attr| attr.name != "display_name")
             .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr, true))
             .collect::<Result<Vec<_>, _>>()?;
         handler
             .update_group(UpdateGroupRequest {
                 group_id: GroupId(group.id),
-                display_name: group.display_name.map(Into::into),
+                display_name: new_display_name.map(|s| s.as_str().into()),
                 delete_attributes: group
                     .remove_attributes
                     .unwrap_or_default()
                     .into_iter()
+                    .filter(|attr| attr != "display_name")
                     .map(Into::into)
                     .collect(),
                 insert_attributes,

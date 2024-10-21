@@ -75,3 +75,10 @@ rev = "4b9fabffb63393ec7626a4477fd36de12a07fac9"
 
 [lib]
 crate-type = ["cdylib"]
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = ['--enable-bulk-memory']
+[package.metadata.wasm-pack.profile.profiling]
+wasm-opt = ['--enable-bulk-memory']
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ['--enable-bulk-memory']
