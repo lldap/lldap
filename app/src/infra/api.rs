@@ -204,7 +204,7 @@ impl HostService {
     }
 
     pub async fn probe_password_reset() -> Result<bool> {
-        Ok(gloo_net::http::Request::get(
+        Ok(gloo_net::http::Request::post(
             &(base_url() + "/auth/reset/step1/lldap_unlikely_very_long_user_name"),
         )
         .header("Content-Type", "application/json")
