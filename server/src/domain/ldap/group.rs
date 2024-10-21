@@ -7,31 +7,28 @@ use tracing::{debug, instrument, warn};
 use crate::domain::{
     deserialize::deserialize_attribute_value,
     handler::{GroupListerBackendHandler, GroupRequestFilter},
-    ldap::error::LdapError,
+    ldap::{
+        error::{LdapError, LdapResult},
+        utils::{
+            expand_attribute_wildcards, get_custom_attribute,
+            get_group_id_from_distinguished_name_or_plain_name,
+            get_user_id_from_distinguished_name_or_plain_name, map_group_field, ExpandedAttributes,
+            GroupFieldType, LdapInfo,
+        },
+    },
     schema::{PublicSchema, SchemaGroupAttributeExtractor},
     types::{AttributeName, AttributeType, Group, LdapObjectClass, UserId, Uuid},
-};
-
-use super::{
-    error::LdapResult,
-    utils::{
-        expand_attribute_wildcards, get_custom_attribute,
-        get_group_id_from_distinguished_name_or_plain_name,
-        get_user_id_from_distinguished_name_or_plain_name, map_group_field, GroupFieldType,
-        LdapInfo,
-    },
 };
 
 pub fn get_group_attribute(
     group: &Group,
     base_dn_str: &str,
-    attribute: &str,
+    attribute: &AttributeName,
     user_filter: &Option<UserId>,
     ignored_group_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
-    let attribute = AttributeName::from(attribute);
-    let attribute_values = match map_group_field(&attribute, schema) {
+    let attribute_values = match map_group_field(attribute, schema) {
         GroupFieldType::ObjectClass => {
             let mut classes = vec![b"groupOfUniqueNames".to_vec()];
             classes.extend(
@@ -74,12 +71,12 @@ pub fn get_group_attribute(
                 )
             }
             _ => {
-                if ignored_group_attributes.contains(&attribute) {
+                if ignored_group_attributes.contains(attribute) {
                     return None;
                 }
                 get_custom_attribute::<SchemaGroupAttributeExtractor>(
                         &group.attributes,
-                        &attribute,
+                        attribute,
                         schema,
                     ).or_else(||{warn!(
                             r#"Ignoring unrecognized group attribute: {}\n\
@@ -105,33 +102,42 @@ const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] = &[
     "entryuuid",
 ];
 
-fn expand_group_attribute_wildcards(attributes: &[String]) -> Vec<&str> {
+fn expand_group_attribute_wildcards(attributes: &[String]) -> ExpandedAttributes {
     expand_attribute_wildcards(attributes, ALL_GROUP_ATTRIBUTE_KEYS)
 }
 
 fn make_ldap_search_group_result_entry(
     group: Group,
     base_dn_str: &str,
-    expanded_attributes: &[&str],
+    mut expanded_attributes: ExpandedAttributes,
     user_filter: &Option<UserId>,
     ignored_group_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
+    if expanded_attributes.include_custom_attributes {
+        expanded_attributes.attribute_keys.extend(
+            group
+                .attributes
+                .iter()
+                .map(|a| (a.name.clone(), a.name.to_string())),
+        );
+    }
     LdapSearchResultEntry {
         dn: format!("cn={},ou=groups,{}", group.display_name, base_dn_str),
         attributes: expanded_attributes
-            .iter()
-            .filter_map(|a| {
+            .attribute_keys
+            .into_iter()
+            .filter_map(|(attribute, name)| {
                 let values = get_group_attribute(
                     &group,
                     base_dn_str,
-                    a,
+                    &attribute,
                     user_filter,
                     ignored_group_attributes,
                     schema,
                 )?;
                 Some(LdapPartialAttribute {
-                    atype: a.to_string(),
+                    atype: name,
                     vals: values,
                 })
             })
@@ -295,7 +301,7 @@ pub fn convert_groups_to_ldap_op<'a>(
         LdapOp::SearchResultEntry(make_ldap_search_group_result_entry(
             g,
             &ldap_info.base_dn_str,
-            expanded_attributes.as_ref().unwrap(),
+            expanded_attributes.clone().unwrap(),
             user_filter,
             &ldap_info.ignored_group_attributes,
             schema,

@@ -12,8 +12,8 @@ use crate::domain::{
         utils::{
             expand_attribute_wildcards, get_custom_attribute,
             get_group_id_from_distinguished_name_or_plain_name,
-            get_user_id_from_distinguished_name_or_plain_name, map_user_field, LdapInfo,
-            UserFieldType,
+            get_user_id_from_distinguished_name_or_plain_name, map_user_field, ExpandedAttributes,
+            LdapInfo, UserFieldType,
         },
     },
     schema::{PublicSchema, SchemaUserAttributeExtractor},
@@ -25,14 +25,13 @@ use crate::domain::{
 
 pub fn get_user_attribute(
     user: &User,
-    attribute: &str,
+    attribute: &AttributeName,
     base_dn_str: &str,
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
-    let attribute = AttributeName::from(attribute);
-    let attribute_values = match map_user_field(&attribute, schema) {
+    let attribute_values = match map_user_field(attribute, schema) {
         UserFieldType::ObjectClass => {
             let mut classes = vec![
                 b"inetOrgPerson".to_vec(),
@@ -93,12 +92,12 @@ pub fn get_user_attribute(
                 )
             }
             _ => {
-                if ignored_user_attributes.contains(&attribute) {
+                if ignored_user_attributes.contains(attribute) {
                     return None;
                 }
                 get_custom_attribute::<SchemaUserAttributeExtractor>(
                     &user.attributes,
-                    &attribute,
+                    attribute,
                     schema,
                 )
                 .or_else(|| {
@@ -134,27 +133,34 @@ const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
 fn make_ldap_search_user_result_entry(
     user: User,
     base_dn_str: &str,
-    expanded_attributes: &[&str],
+    mut expanded_attributes: ExpandedAttributes,
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
-    let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
+    if expanded_attributes.include_custom_attributes {
+        expanded_attributes.attribute_keys.extend(
+            user.attributes
+                .iter()
+                .map(|a| (a.name.clone(), a.name.to_string())),
+        );
+    }
     LdapSearchResultEntry {
-        dn,
+        dn: format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str),
         attributes: expanded_attributes
-            .iter()
-            .filter_map(|a| {
+            .attribute_keys
+            .into_iter()
+            .filter_map(|(attribute, name)| {
                 let values = get_user_attribute(
                     &user,
-                    a,
+                    &attribute,
                     base_dn_str,
                     groups,
                     ignored_user_attributes,
                     schema,
                 )?;
                 Some(LdapPartialAttribute {
-                    atype: a.to_string(),
+                    atype: name,
                     vals: values,
                 })
             })
@@ -295,7 +301,7 @@ fn convert_user_filter(
     }
 }
 
-fn expand_user_attribute_wildcards(attributes: &[String]) -> Vec<&str> {
+fn expand_user_attribute_wildcards(attributes: &[String]) -> ExpandedAttributes {
     expand_attribute_wildcards(attributes, ALL_USER_ATTRIBUTE_KEYS)
 }
 
@@ -334,7 +340,7 @@ pub fn convert_users_to_ldap_op<'a>(
         LdapOp::SearchResultEntry(make_ldap_search_user_result_entry(
             u.user,
             &ldap_info.base_dn_str,
-            expanded_attributes.as_ref().unwrap(),
+            expanded_attributes.clone().unwrap(),
             u.groups.as_deref(),
             &ldap_info.ignored_user_attributes,
             schema,
