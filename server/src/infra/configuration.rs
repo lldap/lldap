@@ -583,10 +583,10 @@ where
         let expected_keys = expected_keys(&figment_config.data()?[&Profile::Default]);
         env_variable_provider().data().unwrap()[&Profile::default()]
             .keys()
-            .map(|k| k.to_ascii_uppercase())
+            .map(|k| format!("LLDAP_{}", k.to_ascii_uppercase()))
             .filter(|k| !expected_keys.contains(k.as_str()))
             .for_each(|k| {
-                eprintln!("WARNING: Unknown environment variable: LLDAP_{}", k);
+                eprintln!("WARNING: Unknown environment variable: {}", k);
             });
     }
     config.server_setup = Some(get_server_setup(
