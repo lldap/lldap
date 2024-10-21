@@ -361,9 +361,9 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
                 file_path
             );
         } else if file_path == "server_key" {
-            eprintln!("WARNING: A key_seed was given, we will ignore the server_key and generate one from the seed!");
+            eprintln!("WARNING: A key_seed was given, we will ignore the server_key and generate one from the seed! Set server_key to an empty string in the config to silence this message.");
         } else {
-            println!("Generating the key from the key_seed");
+            println!("Generating the private key from the key_seed");
         }
         use rand::SeedableRng;
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(stable_hash(key_seed.as_bytes()));
