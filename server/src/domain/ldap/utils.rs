@@ -1,5 +1,6 @@
+use std::collections::BTreeMap;
+
 use chrono::{NaiveDateTime, TimeZone};
-use itertools::Itertools;
 use ldap3_proto::{proto::LdapSubstringFilter, LdapResultCode};
 use tracing::{debug, instrument, warn};
 
@@ -137,30 +138,39 @@ pub fn get_group_id_from_distinguished_name_or_plain_name(
     }
 }
 
+#[derive(Clone)]
+pub struct ExpandedAttributes {
+    // Lowercase name to original name.
+    pub attribute_keys: BTreeMap<AttributeName, String>,
+    pub include_custom_attributes: bool,
+}
+
 #[instrument(skip(all_attribute_keys), level = "debug")]
-pub fn expand_attribute_wildcards<'a>(
-    ldap_attributes: &'a [String],
-    all_attribute_keys: &'a [&'static str],
-) -> Vec<&'a str> {
-    let extra_attributes =
+pub fn expand_attribute_wildcards(
+    ldap_attributes: &[String],
+    all_attribute_keys: &[&'static str],
+) -> ExpandedAttributes {
+    let mut include_custom_attributes = false;
+    let mut attributes_out: BTreeMap<_, _> = ldap_attributes
+        .iter()
+        .filter(|&s| s != "*" && s != "+" && s != "1.1")
+        .map(|s| (AttributeName::from(s), s.to_string()))
+        .collect();
+    attributes_out.extend(
         if ldap_attributes.iter().any(|x| x == "*") || ldap_attributes.is_empty() {
+            include_custom_attributes = true;
             all_attribute_keys
         } else {
             &[]
         }
         .iter()
-        .copied();
-    let attributes_out = ldap_attributes
-        .iter()
-        .map(|s| s.as_str())
-        .filter(|&s| s != "*" && s != "+" && s != "1.1");
-
-    // Deduplicate, preserving order
-    let resolved_attributes = itertools::chain(attributes_out, extra_attributes)
-        .unique_by(|a| a.to_ascii_lowercase())
-        .collect_vec();
-    debug!(?resolved_attributes);
-    resolved_attributes
+        .map(|&s| (AttributeName::from(s), s.to_string())),
+    );
+    debug!(?attributes_out);
+    ExpandedAttributes {
+        attribute_keys: attributes_out,
+        include_custom_attributes,
+    }
 }
 
 pub fn is_subtree(subtree: &[(String, String)], base_tree: &[(String, String)]) -> bool {
