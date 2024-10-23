@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4.2.1
+        uses: actions/checkout@v4.2.2
       - uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --verbose --workspace
@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4.2.1
+        uses: actions/checkout@v4.2.2
 
       - uses: Swatinem/rust-cache@v2
 
@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4.2.1
+        uses: actions/checkout@v4.2.2
 
       - uses: Swatinem/rust-cache@v2
 
@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4.2.1
+        uses: actions/checkout@v4.2.2
 
       - name: Install Rust
         run: rustup toolchain install nightly --component llvm-tools-preview && rustup component add llvm-tools-preview --toolchain stable-x86_64-unknown-linux-gnu
