@@ -22,7 +22,7 @@ vaultwarden_url = "http://your_bitwarden_url:port"
 vaultwarden_admin_token = "insert_admin_token_vaultwarden"
 ldap_host = "insert_ldap_host"
 ldap_port = 3890
-ldap_ssl  = false
+ldap_ssl  = false # true if using LDAPS
 ldap_bind_dn = "uid=admin,ou=people,dc=example,dc=com"
 ldap_bind_password = "insert_admin_pw_ldap"
 ldap_search_base_dn = "dc=example,dc=com"
