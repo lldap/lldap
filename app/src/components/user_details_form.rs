@@ -9,7 +9,7 @@ use crate::{
     },
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
-        form_utils::{read_all_form_attributes, AttributeValue},
+        form_utils::{read_all_form_attributes, AttributeValue, EmailIsRequired, IsAdmin},
         schema::AttributeType,
     },
 };
@@ -212,8 +212,8 @@ impl UserDetailsForm {
         let mut all_values = read_all_form_attributes(
             ctx.props().user_attributes_schema.iter(),
             &self.form_ref,
-            ctx.props().is_admin,
-            !ctx.props().is_edited_user_admin,
+            IsAdmin(ctx.props().is_admin),
+            EmailIsRequired(!ctx.props().is_edited_user_admin),
         )?;
         let base_attributes = &self.user.attributes;
         all_values.retain(|a| {

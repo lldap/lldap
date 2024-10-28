@@ -16,9 +16,12 @@ pub struct GraphQlAttributeSchema {
     pub is_editable: bool,
 }
 
-fn validate_attributes(all_values: &[AttributeValue], email_is_required: bool) -> Result<()> {
+fn validate_attributes(
+    all_values: &[AttributeValue],
+    email_is_required: EmailIsRequired,
+) -> Result<()> {
     let maybe_email_values = all_values.iter().find(|a| a.name == "mail");
-    if email_is_required || maybe_email_values.is_some() {
+    if email_is_required.0 || maybe_email_values.is_some() {
         let email_values = &maybe_email_values
             .ok_or_else(|| anyhow!("Email is required"))?
             .values;
@@ -28,11 +31,14 @@ fn validate_attributes(all_values: &[AttributeValue], email_is_required: bool) -
     Ok(())
 }
 
+pub struct IsAdmin(pub bool);
+pub struct EmailIsRequired(pub bool);
+
 pub fn read_all_form_attributes(
     schema: impl IntoIterator<Item = impl Into<GraphQlAttributeSchema>>,
     form_ref: &NodeRef,
-    is_admin: bool,
-    email_is_required: bool,
+    is_admin: IsAdmin,
+    email_is_required: EmailIsRequired,
 ) -> Result<Vec<AttributeValue>> {
     let form = form_ref.cast::<HtmlFormElement>().unwrap();
     let form_data = FormData::new_with_form(&form)
@@ -40,7 +46,7 @@ pub fn read_all_form_attributes(
     let all_values = schema
         .into_iter()
         .map(Into::<GraphQlAttributeSchema>::into)
-        .filter(|attr| !attr.is_readonly && (is_admin || attr.is_editable))
+        .filter(|attr| !attr.is_readonly && (is_admin.0 || attr.is_editable))
         .map(|attr| -> Result<AttributeValue> {
             let val = form_data
                 .get_all(attr.name.as_str())
