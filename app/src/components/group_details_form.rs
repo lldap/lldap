@@ -9,7 +9,7 @@ use crate::{
     },
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
-        form_utils::{read_all_form_attributes, AttributeValue},
+        form_utils::{read_all_form_attributes, AttributeValue, EmailIsRequired, IsAdmin},
         schema::AttributeType,
     },
 };
@@ -210,8 +210,8 @@ impl GroupDetailsForm {
         let mut all_values = read_all_form_attributes(
             ctx.props().group_attributes_schema.iter(),
             &self.form_ref,
-            ctx.props().is_admin,
-            false,
+            IsAdmin(ctx.props().is_admin),
+            EmailIsRequired(false),
         )?;
         let base_attributes = &self.group.attributes;
         all_values.retain(|a| {

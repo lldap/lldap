@@ -11,7 +11,10 @@ use crate::{
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
-        form_utils::{read_all_form_attributes, AttributeValue, GraphQlAttributeSchema},
+        form_utils::{
+            read_all_form_attributes, AttributeValue, EmailIsRequired, GraphQlAttributeSchema,
+            IsAdmin,
+        },
         schema::AttributeType,
     },
 };
@@ -121,8 +124,8 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                 let all_values = read_all_form_attributes(
                     self.attributes_schema.iter().flatten(),
                     &self.form_ref,
-                    true,
-                    true,
+                    IsAdmin(true),
+                    EmailIsRequired(true),
                 )?;
                 let attributes = Some(
                     all_values
@@ -302,7 +305,7 @@ impl Component for CreateUserForm {
     }
 }
 
-pub fn get_custom_attribute_input(attribute_schema: &Attribute) -> Html {
+fn get_custom_attribute_input(attribute_schema: &Attribute) -> Html {
     if attribute_schema.is_list {
         html! {
             <ListAttributeInput
