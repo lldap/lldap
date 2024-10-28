@@ -657,5 +657,9 @@ where
             web::resource("/reset/step2/{token}")
                 .route(web::get().to(get_password_reset_step2_handler::<Backend>)),
         );
+    } else {
+        cfg.service(
+            web::resource("/reset/step1/{user_id}").route(web::post().to(HttpResponse::NotFound)),
+        );
     }
 }
