@@ -345,7 +345,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         match (&request.user_identity, &request.new_password) {
             (Some(user), Some(password)) => {
                 match get_user_id_from_distinguished_name(
-                    user,
+                    &user.to_ascii_lowercase(),
                     &self.ldap_info.base_dn,
                     &self.ldap_info.base_dn_str,
                 ) {
