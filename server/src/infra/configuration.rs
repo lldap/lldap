@@ -517,7 +517,7 @@ impl ConfigOverrider for SmtpOpts {
     }
 }
 
-fn expected_keys(dict: &figment::value::Dict) -> HashSet<String> {
+fn extract_keys(dict: &figment::value::Dict) -> HashSet<String> {
     use figment::value::{Dict, Value};
     fn process_value(value: &Dict, keys: &mut HashSet<String>, path: &mut Vec<String>) {
         for (key, value) in value {
@@ -538,6 +538,13 @@ fn expected_keys(dict: &figment::value::Dict) -> HashSet<String> {
         }
     }
     let mut keys = HashSet::new();
+    let mut path = Vec::new();
+    process_value(dict, &mut keys, &mut path);
+    keys
+}
+
+fn expected_keys(dict: &figment::value::Dict) -> HashSet<String> {
+    let mut keys = extract_keys(dict);
     // CLI-only values.
     keys.insert("LLDAP_CONFIG_FILE".to_string());
     keys.insert("LLDAP_TEST_EMAIL_TO".to_string());
@@ -547,9 +554,6 @@ fn expected_keys(dict: &figment::value::Dict) -> HashSet<String> {
     keys.insert("LLDAP_SMTP_OPTIONS__TO".to_string());
     // Deprecated
     keys.insert("LLDAP_SMTP_OPTIONS__TLS_REQUIRED".to_string());
-    // From the config keys.
-    let mut path = Vec::new();
-    process_value(dict, &mut keys, &mut path);
     keys
 }
 
@@ -580,13 +584,18 @@ where
     }
     {
         use figment::{Profile, Provider};
-        let expected_keys = expected_keys(&figment_config.data()?[&Profile::Default]);
-        env_variable_provider().data().unwrap()[&Profile::default()]
-            .keys()
-            .map(|k| format!("LLDAP_{}", k.to_ascii_uppercase()))
+        let expected_keys = expected_keys(
+            &Figment::from(Serialized::defaults(
+                ConfigurationBuilder::default().private_build().unwrap(),
+            ))
+            .data()
+            .unwrap()[&Profile::default()],
+        );
+        extract_keys(&env_variable_provider().data().unwrap()[&Profile::default()])
+            .iter()
             .filter(|k| !expected_keys.contains(k.as_str()))
             .for_each(|k| {
-                eprintln!("WARNING: Unknown environment variable: {}", k);
+                eprintln!("WARNING: Unknown environment variable: LLDAP_{}", k);
             });
     }
     config.server_setup = Some(get_server_setup(
