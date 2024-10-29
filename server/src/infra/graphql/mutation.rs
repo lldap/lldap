@@ -265,6 +265,14 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             display_name,
             attributes: insert_attributes,
         } = unpack_attributes(user_insert_attributes, &schema, is_admin)?;
+        let display_name = display_name.or_else(|| {
+            // If the display name is not inserted, but removed, reset it.
+            user.remove_attributes
+                .iter()
+                .flatten()
+                .find(|attr| *attr == "display_name")
+                .map(|_| String::new())
+        });
         handler
             .update_user(UpdateUserRequest {
                 user_id,
@@ -277,7 +285,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                     .remove_attributes
                     .unwrap_or_default()
                     .into_iter()
-                    .filter(|attr| attr != "mail") // mail can be sent when editing an admin user
+                    .filter(|attr| attr != "mail" && attr != "display_name")
                     .map(Into::into)
                     .collect(),
                 insert_attributes,
