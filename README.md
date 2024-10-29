@@ -163,6 +163,15 @@ services:
       # You can also set a different database:
       # - LLDAP_DATABASE_URL=mysql://mysql-user:password@mysql-server/my-database
       # - LLDAP_DATABASE_URL=postgres://postgres-user:password@postgres-server/my-database
+      # If using SMTP, set the following variables
+      # - LLDAP_SMTP_OPTIONS__ENABLE_PASSWORD_RESET=true
+      # - LLDAP_SMTP_OPTIONS__SERVER=smtp.example.com
+      # - LLDAP_SMTP_OPTIONS__PORT=465 # Check your smtp providor's documentation for this setting
+      # - LLDAP_SMTP_OPTIONS__SMTP_ENCRYPTION=TLS # How the connection is encrypted, either "NONE" (no encryption, port 25), "TLS" (sometimes called SSL, port 465) or "STARTTLS" (sometimes called TLS, port 587).
+      # - LLDAP_SMTP_OPTIONS__USER=no-reply@example.com # The SMTP user, usually your email address
+      # - LLDAP_SMTP_OPTIONS__PASSWORD=PasswordGoesHere # The SMTP password
+      # - LLDAP_SMTP_OPTIONS__FROM=no-reply <no-reply@example.com> # The header field, optional: how the sender appears in the email. The first is a free-form name, followed by an email between <>.
+      # - LLDAP_SMTP_OPTIONS__TO=admin <admin@example.com> # Same for reply-to, optional.
 ```
 
 Then the service will listen on two ports, one for LDAP and one for the web
@@ -474,10 +483,13 @@ create users, set passwords, add them to groups and so on. Users can also
 connect to the web UI and change their information, or request a password reset
 link (if you configured the SMTP client).
 
-Creating and managing custom attributes is currently in Beta. It's not
-supported in the Web UI. The recommended way is to use
-[Zepmann/lldap-cli](https://github.com/Zepmann/lldap-cli), a
-community-contributed CLI frontend.
+You can create and manage custom attributes through the Web UI, or through the
+community-contributed CLI frontend (
+[Zepmann/lldap-cli](https://github.com/Zepmann/lldap-cli)). This is necessary
+for some service integrations.
+
+The [bootstrap.sh](scripts/bootstrap.sh) script can enforce a list of
+users/groups/attributes from a given file, reflecting it on the server.
 
 LLDAP is also very scriptable, through its GraphQL API. See the
 [Scripting](docs/scripting.md) docs for more info.
