@@ -82,9 +82,14 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
 
 async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnection> {
     let sql_pool = {
+        let num_connections = if database_url.db_type() == "sqlite" {
+            1
+        } else {
+            5
+        };
         let mut sql_opt = sea_orm::ConnectOptions::new(database_url.to_string());
         sql_opt
-            .max_connections(5)
+            .max_connections(num_connections)
             .sqlx_logging(true)
             .sqlx_logging_level(log::LevelFilter::Debug);
         Database::connect(sql_opt).await?
