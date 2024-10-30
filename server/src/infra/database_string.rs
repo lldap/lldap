@@ -17,6 +17,12 @@ impl From<&str> for DatabaseUrl {
     }
 }
 
+impl DatabaseUrl {
+    pub fn db_type(&self) -> &str {
+        self.0.scheme()
+    }
+}
+
 impl std::fmt::Debug for DatabaseUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.0.password().is_some() {
