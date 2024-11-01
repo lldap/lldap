@@ -43,11 +43,11 @@ pub struct FormModel {
     old_password: String,
 
     #[validate(custom(
-            function = "validate_password_complexity",
-            message = "Password must contain at least one uppercase letter, one lowercase letter, one symbol, and one number"
-            ))]
-        password: String,
-        
+        function = "validate_password_complexity",
+        message = "Password must contain at least one uppercase letter, one lowercase letter, one symbol, one number, and be eight characters or longer."
+    ))]
+    password: String,
+
     #[validate(must_match(other = "password", message = "Passwords must match"))]
     confirm_password: String,
 }
@@ -65,8 +65,9 @@ fn validate_password_complexity(value: &str) -> Result<(), validator::Validation
     let has_lowercase = Regex::new(r"[a-z]").unwrap().is_match(value);
     let has_symbol = Regex::new(r"[^A-Za-z0-9]").unwrap().is_match(value);
     let has_number = Regex::new(r"\d").unwrap().is_match(value);
+    let has_length = value.is_empty() || value.len() >= 8;
 
-    if has_uppercase && has_lowercase && has_symbol && has_number {
+    if has_uppercase && has_lowercase && has_symbol && has_number && has_length {
         Ok(())
     } else {
         Err(validator::ValidationError::new(""))
