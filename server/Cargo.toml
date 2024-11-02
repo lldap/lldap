@@ -86,7 +86,7 @@ path = "../auth"
 features = ["opaque_server", "opaque_client", "sea_orm"]
 
 [dependencies.opaque-ke]
-version = "0.6"
+version = "0.7"
 
 [dependencies.rand]
 features = ["small_rng", "getrandom"]
@@ -122,9 +122,15 @@ default-features = false
 version = "0.24"
 
 [dependencies.sea-orm]
-version= "0.12"
+version = "0.12"
 default-features = false
-features = ["macros", "with-chrono", "with-uuid", "sqlx-all", "runtime-actix-rustls"]
+features = [
+  "macros",
+  "with-chrono",
+  "with-uuid",
+  "sqlx-all",
+  "runtime-actix-rustls",
+]
 
 [dependencies.reqwest]
 version = "0.11"
