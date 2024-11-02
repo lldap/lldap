@@ -31,14 +31,14 @@ default-features = false
 version = "1"
 
 [dependencies.opaque-ke]
-version = "0.6"
+version = "0.7"
 
 [dependencies.chrono]
 version = "*"
-features = [ "serde" ]
+features = ["serde"]
 
 [dependencies.sea-orm]
-version= "0.12"
+version = "0.12"
 default-features = false
 features = ["macros"]
 optional = true
