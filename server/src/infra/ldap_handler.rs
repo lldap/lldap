@@ -212,6 +212,13 @@ pub struct LdapHandler<Backend> {
     user_info: Option<ValidationResults>,
     backend_handler: AccessControlledBackendHandler<Backend>,
     ldap_info: LdapInfo,
+    session_uuid: uuid::Uuid,
+}
+
+impl<Backend> LdapHandler<Backend> {
+    pub fn session_uuid(&self) -> &uuid::Uuid {
+        &self.session_uuid
+    }
 }
 
 impl<Backend: LoginHandler> LdapHandler<Backend> {
@@ -232,6 +239,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         mut ldap_base_dn: String,
         ignored_user_attributes: Vec<AttributeName>,
         ignored_group_attributes: Vec<AttributeName>,
+        session_uuid: uuid::Uuid,
     ) -> Self {
         ldap_base_dn.make_ascii_lowercase();
         Self {
@@ -248,6 +256,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 ignored_user_attributes,
                 ignored_group_attributes,
             },
+            session_uuid,
         }
     }
 
@@ -258,6 +267,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             ldap_base_dn.to_string(),
             vec![],
             vec![],
+            uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
         )
     }
 
@@ -401,6 +411,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
+    #[instrument(skip_all, level = "debug")]
     async fn do_extended_request(&mut self, request: &LdapExtendedRequest) -> Vec<LdapOp> {
         match LdapPasswordModifyRequest::try_from(request) {
             Ok(password_request) => self
@@ -506,6 +517,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
+    #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
     async fn do_modify_request(&mut self, request: &LdapModifyRequest) -> Vec<LdapOp> {
         self.handle_modify_request(request)
             .await
@@ -676,6 +688,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         Ok(results)
     }
 
+    #[instrument(skip_all, level = "debug")]
     async fn do_create_user(&self, request: LdapAddRequest) -> LdapResult<Vec<LdapOp>> {
         let backend_handler = self
             .user_info
@@ -761,6 +774,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
     }
 
+    #[instrument(skip_all, level = "debug")]
     pub async fn do_compare(&mut self, request: LdapCompareRequest) -> LdapResult<Vec<LdapOp>> {
         let req = make_search_request::<String>(
             &self.ldap_info.base_dn_str,
@@ -829,6 +843,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 .await
                 .unwrap_or_else(|e: LdapError| vec![make_search_error(e.code, e.message)]),
             LdapOp::UnbindRequest => {
+                debug!(
+                    "Unbind request for {}",
+                    self.user_info
+                        .as_ref()
+                        .map(|u| u.user.as_str())
+                        .unwrap_or("<not bound>"),
+                );
                 self.user_info = None;
                 // No need to notify on unbind (per rfc4511)
                 return None;
