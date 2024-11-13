@@ -1,7 +1,3 @@
-> [!IMPORTANT]
-> The integration requires custom ldap properties which are not supported on
-> stable (as of 2024-09-19), please use nightly/latest tag.
-
 # Configure lldap
 
 You MUST use LDAPS. You MUST NOT use plain ldap. Even over a private network
@@ -45,11 +41,6 @@ You will need to add the `binddn` and `bindpw` settings.
 The provided implementation uses custom attributes to mark users and groups
 that should be included in the system (for instance, you don't want LDAP
 accounts of other services to have a matching unix user).
-
-> [!TIP]
-> You can create custom attributes in the Web UI, but to provide values, you
-> need to communicate with the API, see [scripting]. Example using lldap-cli:
-> `./lldap-cli user update set example-user unix-uid 5000`
 
 For users, you need to add an (integer) `unix-uid` attribute to the schema, and
 manually set the value for the users you want to enable to login with PAM.
