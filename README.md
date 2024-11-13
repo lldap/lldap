@@ -491,6 +491,9 @@ for some service integrations.
 The [bootstrap.sh](scripts/bootstrap.sh) script can enforce a list of
 users/groups/attributes from a given file, reflecting it on the server.
 
+To manage the user, group and membership lifecycle in an infrastructure-as-code
+scenario you can use the unofficial [LLDAP terraform provider in the terraform registry](https://registry.terraform.io/providers/tasansga/lldap/latest).
+
 LLDAP is also very scriptable, through its GraphQL API. See the
 [Scripting](docs/scripting.md) docs for more info.
 
