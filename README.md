@@ -153,6 +153,8 @@ services:
       - UID=####
       - GID=####
       - TZ=####/####
+      - LLDAP_LDAP_USER_DN=admin
+      - LLDAP_LDAP_USER_PASS=######
       - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
       - LLDAP_KEY_SEED=REPLACE_WITH_RANDOM
       - LLDAP_LDAP_BASE_DN=dc=example,dc=com
@@ -706,8 +708,9 @@ modern identity protocols, check out Kanidm.
 If you just set up the server, can get to the login page but the password you
 set isn't working, try the following:
 
-- (For docker): Make sure that the `/data` folder is persistent, either to a
+- (For Docker): Make sure that the `/data` folder is persistent, either to a
   docker volume or mounted from the host filesystem.
+- (For Docker): If you have run the docker container without the `LLDAP_LDAP_USER_DN` and `LLDAP_LDAP_USER_PASS` environment variables, the admin user created inside `users.db` will have no way to log in. So, kill the container, remove `users.db` and   redeploy the stack, with those variables set. (Note: Redeploying the stack with the variables but without deleting `users.db` will not do anything, as the admin user created persists due to volume mounting)
 - Check if there is a `lldap_config.toml` file (either in `/data` for docker
   or in the current directory). If there isn't, copy
   `lldap_config.docker_template.toml` there, and fill in the various values
