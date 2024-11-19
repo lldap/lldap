@@ -606,6 +606,7 @@ folder for help with:
 - [Nextcloud](example_configs/nextcloud.md)
 - [Nexus](example_configs/nexus.md)
 - [OCIS (OwnCloud Infinite Scale)](example_configs/ocis.md)
+- [OneDev](example_configs/onedev.md)
 - [Organizr](example_configs/Organizr.md)
 - [Portainer](example_configs/portainer.md)
 - [PowerDNS Admin](example_configs/powerdns_admin.md)
