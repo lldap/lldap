@@ -7,7 +7,7 @@ Select `Generic LDAP`
 * Manager DN: `uid=admin,ou=people,dc=example,dc=com`
 * Manager Password: Your bind user's password
 * User Search Base: `ou=people,dc=example,dc=com`
-* User Full Name Attribute: (Leave Blank)
+* User Full Name Attribute: `displayName`
 * Email Attribute: mail
 * User SSH Key Attribute: (Leave Blank)
 * Group Retrieval: "Search Groups Using Filter"
