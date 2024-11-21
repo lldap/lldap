@@ -1,8 +1,8 @@
-# Configuration for Onedev
+# Configuration for OneDev
 In Onedev, go to `Administration > Authentication Sources` and click `External Authentication`
 Select `Generic LDAP`
 
-* LDAP URL: Your lldap server's ip/hostname
+* LDAP URL: ldap://lldap_ip_or_hostname:3890 or ldaps://lldap_ip_or_hostname:6360
 * Authentication Required: On
 * Manager DN: `uid=admin,ou=people,dc=example,dc=com`
 * Manager Password: Your bind user's password
