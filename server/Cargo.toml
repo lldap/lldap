@@ -8,7 +8,7 @@ keywords = ["cli", "ldap", "graphql", "server", "authentication"]
 license = "GPL-3.0-only"
 name = "lldap"
 repository = "https://github.com/lldap/lldap"
-version = "0.6.1"
+version = "0.6.2-alpha"
 
 [dependencies]
 actix = "0.13"
