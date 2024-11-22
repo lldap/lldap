@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] 2024-11-22
+
+Small release, mainly to fix a migration issue with Sqlite and Postgresql.
+
+### Added
+
+ - Added a link to a community terraform provider (#1035)
+
+### Changed
+
+ - The opaque dependency now points to the official crate rather than a fork (#1040)
+
+### Fixed
+
+ - Migration of the DB schema from 7 to 8 is now automatic for sqlite, and fixed for postgres (#1045)
+ - The startup warning about `key_seed` applying instead of `key_file` now has instructions on how to silence it (#1032)
+
+### New services
+
+- OneDev
+
 ## [0.6.0] 2024-11-09
 
 ### Breaking
