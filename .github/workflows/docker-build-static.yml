@@ -738,5 +738,9 @@ jobs:
           artifacts:  aarch64-lldap.tar.gz,
                       amd64-lldap.tar.gz,
                       armhf-lldap.tar.gz
+          draft: true
+          omitBodyDuringUpdate: true
+          omitDraftDuringUpdate: true
+          omitNameDuringUpdate: true
         env:
          GITHUB_TOKEN: ${{ github.token }}
