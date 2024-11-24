@@ -1,0 +1,36 @@
+# See https://www.kimai.org/documentation/local-yaml.html
+# this file should be renamed local.yaml
+kimai:
+  ldap:
+    activate: true
+    connection:
+      host: lldap
+      port: 3890
+      useSsl: false
+      useStartTls: false
+      username: uid=admin,ou=people,dc=example,dc=com
+      password: <PASSWORD_HERE>
+      accountFilterFormat: (&(objectClass=person)(uid=%s))
+      bindRequiresDn: true
+      optReferrals: false
+
+    user:
+      baseDn: ou=people, dc=example, dc=com
+      usernameAttribute: uid
+      filter: (&(objectClass=person)(memberof=cn=kimai,ou=groups,dc=example,dc=com))
+      attributes:
+        - { ldap_attr: "uid", user_method: setUserIdentifier }
+        - { ldap_attr: "mail", user_method: setEmail }
+        - { ldap_attr: "cn", user_method: setAlias }
+
+    role:
+      baseDn: ou=groups, dc=example, dc=com
+      filter: (&(objectClass=groupOfUniqueNames))
+      usernameAttribute: cn
+      nameAttribute: cn
+      userDnAttribute: member
+
+      # Convert LDAP group name (nameAttribute) to Kimai role. Available roles are listed here: https://www.kimai.org/documentation/permissions.html
+      groups:
+        - { ldap_value: lldap_admin, role: ROLE_SUPER_ADMIN }
+        # add additional group mappings here

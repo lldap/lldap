@@ -594,6 +594,7 @@ folder for help with:
 - [Jitsi Meet](example_configs/jitsi_meet.conf)
 - [Kasm](example_configs/kasm.md)
 - [KeyCloak](example_configs/keycloak.md)
+- [Kimai](example_configs/kimai.yaml)
 - [LibreNMS](example_configs/librenms.md)
 - [Maddy](example_configs/maddy.md)
 - [Mastodon](example_configs/mastodon.env.example)
