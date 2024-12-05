@@ -1,6 +1,5 @@
 # Configuration for OneDev
-In Onedev, go to `Administration > Authentication Sources` and click `External Authentication`
-Select `Generic LDAP`
+In Onedev, go to `Administration > External Authentication Source > Authenticator` and Select `Generic LDAP`
 
 * LDAP URL: ldap://lldap_ip_or_hostname:3890 or ldaps://lldap_ip_or_hostname:6360
 * Authentication Required: On
