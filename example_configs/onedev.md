@@ -6,6 +6,7 @@ In Onedev, go to `Administration > External Authentication Source > Authenticato
 * Manager DN: `uid=admin,ou=people,dc=example,dc=com`
 * Manager Password: Your bind user's password
 * User Search Base: `ou=people,dc=example,dc=com`
+* User Search Filter" `(&(uid={0})(objectclass=person))`
 * User Full Name Attribute: `displayName`
 * Email Attribute: mail
 * User SSH Key Attribute: (Leave Blank)
