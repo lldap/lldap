@@ -20,6 +20,8 @@ pub use super::user_attribute_schema::Column as UserAttributeSchemaColumn;
 pub use super::user_attribute_schema::Entity as UserAttributeSchema;
 pub use super::user_attributes::Column as UserAttributesColumn;
 pub use super::user_attributes::Entity as UserAttributes;
+pub use super::user_attributes_search::Column as UserAttributesSearchColumn;
+pub use super::user_attributes_search::Entity as UserAttributesSearch;
 pub use super::user_object_classes::Column as UserObjectClassesColumn;
 pub use super::user_object_classes::Entity as UserObjectClasses;
 pub use super::users::Column as UserColumn;
