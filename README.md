@@ -198,32 +198,36 @@ Each package offers a [systemd service](https://wiki.archlinux.org/title/systemd
 When using the distributed packages, the default login is `admin/password`. You can change that from the web UI after starting the service.
 
 <details>
-<summary><b>Arch</b></summary>
+<summary><b>Arch Linux</b></summary>
 <br>
   Arch Linux offers unofficial support through the <a href="https://wiki.archlinux.org/title/Arch_User_Repository">Arch User Repository (AUR)</a>.<br>
   The package descriptions can be used <a href="https://wiki.archlinux.org/title/Arch_User_Repository#Getting_started">to create and install packages</a>.<br><br>
-  Maintainer: <a href="https://github.com/Zepmann">@Zepmann</a><br>
-  Support: <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
-  Package repository: <a href="https://aur.archlinux.org/packages">Arch user repository</a><br>
+  Support: <a href="https://github.com/lldap/lldap/discussions/1044">Discussions</a><br>
+  Package repository: <a href="https://aur.archlinux.org/packages">Arch User Repository</a><br><br>
 <table>
   <tr>
-    <td>Available packages:</td>
+    <td>Package name</td>
+    <td>Maintainer</td>
+    <td>Description</td>
+  </tr>
+  <tr>
     <td><a href="https://aur.archlinux.org/packages/lldap">lldap</a></td>
+    <td><a href="https://github.com/Zepmann">@Zepmann</a></td>
     <td>Builds the latest stable version.</td>
   </tr>
   <tr>
-    <td></td>
     <td><a href="https://aur.archlinux.org/packages/lldap-bin">lldap-bin</a></td>
-    <td>Uses the latest pre-compiled binaries from the <a href="https://aur.archlinux.org/packages/lldap-bin">releases in this repository</a>.<br>
-        This package is recommended if you want to run lldap on a system with limited resources.</td>
+    <td><a href="https://github.com/Zepmann">@Zepmann</a></td>
+    <td>Uses the latest pre-compiled binaries from the <a href="https://github.com/lldap/lldap/releases">releases in this repository</a>.<br>
+        This package is recommended if you want to run LLDAP on a system with limited resources.</td>
   </tr>
   <tr>
-    <td></td>
     <td><a href="https://aur.archlinux.org/packages/lldap-git">lldap-git</a></td>
+    <td></td>
     <td>Builds the latest main branch code.</td>
   </tr>
 </table>
-LLDPA configuration file: /etc/lldap.toml<br>
+LLDAP configuration file: /etc/lldap.toml<br>
 </details>
 <details>
 <summary><b>Debian</b></summary>
