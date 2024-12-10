@@ -39,13 +39,19 @@ As long as your user is in the group you specified, you should now be able to se
 
 1. Set VAULT_ADDR environment variable 
     
-    `export VAULT_ADDR=https://vault.example.com`
+    ```bash
+    export VAULT_ADDR=https://vault.example.com
+    ```
 2. Login to vault and provide token when prompted
 
-    `vault login`
+    ```bash
+    vault login
+    ````
 3. Enable the LDAP authentication method
 
-    `vault auth enable ldap`
+    ```bash
+    vault auth enable ldap
+    ```
 4. Configure the LDAP authentication method
 
     ```bash
@@ -64,6 +70,8 @@ As long as your user is in the group you specified, you should now be able to se
     If you are using plain LDAP, change the URL accordingly. If you're using LDAPS and your server does not have your LDAPS certificate installed append `insecure_tls=true` to the bottom of the command.
 5.  Add your group to the LDAP configuration and set the policy
     
-    `vault write auth/ldap/groups/vault_users policies=default`
+    ```bash
+    vault write auth/ldap/groups/vault_users policies=default
+    ```
 
 As long as your user is in the group you specified, you should now be able to select `LDAP` from the dropdown on the login page and use your credentials.
