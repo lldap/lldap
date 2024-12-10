@@ -10,8 +10,10 @@ use crate::domain::{
     ldap::{
         error::{LdapError, LdapResult},
         utils::{
-            expand_attribute_wildcards, get_custom_attribute, get_group_id_from_distinguished_name,
-            get_user_id_from_distinguished_name, map_user_field, LdapInfo, UserFieldType,
+            expand_attribute_wildcards, get_custom_attribute,
+            get_group_id_from_distinguished_name_or_plain_name,
+            get_user_id_from_distinguished_name_or_plain_name, map_user_field, ExpandedAttributes,
+            LdapInfo, UserFieldType,
         },
     },
     schema::{PublicSchema, SchemaUserAttributeExtractor},
@@ -23,14 +25,13 @@ use crate::domain::{
 
 pub fn get_user_attribute(
     user: &User,
-    attribute: &str,
+    attribute: &AttributeName,
     base_dn_str: &str,
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
-    let attribute = AttributeName::from(attribute);
-    let attribute_values = match map_user_field(&attribute, schema) {
+    let attribute_values = match map_user_field(attribute, schema) {
         UserFieldType::ObjectClass => {
             let mut classes = vec![
                 b"inetOrgPerson".to_vec(),
@@ -91,12 +92,12 @@ pub fn get_user_attribute(
                 )
             }
             _ => {
-                if ignored_user_attributes.contains(&attribute) {
+                if ignored_user_attributes.contains(attribute) {
                     return None;
                 }
                 get_custom_attribute::<SchemaUserAttributeExtractor>(
                     &user.attributes,
-                    &attribute,
+                    attribute,
                     schema,
                 )
                 .or_else(|| {
@@ -132,27 +133,34 @@ const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
 fn make_ldap_search_user_result_entry(
     user: User,
     base_dn_str: &str,
-    expanded_attributes: &[&str],
+    mut expanded_attributes: ExpandedAttributes,
     groups: Option<&[GroupDetails]>,
     ignored_user_attributes: &[AttributeName],
     schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
-    let dn = format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str);
+    if expanded_attributes.include_custom_attributes {
+        expanded_attributes.attribute_keys.extend(
+            user.attributes
+                .iter()
+                .map(|a| (a.name.clone(), a.name.to_string())),
+        );
+    }
     LdapSearchResultEntry {
-        dn,
+        dn: format!("uid={},ou=people,{}", user.user_id.as_str(), base_dn_str),
         attributes: expanded_attributes
-            .iter()
-            .filter_map(|a| {
+            .attribute_keys
+            .into_iter()
+            .filter_map(|(attribute, name)| {
                 let values = get_user_attribute(
                     &user,
-                    a,
+                    &attribute,
                     base_dn_str,
                     groups,
                     ignored_user_attributes,
                     schema,
                 )?;
                 Some(LdapPartialAttribute {
-                    atype: a.to_string(),
+                    atype: name,
                     vals: values,
                 })
             })
@@ -165,13 +173,13 @@ fn get_user_attribute_equality_filter(
     typ: AttributeType,
     is_list: bool,
     value: &str,
-) -> LdapResult<UserRequestFilter> {
+) -> UserRequestFilter {
     deserialize_attribute_value(&[value.to_owned()], typ, is_list)
-        .map_err(|e| LdapError {
-            code: LdapResultCode::Other,
-            message: format!("Invalid value for attribute {}: {}", field, e),
-        })
         .map(|v| UserRequestFilter::AttributeEquality(field.clone(), v))
+        .unwrap_or_else(|e| {
+            warn!("Invalid value for attribute {}: {}", field, e);
+            UserRequestFilter::from(false)
+        })
 }
 
 fn convert_user_filter(
@@ -200,9 +208,9 @@ fn convert_user_filter(
                     value,
                 )),
                 UserFieldType::PrimaryField(field) => Ok(UserRequestFilter::Equality(field, value)),
-                UserFieldType::Attribute(field, typ, is_list) => {
-                    get_user_attribute_equality_filter(&field, typ, is_list, &value)
-                }
+                UserFieldType::Attribute(field, typ, is_list) => Ok(
+                    get_user_attribute_equality_filter(&field, typ, is_list, &value),
+                ),
                 UserFieldType::NoMatch => {
                     if !ldap_info.ignored_user_attributes.contains(&field) {
                         warn!(
@@ -222,15 +230,18 @@ fn convert_user_filter(
                         .extra_user_object_classes
                         .contains(&LdapObjectClass::from(value)),
                 )),
-                UserFieldType::MemberOf => Ok(UserRequestFilter::MemberOf(
-                    get_group_id_from_distinguished_name(
-                        &value,
-                        &ldap_info.base_dn,
-                        &ldap_info.base_dn_str,
-                    )?,
-                )),
+                UserFieldType::MemberOf => Ok(get_group_id_from_distinguished_name_or_plain_name(
+                    &value,
+                    &ldap_info.base_dn,
+                    &ldap_info.base_dn_str,
+                )
+                .map(UserRequestFilter::MemberOf)
+                .unwrap_or_else(|e| {
+                    warn!("Invalid memberOf filter: {}", e);
+                    UserRequestFilter::from(false)
+                })),
                 UserFieldType::EntryDn | UserFieldType::Dn => {
-                    Ok(get_user_id_from_distinguished_name(
+                    Ok(get_user_id_from_distinguished_name_or_plain_name(
                         value.as_str(),
                         &ldap_info.base_dn,
                         &ldap_info.base_dn_str,
@@ -245,13 +256,13 @@ fn convert_user_filter(
         }
         LdapFilter::Present(field) => {
             let field = AttributeName::from(field.as_str());
-            // Check that it's a field we support.
-            Ok(UserRequestFilter::from(
-                field.as_str() == "objectclass"
-                    || field.as_str() == "dn"
-                    || field.as_str() == "distinguishedname"
-                    || !matches!(map_user_field(&field, schema), UserFieldType::NoMatch),
-            ))
+            Ok(match map_user_field(&field, schema) {
+                UserFieldType::Attribute(name, _, _) => {
+                    UserRequestFilter::CustomAttributePresent(name)
+                }
+                UserFieldType::NoMatch => UserRequestFilter::from(false),
+                _ => UserRequestFilter::from(true),
+            })
         }
         LdapFilter::Substring(field, substring_filter) => {
             let field = AttributeName::from(field.as_str());
@@ -290,7 +301,7 @@ fn convert_user_filter(
     }
 }
 
-fn expand_user_attribute_wildcards(attributes: &[String]) -> Vec<&str> {
+fn expand_user_attribute_wildcards(attributes: &[String]) -> ExpandedAttributes {
     expand_attribute_wildcards(attributes, ALL_USER_ATTRIBUTE_KEYS)
 }
 
@@ -329,7 +340,7 @@ pub fn convert_users_to_ldap_op<'a>(
         LdapOp::SearchResultEntry(make_ldap_search_user_result_entry(
             u.user,
             &ldap_info.base_dn_str,
-            expanded_attributes.as_ref().unwrap(),
+            expanded_attributes.clone().unwrap(),
             u.groups.as_deref(),
             &ldap_info.ignored_user_attributes,
             schema,

@@ -3,6 +3,7 @@ use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
     Error,
 };
+use std::env;
 use tracing::{debug, error, Span};
 use tracing_actix_web::RootSpanBuilder;
 use tracing_subscriber::{filter::EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
@@ -42,10 +43,14 @@ pub fn init(config: &Configuration) -> anyhow::Result<()> {
             "sqlx=warn,reqwest=warn,info"
         })
     });
-    tracing_subscriber::registry()
+    let registry = tracing_subscriber::registry()
         .with(env_filter)
-        .with(tracing_forest::ForestLayer::default())
-        .init();
+        .with(tracing_forest::ForestLayer::default());
+    if env::var("LLDAP_RAW_LOG").is_ok() {
+        registry.with(tracing_subscriber::fmt::layer()).init();
+    } else {
+        registry.init();
+    }
     Ok(())
 }
 

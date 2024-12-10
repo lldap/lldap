@@ -20,7 +20,7 @@ ssl_skip_verify = false
 # client_key = "/path/to/client.key"
 
 # Search user bind dn
-bind_dn = "uid=<your grafana user>,ou=people,dc=example,dc=org"
+bind_dn = "uid=<your grafana user>,ou=people,dc=example,dc=com"
 # Search user bind password
 # If the password contains # or ; you have to wrap it with triple quotes. Ex """#password;"""
 bind_password = "<grafana user password>"
@@ -31,7 +31,7 @@ search_filter = "(uid=%s)"
 # search_filter = "(&(uid=%s)(memberOf=cn=<your group>,ou=groups,dc=example,dc=org))"
 
 # An array of base dns to search through
-search_base_dns = ["dc=example,dc=org"]
+search_base_dns = ["dc=example,dc=com"]
 
 # Specify names of the LDAP attributes your LDAP uses
 [servers.attributes]

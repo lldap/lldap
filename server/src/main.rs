@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 #![forbid(non_ascii_idents)]
-// TODO: Remove next line after upgrade to 1.77
+// TODO: Remove next line when it stops warning about async functions.
 #![allow(clippy::blocks_in_conditions)]
 
 use std::time::Duration;
@@ -28,7 +28,7 @@ use actix_server::ServerBuilder;
 use anyhow::{anyhow, bail, Context, Result};
 use futures_util::TryFutureExt;
 use sea_orm::{Database, DatabaseConnection};
-use tracing::*;
+use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
 
 mod domain;
 mod infra;
@@ -82,9 +82,14 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
 
 async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnection> {
     let sql_pool = {
+        let num_connections = if database_url.db_type() == "sqlite" {
+            1
+        } else {
+            5
+        };
         let mut sql_opt = sea_orm::ConnectOptions::new(database_url.to_string());
         sql_opt
-            .max_connections(5)
+            .max_connections(num_connections)
             .sqlx_logging(true)
             .sqlx_logging_level(log::LevelFilter::Debug);
         Database::connect(sql_opt).await?
@@ -144,20 +149,28 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
             .await
             .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))
             .context("while creating the admin user")?;
-    } else if config.force_ldap_user_pass_reset {
-        warn!("Forcing admin password reset to the config-provided password");
+    } else if config.force_ldap_user_pass_reset.is_positive() {
+        let span = if config.force_ldap_user_pass_reset.is_yes() {
+            span!(
+                Level::WARN,
+                "Forcing admin password reset to the config-provided password"
+            )
+        } else {
+            span!(Level::INFO, "Resetting admin password")
+        };
         register_password(
             &backend_handler,
             config.ldap_user_dn.clone(),
             &config.ldap_user_pass,
         )
+        .instrument(span)
         .await
         .context(format!(
             "while resetting admin password for {}",
             &config.ldap_user_dn
         ))?;
     }
-    if config.force_update_private_key || config.force_ldap_user_pass_reset {
+    if config.force_update_private_key || config.force_ldap_user_pass_reset.is_yes() {
         bail!("Restart the server without --force-update-private-key or --force-ldap-user-pass-reset to continue.");
     }
     let server_builder = infra::ldap_server::build_ldap_server(

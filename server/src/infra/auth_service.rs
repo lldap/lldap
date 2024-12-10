@@ -401,11 +401,14 @@ async fn opaque_login_finish<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    let name = data
+    match data
         .get_opaque_handler()
         .login_finish(request.into_inner())
-        .await?;
-    get_login_successful_response(&data, &name).await
+        .await
+    {
+        Ok(name) => get_login_successful_response(&data, &name).await,
+        Err(e) => Err(e.into()),
+    }
 }
 
 async fn opaque_login_finish_handler<Backend>(
@@ -445,31 +448,6 @@ where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + LoginHandler + 'static,
 {
     simple_login(data, request)
-        .await
-        .unwrap_or_else(error_to_http_response)
-}
-
-#[instrument(skip_all, level = "debug", fields(name = %request.name))]
-async fn post_authorize<Backend>(
-    data: web::Data<AppState<Backend>>,
-    request: web::Json<BindRequest>,
-) -> TcpResult<HttpResponse>
-where
-    Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
-{
-    let name = request.name.clone();
-    data.get_login_handler().bind(request.into_inner()).await?;
-    get_login_successful_response(&data, &name).await
-}
-
-async fn post_authorize_handler<Backend>(
-    data: web::Data<AppState<Backend>>,
-    request: web::Json<BindRequest>,
-) -> HttpResponse
-where
-    Backend: TcpBackendHandler + BackendHandler + LoginHandler + 'static,
-{
-    post_authorize(data, request)
         .await
         .unwrap_or_else(error_to_http_response)
 }
@@ -648,32 +626,28 @@ pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig, enable_password_r
 where
     Backend: TcpBackendHandler + LoginHandler + OpaqueHandler + BackendHandler + 'static,
 {
-    cfg.service(web::resource("").route(web::post().to(post_authorize_handler::<Backend>)))
-        .service(
-            web::resource("/opaque/login/start")
-                .route(web::post().to(opaque_login_start::<Backend>)),
-        )
-        .service(
-            web::resource("/opaque/login/finish")
-                .route(web::post().to(opaque_login_finish_handler::<Backend>)),
-        )
-        .service(
-            web::resource("/simple/login").route(web::post().to(simple_login_handler::<Backend>)),
-        )
-        .service(web::resource("/refresh").route(web::get().to(get_refresh_handler::<Backend>)))
-        .service(web::resource("/logout").route(web::get().to(get_logout_handler::<Backend>)))
-        .service(
-            web::scope("/opaque/register")
-                .wrap(CookieToHeaderTranslatorFactory)
-                .service(
-                    web::resource("/start")
-                        .route(web::post().to(opaque_register_start_handler::<Backend>)),
-                )
-                .service(
-                    web::resource("/finish")
-                        .route(web::post().to(opaque_register_finish_handler::<Backend>)),
-                ),
-        );
+    cfg.service(
+        web::resource("/opaque/login/start").route(web::post().to(opaque_login_start::<Backend>)),
+    )
+    .service(
+        web::resource("/opaque/login/finish")
+            .route(web::post().to(opaque_login_finish_handler::<Backend>)),
+    )
+    .service(web::resource("/simple/login").route(web::post().to(simple_login_handler::<Backend>)))
+    .service(web::resource("/refresh").route(web::get().to(get_refresh_handler::<Backend>)))
+    .service(web::resource("/logout").route(web::get().to(get_logout_handler::<Backend>)))
+    .service(
+        web::scope("/opaque/register")
+            .wrap(CookieToHeaderTranslatorFactory)
+            .service(
+                web::resource("/start")
+                    .route(web::post().to(opaque_register_start_handler::<Backend>)),
+            )
+            .service(
+                web::resource("/finish")
+                    .route(web::post().to(opaque_register_finish_handler::<Backend>)),
+            ),
+    );
     if enable_password_reset {
         cfg.service(
             web::resource("/reset/step1/{user_id}")
@@ -682,6 +656,10 @@ where
         .service(
             web::resource("/reset/step2/{token}")
                 .route(web::get().to(get_password_reset_step2_handler::<Backend>)),
+        );
+    } else {
+        cfg.service(
+            web::resource("/reset/step1/{user_id}").route(web::post().to(HttpResponse::NotFound)),
         );
     }
 }

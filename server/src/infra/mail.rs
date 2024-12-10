@@ -4,6 +4,8 @@ use lettre::{
     message::Mailbox, transport::smtp::authentication::Credentials, AsyncSmtpTransport,
     AsyncTransport, Message, Tokio1Executor,
 };
+use std::time::Duration;
+use tokio::time::sleep;
 use tracing::debug;
 
 async fn send_email(
@@ -31,8 +33,8 @@ async fn send_email(
             ),
             server_url.domain().unwrap_or_default()
         )))
-        .from(from)
-        .reply_to(reply_to)
+        .from(from.0)
+        .reply_to(reply_to.0)
         .to(to)
         .subject(subject)
         .singlepart(
@@ -58,11 +60,20 @@ async fn send_email(
     }
 
     if let Err(e) = mailer.port(options.port).build().send(email).await {
-        if e.to_string().contains("CorruptMessage") {
-            Err(anyhow!("CorruptMessage returned by lettre, this usually means the SMTP encryption setting is wrong.").context(e))
-        } else {
-            Err(e.into())
-        }
+        debug!("Error sending email: {:?}", e);
+        let message = e.to_string();
+        Err(anyhow!(
+            "{}: {}",
+            if message.contains("CorruptMessage")
+                || message.contains("corrupt message")
+                || message.contains("incomplete response")
+            {
+                "SMTP protocol error, this usually means the SMTP encryption setting is wrong. Try TLS with port 465 or STARTTLS with port 587"
+            } else {
+                "Error sending email"
+            },
+            message
+        ))
     } else {
         Ok(())
     }
@@ -92,14 +103,18 @@ To reset your password please visit the following URL: {}
 Please contact an administrator if you did not initiate the process.",
         username, reset_url
     );
-    send_email(
+    let res = send_email(
         to,
         "[LLDAP] Password reset requested",
         body,
         options,
         server_url,
     )
-    .await
+    .await;
+    if res.is_err() {
+        sleep(Duration::from_secs(3)).await;
+    }
+    res
 }
 
 pub async fn send_test_email(to: Mailbox, options: &MailOptions) -> Result<()> {

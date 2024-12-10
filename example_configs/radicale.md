@@ -1,15 +1,24 @@
-# Configuration of RADICALE authentification with lldap.
+# Configuration of Radicale authentication with LLDAP
 
-# Fork of the radicale LDAP plugin to work with LLDAP : https://github.com/shroomify-it/radicale-auth-ldap-plugin
+## Native configuration (requires Radicale >=3.3.0)
 
-# Full docker-compose stack : https://github.com/shroomify-it/docker-deploy_radicale-agendav-lldap
+```ini
+[auth]
+type = ldap
+ldap_uri = ldap://lldap:3890
+ldap_base = dc=example,dc=com
+ldap_reader_dn = uid=admin,ou=people,dc=example,dc=com
+ldap_secret = CHANGEME
+ldap_filter = (&(objectClass=person)(uid={0}))
+lc_username = True
+```
 
-# Radicale config file v0.3 (inside docker container /etc/radicale/config https://radicale.org/v3.html#configuration)
+## Plugin configuration (requires [radicale-auth-ldap](https://github.com/shroomify-it/radicale-auth-ldap-plugin) plugin and Radicale >=3.0)
 
-```toml
+```ini
 [auth]
 type = radicale_auth_ldap
-ldap_url = ldap://lldap:3890  
+ldap_url = ldap://lldap:3890
 ldap_base = dc=example,dc=com
 ldap_attribute = uid
 ldap_filter = (objectClass=person)

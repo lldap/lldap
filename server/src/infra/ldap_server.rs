@@ -19,8 +19,9 @@ use rustls::PrivateKey;
 use tokio_rustls::TlsAcceptor as RustlsTlsAcceptor;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tracing::{debug, error, info, instrument};
+use uuid::Uuid;
 
-#[instrument(skip_all, level = "info", name = "LDAP request")]
+#[instrument(skip_all, level = "info", name = "LDAP request", fields(session_id = %session.session_uuid()))]
 async fn handle_ldap_message<Backend, Writer>(
     msg: Result<LdapMsg, std::io::Error>,
     resp: &mut Writer,
@@ -33,6 +34,11 @@ where
 {
     use futures_util::SinkExt;
     let msg = msg.context("while receiving LDAP op")?;
+    for control in msg.ctrl.iter() {
+        if let LdapControl::Unknown { oid, .. } = control {
+            info!("Received unknown control: {}, ignoring", oid);
+        }
+    }
     debug!(?msg);
     match session.handle_ldap_message(msg.op).await {
         None => return Ok(false),
@@ -68,7 +74,6 @@ where
     Ok(true)
 }
 
-#[instrument(skip_all, level = "info", name = "LDAP session")]
 async fn handle_ldap_stream<Stream, Backend>(
     stream: Stream,
     backend_handler: Backend,
@@ -86,13 +91,16 @@ where
     let mut requests = FramedRead::new(r, LdapCodec::default());
     let mut resp = FramedWrite::new(w, LdapCodec::default());
 
+    let session_uuid = Uuid::new_v4();
     let mut session = LdapHandler::new(
         AccessControlledBackendHandler::new(backend_handler),
         ldap_base_dn,
         ignored_user_attributes,
         ignored_group_attributes,
+        session_uuid,
     );
 
+    info!("LDAP session start: {}", session_uuid);
     while let Some(msg) = requests.next().await {
         if !handle_ldap_message(msg, &mut resp, &mut session)
             .await
@@ -101,6 +109,7 @@ where
             break;
         }
     }
+    info!("LDAP session end: {}", session_uuid);
     Ok(requests.into_inner().unsplit(resp.into_inner()))
 }
 

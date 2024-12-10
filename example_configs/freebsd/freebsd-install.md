@@ -11,7 +11,7 @@ Make your config, if your want to enable LDAPS, copy your server key and certifi
 
 Enable lldap service in /etc/rc.conf:
 
-`echo "lldap_enable=YES" > /etc/rc.conf`
+`sysrc lldap_enable="YES"`
 
 Start your service:
 

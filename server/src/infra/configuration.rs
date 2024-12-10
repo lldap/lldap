@@ -1,10 +1,15 @@
+use std::collections::HashSet;
+
 use crate::{
     domain::{
         sql_tables::{ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation},
         types::{AttributeName, UserId},
     },
     infra::{
-        cli::{GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts},
+        cli::{
+            GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts,
+            TrueFalseAlways,
+        },
         database_string::DatabaseUrl,
     },
 };
@@ -14,13 +19,19 @@ use figment::{
     Figment,
 };
 use figment_file_provider_adapter::FileAdapter;
-use lettre::message::Mailbox;
 use lldap_auth::opaque::{server::ServerSetup, KeyPair};
 use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[derive(
+    Clone, Deserialize, Serialize, derive_more::FromStr, derive_more::Debug, derive_more::Display,
+)]
+#[debug(r#""{_0}""#)]
+#[display("{_0}")]
+pub struct Mailbox(pub lettre::message::Mailbox);
+
+#[derive(Clone, derive_more::Debug, Deserialize, Serialize, derive_builder::Builder)]
 #[builder(pattern = "owned")]
 pub struct MailOptions {
     #[builder(default = "false")]
@@ -40,6 +51,8 @@ pub struct MailOptions {
     #[builder(default = "SmtpEncryption::Tls")]
     pub smtp_encryption: SmtpEncryption,
     /// Deprecated.
+    #[debug(skip)]
+    #[serde(skip)]
     #[builder(default = "None")]
     pub tls_required: Option<bool>,
 }
@@ -69,7 +82,11 @@ impl std::default::Default for LdapsOptions {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[derive(Clone, Deserialize, Serialize, derive_more::Debug)]
+#[debug(r#""{_0}""#)]
+pub struct HttpUrl(pub Url);
+
+#[derive(Clone, Deserialize, Serialize, derive_builder::Builder, derive_more::Debug)]
 #[builder(pattern = "owned", build_fn(name = "private_build"))]
 pub struct Configuration {
     #[builder(default = r#"String::from("0.0.0.0")"#)]
@@ -90,8 +107,8 @@ pub struct Configuration {
     pub ldap_user_email: String,
     #[builder(default = r#"SecUtf8::from("password")"#)]
     pub ldap_user_pass: SecUtf8,
-    #[builder(default = "false")]
-    pub force_ldap_user_pass_reset: bool,
+    #[builder(default)]
+    pub force_ldap_user_pass_reset: TrueFalseAlways,
     #[builder(default = "false")]
     pub force_update_private_key: bool,
     #[builder(default = r#"DatabaseUrl::from("sqlite://users.db?mode=rwc")"#)]
@@ -112,8 +129,9 @@ pub struct Configuration {
     pub smtp_options: MailOptions,
     #[builder(default)]
     pub ldaps_options: LdapsOptions,
-    #[builder(default = r#"Url::parse("http://localhost").unwrap()"#)]
-    pub http_url: Url,
+    #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
+    pub http_url: HttpUrl,
+    #[debug(skip)]
     #[serde(skip)]
     #[builder(field(private), default = "None")]
     server_setup: Option<ServerSetupConfig>,
@@ -229,16 +247,22 @@ fn generate_random_private_key() -> ServerSetup {
     ServerSetup::new(&mut rng)
 }
 
+#[cfg(unix)]
+fn set_mode(permissions: &mut std::fs::Permissions) {
+    use std::os::unix::fs::PermissionsExt;
+    permissions.set_mode(0o400);
+}
+
+#[cfg(not(unix))]
+fn set_mode(_: &mut std::fs::Permissions) {}
+
 fn write_to_readonly_file(path: &std::path::Path, buffer: &[u8]) -> Result<()> {
     use std::{fs::File, io::Write};
     assert!(!path.exists());
     let mut file = File::create(path)?;
     let mut permissions = file.metadata()?.permissions();
     permissions.set_readonly(true);
-    if cfg!(unix) {
-        use std::os::unix::fs::PermissionsExt;
-        permissions.set_mode(0o400);
-    }
+    set_mode(&mut permissions);
     file.set_permissions(permissions)?;
     Ok(file.write_all(buffer)?)
 }
@@ -337,9 +361,9 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
                 file_path
             );
         } else if file_path == "server_key" {
-            eprintln!("WARNING: A key_seed was given, we will ignore the server_key and generate one from the seed!");
+            eprintln!("WARNING: A key_seed was given, we will ignore the key_file and generate one from the seed! Set key_file to an empty string in the config to silence this message.");
         } else {
-            println!("Generating the key from the key_seed");
+            println!("Generating the private key from the key_seed");
         }
         use rand::SeedableRng;
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(stable_hash(key_seed.as_bytes()));
@@ -410,7 +434,7 @@ impl ConfigOverrider for RunOpts {
         }
 
         if let Some(url) = self.http_url.as_ref() {
-            config.http_url = url.clone();
+            config.http_url = HttpUrl(url.clone());
         }
 
         if let Some(database_url) = self.database_url.as_ref() {
@@ -464,10 +488,10 @@ impl ConfigOverrider for GeneralConfigOpts {
 impl ConfigOverrider for SmtpOpts {
     fn override_config(&self, config: &mut Configuration) {
         if let Some(from) = &self.smtp_from {
-            config.smtp_options.from = Some(from.clone());
+            config.smtp_options.from = Some(Mailbox(from.clone()));
         }
         if let Some(reply_to) = &self.smtp_reply_to {
-            config.smtp_options.reply_to = Some(reply_to.clone());
+            config.smtp_options.reply_to = Some(Mailbox(reply_to.clone()));
         }
         if let Some(server) = &self.smtp_server {
             config.smtp_options.server.clone_from(server);
@@ -493,6 +517,46 @@ impl ConfigOverrider for SmtpOpts {
     }
 }
 
+fn extract_keys(dict: &figment::value::Dict) -> HashSet<String> {
+    use figment::value::{Dict, Value};
+    fn process_value(value: &Dict, keys: &mut HashSet<String>, path: &mut Vec<String>) {
+        for (key, value) in value {
+            match value {
+                Value::Dict(_, dict) => {
+                    path.push(format!("{}__", key.to_ascii_uppercase()));
+                    process_value(dict, keys, path);
+                    path.pop();
+                }
+                _ => {
+                    keys.insert(format!(
+                        "LLDAP_{}{}",
+                        path.join(""),
+                        key.to_ascii_uppercase()
+                    ));
+                }
+            }
+        }
+    }
+    let mut keys = HashSet::new();
+    let mut path = Vec::new();
+    process_value(dict, &mut keys, &mut path);
+    keys
+}
+
+fn expected_keys(dict: &figment::value::Dict) -> HashSet<String> {
+    let mut keys = extract_keys(dict);
+    // CLI-only values.
+    keys.insert("LLDAP_CONFIG_FILE".to_string());
+    keys.insert("LLDAP_TEST_EMAIL_TO".to_string());
+    // Alternate spellings from clap.
+    keys.insert("LLDAP_SERVER_KEY_FILE".to_string());
+    keys.insert("LLDAP_SERVER_KEY_SEED".to_string());
+    keys.insert("LLDAP_SMTP_OPTIONS__TO".to_string());
+    // Deprecated
+    keys.insert("LLDAP_SMTP_OPTIONS__TLS_REQUIRED".to_string());
+    keys
+}
+
 pub fn init<C>(overrides: C) -> Result<Configuration>
 where
     C: TopLevelCommandOpts + ConfigOverrider,
@@ -503,18 +567,36 @@ where
     );
 
     let ignore_keys = ["key_file", "cert_file"];
+    let env_variable_provider =
+        || FileAdapter::wrap(Env::prefixed("LLDAP_").split("__")).ignore(&ignore_keys);
     let figment_config = Figment::from(Serialized::defaults(
         ConfigurationBuilder::default().private_build().unwrap(),
     ))
     .merge(
         FileAdapter::wrap(Toml::file(&overrides.general_config().config_file)).ignore(&ignore_keys),
     )
-    .merge(FileAdapter::wrap(Env::prefixed("LLDAP_").split("__")).ignore(&ignore_keys));
+    .merge(env_variable_provider());
     let mut config: Configuration = figment_config.extract()?;
 
     overrides.override_config(&mut config);
     if config.verbose {
         println!("Configuration: {:#?}", &config);
+    }
+    {
+        use figment::{Profile, Provider};
+        let expected_keys = expected_keys(
+            &Figment::from(Serialized::defaults(
+                ConfigurationBuilder::default().private_build().unwrap(),
+            ))
+            .data()
+            .unwrap()[&Profile::default()],
+        );
+        extract_keys(&env_variable_provider().data().unwrap()[&Profile::default()])
+            .iter()
+            .filter(|k| !expected_keys.contains(k.as_str()))
+            .for_each(|k| {
+                eprintln!("WARNING: Unknown environment variable: LLDAP_{}", k);
+            });
     }
     config.server_setup = Some(get_server_setup(
         &config.key_file,

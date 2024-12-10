@@ -194,7 +194,7 @@ where
         .get_jwt_blacklist()
         .await
         .context("while getting the jwt blacklist")?;
-    let server_url = config.http_url.clone();
+    let server_url = config.http_url.0.clone();
     let mail_options = config.smtp_options.clone();
     let verbose = config.verbose;
     info!("Starting the API/web server on port {}", config.http_port);

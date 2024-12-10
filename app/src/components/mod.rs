@@ -14,6 +14,7 @@ pub mod delete_user;
 pub mod delete_user_attribute;
 pub mod form;
 pub mod group_details;
+pub mod group_details_form;
 pub mod group_schema_table;
 pub mod group_table;
 pub mod login;

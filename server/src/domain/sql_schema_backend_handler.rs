@@ -175,7 +175,9 @@ impl SqlBackendHandler {
 mod tests {
     use super::*;
     use crate::domain::{
-        handler::AttributeList, sql_backend_handler::tests::*, types::AttributeType,
+        handler::{AttributeList, UpdateUserRequest, UserBackendHandler, UserRequestFilter},
+        sql_backend_handler::tests::*,
+        types::{AttributeType, AttributeValue, Serialized},
     };
     use pretty_assertions::assert_eq;
 
@@ -194,6 +196,7 @@ mod tests {
                             is_visible: true,
                             is_editable: true,
                             is_hardcoded: true,
+                            is_readonly: false,
                         },
                         AttributeSchema {
                             name: "first_name".into(),
@@ -202,6 +205,7 @@ mod tests {
                             is_visible: true,
                             is_editable: true,
                             is_hardcoded: true,
+                            is_readonly: false,
                         },
                         AttributeSchema {
                             name: "last_name".into(),
@@ -210,6 +214,7 @@ mod tests {
                             is_visible: true,
                             is_editable: true,
                             is_hardcoded: true,
+                            is_readonly: false,
                         }
                     ]
                 },
@@ -244,6 +249,7 @@ mod tests {
             is_visible: false,
             is_editable: false,
             is_hardcoded: false,
+            is_readonly: false,
         };
         assert!(fixture
             .handler
@@ -269,6 +275,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_user_attribute_present_filter() {
+        let fixture = TestFixture::new().await;
+        let new_attribute = CreateAttributeRequest {
+            name: "new_attribute".into(),
+            attribute_type: AttributeType::Integer,
+            is_list: true,
+            is_visible: false,
+            is_editable: false,
+        };
+        fixture
+            .handler
+            .add_user_attribute(new_attribute)
+            .await
+            .unwrap();
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: "bob".into(),
+                insert_attributes: vec![AttributeValue {
+                    name: "new_attribute".into(),
+                    value: Serialized::from(&3),
+                }],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::CustomAttributePresent(
+                "new_attribute".into(),
+            )),
+        )
+        .await;
+        assert_eq!(users, vec!["bob"]);
+    }
+
+    #[tokio::test]
     async fn test_group_attribute_add_and_delete() {
         let fixture = TestFixture::new().await;
         let new_attribute = CreateAttributeRequest {
@@ -290,6 +333,7 @@ mod tests {
             is_visible: true,
             is_editable: false,
             is_hardcoded: false,
+            is_readonly: false,
         };
         assert!(fixture
             .handler

@@ -212,6 +212,13 @@ pub struct LdapHandler<Backend> {
     user_info: Option<ValidationResults>,
     backend_handler: AccessControlledBackendHandler<Backend>,
     ldap_info: LdapInfo,
+    session_uuid: uuid::Uuid,
+}
+
+impl<Backend> LdapHandler<Backend> {
+    pub fn session_uuid(&self) -> &uuid::Uuid {
+        &self.session_uuid
+    }
 }
 
 impl<Backend: LoginHandler> LdapHandler<Backend> {
@@ -232,6 +239,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         mut ldap_base_dn: String,
         ignored_user_attributes: Vec<AttributeName>,
         ignored_group_attributes: Vec<AttributeName>,
+        session_uuid: uuid::Uuid,
     ) -> Self {
         ldap_base_dn.make_ascii_lowercase();
         Self {
@@ -248,6 +256,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 ignored_user_attributes,
                 ignored_group_attributes,
             },
+            session_uuid,
         }
     }
 
@@ -258,11 +267,18 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             ldap_base_dn.to_string(),
             vec![],
             vec![],
+            uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
         )
     }
 
     #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
     pub async fn do_bind(&mut self, request: &LdapBindRequest) -> (LdapResultCode, String) {
+        if request.dn.is_empty() {
+            return (
+                LdapResultCode::InappropriateAuthentication,
+                "Anonymous bind not allowed".to_string(),
+            );
+        }
         let user_id = match get_user_id_from_distinguished_name(
             &request.dn.to_ascii_lowercase(),
             &self.ldap_info.base_dn,
@@ -339,7 +355,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         match (&request.user_identity, &request.new_password) {
             (Some(user), Some(password)) => {
                 match get_user_id_from_distinguished_name(
-                    user,
+                    &user.to_ascii_lowercase(),
                     &self.ldap_info.base_dn,
                     &self.ldap_info.base_dn_str,
                 ) {
@@ -395,6 +411,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
+    #[instrument(skip_all, level = "debug")]
     async fn do_extended_request(&mut self, request: &LdapExtendedRequest) -> Vec<LdapOp> {
         match LdapPasswordModifyRequest::try_from(request) {
             Ok(password_request) => self
@@ -500,6 +517,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
+    #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
     async fn do_modify_request(&mut self, request: &LdapModifyRequest) -> Vec<LdapOp> {
         self.handle_modify_request(request)
             .await
@@ -670,6 +688,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         Ok(results)
     }
 
+    #[instrument(skip_all, level = "debug")]
     async fn do_create_user(&self, request: LdapAddRequest) -> LdapResult<Vec<LdapOp>> {
         let backend_handler = self
             .user_info
@@ -755,6 +774,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
     }
 
+    #[instrument(skip_all, level = "debug")]
     pub async fn do_compare(&mut self, request: LdapCompareRequest) -> LdapResult<Vec<LdapOp>> {
         let req = make_search_request::<String>(
             &self.ldap_info.base_dn_str,
@@ -769,13 +789,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 message: "Too many search results".to_string(),
             });
         }
-
+        let requested_attribute = AttributeName::from(&request.atype);
         match entries.first() {
             Some(LdapOp::SearchResultEntry(entry)) => {
-                let available = entry
-                    .attributes
-                    .iter()
-                    .any(|attr| attr.atype == request.atype && attr.vals.contains(&request.val));
+                let available = entry.attributes.iter().any(|attr| {
+                    AttributeName::from(&attr.atype) == requested_attribute
+                        && attr.vals.contains(&request.val)
+                });
                 Ok(vec![LdapOp::CompareResult(LdapResultOp {
                     code: if available {
                         LdapResultCode::CompareTrue
@@ -823,6 +843,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 .await
                 .unwrap_or_else(|e: LdapError| vec![make_search_error(e.code, e.message)]),
             LdapOp::UnbindRequest => {
+                debug!(
+                    "Unbind request for {}",
+                    self.user_info
+                        .as_ref()
+                        .map(|u| u.user.as_str())
+                        .unwrap_or("<not bound>"),
+                );
                 self.user_info = None;
                 // No need to notify on unbind (per rfc4511)
                 return None;
@@ -1282,32 +1309,6 @@ mod tests {
                     dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
-                            atype: "objectClass".to_string(),
-                            vals: vec![
-                                b"inetOrgPerson".to_vec(),
-                                b"posixAccount".to_vec(),
-                                b"mailAccount".to_vec(),
-                                b"person".to_vec(),
-                                b"customUserClass".to_vec(),
-                            ]
-                        },
-                        LdapPartialAttribute {
-                            atype: "uid".to_string(),
-                            vals: vec![b"bob_1".to_vec()]
-                        },
-                        LdapPartialAttribute {
-                            atype: "mail".to_string(),
-                            vals: vec![b"bob@bobmail.bob".to_vec()]
-                        },
-                        LdapPartialAttribute {
-                            atype: "givenName".to_string(),
-                            vals: vec!["Bôb".to_string().into_bytes()]
-                        },
-                        LdapPartialAttribute {
-                            atype: "sn".to_string(),
-                            vals: vec!["Böbberson".to_string().into_bytes()]
-                        },
-                        LdapPartialAttribute {
                             atype: "cn".to_string(),
                             vals: vec!["Bôb Böbberson".to_string().into_bytes()]
                         },
@@ -1319,11 +1320,14 @@ mod tests {
                             atype: "entryUuid".to_string(),
                             vals: vec![b"698e1d5f-7a40-3151-8745-b9b8a37839da".to_vec()]
                         },
-                    ],
-                }),
-                LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                    dn: "uid=jim,ou=people,dc=example,dc=com".to_string(),
-                    attributes: vec![
+                        LdapPartialAttribute {
+                            atype: "givenName".to_string(),
+                            vals: vec!["Bôb".to_string().into_bytes()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "mail".to_string(),
+                            vals: vec![b"bob@bobmail.bob".to_vec()]
+                        },
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
                             vals: vec![
@@ -1335,21 +1339,18 @@ mod tests {
                             ]
                         },
                         LdapPartialAttribute {
-                            atype: "uid".to_string(),
-                            vals: vec![b"jim".to_vec()]
-                        },
-                        LdapPartialAttribute {
-                            atype: "mail".to_string(),
-                            vals: vec![b"jim@cricket.jim".to_vec()]
-                        },
-                        LdapPartialAttribute {
-                            atype: "givenName".to_string(),
-                            vals: vec![b"Jim".to_vec()]
-                        },
-                        LdapPartialAttribute {
                             atype: "sn".to_string(),
-                            vals: vec![b"Cricket".to_vec()]
+                            vals: vec!["Böbberson".to_string().into_bytes()]
                         },
+                        LdapPartialAttribute {
+                            atype: "uid".to_string(),
+                            vals: vec![b"bob_1".to_vec()]
+                        },
+                    ],
+                }),
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "uid=jim,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![
                         LdapPartialAttribute {
                             atype: "cn".to_string(),
                             vals: vec![b"Jimminy Cricket".to_vec()]
@@ -1363,8 +1364,34 @@ mod tests {
                             vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()]
                         },
                         LdapPartialAttribute {
+                            atype: "givenName".to_string(),
+                            vals: vec![b"Jim".to_vec()]
+                        },
+                        LdapPartialAttribute {
                             atype: "jpegPhoto".to_string(),
                             vals: vec![JpegPhoto::for_tests().into_bytes()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "mail".to_string(),
+                            vals: vec![b"jim@cricket.jim".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "objectClass".to_string(),
+                            vals: vec![
+                                b"inetOrgPerson".to_vec(),
+                                b"posixAccount".to_vec(),
+                                b"mailAccount".to_vec(),
+                                b"person".to_vec(),
+                                b"customUserClass".to_vec(),
+                            ]
+                        },
+                        LdapPartialAttribute {
+                            atype: "sn".to_string(),
+                            vals: vec![b"Cricket".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "uid".to_string(),
+                            vals: vec![b"jim".to_vec()]
                         },
                     ],
                 }),
@@ -1418,12 +1445,20 @@ mod tests {
                     dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
-                            atype: "objectClass".to_string(),
-                            vals: vec![b"groupOfUniqueNames".to_vec(),]
-                        },
-                        LdapPartialAttribute {
                             atype: "cn".to_string(),
                             vals: vec![b"group_1".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "entryDN".to_string(),
+                            vals: vec![b"uid=group_1,ou=groups,dc=example,dc=com".to_vec()],
+                        },
+                        LdapPartialAttribute {
+                            atype: "entryUuid".to_string(),
+                            vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
+                        },
+                        LdapPartialAttribute {
+                            atype: "objectClass".to_string(),
+                            vals: vec![b"groupOfUniqueNames".to_vec(),]
                         },
                         LdapPartialAttribute {
                             atype: "uniqueMember".to_string(),
@@ -1432,38 +1467,30 @@ mod tests {
                                 b"uid=john,ou=people,dc=example,dc=com".to_vec(),
                             ]
                         },
-                        LdapPartialAttribute {
-                            atype: "entryUuid".to_string(),
-                            vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
-                        },
-                        LdapPartialAttribute {
-                            atype: "entryDN".to_string(),
-                            vals: vec![b"uid=group_1,ou=groups,dc=example,dc=com".to_vec()],
-                        },
                     ],
                 }),
                 LdapOp::SearchResultEntry(LdapSearchResultEntry {
                     dn: "cn=BestGroup,ou=groups,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
-                            atype: "objectClass".to_string(),
-                            vals: vec![b"groupOfUniqueNames".to_vec(),]
-                        },
-                        LdapPartialAttribute {
                             atype: "cn".to_string(),
                             vals: vec![b"BestGroup".to_vec()]
                         },
                         LdapPartialAttribute {
-                            atype: "uniqueMember".to_string(),
-                            vals: vec![b"uid=john,ou=people,dc=example,dc=com".to_vec()]
+                            atype: "entryDN".to_string(),
+                            vals: vec![b"uid=BestGroup,ou=groups,dc=example,dc=com".to_vec()],
                         },
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
                             vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
                         },
                         LdapPartialAttribute {
-                            atype: "entryDN".to_string(),
-                            vals: vec![b"uid=BestGroup,ou=groups,dc=example,dc=com".to_vec()],
+                            atype: "objectClass".to_string(),
+                            vals: vec![b"groupOfUniqueNames".to_vec(),]
+                        },
+                        LdapPartialAttribute {
+                            atype: "uniqueMember".to_string(),
+                            vals: vec![b"uid=john,ou=people,dc=example,dc=com".to_vec()]
                         },
                     ],
                 }),
@@ -1837,8 +1864,8 @@ mod tests {
                 eq(Some(UserRequestFilter::MemberOf("group_1".into()))),
                 eq(false),
             )
-            .times(1)
-            .return_once(|_, _| Ok(vec![]));
+            .times(2)
+            .returning(|_, _| Ok(vec![]));
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality(
@@ -1857,11 +1884,17 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            Err(LdapError {
-                code: LdapResultCode::InvalidDNSyntax,
-                message: "Missing DN value".to_string()
-            })
+            Ok(vec![make_search_success()])
         );
+    }
+    #[tokio::test]
+    async fn test_search_member_of_filter_error() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::from(false))), eq(false))
+            .times(1)
+            .returning(|_, _| Ok(vec![]));
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality(
                 "memberOf".to_string(),
@@ -1871,10 +1904,8 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            Err(LdapError{
-                code: LdapResultCode::InvalidDNSyntax,
-                message: r#"Unexpected DN format. Got "cn=mygroup,dc=example,dc=com", expected: "uid=id,ou=groups,dc=example,dc=com""#.to_string()
-            })
+            // The error is ignored, a warning is printed.
+            Ok(vec![make_search_success()])
         );
     }
 
@@ -2019,6 +2050,10 @@ mod tests {
                     dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
+                            atype: "cn".to_string(),
+                            vals: vec!["Bôb Böbberson".to_string().into_bytes()]
+                        },
+                        LdapPartialAttribute {
                             atype: "objectClass".to_string(),
                             vals: vec![
                                 b"inetOrgPerson".to_vec(),
@@ -2026,11 +2061,7 @@ mod tests {
                                 b"mailAccount".to_vec(),
                                 b"person".to_vec(),
                                 b"customUserClass".to_vec(),
-                            ]
-                        },
-                        LdapPartialAttribute {
-                            atype: "cn".to_string(),
-                            vals: vec!["Bôb Böbberson".to_string().into_bytes()]
+                            ],
                         },
                     ],
                 }),
@@ -2038,12 +2069,12 @@ mod tests {
                     dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
-                            atype: "objectClass".to_string(),
-                            vals: vec![b"groupOfUniqueNames".to_vec(),]
-                        },
-                        LdapPartialAttribute {
                             atype: "cn".to_string(),
                             vals: vec![b"group_1".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "objectClass".to_string(),
+                            vals: vec![b"groupOfUniqueNames".to_vec(),]
                         },
                     ],
                 }),
@@ -2104,34 +2135,12 @@ mod tests {
                 dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
                 attributes: vec![
                     LdapPartialAttribute {
-                        atype: "objectclass".to_string(),
-                        vals: vec![
-                            b"inetOrgPerson".to_vec(),
-                            b"posixAccount".to_vec(),
-                            b"mailAccount".to_vec(),
-                            b"person".to_vec(),
-                            b"customUserClass".to_vec(),
-                        ],
-                    },
-                    LdapPartialAttribute {
-                        atype: "uid".to_string(),
-                        vals: vec![b"bob_1".to_vec()],
-                    },
-                    LdapPartialAttribute {
-                        atype: "mail".to_string(),
-                        vals: vec![b"bob@bobmail.bob".to_vec()],
-                    },
-                    LdapPartialAttribute {
-                        atype: "sn".to_string(),
-                        vals: vec!["Böbberson".to_string().into_bytes()],
+                        atype: "avatar".to_string(),
+                        vals: vec![JpegPhoto::for_tests().into_bytes()],
                     },
                     LdapPartialAttribute {
                         atype: "cn".to_string(),
                         vals: vec!["Bôb Böbberson".to_string().into_bytes()],
-                    },
-                    LdapPartialAttribute {
-                        atype: "jpegPhoto".to_string(),
-                        vals: vec![JpegPhoto::for_tests().into_bytes()],
                     },
                     LdapPartialAttribute {
                         atype: "createtimestamp".to_string(),
@@ -2145,6 +2154,36 @@ mod tests {
                         atype: "entryuuid".to_string(),
                         vals: vec![b"b4ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
                     },
+                    LdapPartialAttribute {
+                        atype: "jpegPhoto".to_string(),
+                        vals: vec![JpegPhoto::for_tests().into_bytes()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "last_name".to_string(),
+                        vals: vec!["Böbberson".to_string().into_bytes()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "mail".to_string(),
+                        vals: vec![b"bob@bobmail.bob".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "objectclass".to_string(),
+                        vals: vec![
+                            b"inetOrgPerson".to_vec(),
+                            b"posixAccount".to_vec(),
+                            b"mailAccount".to_vec(),
+                            b"person".to_vec(),
+                            b"customUserClass".to_vec(),
+                        ],
+                    },
+                    LdapPartialAttribute {
+                        atype: "sn".to_string(),
+                        vals: vec!["Böbberson".to_string().into_bytes()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "uid".to_string(),
+                        vals: vec![b"bob_1".to_vec()],
+                    },
                 ],
             }),
             // "objectclass", "dn", "uid", "cn", "member", "uniquemember"
@@ -2152,17 +2191,12 @@ mod tests {
                 dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
                 attributes: vec![
                     LdapPartialAttribute {
-                        atype: "objectclass".to_string(),
-                        vals: vec![b"groupOfUniqueNames".to_vec()],
-                    },
-                    // UID
-                    LdapPartialAttribute {
-                        atype: "uid".to_string(),
-                        vals: vec![b"group_1".to_vec()],
-                    },
-                    LdapPartialAttribute {
                         atype: "cn".to_string(),
                         vals: vec![b"group_1".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "entryuuid".to_string(),
+                        vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
                     },
                     //member / uniquemember : "uid={},ou=people,{}"
                     LdapPartialAttribute {
@@ -2173,15 +2207,20 @@ mod tests {
                         ],
                     },
                     LdapPartialAttribute {
+                        atype: "objectclass".to_string(),
+                        vals: vec![b"groupOfUniqueNames".to_vec()],
+                    },
+                    // UID
+                    LdapPartialAttribute {
+                        atype: "uid".to_string(),
+                        vals: vec![b"group_1".to_vec()],
+                    },
+                    LdapPartialAttribute {
                         atype: "uniquemember".to_string(),
                         vals: vec![
                             b"uid=bob,ou=people,dc=example,dc=com".to_vec(),
                             b"uid=john,ou=people,dc=example,dc=com".to_vec(),
                         ],
-                    },
-                    LdapPartialAttribute {
-                        atype: "entryuuid".to_string(),
-                        vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
                     },
                 ],
             }),
@@ -2880,6 +2919,7 @@ mod tests {
                         is_visible: true,
                         is_editable: true,
                         is_hardcoded: false,
+                        is_readonly: false,
                     }],
                 },
                 group_attributes: AttributeList {
@@ -2890,6 +2930,7 @@ mod tests {
                         is_visible: true,
                         is_editable: true,
                         is_hardcoded: false,
+                        is_readonly: false,
                     }],
                 },
                 extra_user_object_classes: vec![
@@ -2913,12 +2954,12 @@ mod tests {
                     dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
                     attributes: vec![
                         LdapPartialAttribute {
-                            atype: "uid".to_owned(),
-                            vals: vec![b"test".to_vec()],
-                        },
-                        LdapPartialAttribute {
                             atype: "nickname".to_owned(),
                             vals: vec![b"Bob the Builder".to_vec()],
+                        },
+                        LdapPartialAttribute {
+                            atype: "uid".to_owned(),
+                            vals: vec![b"test".to_vec()],
                         },
                     ],
                 }),
@@ -2926,12 +2967,12 @@ mod tests {
                     dn: "cn=group,ou=groups,dc=example,dc=com".to_owned(),
                     attributes: vec![
                         LdapPartialAttribute {
-                            atype: "uid".to_owned(),
-                            vals: vec![b"group".to_vec()],
-                        },
-                        LdapPartialAttribute {
                             atype: "club_name".to_owned(),
                             vals: vec![b"Breakfast Club".to_vec()],
+                        },
+                        LdapPartialAttribute {
+                            atype: "uid".to_owned(),
+                            vals: vec![b"group".to_vec()],
                         },
                     ],
                 }),

@@ -63,7 +63,7 @@ type Query {
 "The details required to create a user."
 input CreateUserInput {
   id: String!
-  email: String!
+  email: String
   displayName: String
   firstName: String
   lastName: String
@@ -78,6 +78,7 @@ type AttributeSchema {
   isVisible: Boolean!
   isEditable: Boolean!
   isHardcoded: Boolean!
+  isReadonly: Boolean!
 }
 
 "The fields that can be updated for a user."

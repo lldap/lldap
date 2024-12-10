@@ -5,7 +5,7 @@ use crate::{
             static_value::StaticValue,
             submit::Submit,
         },
-        user_details::{Attribute, AttributeSchema, User},
+        group_details::{Attribute, AttributeSchema, Group},
     },
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
@@ -17,23 +17,24 @@ use anyhow::{Ok, Result};
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
 
-/// The GraphQL query sent to the server to update the user details.
+/// The GraphQL query sent to the server to update the group details.
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
-    query_path = "queries/update_user.graphql",
+    query_path = "queries/update_group.graphql",
     response_derives = "Debug",
     variables_derives = "Clone,PartialEq,Eq",
     custom_scalars_module = "crate::infra::graphql"
 )]
-pub struct UpdateUser;
+pub struct UpdateGroup;
 
-/// A [yew::Component] to display the user details, with a form allowing to edit them.
-pub struct UserDetailsForm {
+/// A [yew::Component] to display the group details, with a form allowing to edit them.
+pub struct GroupDetailsForm {
     common: CommonComponentParts<Self>,
-    /// True if we just successfully updated the user, to display a success message.
+    /// True if we just successfully updated the group, to display a success message.
     just_updated: bool,
-    user: User,
+    updated_group_name: bool,
+    group: Group,
     form_ref: NodeRef,
 }
 
@@ -43,19 +44,19 @@ pub enum Msg {
     /// The "Submit" button was clicked.
     SubmitClicked,
     /// We got the response from the server about our update message.
-    UserUpdated(Result<update_user::ResponseData>),
+    GroupUpdated(Result<update_group::ResponseData>),
 }
 
-#[derive(yew::Properties, Clone, PartialEq, Eq)]
+#[derive(yew::Properties, Clone, PartialEq)]
 pub struct Props {
-    /// The current user details.
-    pub user: User,
-    pub user_attributes_schema: Vec<AttributeSchema>,
+    /// The current group details.
+    pub group: Group,
+    pub group_attributes_schema: Vec<AttributeSchema>,
     pub is_admin: bool,
-    pub is_edited_user_admin: bool,
+    pub on_display_name_updated: Callback<()>,
 }
 
-impl CommonComponent<UserDetailsForm> for UserDetailsForm {
+impl CommonComponent<GroupDetailsForm> for GroupDetailsForm {
     fn handle_msg(
         &mut self,
         ctx: &Context<Self>,
@@ -63,10 +64,14 @@ impl CommonComponent<UserDetailsForm> for UserDetailsForm {
     ) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
-            Msg::SubmitClicked => self.submit_user_update_form(ctx),
-            Msg::UserUpdated(Err(e)) => Err(e),
-            Msg::UserUpdated(Result::Ok(_)) => {
+            Msg::SubmitClicked => self.submit_group_update_form(ctx),
+            Msg::GroupUpdated(Err(e)) => Err(e),
+            Msg::GroupUpdated(Result::Ok(_)) => {
                 self.just_updated = true;
+                if self.updated_group_name {
+                    self.updated_group_name = false;
+                    ctx.props().on_display_name_updated.emit(());
+                }
                 Ok(true)
             }
         }
@@ -77,7 +82,7 @@ impl CommonComponent<UserDetailsForm> for UserDetailsForm {
     }
 }
 
-impl Component for UserDetailsForm {
+impl Component for GroupDetailsForm {
     type Message = Msg;
     type Properties = Props;
 
@@ -85,7 +90,8 @@ impl Component for UserDetailsForm {
         Self {
             common: CommonComponentParts::<Self>::create(),
             just_updated: false,
-            user: ctx.props().user.clone(),
+            updated_group_name: false,
+            group: ctx.props().group.clone(),
             form_ref: NodeRef::default(),
         }
     }
@@ -102,9 +108,9 @@ impl Component for UserDetailsForm {
             |a: &AttributeSchema| (ctx.props().is_admin || a.is_editable) && !a.is_readonly;
         let display_field = |a: &AttributeSchema| {
             if can_edit(a) {
-                get_custom_attribute_input(a, &self.user.attributes)
+                get_custom_attribute_input(a, &self.group.attributes)
             } else {
-                get_custom_attribute_static(a, &self.user.attributes)
+                get_custom_attribute_static(a, &self.group.attributes)
             }
         };
         html! {
@@ -112,22 +118,22 @@ impl Component for UserDetailsForm {
             <form
               class="form"
               ref={self.form_ref.clone()}>
-              <StaticValue label="User ID" id="userId">
-                <i>{&self.user.id}</i>
+              <StaticValue label="Group ID" id="groupId">
+                <i>{&self.group.id}</i>
               </StaticValue>
               {
                   ctx
                       .props()
-                      .user_attributes_schema
+                      .group_attributes_schema
                       .iter()
-                      .filter(|a| a.is_hardcoded && a.name != "user_id")
+                      .filter(|a| a.is_hardcoded && a.name != "group_id")
                       .map(display_field)
                       .collect::<Vec<_>>()
               }
               {
                   ctx
                       .props()
-                      .user_attributes_schema
+                      .group_attributes_schema
                       .iter()
                       .filter(|a| !a.is_hardcoded)
                       .map(display_field)
@@ -148,7 +154,7 @@ impl Component for UserDetailsForm {
               } else { html! {} }
             }
             <div hidden={!self.just_updated}>
-              <div class="alert alert-success mt-4">{"User successfully updated!"}</div>
+              <div class="alert alert-success mt-4">{"Group successfully updated!"}</div>
             </div>
           </div>
         }
@@ -157,9 +163,9 @@ impl Component for UserDetailsForm {
 
 fn get_custom_attribute_input(
     attribute_schema: &AttributeSchema,
-    user_attributes: &[Attribute],
+    group_attributes: &[Attribute],
 ) -> Html {
-    let values = user_attributes
+    let values = group_attributes
         .iter()
         .find(|a| a.name == attribute_schema.name)
         .map(|attribute| attribute.value.clone())
@@ -185,9 +191,9 @@ fn get_custom_attribute_input(
 
 fn get_custom_attribute_static(
     attribute_schema: &AttributeSchema,
-    user_attributes: &[Attribute],
+    group_attributes: &[Attribute],
 ) -> Html {
-    let values = user_attributes
+    let values = group_attributes
         .iter()
         .find(|a| a.name == attribute_schema.name)
         .map(|attribute| attribute.value.clone())
@@ -199,23 +205,15 @@ fn get_custom_attribute_static(
     }
 }
 
-impl UserDetailsForm {
-    fn submit_user_update_form(&mut self, ctx: &Context<Self>) -> Result<bool> {
-        // TODO: Handle unloaded files.
-        // if let Some(JsFile {
-        //     file: Some(_),
-        //     contents: None,
-        // }) = &self.avatar
-        // {
-        //     bail!("Image file hasn't finished loading, try again");
-        // }
+impl GroupDetailsForm {
+    fn submit_group_update_form(&mut self, ctx: &Context<Self>) -> Result<bool> {
         let mut all_values = read_all_form_attributes(
-            ctx.props().user_attributes_schema.iter(),
+            ctx.props().group_attributes_schema.iter(),
             &self.form_ref,
             IsAdmin(ctx.props().is_admin),
-            EmailIsRequired(!ctx.props().is_edited_user_admin),
+            EmailIsRequired(false),
         )?;
-        let base_attributes = &self.user.attributes;
+        let base_attributes = &self.group.attributes;
         all_values.retain(|a| {
             let base_val = base_attributes
                 .iter()
@@ -224,12 +222,15 @@ impl UserDetailsForm {
                 .map(|v| v.value != a.values)
                 .unwrap_or(!a.values.is_empty())
         });
+        if all_values.iter().any(|a| a.name == "display_name") {
+            self.updated_group_name = true;
+        }
         let remove_attributes: Option<Vec<String>> = if all_values.is_empty() {
             None
         } else {
             Some(all_values.iter().map(|a| a.name.clone()).collect())
         };
-        let insert_attributes: Option<Vec<update_user::AttributeValueInput>> =
+        let insert_attributes: Option<Vec<update_group::AttributeValueInput>> =
             if remove_attributes.is_none() {
                 None
             } else {
@@ -238,7 +239,7 @@ impl UserDetailsForm {
                         .into_iter()
                         .filter(|a| !a.values.is_empty())
                         .map(
-                            |AttributeValue { name, values }| update_user::AttributeValueInput {
+                            |AttributeValue { name, values }| update_group::AttributeValueInput {
                                 name,
                                 value: values,
                             },
@@ -246,29 +247,25 @@ impl UserDetailsForm {
                         .collect(),
                 )
             };
-        let mut user_input = update_user::UpdateUserInput {
-            id: self.user.id.clone(),
-            email: None,
+        let mut group_input = update_group::UpdateGroupInput {
+            id: self.group.id,
             displayName: None,
-            firstName: None,
-            lastName: None,
-            avatar: None,
             removeAttributes: None,
             insertAttributes: None,
         };
-        let default_user_input = user_input.clone();
-        user_input.removeAttributes = remove_attributes;
-        user_input.insertAttributes = insert_attributes;
+        let default_group_input = group_input.clone();
+        group_input.removeAttributes = remove_attributes;
+        group_input.insertAttributes = insert_attributes;
         // Nothing changed.
-        if user_input == default_user_input {
+        if group_input == default_group_input {
             return Ok(false);
         }
-        let req = update_user::Variables { user: user_input };
-        self.common.call_graphql::<UpdateUser, _>(
+        let req = update_group::Variables { group: group_input };
+        self.common.call_graphql::<UpdateGroup, _>(
             ctx,
             req,
-            Msg::UserUpdated,
-            "Error trying to update user",
+            Msg::GroupUpdated,
+            "Error trying to update group",
         );
         Ok(false)
     }

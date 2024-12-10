@@ -22,14 +22,18 @@ use sea_orm::{
 use std::collections::HashSet;
 use tracing::instrument;
 
-fn attribute_condition(name: AttributeName, value: Serialized) -> Cond {
+fn attribute_condition(name: AttributeName, value: Option<Serialized>) -> Cond {
     Expr::in_subquery(
         Expr::col(UserColumn::UserId.as_column_ref()),
         model::UserAttributes::find()
             .select_only()
             .column(model::UserAttributesColumn::UserId)
             .filter(model::UserAttributesColumn::AttributeName.eq(name))
-            .filter(model::UserAttributesColumn::Value.eq(value))
+            .filter(
+                value
+                    .map(|value| model::UserAttributesColumn::Value.eq(value))
+                    .unwrap_or_else(|| SimpleExpr::Constant(true.into())),
+            )
             .into_query(),
     )
     .into_condition()
@@ -79,7 +83,7 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
                 ColumnTrait::eq(&column, value).into_condition()
             }
         }
-        AttributeEquality(column, value) => attribute_condition(column, value),
+        AttributeEquality(column, value) => attribute_condition(column, Some(value)),
         MemberOf(group) => user_id_subcondition(
             Expr::col((group_table, GroupColumn::LowercaseDisplayName))
                 .eq(group.as_str().to_lowercase())
@@ -98,6 +102,7 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
                 .like(filter.to_sql_filter())
                 .into_condition()
         }
+        CustomAttributePresent(name) => attribute_condition(name, None),
     }
 }
 

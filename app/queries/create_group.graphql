@@ -1,5 +1,5 @@
-mutation CreateGroup($name: String!) {
-  createGroup(name: $name) {
+mutation CreateGroup($group: CreateGroupInput!) {
+  createGroupWithDetails(request: $group) {
     id
     displayName
   }

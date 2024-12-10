@@ -50,6 +50,7 @@ impl From<Model> for AttributeSchema {
             is_visible: value.is_user_visible,
             is_editable: value.is_user_editable,
             is_hardcoded: value.is_hardcoded,
+            is_readonly: false,
         }
     }
 }

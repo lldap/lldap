@@ -39,7 +39,7 @@ env:
 # GitHub actions randomly timeout when downloading musl-gcc, using custom dev image   #
 # Look into .github/workflows/Dockerfile.dev for development image details            #
 # Using lldap dev image based on https://hub.docker.com/_/rust and musl-gcc bundled   #
-# lldap/rust-dev:latest                                                               #
+# lldap/rust-dev                                                                      #
 #######################################################################################
 # Cargo build
 ### armv7, aarch64 and amd64 is musl based
@@ -84,10 +84,10 @@ jobs:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.event_name == 'release' }}
     container:
-      image: lldap/rust-dev:latest
+      image: lldap/rust-dev:v81
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.2
       - uses: actions/cache@v4
         with:
           path: |
@@ -125,14 +125,14 @@ jobs:
       matrix:
         target: [armv7-unknown-linux-musleabihf, aarch64-unknown-linux-musl, x86_64-unknown-linux-musl]
     container:
-      image: lldap/rust-dev:latest
+      image: lldap/rust-dev:v81
       env:
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.2
       - uses: actions/cache@v4
         with:
           path: |
@@ -294,7 +294,7 @@ jobs:
 
     steps:
        - name: Checkout scripts
-         uses: actions/checkout@v4.1.7
+         uses: actions/checkout@v4.2.2
          with:
            sparse-checkout: 'scripts'
 
@@ -482,7 +482,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.2
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -512,7 +512,7 @@ jobs:
           tags: ${{ matrix.container }}-base
 
       - name: Build ${{ matrix.container }} Base Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           # On PR will fail, force fully uncomment push: true, or docker image will fail for next steps
@@ -613,7 +613,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build ${{ matrix.container }}-rootless Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -627,7 +627,7 @@ jobs:
 
 ### This docker build always the last, due :latest tag pushed multiple times, for whatever variants may added in future add docker build above this
       - name: Build ${{ matrix.container }} Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -738,5 +738,9 @@ jobs:
           artifacts:  aarch64-lldap.tar.gz,
                       amd64-lldap.tar.gz,
                       armhf-lldap.tar.gz
+          draft: true
+          omitBodyDuringUpdate: true
+          omitDraftDuringUpdate: true
+          omitNameDuringUpdate: true
         env:
          GITHUB_TOKEN: ${{ github.token }}

@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, derive_more::Display)]
+#[display("{_0}")]
 pub struct DatabaseUrl(Url);
 
 impl From<Url> for DatabaseUrl {
@@ -16,22 +17,22 @@ impl From<&str> for DatabaseUrl {
     }
 }
 
+impl DatabaseUrl {
+    pub fn db_type(&self) -> &str {
+        self.0.scheme()
+    }
+}
+
 impl std::fmt::Debug for DatabaseUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.0.password().is_some() {
             let mut url = self.0.clone();
             // It can fail for URLs that cannot have a password, like "mailto:bob@example".
             let _ = url.set_password(Some("***PASSWORD***"));
-            f.write_fmt(format_args!("{}", url))
+            f.write_fmt(format_args!(r#""{}""#, url))
         } else {
-            f.write_fmt(format_args!("{}", self.0))
+            f.write_fmt(format_args!(r#""{}""#, self.0))
         }
-    }
-}
-
-impl std::fmt::Display for DatabaseUrl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self.0))
     }
 }
 
@@ -44,7 +45,7 @@ mod tests {
         let url = DatabaseUrl::from("postgres://user:pass@localhost:5432/dbname");
         assert_eq!(
             format!("{:?}", url),
-            "postgres://user:***PASSWORD***@localhost:5432/dbname"
+            r#""postgres://user:***PASSWORD***@localhost:5432/dbname""#
         );
         assert_eq!(
             url.to_string(),

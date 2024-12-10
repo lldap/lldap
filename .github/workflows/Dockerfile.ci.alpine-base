@@ -64,7 +64,7 @@ WORKDIR /app
 ENV UID=1000
 ENV GID=1000
 ENV USER=lldap
-RUN apk add --no-cache tini ca-certificates bash tzdata && \
+RUN apk add --no-cache tini ca-certificates bash tzdata jq curl jo && \
     addgroup -g $GID $USER && \
     adduser \
     --disabled-password \

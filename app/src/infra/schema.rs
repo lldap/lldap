@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::{fmt::Display, str::FromStr};
 use validator::ValidationError;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttributeType {
     String,
     Integer,
@@ -34,25 +34,25 @@ impl FromStr for AttributeType {
 #[macro_export]
 macro_rules! convert_attribute_type {
     ($source_type:ty) => {
-        impl From<$source_type> for AttributeType {
+        impl From<$source_type> for $crate::infra::schema::AttributeType {
             fn from(value: $source_type) -> Self {
                 match value {
-                    <$source_type>::STRING => AttributeType::String,
-                    <$source_type>::INTEGER => AttributeType::Integer,
-                    <$source_type>::DATE_TIME => AttributeType::DateTime,
-                    <$source_type>::JPEG_PHOTO => AttributeType::Jpeg,
+                    <$source_type>::STRING => $crate::infra::schema::AttributeType::String,
+                    <$source_type>::INTEGER => $crate::infra::schema::AttributeType::Integer,
+                    <$source_type>::DATE_TIME => $crate::infra::schema::AttributeType::DateTime,
+                    <$source_type>::JPEG_PHOTO => $crate::infra::schema::AttributeType::Jpeg,
                     _ => panic!("Unknown attribute type"),
                 }
             }
         }
 
-        impl From<AttributeType> for $source_type {
-            fn from(value: AttributeType) -> Self {
+        impl From<$crate::infra::schema::AttributeType> for $source_type {
+            fn from(value: $crate::infra::schema::AttributeType) -> Self {
                 match value {
-                    AttributeType::String => <$source_type>::STRING,
-                    AttributeType::Integer => <$source_type>::INTEGER,
-                    AttributeType::DateTime => <$source_type>::DATE_TIME,
-                    AttributeType::Jpeg => <$source_type>::JPEG_PHOTO,
+                    $crate::infra::schema::AttributeType::String => <$source_type>::STRING,
+                    $crate::infra::schema::AttributeType::Integer => <$source_type>::INTEGER,
+                    $crate::infra::schema::AttributeType::DateTime => <$source_type>::DATE_TIME,
+                    $crate::infra::schema::AttributeType::Jpeg => <$source_type>::JPEG_PHOTO,
                 }
             }
         }
