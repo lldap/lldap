@@ -314,8 +314,8 @@ pub struct UserRestrictedListerBackendHandler<'a, Handler> {
 }
 
 #[async_trait]
-impl<'a, Handler: ReadSchemaBackendHandler + Sync> ReadSchemaBackendHandler
-    for UserRestrictedListerBackendHandler<'a, Handler>
+impl<Handler: ReadSchemaBackendHandler + Sync> ReadSchemaBackendHandler
+    for UserRestrictedListerBackendHandler<'_, Handler>
 {
     async fn get_schema(&self) -> Result<Schema> {
         let mut schema = self.handler.get_schema().await?;
@@ -331,8 +331,8 @@ impl<'a, Handler: ReadSchemaBackendHandler + Sync> ReadSchemaBackendHandler
 }
 
 #[async_trait]
-impl<'a, Handler: UserListerBackendHandler + Sync> UserListerBackendHandler
-    for UserRestrictedListerBackendHandler<'a, Handler>
+impl<Handler: UserListerBackendHandler + Sync> UserListerBackendHandler
+    for UserRestrictedListerBackendHandler<'_, Handler>
 {
     async fn list_users(
         &self,
@@ -354,8 +354,8 @@ impl<'a, Handler: UserListerBackendHandler + Sync> UserListerBackendHandler
 }
 
 #[async_trait]
-impl<'a, Handler: GroupListerBackendHandler + Sync> GroupListerBackendHandler
-    for UserRestrictedListerBackendHandler<'a, Handler>
+impl<Handler: GroupListerBackendHandler + Sync> GroupListerBackendHandler
+    for UserRestrictedListerBackendHandler<'_, Handler>
 {
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
         let group_filter = self
@@ -379,7 +379,7 @@ pub trait UserAndGroupListerBackendHandler:
 }
 
 #[async_trait]
-impl<'a, Handler: GroupListerBackendHandler + UserListerBackendHandler + Sync>
-    UserAndGroupListerBackendHandler for UserRestrictedListerBackendHandler<'a, Handler>
+impl<Handler: GroupListerBackendHandler + UserListerBackendHandler + Sync>
+    UserAndGroupListerBackendHandler for UserRestrictedListerBackendHandler<'_, Handler>
 {
 }

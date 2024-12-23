@@ -189,7 +189,7 @@ pub async fn build_tcp_server<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
-    let jwt_secret = config.jwt_secret.clone();
+    let jwt_secret = config.jwt_secret.clone().unwrap();
     let jwt_blacklist = backend_handler
         .get_jwt_blacklist()
         .await
