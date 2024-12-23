@@ -156,6 +156,7 @@ services:
       - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
       - LLDAP_KEY_SEED=REPLACE_WITH_RANDOM
       - LLDAP_LDAP_BASE_DN=dc=example,dc=com
+      - LLDAP_LDAP_USER_PASS=adminPas$word
       # If using LDAPS, set enabled true and configure cert and key path
       # - LLDAP_LDAPS_OPTIONS__ENABLED=true
       # - LLDAP_LDAPS_OPTIONS__CERT_FILE=/path/to/certfile.crt
@@ -713,6 +714,9 @@ modern identity protocols, check out Kanidm.
 If you just set up the server, can get to the login page but the password you
 set isn't working, try the following:
 
+- If you have changed the admin password in the config after the first run, it
+  won't be used (unless you force its use with `force_ldap_user_pass_reset`).
+  The config password is only for the initial admin creation.
 - (For docker): Make sure that the `/data` folder is persistent, either to a
   docker volume or mounted from the host filesystem.
 - Check if there is a `lldap_config.toml` file (either in `/data` for docker

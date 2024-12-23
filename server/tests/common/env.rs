@@ -3,6 +3,8 @@ use std::env::var;
 
 pub const DB_KEY: &str = "LLDAP_DATABASE_URL";
 pub const PRIVATE_KEY_SEED: &str = "LLDAP_KEY_SEED";
+pub const JWT_SECRET: &str = "LLDAP_JWT_SECRET";
+pub const LDAP_USER_PASSWORD: &str = "LLDAP_LDAP_USER_PASS";
 
 pub fn database_url() -> String {
     let url = var(DB_KEY).ok();

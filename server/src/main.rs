@@ -33,8 +33,17 @@ use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
 mod domain;
 mod infra;
 
+const ADMIN_PASSWORD_MISSING_ERROR : &str = "The LDAP admin password must be initialized. \
+            Either set the `ldap_user_pass` config value or the `LLDAP_LDAP_USER_PASS` environment variable. \
+            A minimum of 8 characters is recommended.";
+
 async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) -> Result<()> {
-    let pass_length = config.ldap_user_pass.unsecure().len();
+    let pass_length = config
+        .ldap_user_pass
+        .as_ref()
+        .expect(ADMIN_PASSWORD_MISSING_ERROR)
+        .unsecure()
+        .len();
     assert!(
         pass_length >= 8,
         "Minimum password length is 8 characters, got {} characters",
@@ -48,7 +57,11 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
             ..Default::default()
         })
         .and_then(|_| {
-            register_password(handler, config.ldap_user_dn.clone(), &config.ldap_user_pass)
+            register_password(
+                handler,
+                config.ldap_user_dn.clone(),
+                config.ldap_user_pass.as_ref().unwrap(),
+            )
         })
         .await
         .context("Error creating admin user")?;
@@ -161,7 +174,10 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
         register_password(
             &backend_handler,
             config.ldap_user_dn.clone(),
-            &config.ldap_user_pass,
+            config
+                .ldap_user_pass
+                .as_ref()
+                .expect(ADMIN_PASSWORD_MISSING_ERROR),
         )
         .instrument(span)
         .await

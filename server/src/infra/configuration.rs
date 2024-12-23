@@ -97,16 +97,16 @@ pub struct Configuration {
     pub http_host: String,
     #[builder(default = "17170")]
     pub http_port: u16,
-    #[builder(default = r#"SecUtf8::from("secretjwtsecret")"#)]
-    pub jwt_secret: SecUtf8,
+    #[builder(default)]
+    pub jwt_secret: Option<SecUtf8>,
     #[builder(default = r#"String::from("dc=example,dc=com")"#)]
     pub ldap_base_dn: String,
     #[builder(default = r#"UserId::new("admin")"#)]
     pub ldap_user_dn: UserId,
     #[builder(default)]
     pub ldap_user_email: String,
-    #[builder(default = r#"SecUtf8::from("password")"#)]
-    pub ldap_user_pass: SecUtf8,
+    #[builder(default)]
+    pub ldap_user_pass: Option<SecUtf8>,
     #[builder(default)]
     pub force_ldap_user_pass_reset: TrueFalseAlways,
     #[builder(default = "false")]
@@ -607,11 +607,24 @@ where
             .unwrap_or_default(),
         figment_config,
     )?);
-    if config.jwt_secret == SecUtf8::from("secretjwtsecret") {
-        println!("WARNING: Default JWT secret used! This is highly unsafe and can allow attackers to log in as admin.");
-    }
-    if config.ldap_user_pass == SecUtf8::from("password") {
-        println!("WARNING: Unsecure default admin password is used.");
+    if config.jwt_secret.is_none() {
+        use rand::{seq::SliceRandom, Rng};
+        struct Symbols;
+
+        impl rand::prelude::Distribution<char> for Symbols {
+            fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> char {
+                *b"01234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+,-./:;<=>?_~!@#$%^&*()[]{}:;".choose(rng).unwrap() as char
+            }
+        }
+        bail!("The JWT secret must be initialized to a random string, preferably at least 32 characters long. \
+            Either set the `jwt_secret` config value or the `LLDAP_JWT_SECRET` environment variable. \
+            You can generate the value by running\n\
+            LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\\''()*+,-./:;<=>?@[\\]^_{{|}}~' </dev/urandom | head -c 32; echo ''\n\
+            or you can use this random value: {}", 
+        rand::thread_rng()
+            .sample_iter(&Symbols)
+            .take(32)
+            .collect::<String>());
     }
     if config.smtp_options.tls_required.is_some() {
         println!("DEPRECATED: smtp_options.tls_required field is deprecated, it never did anything. You can replace it with smtp_options.smtp_encryption.");
@@ -669,7 +682,9 @@ mod tests {
     fn figment_location_extraction_key_file() {
         Jail::expect_with(|jail| {
             jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            jail.clear_env();
             jail.set_env("LLDAP_KEY_SEED", "a123");
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
             let ignore_keys = ["key_file", "cert_file"];
             let figment_config = Figment::from(Serialized::defaults(
                 ConfigurationBuilder::default().private_build().unwrap(),
@@ -696,7 +711,9 @@ mod tests {
     fn check_server_setup_key_extraction_seed_success_with_nonexistant_file() {
         Jail::expect_with(|jail| {
             jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            jail.clear_env();
             jail.set_env("LLDAP_KEY_SEED", "a123");
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
             init(default_run_opts()).unwrap();
             Ok(())
         });
@@ -706,7 +723,9 @@ mod tests {
     fn check_server_setup_key_extraction_seed_failure_with_existing_file() {
         Jail::expect_with(|jail| {
             jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            jail.clear_env();
             jail.set_env("LLDAP_KEY_SEED", "a123");
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
             write_random_key(jail, "test");
             init(default_run_opts()).unwrap_err();
             Ok(())
@@ -717,6 +736,8 @@ mod tests {
     fn check_server_setup_key_extraction_file_success_with_existing_file() {
         Jail::expect_with(|jail| {
             jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
             write_random_key(jail, "test");
             init(default_run_opts()).unwrap();
             Ok(())
@@ -727,6 +748,8 @@ mod tests {
     fn check_server_setup_key_extraction_file_success_with_nonexistent_file() {
         Jail::expect_with(|jail| {
             jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
             init(default_run_opts()).unwrap();
             Ok(())
         });
@@ -736,6 +759,8 @@ mod tests {
     fn check_server_setup_key_extraction_file_with_previous_different_file() {
         Jail::expect_with(|jail| {
             jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
             write_random_key(jail, "test");
             let config = init(default_run_opts()).unwrap();
             let info = config.get_private_key_info();
@@ -766,6 +791,8 @@ mod tests {
     #[test]
     fn check_server_setup_key_extraction_file_to_seed() {
         Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
             jail.create_file("lldap_config.toml", "")?;
             write_random_key(jail, "server_key");
             init(default_run_opts()).unwrap();
@@ -782,6 +809,8 @@ mod tests {
     #[test]
     fn check_server_setup_key_extraction_file_to_seed_removed_file() {
         Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
             jail.create_file("lldap_config.toml", "")?;
             write_random_key(jail, "server_key");
             let config = init(default_run_opts()).unwrap();

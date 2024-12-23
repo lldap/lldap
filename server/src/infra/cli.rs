@@ -37,7 +37,7 @@ impl<'de> Deserialize<'de> for TrueFalseAlways {
 
         struct Visitor;
 
-        impl<'de> serde::de::Visitor<'de> for Visitor {
+        impl serde::de::Visitor<'_> for Visitor {
             type Value = TrueFalseAlways;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

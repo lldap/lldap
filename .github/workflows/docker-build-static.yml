@@ -216,6 +216,8 @@ jobs:
            LLDAP_database_url: postgres://lldapuser:lldappass@localhost/lldap
            LLDAP_ldap_port: 3890
            LLDAP_http_port: 17170
+           LLDAP_JWT_SECRET: verysecret
+           LLDAP_LDAP_USER_PASS: password
 
 
        - name: Run lldap with mariadb DB (MySQL Compatible) and healthcheck
@@ -227,6 +229,8 @@ jobs:
            LLDAP_database_url: mysql://lldapuser:lldappass@localhost/lldap
            LLDAP_ldap_port: 3891
            LLDAP_http_port: 17171
+           LLDAP_JWT_SECRET: verysecret
+           LLDAP_LDAP_USER_PASS: password
 
 
        - name: Run lldap with sqlite DB and healthcheck
@@ -238,6 +242,8 @@ jobs:
            LLDAP_database_url: sqlite://users.db?mode=rwc
            LLDAP_ldap_port: 3892
            LLDAP_http_port: 17172
+           LLDAP_JWT_SECRET: verysecret
+           LLDAP_LDAP_USER_PASS: password
 
        - name: Check DB container logs
          run: |
@@ -324,9 +330,9 @@ jobs:
               sleep 10s
               bin/lldap healthcheck
          env:
-           LLDAP_database_url: sqlite://users.db?mode=rwc
-           LLDAP_ldap_port: 3890
-           LLDAP_http_port: 17170
+           LLDAP_DATABASE_URL: sqlite://users.db?mode=rwc
+           LLDAP_LDAP_PORT: 3890
+           LLDAP_HTTP_PORT: 17170
            LLDAP_LDAP_USER_PASS: ldappass
            LLDAP_JWT_SECRET: somejwtsecret
 
@@ -350,8 +356,11 @@ jobs:
               sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" -e ":a; s/(INSERT INTO (user_attribute_schema|jwt_storage)\(.*\) VALUES\(.*),1([^']*\);)$/\1,true\3/; s/(INSERT INTO (user_attribute_schema|jwt_storage)\(.*\) VALUES\(.*),0([^']*\);)$/\1,false\3/; ta" -e '1s/^/BEGIN;\n/' -e '$aCOMMIT;' ./dump.sql
 
        - name: Create schema on postgres
+         env:
+           LLDAP_DATABASE_URL: postgres://lldapuser:lldappass@localhost:5432/lldap
+           LLDAP_JWT_SECRET: somejwtsecret
          run: |
-              bin/lldap create_schema -d postgres://lldapuser:lldappass@localhost:5432/lldap
+              bin/lldap create_schema
 
        - name: Copy converted db to postgress and import
          run: |
@@ -368,7 +377,10 @@ jobs:
               sed  -i '1 i\SET FOREIGN_KEY_CHECKS = 0;' ./dump.sql
 
        - name: Create schema on mariadb
-         run: bin/lldap create_schema -d mysql://lldapuser:lldappass@localhost:3306/lldap
+         env:
+           LLDAP_DATABASE_URL: mysql://lldapuser:lldappass@localhost:3306/lldap
+           LLDAP_JWT_SECRET: somejwtsecret
+         run: bin/lldap create_schema
 
        - name: Copy converted db to mariadb and import
          run: |
@@ -384,7 +396,10 @@ jobs:
               sed  -i '1 i\SET FOREIGN_KEY_CHECKS = 0;' ./dump.sql
 
        - name: Create schema on mysql
-         run: bin/lldap create_schema -d mysql://lldapuser:lldappass@localhost:3307/lldap
+         env:
+           LLDAP_DATABASE_URL: mysql://lldapuser:lldappass@localhost:3307/lldap
+           LLDAP_JWT_SECRET: somejwtsecret
+         run: bin/lldap create_schema
 
        - name: Copy converted db to mysql and import
          run: |
@@ -399,10 +414,9 @@ jobs:
               sleep 10s
               bin/lldap healthcheck
          env:
-           LLDAP_database_url: postgres://lldapuser:lldappass@localhost:5432/lldap
-           LLDAP_ldap_port: 3891
-           LLDAP_http_port: 17171
-           LLDAP_LDAP_USER_PASS: ldappass
+           LLDAP_DATABASE_URL: postgres://lldapuser:lldappass@localhost:5432/lldap
+           LLDAP_LDAP_PORT: 3891
+           LLDAP_HTTP_PORT: 17171
            LLDAP_JWT_SECRET: somejwtsecret
 
        - name: Run lldap with mariaDB and healthcheck again
@@ -411,9 +425,9 @@ jobs:
               sleep 10s
               bin/lldap healthcheck
          env:
-           LLDAP_database_url: mysql://lldapuser:lldappass@localhost:3306/lldap
-           LLDAP_ldap_port: 3892
-           LLDAP_http_port: 17172
+           LLDAP_DATABASE_URL: mysql://lldapuser:lldappass@localhost:3306/lldap
+           LLDAP_LDAP_PORT: 3892
+           LLDAP_HTTP_PORT: 17172
            LLDAP_JWT_SECRET: somejwtsecret
 
        - name: Run lldap with mysql and healthcheck again
@@ -422,9 +436,9 @@ jobs:
               sleep 10s
               bin/lldap healthcheck
          env:
-           LLDAP_database_url: mysql://lldapuser:lldappass@localhost:3307/lldap
-           LLDAP_ldap_port: 3893
-           LLDAP_http_port: 17173
+           LLDAP_DATABASE_URL: mysql://lldapuser:lldappass@localhost:3307/lldap
+           LLDAP_LDAP_PORT: 3893
+           LLDAP_HTTP_PORT: 17173
            LLDAP_JWT_SECRET: somejwtsecret
 
        - name: Test Dummy User Postgres
