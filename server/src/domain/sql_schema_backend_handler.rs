@@ -215,6 +215,15 @@ mod tests {
                             is_editable: true,
                             is_hardcoded: true,
                             is_readonly: false,
+                        },
+                        AttributeSchema {
+                            name: "mail".into(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: true,
+                            is_readonly: false,
                         }
                     ]
                 },
