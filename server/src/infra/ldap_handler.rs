@@ -545,6 +545,18 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 }
             }
         }
+        else if request.base == "cn=Subschema" && request.scope == LdapSearchScope::Base {
+            debug!("Subschema request made");
+            let backend_handler = self.backend_handler.get_schema_only_handler();
+            let schema = &backend_handler.get_schema().await.map_err(|e| LdapError {
+                code: LdapResultCode::OperationsError,
+                message: format!("Unable to get schema: {:#}", e)
+            })?;
+            return Ok(vec![
+                schema_response(&schema),
+                make_search_success(),
+            ]);
+        }
         self.do_search(request).await
     }
 
