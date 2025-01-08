@@ -267,6 +267,173 @@ impl HardcodedSchema {
         }
     }
 }
+
+fn get_hardcoded_schema() -> HardcodedSchema {
+    HardcodedSchema {
+        user_attributes_must: AttributeList {
+            attributes: vec![
+                AttributeSchema {
+                    name: "uid".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "mail".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                }
+            ]
+        },
+        user_attributes_may: AttributeList {
+            attributes: vec![
+                AttributeSchema {
+                    name: "objectclass".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "givenname".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "sn".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "cn".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "jpegPhoto".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "createtimestamp".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "entryuuid".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+            ]
+        },
+        group_attributes_must: AttributeList {
+            attributes: vec![
+                AttributeSchema {
+                    name: "uid".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "cn".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+            ]
+        },
+        group_attributes_may: AttributeList {
+            attributes: vec![
+                AttributeSchema {
+                    name: "objectclass".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "member".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "uniquemember".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "entryuuid".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+            ],
+        },
+        user_object_classes: ObjectClassList (
+            vec![
+            LdapObjectClass::from("inetOrgPerson"),
+            LdapObjectClass::from("posixAccount"),
+            LdapObjectClass::from("mailAccount"),
+            LdapObjectClass::from("person"),
+        ]),
+        group_object_classes: ObjectClassList (
+            vec![
+            LdapObjectClass::from("groupOfUniqueNames"),
+        ]),
+    }
+}
     })
 }
 
