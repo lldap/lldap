@@ -434,6 +434,77 @@ fn get_hardcoded_schema() -> HardcodedSchema {
         ]),
     }
 }
+
+fn schema_response(schema: &Schema) -> LdapOp {
+    let hardcoded_schema: HardcodedSchema = get_hardcoded_schema().extend_with_custom_schema(schema);
+
+    let current_time_utc = Utc::now().format("%Y%m%d%H%M%SZ").to_string().into_bytes();
+
+    LdapOp::SearchResultEntry(LdapSearchResultEntry { 
+        dn: "cn=Subschema".to_string(),
+        attributes: vec![
+           LdapPartialAttribute {
+            atype: "structuralObjectClass".to_string(),
+            vals: vec![b"subentry".to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "objectClass".to_string(),
+            vals: vec![b"top".to_vec(), b"subentry".to_vec(), b"subschema".to_vec(), b"extensibleObject".to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "cn".to_string(),
+            vals: vec![b"Subschema".to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "createTimestamp".to_string(),
+            vals: vec![current_time_utc.to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "modifyTimestamp".to_string(),
+            vals: vec![current_time_utc.to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "ldapSyntaxes".to_string(),
+            vals: vec![
+                b"( 1.3.6.1.4.1.1466.115.121.1.15 DESC 'Directory String' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.27 DESC 'Integer' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.28 DESC 'JPEG' X-NOT-HUMAN-READABLE'TRUE' )".to_vec(),
+                ],
+           },
+           LdapPartialAttribute {
+            atype: "attributeTypes".to_string(),
+            vals: vec![
+                b"( 2.0 NAME 'String' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
+                b"( 2.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
+                b"( 2.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
+                b"( 2.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                ].into_iter().chain(
+                    hardcoded_schema.formatted_attribute_list()
+                ).collect()
+           },
+           LdapPartialAttribute {
+            atype: "objectClasses".to_string(),
+            vals: vec![
+                    format!(
+                        "( 3.0 NAME ( {} ) DESC 'LLDAP builtin: a person' STRUCTURAL MUST ( {} ) MAY ( {} ) )",
+                        hardcoded_schema.user_object_classes.format_for_schema(),
+                        hardcoded_schema.user_attributes_must.format_for_schema(),
+                        hardcoded_schema.user_attributes_may.format_for_schema(),
+                    ).into_bytes(),
+                    format!(
+                        "( 3.1 NAME ( {} ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( {} ) MAY ( {} ) )",
+                        hardcoded_schema.group_object_classes.format_for_schema(),
+                        hardcoded_schema.group_attributes_must.format_for_schema(),
+                        hardcoded_schema.group_attributes_may.format_for_schema(),
+                    ).into_bytes(),
+                ],
+           },
+           LdapPartialAttribute {
+            atype: "subschemaSubentry".to_string(),
+            vals: vec![b"cn=Subschema".to_vec()],
+           },
+        ], 
     })
 }
 
