@@ -2659,6 +2659,7 @@ dependencies = [
  "chrono",
  "derive_more 1.0.0",
  "image",
+ "itertools",
  "juniper",
  "lldap_auth",
  "pretty_assertions",
@@ -2745,6 +2746,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "derive_more 1.0.0",
+ "itertools",
  "ldap3_proto",
  "lldap_access_control",
  "lldap_auth",
