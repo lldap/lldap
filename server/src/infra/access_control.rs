@@ -231,6 +231,12 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         Self { handler }
     }
 
+    pub fn get_schema_only_handler(
+        &self,
+    ) -> &dyn ReadSchemaBackendHandler {
+        &self.handler
+    }
+
     pub fn get_admin_handler(
         &self,
         validation_result: &ValidationResults,
