@@ -167,11 +167,18 @@ enum AttributeType {
 
 type AttributeList {
   attributes: [AttributeSchema!]!
-  extraLdapObjectClasses: [String!]!
+  extraObjectClasses: [String!]!
+  hardcodedObjectClasses: [String!]!
+  objectClasses: [ObjectClassGQL!]!
 }
 
 type Success {
   ok: Boolean!
+}
+
+type ObjectClassGQL {
+  objectClass: String!
+  isHardcoded: Boolean!
 }
 
 schema {

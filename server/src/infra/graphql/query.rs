@@ -519,6 +519,23 @@ pub struct AttributeList<Handler: BackendHandler> {
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
 
+#[derive(Clone)]
+pub struct ObjectClassGQL {
+    object_class: String,
+    is_hardcoded: bool,
+}
+
+#[graphql_object]
+impl ObjectClassGQL {
+    fn object_class(&self) -> &str {
+        &self.object_class
+    }
+
+    fn is_hardcoded(&self) -> bool {
+        self.is_hardcoded
+    }
+}
+
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> AttributeList<Handler> {
     fn attributes(&self) -> Vec<AttributeSchema<Handler>> {
@@ -530,8 +547,47 @@ impl<Handler: BackendHandler> AttributeList<Handler> {
             .collect()
     }
 
-    fn extra_ldap_object_classes(&self) -> Vec<String> {
+    fn extra_object_classes(&self) -> Vec<String> {
         self.extra_classes.iter().map(|c| c.to_string()).collect()
+    }
+
+    fn hardcoded_object_classes(&self) -> Vec<String> {
+        vec![
+            "inetOrgPerson".to_string(),
+            "posixAccount".to_string(),
+            "mailAccount".to_string(),
+            "person".to_string(),
+        ]
+    }
+
+    fn object_classes(&self) -> Vec<ObjectClassGQL> {
+        let mut all_object_classes: Vec<ObjectClassGQL> = vec![
+            ObjectClassGQL {
+                object_class: "inetOrgPerson".to_string(),
+                is_hardcoded: true,
+            },
+            ObjectClassGQL {
+                object_class: "posixAccount".to_string(),
+                is_hardcoded: true,
+            },
+            ObjectClassGQL {
+                object_class: "mailAccount".to_string(),
+                is_hardcoded: true,
+            },
+            ObjectClassGQL {
+                object_class: "person".to_string(),
+                is_hardcoded: true,
+            },
+        ];
+
+        all_object_classes.extend(
+            self.extra_classes.iter().map(|c| ObjectClassGQL {
+                object_class: c.to_string(),
+                is_hardcoded: false,
+            }).collect::<Vec<_>>(),
+        );
+
+        all_object_classes
     }
 }
 
