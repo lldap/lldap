@@ -2,8 +2,9 @@ use crate::core::{
     error::{LdapError, LdapResult},
     group::{convert_groups_to_ldap_op, get_groups_list},
     user::{convert_users_to_ldap_op, get_user_list},
-    utils::{LdapInfo, is_subtree, parse_distinguished_name},
+    utils::{LdapInfo, LdapSchemaDescription, is_subtree, parse_distinguished_name},
 };
+use chrono::Utc;
 use ldap3_proto::{
     LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry, LdapSearchScope,
     proto::{
@@ -164,6 +165,82 @@ pub(crate) fn root_dse_response(base_dn: &str) -> LdapOp {
                 atype: "isGlobalCatalogReady".to_string(),
                 vals: vec![b"false".to_vec()],
             },
+            LdapPartialAttribute {
+                atype: "subschemaSubentry".to_string(),
+                vals: vec![b"cn=Subschema".to_vec()],
+            },
+        ],
+    })
+}
+
+pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
+    let ldap_schema_description: LdapSchemaDescription = LdapSchemaDescription::from(schema);
+    let current_time_utc = Utc::now().format("%Y%m%d%H%M%SZ").to_string().into_bytes();
+    LdapOp::SearchResultEntry(LdapSearchResultEntry {
+        dn: "cn=Subschema".to_string(),
+        attributes: vec![
+           LdapPartialAttribute {
+            atype: "structuralObjectClass".to_string(),
+            vals: vec![b"subentry".to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "objectClass".to_string(),
+            vals: vec![b"top".to_vec(), b"subentry".to_vec(), b"subschema".to_vec(), b"extensibleObject".to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "cn".to_string(),
+            vals: vec![b"Subschema".to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "createTimestamp".to_string(),
+            vals: vec![current_time_utc.to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "modifyTimestamp".to_string(),
+            vals: vec![current_time_utc.to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "ldapSyntaxes".to_string(),
+            vals: vec![
+                b"( 1.3.6.1.4.1.1466.115.121.1.15 DESC 'Directory String' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.27 DESC 'Integer' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.28 DESC 'JPEG' X-NOT-HUMAN-READABLE 'TRUE' )".to_vec(),
+                ],
+           },
+           LdapPartialAttribute {
+            atype: "attributeTypes".to_string(),
+            vals: vec![
+                b"( 2.0 NAME 'String' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
+                b"( 2.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
+                b"( 2.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
+                b"( 2.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                ].into_iter().chain(
+                    // we pass the number of hardcoded attributes already included for formatting of custom attributes
+                    ldap_schema_description.formatted_attribute_list(4)
+                ).collect()
+           },
+           LdapPartialAttribute {
+            atype: "objectClasses".to_string(),
+            vals: vec![
+                    format!(
+                        "( 3.0 NAME ( {} ) DESC 'LLDAP builtin: a person' STRUCTURAL MUST ( {} ) MAY ( {} ) )",
+                        ldap_schema_description.user_object_classes().format_for_ldap_schema_description(),
+                        ldap_schema_description.required_user_attributes().format_for_ldap_schema_description(),
+                        ldap_schema_description.optional_user_attributes().format_for_ldap_schema_description(),
+                    ).into_bytes(),
+                    format!(
+                        "( 3.1 NAME ( {} ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( {} ) MAY ( {} ) )",
+                        ldap_schema_description.group_object_classes().format_for_ldap_schema_description(),
+                        ldap_schema_description.required_group_attributes().format_for_ldap_schema_description(),
+                        ldap_schema_description.optional_group_attributes().format_for_ldap_schema_description(),
+                    ).into_bytes(),
+                ],
+           },
+           LdapPartialAttribute {
+            atype: "subschemaSubentry".to_string(),
+            vals: vec![b"cn=Subschema".to_vec()],
+           },
         ],
     })
 }
@@ -177,6 +254,10 @@ pub(crate) fn is_root_dse_request(request: &LdapSearchRequest) -> bool {
         }
     }
     false
+}
+
+pub(crate) fn is_subschema_entry_request(request: &LdapSearchRequest) -> bool {
+    request.base == "cn=Subschema" && request.scope == LdapSearchScope::Base
 }
 
 async fn do_search_internal(

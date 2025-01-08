@@ -11,6 +11,9 @@ impl PublicSchema {
     pub fn get_schema(&self) -> &Schema {
         &self.0
     }
+    pub fn into_schema(self) -> Schema {
+        self.0
+    }
 }
 
 impl From<Schema> for PublicSchema {

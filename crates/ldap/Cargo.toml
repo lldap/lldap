@@ -12,6 +12,7 @@ repository.workspace = true
 anyhow = "*"
 ldap3_proto = "0.6.0"
 tracing = "*"
+itertools = "0.10"
 
 [dependencies.chrono]
 features = ["serde"]
