@@ -1,7 +1,8 @@
 use crate::{
     domain::{
         handler::{
-            BackendHandler, BindRequest, CreateUserRequest, LoginHandler, ReadSchemaBackendHandler,
+            AttributeList, AttributeSchema, BackendHandler, BindRequest, CreateUserRequest, LoginHandler, 
+            ReadSchemaBackendHandler, Schema
         },
         ldap::{
             error::{LdapError, LdapResult},
@@ -10,10 +11,10 @@ use crate::{
             utils::{
                 get_user_id_from_distinguished_name, is_subtree, parse_distinguished_name, LdapInfo,
             },
-        },
+        }, 
         opaque_handler::OpaqueHandler,
         schema::PublicSchema,
-        types::{AttributeName, Email, Group, JpegPhoto, UserAndGroups, UserId},
+        types::{AttributeName, AttributeType, Email, Group, JpegPhoto, LdapObjectClass, UserAndGroups, UserId}
     },
     infra::access_control::{
         AccessControlledBackendHandler, AdminBackendHandler, UserAndGroupListerBackendHandler,
@@ -30,6 +31,8 @@ use ldap3_proto::proto::{
 };
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
+use itertools::Itertools;
+use chrono::Utc;
 
 #[derive(Debug)]
 enum SearchScope {
