@@ -211,6 +211,62 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
         ],
     })
 }
+
+pub struct ObjectClassList (Vec<LdapObjectClass>);
+
+impl ObjectClassList {
+    fn format_for_schema(&self) -> String {
+        self.0.iter().map(|c| format!("'{}'", c)).unique().collect::<Vec<_>>().join(" ")
+    }
+}
+
+pub struct HardcodedSchema {
+    user_attributes_must: AttributeList,
+    user_attributes_may: AttributeList,
+    group_attributes_must: AttributeList,
+    group_attributes_may: AttributeList,
+    user_object_classes: ObjectClassList,
+    group_object_classes: ObjectClassList,
+}
+
+impl HardcodedSchema {
+    fn extend_with_custom_schema(mut self, schema: &Schema) -> Self {
+        self.user_attributes_may.attributes.extend(schema.user_attributes.attributes.clone());
+        self.group_attributes_may.attributes.extend(schema.group_attributes.attributes.clone());
+        self.user_object_classes.0.extend(schema.extra_user_object_classes.clone());
+        self.group_object_classes.0.extend(schema.extra_group_object_classes.clone());
+
+        self
+    }
+
+    fn formatted_attribute_list(&self) -> Vec<Vec<u8>> {
+        let mut formatted_list: Vec<Vec<u8>> = Vec::new();
+
+        for (index, attribute) in self.all_attributes().attributes.into_iter().enumerate() {
+            formatted_list.push(
+                format!("( 2.{} NAME '{}' DESC 'LLDAP: {}' SUP {:?} )",
+                (index + 4), 
+                attribute.name, 
+                if attribute.is_hardcoded {"builtin attribute"} else {"custom attribute"}, 
+                attribute.attribute_type
+            ).into_bytes().to_vec()
+            )
+        }
+
+        formatted_list
+    }
+
+    pub fn all_attributes(&self) -> AttributeList {
+        AttributeList {
+            attributes: [
+                self.user_attributes_must.attributes.clone(),
+                self.user_attributes_may.attributes.clone(),
+                self.group_attributes_must.attributes.clone(),
+                self.group_attributes_may.attributes.clone(),
+            ].concat().iter().unique_by(|a| &a.name).cloned().collect::<Vec<_>>()
+        }
+    }
+}
     })
 }
 
