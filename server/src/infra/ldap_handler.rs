@@ -223,7 +223,7 @@ impl ObjectClassList {
     }
 }
 
-pub struct HardcodedSchema {
+pub struct LldapBuiltinSchema {
     user_attributes_must: AttributeList,
     user_attributes_may: AttributeList,
     group_attributes_must: AttributeList,
@@ -232,7 +232,7 @@ pub struct HardcodedSchema {
     group_object_classes: ObjectClassList,
 }
 
-impl HardcodedSchema {
+impl LldapBuiltinSchema {
     fn extend_with_custom_schema(mut self, schema: &Schema) -> Self {
         self.user_attributes_may.attributes.extend(schema.user_attributes.attributes.clone());
         self.group_attributes_may.attributes.extend(schema.group_attributes.attributes.clone());
@@ -271,8 +271,8 @@ impl HardcodedSchema {
     }
 }
 
-fn get_hardcoded_schema() -> HardcodedSchema {
-    HardcodedSchema {
+fn get_lldap_builtin_schema() -> LldapBuiltinSchema {
+    LldapBuiltinSchema {
         user_attributes_must: AttributeList {
             attributes: vec![
                 AttributeSchema {
@@ -440,7 +440,7 @@ fn get_hardcoded_schema() -> HardcodedSchema {
 }
 
 fn schema_response(schema: &Schema) -> LdapOp {
-    let hardcoded_schema: HardcodedSchema = get_hardcoded_schema().extend_with_custom_schema(schema);
+    let full_schema: LldapBuiltinSchema = get_lldap_builtin_schema().extend_with_custom_schema(schema);
 
     let current_time_utc = Utc::now().format("%Y%m%d%H%M%SZ").to_string().into_bytes();
 
@@ -484,7 +484,7 @@ fn schema_response(schema: &Schema) -> LdapOp {
                 b"( 2.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
                 b"( 2.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
                 ].into_iter().chain(
-                    hardcoded_schema.formatted_attribute_list()
+                    full_schema.formatted_attribute_list()
                 ).collect()
            },
            LdapPartialAttribute {
@@ -492,15 +492,15 @@ fn schema_response(schema: &Schema) -> LdapOp {
             vals: vec![
                     format!(
                         "( 3.0 NAME ( {} ) DESC 'LLDAP builtin: a person' STRUCTURAL MUST ( {} ) MAY ( {} ) )",
-                        hardcoded_schema.user_object_classes.format_for_schema(),
-                        hardcoded_schema.user_attributes_must.format_for_schema(),
-                        hardcoded_schema.user_attributes_may.format_for_schema(),
+                        full_schema.user_object_classes.format_for_schema(),
+                        full_schema.user_attributes_must.format_for_schema(),
+                        full_schema.user_attributes_may.format_for_schema(),
                     ).into_bytes(),
                     format!(
                         "( 3.1 NAME ( {} ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( {} ) MAY ( {} ) )",
-                        hardcoded_schema.group_object_classes.format_for_schema(),
-                        hardcoded_schema.group_attributes_must.format_for_schema(),
-                        hardcoded_schema.group_attributes_may.format_for_schema(),
+                        full_schema.group_object_classes.format_for_schema(),
+                        full_schema.group_attributes_must.format_for_schema(),
+                        full_schema.group_attributes_may.format_for_schema(),
                     ).into_bytes(),
                 ],
            },
