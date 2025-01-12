@@ -551,15 +551,6 @@ impl<Handler: BackendHandler> AttributeList<Handler> {
         self.extra_classes.iter().map(|c| c.to_string()).collect()
     }
 
-    fn hardcoded_object_classes(&self) -> Vec<String> {
-        vec![
-            "inetOrgPerson".to_string(),
-            "posixAccount".to_string(),
-            "mailAccount".to_string(),
-            "person".to_string(),
-        ]
-    }
-
     fn object_classes(&self) -> Vec<ObjectClassGQL> {
         let mut all_object_classes: Vec<ObjectClassGQL> = vec![
             ObjectClassGQL {
