@@ -6,8 +6,8 @@ use crate::{
         },
         ldap::{
             error::{LdapError, LdapResult},
-            group::{convert_groups_to_ldap_op, get_groups_list},
-            user::{convert_users_to_ldap_op, get_user_list},
+            group::{convert_groups_to_ldap_op, get_groups_list, DEFAULT_GROUP_OBJECT_CLASSES},
+            user::{convert_users_to_ldap_op, get_user_list, DEFAULT_USER_OBJECT_CLASSES},
             utils::{
                 get_user_id_from_distinguished_name, is_subtree, parse_distinguished_name, LdapInfo,
             },
@@ -425,16 +425,17 @@ fn get_hardcoded_schema() -> HardcodedSchema {
             ],
         },
         user_object_classes: ObjectClassList (
-            vec![
-            LdapObjectClass::from("inetOrgPerson"),
-            LdapObjectClass::from("posixAccount"),
-            LdapObjectClass::from("mailAccount"),
-            LdapObjectClass::from("person"),
-        ]),
+            DEFAULT_USER_OBJECT_CLASSES
+                .iter()
+                .map(|&c| LdapObjectClass::from(c))
+                .collect()
+        ),
         group_object_classes: ObjectClassList (
-            vec![
-            LdapObjectClass::from("groupOfUniqueNames"),
-        ]),
+            DEFAULT_GROUP_OBJECT_CLASSES
+                .iter()
+                .map(|&c| LdapObjectClass::from(c))
+                .collect()
+        ),
     }
 }
 
