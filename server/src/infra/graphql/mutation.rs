@@ -23,7 +23,8 @@ use crate::{
 };
 use anyhow::{anyhow, Context as AnyhowContext};
 use base64::Engine;
-use juniper::{graphql_object, FieldResult, GraphQLInputObject, GraphQLObject};
+use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject, GraphQLObject};
+use lldap_validation::attributes::{validate_attribute_name, ALLOWED_CHARACTERS_DESCRIPTION};
 use tracing::{debug, debug_span, Instrument, Span};
 
 #[derive(PartialEq, Eq, Debug)]
@@ -440,6 +441,22 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name, ?attribute_type, is_list, is_visible, is_editable);
         });
+        validate_attribute_name(&name).map_err(|invalid_chars: Vec<char>| -> FieldError {
+            let chars = String::from_iter(invalid_chars);
+            span.in_scope(|| {
+                debug!(
+                    "Cannot create attribute with invalid name. Valid characters: {}. Invalid chars found: {}",
+                    ALLOWED_CHARACTERS_DESCRIPTION,
+                    chars
+                )
+            });
+            anyhow!(
+                "Cannot create attribute with invalid name. Valid characters: {}. Invalid chars found: {}",
+                ALLOWED_CHARACTERS_DESCRIPTION,
+                chars
+            )
+            .into()
+        })?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -471,6 +488,20 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name, ?attribute_type, is_list, is_visible, is_editable);
         });
+        validate_attribute_name(&name).map_err(|invalid_chars: Vec<char>| -> FieldError {
+            let chars = String::from_iter(invalid_chars);
+            span.in_scope(|| {
+                debug!(
+                    "Cannot create attribute with invalid name. Invalid chars found: {}",
+                    chars
+                )
+            });
+            anyhow!(
+                "Cannot create attribute with invalid name. Valid characters: {}",
+                ALLOWED_CHARACTERS_DESCRIPTION
+            )
+            .into()
+        })?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -694,4 +725,241 @@ fn deserialize_attribute(
         name: attribute_name,
         value: deserialized_values,
     })
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::{
+        domain::types::{AttributeName, AttributeType},
+        infra::{
+            access_control::{Permission, ValidationResults},
+            graphql::query::Query,
+            test_utils::MockTestBackendHandler,
+        },
+    };
+    use juniper::{
+        execute, graphql_value, DefaultScalarValue, EmptySubscription, GraphQLType, InputValue,
+        RootNode, Variables,
+    };
+    use mockall::predicate::eq;
+    use pretty_assertions::assert_eq;
+
+    fn mutation_schema<'q, C, Q, M>(
+        query_root: Q,
+        mutation_root: M,
+    ) -> RootNode<'q, Q, M, EmptySubscription<C>>
+    where
+        Q: GraphQLType<DefaultScalarValue, Context = C, TypeInfo = ()> + 'q,
+        M: GraphQLType<DefaultScalarValue, Context = C, TypeInfo = ()> + 'q,
+    {
+        RootNode::new(query_root, mutation_root, EmptySubscription::<C>::new())
+    }
+
+    #[tokio::test]
+    async fn test_create_user_attribute_valid() {
+        const QUERY: &str = r#"
+            mutation CreateUserAttribute($name: String!, $attributeType: AttributeType!, $isList: Boolean!, $isVisible: Boolean!, $isEditable: Boolean!) {
+                addUserAttribute(name: $name, attributeType: $attributeType, isList: $isList, isVisible: $isVisible, isEditable: $isEditable) {
+                    ok
+                }
+            }
+        "#;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_add_user_attribute()
+            .with(eq(CreateAttributeRequest {
+                name: AttributeName::new("AttrName0"),
+                attribute_type: AttributeType::String,
+                is_list: false,
+                is_visible: false,
+                is_editable: false,
+            }))
+            .return_once(|_| Ok(()));
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("bob"),
+                permission: Permission::Admin,
+            },
+        );
+        let vars = Variables::from([
+            ("name".to_string(), InputValue::scalar("AttrName0")),
+            (
+                "attributeType".to_string(),
+                InputValue::enum_value("STRING"),
+            ),
+            ("isList".to_string(), InputValue::scalar(false)),
+            ("isVisible".to_string(), InputValue::scalar(false)),
+            ("isEditable".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        assert_eq!(
+            execute(QUERY, None, &schema, &vars, &context).await,
+            Ok((
+                graphql_value!(
+                {
+                    "addUserAttribute": {
+                        "ok": true
+                    }
+                } ),
+                vec![]
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_attribute_invalid() {
+        const QUERY: &str = r#"
+            mutation CreateUserAttribute($name: String!, $attributeType: AttributeType!, $isList: Boolean!, $isVisible: Boolean!, $isEditable: Boolean!) {
+                addUserAttribute(name: $name, attributeType: $attributeType, isList: $isList, isVisible: $isVisible, isEditable: $isEditable) {
+                    ok
+                }
+            }
+        "#;
+        let mock = MockTestBackendHandler::new();
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("bob"),
+                permission: Permission::Admin,
+            },
+        );
+        let vars = Variables::from([
+            ("name".to_string(), InputValue::scalar("AttrName_0")),
+            (
+                "attributeType".to_string(),
+                InputValue::enum_value("STRING"),
+            ),
+            ("isList".to_string(), InputValue::scalar(false)),
+            ("isVisible".to_string(), InputValue::scalar(false)),
+            ("isEditable".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        let result = execute(QUERY, None, &schema, &vars, &context).await;
+        match result {
+            Ok(res) => {
+                let (response, errors) = res;
+                assert!(response.is_null());
+                let expected_error_msg =
+                    "Cannot create attribute with invalid name. Valid characters: a-z, A-Z, 0-9, and dash (-). Invalid chars found: _"
+                        .to_string();
+                assert!(errors
+                    .iter()
+                    .all(|e| e.error().message() == expected_error_msg));
+            }
+            Err(_) => {
+                panic!();
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_group_attribute_valid() {
+        const QUERY: &str = r#"
+            mutation CreateGroupAttribute($name: String!, $attributeType: AttributeType!, $isList: Boolean!, $isVisible: Boolean!) {
+                addGroupAttribute(name: $name, attributeType: $attributeType, isList: $isList, isVisible: $isVisible, isEditable: false) {
+                    ok
+                }
+            }
+        "#;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_add_group_attribute()
+            .with(eq(CreateAttributeRequest {
+                name: AttributeName::new("AttrName0"),
+                attribute_type: AttributeType::String,
+                is_list: false,
+                is_visible: false,
+                is_editable: false,
+            }))
+            .return_once(|_| Ok(()));
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("bob"),
+                permission: Permission::Admin,
+            },
+        );
+        let vars = Variables::from([
+            ("name".to_string(), InputValue::scalar("AttrName0")),
+            (
+                "attributeType".to_string(),
+                InputValue::enum_value("STRING"),
+            ),
+            ("isList".to_string(), InputValue::scalar(false)),
+            ("isVisible".to_string(), InputValue::scalar(false)),
+            ("isEditable".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        assert_eq!(
+            execute(QUERY, None, &schema, &vars, &context).await,
+            Ok((
+                graphql_value!(
+                {
+                    "addGroupAttribute": {
+                        "ok": true
+                    }
+                } ),
+                vec![]
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_group_attribute_invalid() {
+        const QUERY: &str = r#"
+            mutation CreateUserAttribute($name: String!, $attributeType: AttributeType!, $isList: Boolean!, $isVisible: Boolean!, $isEditable: Boolean!) {
+                addUserAttribute(name: $name, attributeType: $attributeType, isList: $isList, isVisible: $isVisible, isEditable: $isEditable) {
+                    ok
+                }
+            }
+        "#;
+        let mock = MockTestBackendHandler::new();
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("bob"),
+                permission: Permission::Admin,
+            },
+        );
+        let vars = Variables::from([
+            ("name".to_string(), InputValue::scalar("AttrName_0")),
+            (
+                "attributeType".to_string(),
+                InputValue::enum_value("STRING"),
+            ),
+            ("isList".to_string(), InputValue::scalar(false)),
+            ("isVisible".to_string(), InputValue::scalar(false)),
+            ("isEditable".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        let result = execute(QUERY, None, &schema, &vars, &context).await;
+        match result {
+            Ok(res) => {
+                let (response, errors) = res;
+                assert!(response.is_null());
+                let expected_error_msg =
+                    "Cannot create attribute with invalid name. Valid characters: a-z, A-Z, 0-9, and dash (-). Invalid chars found: _"
+                        .to_string();
+                assert!(errors
+                    .iter()
+                    .all(|e| e.error().message() == expected_error_msg));
+            }
+            Err(_) => {
+                panic!();
+            }
+        }
+    }
 }
