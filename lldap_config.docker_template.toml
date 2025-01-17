@@ -33,6 +33,9 @@
 ## The public URL of the server, for password reset links.
 #http_url = "http://localhost"
 
+## The path to the front-end assets (relative to the working directory).
+#assets_path = "./app"
+
 ## Random secret for JWT signature.
 ## This secret should be random, and should be shared with application
 ## servers that need to consume the JWTs.
