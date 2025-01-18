@@ -3,49 +3,32 @@
 ###############################################################
 
 # This is just the LDAP part of the Authelia configuration!
-
+# See [Authelia docs](https://www.authelia.com/configuration/first-factor/ldap/) for more info
 
 authentication_backend:
   # Password reset through authelia works normally.
   password_reset:
     disable: false
-  # How often authelia should check if there is an user update in LDAP
+  # How often authelia should check if there is a user update in LDAP
   refresh_interval: 1m
   ldap:
-    implementation: custom
+    implementation: lldap
     # Pattern is ldap://HOSTNAME-OR-IP:PORT
     # Normal ldap port is 389, standard in LLDAP is 3890
     address: ldap://lldap:3890
-    # The dial timeout for LDAP.
-    timeout: 5s
-    # Use StartTLS with the LDAP connection, TLS not supported right now
-    start_tls: false
-    #tls:
-    #  skip_verify: false
-    #  minimum_version: TLS1.2
-    # Set base dn, like dc=google,dc.com
+    # Set base dn that you configured in LLDAP
     base_dn: dc=example,dc=com
-    # You need to set this to ou=people, because all users are stored in this ou!
-    additional_users_dn: ou=people
-    # To allow sign in both with username and email, one can use a filter like
-    # (&(|({username_attribute}={input})({mail_attribute}={input}))(objectClass=person))
-    users_filter: "(&({username_attribute}={input})(objectClass=person))"
-    # Set this to ou=groups, because all groups are stored in this ou
-    additional_groups_dn: ou=groups
-    # The groups are not displayed in the UI, but this filter works.
-    groups_filter: "(member={dn})"
-    # The attribute holding the name of the group.
-    attributes:
-      display_name: displayName
-      username: uid
-      group_name: cn
-      mail: mail
-      # distinguished_name: distinguishedName
-      # member_of: memberOf
-
     # The username and password of the bind user.
     # "bind_user" should be the username you created for authentication with the "lldap_strict_readonly" permission. It is not recommended to use an actual admin account here.
     # If you are configuring Authelia to change user passwords, then the account used here needs the "lldap_password_manager" permission instead.
     user: uid=bind_user,ou=people,dc=example,dc=com
     # Password can also be set using a secret: https://www.authelia.com/docs/configuration/secrets.html
     password: 'REPLACE_ME'
+    
+    # Optional: Setup TLS if you've enabled LDAPS
+    # tls:
+    #  skip_verify: false
+    #  minimum_version: TLS1.2
+    
+    # Optional: To allow sign in with BOTH username and email, you can change the users_filter to this
+    # users_filter: "(&(|({username_attribute}={input})({mail_attribute}={input}))(objectClass=person))"
