@@ -3,7 +3,7 @@
 ###############################################################
 
 # This is just the LDAP part of the Authelia configuration!
-# See [Authelia docs](https://www.authelia.com/configuration/first-factor/ldap/) for more info
+# See Authelia docs at https://www.authelia.com/configuration/first-factor/ldap/ for more info
 
 authentication_backend:
   # Password reset through authelia works normally.
@@ -22,7 +22,7 @@ authentication_backend:
     # "bind_user" should be the username you created for authentication with the "lldap_strict_readonly" permission. It is not recommended to use an actual admin account here.
     # If you are configuring Authelia to change user passwords, then the account used here needs the "lldap_password_manager" permission instead.
     user: uid=bind_user,ou=people,dc=example,dc=com
-    # Password can also be set using a secret: https://www.authelia.com/docs/configuration/secrets.html
+    # Password can also be set using a secret: https://www.authelia.com/configuration/methods/secrets/
     password: 'REPLACE_ME'
     
     # Optional: Setup TLS if you've enabled LDAPS
