@@ -1,10 +1,12 @@
 use crate::{
     components::{
         delete_group_attribute::DeleteGroupAttribute,
+        fragments::attribute_schema::render_attribute_name,
         router::{AppRoute, Link},
     },
     convert_attribute_type,
     infra::{
+        attributes::group,
         common_component::{CommonComponent, CommonComponentParts},
         schema::AttributeType,
     },
@@ -152,9 +154,10 @@ impl GroupSchemaTable {
         </svg>
                 };
         let hardcoded = ctx.props().hardcoded;
+        let desc = group::resolve_group_attribute_description_or_default(&attribute.name);
         html! {
             <tr key={attribute.name.clone()}>
-                <td>{&attribute.name}</td>
+                <td>{render_attribute_name(hardcoded, &attribute.name, &desc)}</td>
                 <td>{if attribute.is_list { format!("List<{attribute_type}>")} else {attribute_type.to_string()}}</td>
                 <td>{if attribute.is_visible {checkmark.clone()} else {html!{}}}</td>
                 {
