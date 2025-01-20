@@ -17,7 +17,7 @@ use crate::domain::{
         },
     },
     schema::{PublicSchema, SchemaGroupAttributeExtractor},
-    types::{AttributeName, AttributeType, Group, LdapObjectClass, UserId, Uuid},
+    types::{AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid},
 };
 
 pub fn get_group_attribute(
@@ -44,6 +44,9 @@ pub fn get_group_attribute(
         GroupFieldType::Dn => return None,
         GroupFieldType::EntryDn => {
             vec![format!("uid={},ou=groups,{}", group.display_name, base_dn_str).into_bytes()]
+        }
+        GroupFieldType::GroupId => {
+            vec![group.id.0.to_string().into_bytes()]
         }
         GroupFieldType::DisplayName => vec![group.display_name.to_string().into_bytes()],
         GroupFieldType::CreationDate => vec![chrono::Utc
@@ -170,6 +173,13 @@ fn convert_group_filter(
             let field = AttributeName::from(field.as_str());
             let value = value.to_ascii_lowercase();
             match map_group_field(&field, schema) {
+                GroupFieldType::GroupId => Ok(value
+                    .parse::<i32>()
+                    .map(|id| GroupRequestFilter::GroupId(GroupId(id)))
+                    .unwrap_or_else(|_| {
+                        warn!("Given group id is not a valid integer: {}", value);
+                        GroupRequestFilter::from(false)
+                    })),
                 GroupFieldType::DisplayName => Ok(GroupRequestFilter::DisplayName(value.into())),
                 GroupFieldType::Uuid => Uuid::try_from(value.as_str())
                     .map(GroupRequestFilter::Uuid)

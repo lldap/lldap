@@ -1500,6 +1500,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_search_groups_by_groupid() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::GroupId(GroupId(1)))))
+            .times(1)
+            .return_once(|_| {
+                Ok(vec![Group {
+                    id: GroupId(1),
+                    display_name: "group_1".into(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                    users: vec![UserId::new("bob"), UserId::new("john")],
+                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                    attributes: Vec::new(),
+                }])
+            });
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_group_search_request(
+            LdapFilter::Equality("groupid".to_string(), "1".to_string()),
+            vec!["dn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                    attributes: vec![],
+                }),
+                make_search_success(),
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn test_search_groups_filter() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
