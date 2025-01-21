@@ -1,10 +1,12 @@
 use crate::{
     components::{
         delete_user_attribute::DeleteUserAttribute,
+        fragments::attribute_schema::render_attribute_name,
         router::{AppRoute, Link},
     },
     convert_attribute_type,
     infra::{
+        attributes::user,
         common_component::{CommonComponent, CommonComponentParts},
         schema::AttributeType,
     },
@@ -151,9 +153,10 @@ impl UserSchemaTable {
         </svg>
                 };
         let hardcoded = ctx.props().hardcoded;
+        let desc = user::resolve_user_attribute_description_or_default(&attribute.name);
         html! {
             <tr key={attribute.name.clone()}>
-                <td>{&attribute.name}</td>
+                <td>{render_attribute_name(hardcoded, &attribute.name, &desc)}</td>
                 <td>{if attribute.is_list { format!("List<{attribute_type}>")} else {attribute_type.to_string()}}</td>
                 <td>{if attribute.is_editable {checkmark.clone()} else {html!{}}}</td>
                 <td>{if attribute.is_visible {checkmark.clone()} else {html!{}}}</td>

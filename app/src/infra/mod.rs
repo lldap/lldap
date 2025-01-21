@@ -1,4 +1,5 @@
 pub mod api;
+pub mod attributes;
 pub mod common_component;
 pub mod cookies;
 pub mod form_utils;
