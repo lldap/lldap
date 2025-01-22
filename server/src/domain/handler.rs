@@ -7,9 +7,9 @@ use crate::domain::{
     },
 };
 use async_trait::async_trait;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use itertools::Itertools;
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct BindRequest {
@@ -176,7 +176,12 @@ impl AttributeList {
     }
 
     pub fn format_for_schema(&self) -> String {
-        self.attributes.iter().map(|a| a.name.as_str()).unique().collect::<Vec<_>>().join(" $ ")
+        self.attributes
+            .iter()
+            .map(|a| a.name.as_str())
+            .unique()
+            .collect::<Vec<_>>()
+            .join(" $ ")
     }
 }
 

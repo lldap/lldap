@@ -1,8 +1,8 @@
 use crate::{
     domain::{
         handler::{
-            AttributeList, AttributeSchema, BackendHandler, BindRequest, CreateUserRequest, LoginHandler, 
-            ReadSchemaBackendHandler, Schema
+            AttributeList, AttributeSchema, BackendHandler, BindRequest, CreateUserRequest,
+            LoginHandler, ReadSchemaBackendHandler, Schema,
         },
         ldap::{
             error::{LdapError, LdapResult},
@@ -11,10 +11,13 @@ use crate::{
             utils::{
                 get_user_id_from_distinguished_name, is_subtree, parse_distinguished_name, LdapInfo,
             },
-        }, 
+        },
         opaque_handler::OpaqueHandler,
         schema::PublicSchema,
-        types::{AttributeName, AttributeType, Email, Group, JpegPhoto, LdapObjectClass, UserAndGroups, UserId}
+        types::{
+            AttributeName, AttributeType, Email, Group, JpegPhoto, LdapObjectClass, UserAndGroups,
+            UserId,
+        },
     },
     infra::access_control::{
         AccessControlledBackendHandler, AdminBackendHandler, UserAndGroupListerBackendHandler,
@@ -22,6 +25,8 @@ use crate::{
     },
 };
 use anyhow::Result;
+use chrono::Utc;
+use itertools::Itertools;
 use ldap3_proto::proto::{
     LdapAddRequest, LdapBindCred, LdapBindRequest, LdapBindResponse, LdapCompareRequest,
     LdapDerefAliases, LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapModify,
@@ -31,8 +36,6 @@ use ldap3_proto::proto::{
 };
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
-use itertools::Itertools;
-use chrono::Utc;
 
 #[derive(Debug)]
 enum SearchScope {
@@ -215,11 +218,16 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
     })
 }
 
-pub struct ObjectClassList (Vec<LdapObjectClass>);
+pub struct ObjectClassList(Vec<LdapObjectClass>);
 
 impl ObjectClassList {
     fn format_for_schema(&self) -> String {
-        self.0.iter().map(|c| format!("'{}'", c)).unique().collect::<Vec<_>>().join(" ")
+        self.0
+            .iter()
+            .map(|c| format!("'{}'", c))
+            .unique()
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 
@@ -234,10 +242,18 @@ pub struct LldapBuiltinSchema {
 
 impl LldapBuiltinSchema {
     fn extend_with_custom_schema(mut self, schema: &Schema) -> Self {
-        self.user_attributes_may.attributes.extend(schema.user_attributes.attributes.clone());
-        self.group_attributes_may.attributes.extend(schema.group_attributes.attributes.clone());
-        self.user_object_classes.0.extend(schema.extra_user_object_classes.clone());
-        self.group_object_classes.0.extend(schema.extra_group_object_classes.clone());
+        self.user_attributes_may
+            .attributes
+            .extend(schema.user_attributes.attributes.clone());
+        self.group_attributes_may
+            .attributes
+            .extend(schema.group_attributes.attributes.clone());
+        self.user_object_classes
+            .0
+            .extend(schema.extra_user_object_classes.clone());
+        self.group_object_classes
+            .0
+            .extend(schema.extra_group_object_classes.clone());
 
         self
     }
@@ -247,12 +263,19 @@ impl LldapBuiltinSchema {
 
         for (index, attribute) in self.all_attributes().attributes.into_iter().enumerate() {
             formatted_list.push(
-                format!("( 2.{} NAME '{}' DESC 'LLDAP: {}' SUP {:?} )",
-                (index + 4), 
-                attribute.name, 
-                if attribute.is_hardcoded {"builtin attribute"} else {"custom attribute"}, 
-                attribute.attribute_type
-            ).into_bytes().to_vec()
+                format!(
+                    "( 2.{} NAME '{}' DESC 'LLDAP: {}' SUP {:?} )",
+                    (index + 4),
+                    attribute.name,
+                    if attribute.is_hardcoded {
+                        "builtin attribute"
+                    } else {
+                        "custom attribute"
+                    },
+                    attribute.attribute_type
+                )
+                .into_bytes()
+                .to_vec(),
             )
         }
 
@@ -266,7 +289,12 @@ impl LldapBuiltinSchema {
                 self.user_attributes_may.attributes.clone(),
                 self.group_attributes_must.attributes.clone(),
                 self.group_attributes_may.attributes.clone(),
-            ].concat().iter().unique_by(|a| &a.name).cloned().collect::<Vec<_>>()
+            ]
+            .concat()
+            .iter()
+            .unique_by(|a| &a.name)
+            .cloned()
+            .collect::<Vec<_>>(),
         }
     }
 }
@@ -292,8 +320,8 @@ fn get_lldap_builtin_schema() -> LldapBuiltinSchema {
                     is_editable: false,
                     is_hardcoded: true,
                     is_readonly: true,
-                }
-            ]
+                },
+            ],
         },
         user_attributes_may: AttributeList {
             attributes: vec![
@@ -360,7 +388,7 @@ fn get_lldap_builtin_schema() -> LldapBuiltinSchema {
                     is_hardcoded: true,
                     is_readonly: true,
                 },
-            ]
+            ],
         },
         group_attributes_must: AttributeList {
             attributes: vec![
@@ -382,7 +410,7 @@ fn get_lldap_builtin_schema() -> LldapBuiltinSchema {
                     is_hardcoded: true,
                     is_readonly: true,
                 },
-            ]
+            ],
         },
         group_attributes_may: AttributeList {
             attributes: vec![
@@ -424,27 +452,28 @@ fn get_lldap_builtin_schema() -> LldapBuiltinSchema {
                 },
             ],
         },
-        user_object_classes: ObjectClassList (
+        user_object_classes: ObjectClassList(
             DEFAULT_USER_OBJECT_CLASSES
                 .iter()
                 .map(|&c| LdapObjectClass::from(c))
-                .collect()
+                .collect(),
         ),
-        group_object_classes: ObjectClassList (
+        group_object_classes: ObjectClassList(
             DEFAULT_GROUP_OBJECT_CLASSES
                 .iter()
                 .map(|&c| LdapObjectClass::from(c))
-                .collect()
+                .collect(),
         ),
     }
 }
 
 fn schema_response(schema: &Schema) -> LdapOp {
-    let full_schema: LldapBuiltinSchema = get_lldap_builtin_schema().extend_with_custom_schema(schema);
+    let full_schema: LldapBuiltinSchema =
+        get_lldap_builtin_schema().extend_with_custom_schema(schema);
 
     let current_time_utc = Utc::now().format("%Y%m%d%H%M%SZ").to_string().into_bytes();
 
-    LdapOp::SearchResultEntry(LdapSearchResultEntry { 
+    LdapOp::SearchResultEntry(LdapSearchResultEntry {
         dn: "cn=Subschema".to_string(),
         attributes: vec![
            LdapPartialAttribute {
@@ -508,7 +537,7 @@ fn schema_response(schema: &Schema) -> LdapOp {
             atype: "subschemaSubentry".to_string(),
             vals: vec![b"cn=Subschema".to_vec()],
            },
-        ], 
+        ],
     })
 }
 
@@ -842,18 +871,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     ]);
                 }
             }
-        }
-        else if request.base == "cn=Subschema" && request.scope == LdapSearchScope::Base {
+        } else if request.base == "cn=Subschema" && request.scope == LdapSearchScope::Base {
             debug!("Subschema request made");
             let backend_handler = self.backend_handler.get_schema_only_handler();
             let schema = &backend_handler.get_schema().await.map_err(|e| LdapError {
                 code: LdapResultCode::OperationsError,
-                message: format!("Unable to get schema: {:#}", e)
+                message: format!("Unable to get schema: {:#}", e),
             })?;
-            return Ok(vec![
-                schema_response(&schema),
-                make_search_success(),
-            ]);
+            return Ok(vec![schema_response(&schema), make_search_success()]);
         }
         self.do_search(request).await
     }
@@ -3022,10 +3047,7 @@ mod tests {
         };
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            Ok(vec![
-                schema_response(&schema),
-                make_search_success()
-            ])
+            Ok(vec![schema_response(&schema), make_search_success()])
         )
     }
 

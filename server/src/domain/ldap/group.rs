@@ -20,8 +20,7 @@ use crate::domain::{
     types::{AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid},
 };
 
-pub const DEFAULT_GROUP_OBJECT_CLASSES: &[&str] =
-    &["groupOfUniqueNames"];
+pub const DEFAULT_GROUP_OBJECT_CLASSES: &[&str] = &["groupOfUniqueNames"];
 
 pub fn get_group_attribute(
     group: &Group,

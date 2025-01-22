@@ -5,9 +5,9 @@ use crate::{
         deserialize::deserialize_attribute_value,
         handler::{BackendHandler, ReadSchemaBackendHandler},
         ldap::{
-            utils::{map_user_field, UserFieldType},
-            user::DEFAULT_USER_OBJECT_CLASSES,
             group::DEFAULT_GROUP_OBJECT_CLASSES,
+            user::DEFAULT_USER_OBJECT_CLASSES,
+            utils::{map_user_field, UserFieldType},
         },
         model::UserColumn,
         schema::PublicSchema,
@@ -557,7 +557,8 @@ impl<Handler: BackendHandler> AttributeList<Handler> {
     }
 
     fn object_classes(&self) -> Vec<ObjectClassGQL> {
-        let mut all_object_classes: Vec<ObjectClassGQL> = self.default_classes
+        let mut all_object_classes: Vec<ObjectClassGQL> = self
+            .default_classes
             .iter()
             .map(|c| ObjectClassGQL {
                 object_class: c.to_string(),
@@ -566,10 +567,13 @@ impl<Handler: BackendHandler> AttributeList<Handler> {
             .collect();
 
         all_object_classes.extend(
-            self.extra_classes.iter().map(|c| ObjectClassGQL {
-                object_class: c.to_string(),
-                is_hardcoded: false,
-            }).collect::<Vec<_>>(),
+            self.extra_classes
+                .iter()
+                .map(|c| ObjectClassGQL {
+                    object_class: c.to_string(),
+                    is_hardcoded: false,
+                })
+                .collect::<Vec<_>>(),
         );
 
         all_object_classes
@@ -577,7 +581,11 @@ impl<Handler: BackendHandler> AttributeList<Handler> {
 }
 
 impl<Handler: BackendHandler> AttributeList<Handler> {
-    fn new(attributes: DomainAttributeList, default_classes: Vec<LdapObjectClass>, extra_classes: Vec<LdapObjectClass>) -> Self {
+    fn new(
+        attributes: DomainAttributeList,
+        default_classes: Vec<LdapObjectClass>,
+        extra_classes: Vec<LdapObjectClass>,
+    ) -> Self {
         Self {
             attributes,
             default_classes,
@@ -598,14 +606,20 @@ impl<Handler: BackendHandler> Schema<Handler> {
     fn user_schema(&self) -> AttributeList<Handler> {
         AttributeList::<Handler>::new(
             self.schema.get_schema().user_attributes.clone(),
-            DEFAULT_USER_OBJECT_CLASSES.iter().map(|&c| LdapObjectClass::from(c)).collect(),
+            DEFAULT_USER_OBJECT_CLASSES
+                .iter()
+                .map(|&c| LdapObjectClass::from(c))
+                .collect(),
             self.schema.get_schema().extra_user_object_classes.clone(),
         )
     }
     fn group_schema(&self) -> AttributeList<Handler> {
         AttributeList::<Handler>::new(
             self.schema.get_schema().group_attributes.clone(),
-            DEFAULT_GROUP_OBJECT_CLASSES.iter().map(|&c| LdapObjectClass::from(c)).collect(),
+            DEFAULT_GROUP_OBJECT_CLASSES
+                .iter()
+                .map(|&c| LdapObjectClass::from(c))
+                .collect(),
             self.schema.get_schema().extra_group_object_classes.clone(),
         )
     }
