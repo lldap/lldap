@@ -60,6 +60,9 @@ features = [
 path = "../auth"
 features = [ "opaque_client" ]
 
+[dependencies.lldap_validation]
+path = "../validation"
+
 [dependencies.image]
 features = ["jpeg"]
 default-features = false
