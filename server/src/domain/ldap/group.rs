@@ -17,7 +17,7 @@ use crate::domain::{
         },
     },
     schema::{PublicSchema, SchemaGroupAttributeExtractor},
-    types::{AttributeName, AttributeType, Group, LdapObjectClass, UserId, Uuid},
+    types::{AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid},
 };
 
 pub const DEFAULT_GROUP_OBJECT_CLASSES: &[&str] =
@@ -51,6 +51,9 @@ pub fn get_group_attribute(
         GroupFieldType::Dn => return None,
         GroupFieldType::EntryDn => {
             vec![format!("uid={},ou=groups,{}", group.display_name, base_dn_str).into_bytes()]
+        }
+        GroupFieldType::GroupId => {
+            vec![group.id.0.to_string().into_bytes()]
         }
         GroupFieldType::DisplayName => vec![group.display_name.to_string().into_bytes()],
         GroupFieldType::CreationDate => vec![chrono::Utc
@@ -158,12 +161,23 @@ fn get_group_attribute_equality_filter(
     is_list: bool,
     value: &str,
 ) -> GroupRequestFilter {
-    deserialize_attribute_value(&[value.to_owned()], typ, is_list)
-        .map(|v| GroupRequestFilter::AttributeEquality(field.clone(), v))
-        .unwrap_or_else(|e| {
+    let value_lc = value.to_ascii_lowercase();
+    let serialized_value = deserialize_attribute_value(&[value.to_owned()], typ, is_list);
+    let serialized_value_lc = deserialize_attribute_value(&[value_lc.to_owned()], typ, is_list);
+    match (serialized_value, serialized_value_lc) {
+        (Ok(v), Ok(v_lc)) => GroupRequestFilter::Or(vec![
+            GroupRequestFilter::AttributeEquality(field.clone(), v),
+            GroupRequestFilter::AttributeEquality(field.clone(), v_lc),
+        ]),
+        (Ok(_), Err(e)) => {
+            warn!("Invalid value for attribute {} (lowercased): {}", field, e);
+            GroupRequestFilter::from(false)
+        }
+        (Err(e), _) => {
             warn!("Invalid value for attribute {}: {}", field, e);
             GroupRequestFilter::from(false)
-        })
+        }
+    }
 }
 
 fn convert_group_filter(
@@ -175,17 +189,24 @@ fn convert_group_filter(
     match filter {
         LdapFilter::Equality(field, value) => {
             let field = AttributeName::from(field.as_str());
-            let value = value.to_ascii_lowercase();
+            let value_lc = value.to_ascii_lowercase();
             match map_group_field(&field, schema) {
-                GroupFieldType::DisplayName => Ok(GroupRequestFilter::DisplayName(value.into())),
-                GroupFieldType::Uuid => Uuid::try_from(value.as_str())
+                GroupFieldType::GroupId => Ok(value_lc
+                    .parse::<i32>()
+                    .map(|id| GroupRequestFilter::GroupId(GroupId(id)))
+                    .unwrap_or_else(|_| {
+                        warn!("Given group id is not a valid integer: {}", value_lc);
+                        GroupRequestFilter::from(false)
+                    })),
+                GroupFieldType::DisplayName => Ok(GroupRequestFilter::DisplayName(value_lc.into())),
+                GroupFieldType::Uuid => Uuid::try_from(value_lc.as_str())
                     .map(GroupRequestFilter::Uuid)
                     .map_err(|e| LdapError {
                         code: LdapResultCode::Other,
                         message: format!("Invalid UUID: {:#}", e),
                     }),
                 GroupFieldType::Member => Ok(get_user_id_from_distinguished_name_or_plain_name(
-                    &value,
+                    &value_lc,
                     &ldap_info.base_dn,
                     &ldap_info.base_dn_str,
                 )
@@ -195,21 +216,21 @@ fn convert_group_filter(
                     GroupRequestFilter::from(false)
                 })),
                 GroupFieldType::ObjectClass => Ok(GroupRequestFilter::from(
-                    matches!(value.as_str(), "groupofuniquenames" | "groupofnames")
+                    matches!(value_lc.as_str(), "groupofuniquenames" | "groupofnames")
                         || schema
                             .get_schema()
                             .extra_group_object_classes
-                            .contains(&LdapObjectClass::from(value)),
+                            .contains(&LdapObjectClass::from(value_lc)),
                 )),
                 GroupFieldType::Dn | GroupFieldType::EntryDn => {
                     Ok(get_group_id_from_distinguished_name_or_plain_name(
-                        value.as_str(),
+                        value_lc.as_str(),
                         &ldap_info.base_dn,
                         &ldap_info.base_dn_str,
                     )
                     .map(GroupRequestFilter::DisplayName)
                     .unwrap_or_else(|_| {
-                        warn!("Invalid dn filter on group: {}", value);
+                        warn!("Invalid dn filter on group: {}", value_lc);
                         GroupRequestFilter::from(false)
                     }))
                 }
@@ -224,7 +245,7 @@ fn convert_group_filter(
                     Ok(GroupRequestFilter::from(false))
                 }
                 GroupFieldType::Attribute(field, typ, is_list) => Ok(
-                    get_group_attribute_equality_filter(&field, typ, is_list, &value),
+                    get_group_attribute_equality_filter(&field, typ, is_list, value),
                 ),
                 GroupFieldType::CreationDate => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,

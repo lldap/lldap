@@ -12,6 +12,7 @@ use crate::{
 use anyhow::{bail, Result};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
+use lldap_validation::attributes::validate_attribute_name;
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form_derive::Model;
@@ -66,6 +67,13 @@ impl CommonComponent<CreateUserAttributeForm> for CreateUserAttributeForm {
                 if model.is_editable && !model.is_visible {
                     bail!("Editable attributes must also be visible");
                 }
+                validate_attribute_name(&model.attribute_name).or_else(|invalid_chars| {
+                    let invalid = String::from_iter(invalid_chars);
+                    bail!(
+                        "Attribute name contains one or more invalid characters: {}",
+                        invalid
+                    );
+                })?;
                 let attribute_type = model.attribute_type.parse::<AttributeType>().unwrap();
                 let req = create_user_attribute::Variables {
                     name: model.attribute_name,

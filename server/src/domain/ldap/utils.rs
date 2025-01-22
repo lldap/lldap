@@ -245,6 +245,7 @@ pub fn map_user_field(field: &AttributeName, schema: &PublicSchema) -> UserField
 
 pub enum GroupFieldType {
     NoMatch,
+    GroupId,
     DisplayName,
     CreationDate,
     ObjectClass,
@@ -267,6 +268,7 @@ pub fn map_group_field(field: &AttributeName, schema: &PublicSchema) -> GroupFie
         }
         "member" | "uniquemember" => GroupFieldType::Member,
         "entryuuid" | "uuid" => GroupFieldType::Uuid,
+        "group_id" | "groupid" => GroupFieldType::GroupId,
         _ => schema
             .get_schema()
             .group_attributes

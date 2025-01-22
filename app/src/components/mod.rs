@@ -13,6 +13,7 @@ pub mod delete_group_attribute;
 pub mod delete_user;
 pub mod delete_user_attribute;
 pub mod form;
+pub mod fragments;
 pub mod group_details;
 pub mod group_details_form;
 pub mod group_schema_table;

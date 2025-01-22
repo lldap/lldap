@@ -2536,6 +2536,7 @@ dependencies = [
  "ldap3_proto",
  "lettre",
  "lldap_auth",
+ "lldap_validation",
  "log",
  "mockall",
  "nix",
@@ -2589,6 +2590,7 @@ dependencies = [
  "indexmap 1.6.2",
  "jwt 0.13.0",
  "lldap_auth",
+ "lldap_validation",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -2652,6 +2654,10 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "lldap_validation"
+version = "0.6.0"
 
 [[package]]
 name = "local-channel"
