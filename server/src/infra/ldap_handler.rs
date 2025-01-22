@@ -1660,6 +1660,74 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_search_groups_filter_3() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::Or(vec![
+                GroupRequestFilter::AttributeEquality(
+                    AttributeName::from("attr"),
+                    Serialized::from("TEST"),
+                ),
+                GroupRequestFilter::AttributeEquality(
+                    AttributeName::from("attr"),
+                    Serialized::from("test"),
+                ),
+            ]))))
+            .times(1)
+            .return_once(|_| {
+                Ok(vec![Group {
+                    display_name: "group_1".into(),
+                    id: GroupId(1),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                    users: vec![],
+                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                    attributes: vec![AttributeValue {
+                        name: "Attr".into(),
+                        value: Serialized::from("TEST"),
+                    }],
+                }])
+            });
+        mock.expect_get_schema().returning(|| {
+            Ok(crate::domain::handler::Schema {
+                user_attributes: AttributeList {
+                    attributes: Vec::new(),
+                },
+                group_attributes: AttributeList {
+                    attributes: vec![AttributeSchema {
+                        name: "Attr".into(),
+                        attribute_type: AttributeType::String,
+                        is_list: false,
+                        is_visible: true,
+                        is_editable: true,
+                        is_hardcoded: false,
+                        is_readonly: false,
+                    }],
+                },
+                extra_user_object_classes: Vec::new(),
+                extra_group_object_classes: Vec::new(),
+            })
+        });
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_group_search_request(
+            LdapFilter::Equality("Attr".to_string(), "TEST".to_string()),
+            vec!["cn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                    attributes: vec![LdapPartialAttribute {
+                        atype: "cn".to_string(),
+                        vals: vec![b"group_1".to_vec()]
+                    },],
+                }),
+                make_search_success(),
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn test_search_group_as_scope() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
@@ -1789,10 +1857,16 @@ mod tests {
                         true.into(),
                         true.into(),
                         false.into(),
-                        UserRequestFilter::AttributeEquality(
-                            AttributeName::from("first_name"),
-                            Serialized::from("firstname"),
-                        ),
+                        UserRequestFilter::Or(vec![
+                            UserRequestFilter::AttributeEquality(
+                                AttributeName::from("first_name"),
+                                Serialized::from("FirstName"),
+                            ),
+                            UserRequestFilter::AttributeEquality(
+                                AttributeName::from("first_name"),
+                                Serialized::from("firstname"),
+                            ),
+                        ]),
                         false.into(),
                         UserRequestFilter::UserIdSubString(SubStringFilter {
                             initial: Some("iNIt".to_owned()),
@@ -1833,7 +1907,7 @@ mod tests {
                 LdapFilter::Present("objectClass".to_string()),
                 LdapFilter::Present("uid".to_string()),
                 LdapFilter::Present("unknown".to_string()),
-                LdapFilter::Equality("givenname".to_string(), "firstname".to_string()),
+                LdapFilter::Equality("givenname".to_string(), "FirstName".to_string()),
                 LdapFilter::Equality("unknown_attribute".to_string(), "randomValue".to_string()),
                 LdapFilter::Substring(
                     "uid".to_owned(),

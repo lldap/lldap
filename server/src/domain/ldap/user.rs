@@ -174,12 +174,23 @@ fn get_user_attribute_equality_filter(
     is_list: bool,
     value: &str,
 ) -> UserRequestFilter {
-    deserialize_attribute_value(&[value.to_owned()], typ, is_list)
-        .map(|v| UserRequestFilter::AttributeEquality(field.clone(), v))
-        .unwrap_or_else(|e| {
+    let value_lc = value.to_ascii_lowercase();
+    let serialized_value = deserialize_attribute_value(&[value.to_owned()], typ, is_list);
+    let serialized_value_lc = deserialize_attribute_value(&[value_lc.to_owned()], typ, is_list);
+    match (serialized_value, serialized_value_lc) {
+        (Ok(v), Ok(v_lc)) => UserRequestFilter::Or(vec![
+            UserRequestFilter::AttributeEquality(field.clone(), v),
+            UserRequestFilter::AttributeEquality(field.clone(), v_lc),
+        ]),
+        (Ok(_), Err(e)) => {
+            warn!("Invalid value for attribute {} (lowercased): {}", field, e);
+            UserRequestFilter::from(false)
+        }
+        (Err(e), _) => {
             warn!("Invalid value for attribute {}: {}", field, e);
             UserRequestFilter::from(false)
-        })
+        }
+    }
 }
 
 fn convert_user_filter(
@@ -198,18 +209,20 @@ fn convert_user_filter(
         LdapFilter::Not(filter) => Ok(UserRequestFilter::Not(Box::new(rec(filter)?))),
         LdapFilter::Equality(field, value) => {
             let field = AttributeName::from(field.as_str());
-            let value = value.to_ascii_lowercase();
+            let value_lc = value.to_ascii_lowercase();
             match map_user_field(&field, schema) {
                 UserFieldType::PrimaryField(UserColumn::UserId) => {
-                    Ok(UserRequestFilter::UserId(UserId::new(&value)))
+                    Ok(UserRequestFilter::UserId(UserId::new(&value_lc)))
                 }
                 UserFieldType::PrimaryField(UserColumn::Email) => Ok(UserRequestFilter::Equality(
                     UserColumn::LowercaseEmail,
-                    value,
+                    value_lc,
                 )),
-                UserFieldType::PrimaryField(field) => Ok(UserRequestFilter::Equality(field, value)),
+                UserFieldType::PrimaryField(field) => {
+                    Ok(UserRequestFilter::Equality(field, value_lc))
+                }
                 UserFieldType::Attribute(field, typ, is_list) => Ok(
-                    get_user_attribute_equality_filter(&field, typ, is_list, &value),
+                    get_user_attribute_equality_filter(&field, typ, is_list, value),
                 ),
                 UserFieldType::NoMatch => {
                     if !ldap_info.ignored_user_attributes.contains(&field) {
@@ -223,15 +236,15 @@ fn convert_user_filter(
                 }
                 UserFieldType::ObjectClass => Ok(UserRequestFilter::from(
                     matches!(
-                        value.as_str(),
+                        value_lc.as_str(),
                         "person" | "inetorgperson" | "posixaccount" | "mailaccount"
                     ) || schema
                         .get_schema()
                         .extra_user_object_classes
-                        .contains(&LdapObjectClass::from(value)),
+                        .contains(&LdapObjectClass::from(value_lc)),
                 )),
                 UserFieldType::MemberOf => Ok(get_group_id_from_distinguished_name_or_plain_name(
-                    &value,
+                    &value_lc,
                     &ldap_info.base_dn,
                     &ldap_info.base_dn_str,
                 )
@@ -242,13 +255,13 @@ fn convert_user_filter(
                 })),
                 UserFieldType::EntryDn | UserFieldType::Dn => {
                     Ok(get_user_id_from_distinguished_name_or_plain_name(
-                        value.as_str(),
+                        value_lc.as_str(),
                         &ldap_info.base_dn,
                         &ldap_info.base_dn_str,
                     )
                     .map(UserRequestFilter::UserId)
                     .unwrap_or_else(|_| {
-                        warn!("Invalid dn filter on user: {}", value);
+                        warn!("Invalid dn filter on user: {}", value_lc);
                         UserRequestFilter::from(false)
                     }))
                 }
