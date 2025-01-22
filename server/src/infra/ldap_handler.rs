@@ -2897,6 +2897,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_subschema_response() {
+        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+
+        let backend_handler = ldap_handler.backend_handler.get_schema_only_handler();
+        let schema = &backend_handler.get_schema().await.unwrap();
+
+        let request = LdapSearchRequest {
+            base: "cn=Subschema".to_string(),
+            scope: LdapSearchScope::Base,
+            aliases: LdapDerefAliases::Never,
+            sizelimit: 0,
+            timelimit: 0,
+            typesonly: false,
+            filter: LdapFilter::Present("objectClass".to_string()),
+            attrs: vec!["supportedExtension".to_string()],
+        };
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                schema_response(&schema),
+                make_search_success()
+            ])
+        )
+    }
+
+    #[tokio::test]
     async fn test_create_user() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_create_user()
