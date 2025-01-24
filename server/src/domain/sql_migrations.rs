@@ -1,8 +1,6 @@
-use crate::domain::{
-    sql_tables::{DbConnection, SchemaVersion, LAST_SCHEMA_VERSION},
-    types::{AttributeType, GroupId, JpegPhoto, Serialized, UserId, Uuid},
-};
+use crate::domain::sql_tables::{DbConnection, SchemaVersion, LAST_SCHEMA_VERSION};
 use itertools::Itertools;
+use lldap_domain::types::{AttributeType, GroupId, JpegPhoto, Serialized, UserId, Uuid};
 use sea_orm::{
     sea_query::{
         self, all, BinOper, BlobSize::Blob, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func,

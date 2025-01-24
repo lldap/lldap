@@ -123,10 +123,8 @@ pub async fn set_private_key_info(pool: &DbConnection, info: PrivateKeyInfo) -> 
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::{
-        sql_migrations,
-        types::{GroupId, JpegPhoto, Serialized, Uuid},
-    };
+    use crate::domain::sql_migrations;
+    use lldap_domain::types::{GroupId, JpegPhoto, Serialized, Uuid};
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -254,11 +252,11 @@ mod tests {
             vec![
                 SimpleUser {
                     display_name: None,
-                    uuid: crate::uuid!("a02eaf13-48a7-30f6-a3d4-040ff7c52b04")
+                    uuid: lldap_domain::uuid!("a02eaf13-48a7-30f6-a3d4-040ff7c52b04")
                 },
                 SimpleUser {
                     display_name: Some("John Doe".to_owned()),
-                    uuid: crate::uuid!("986765a5-3f03-389e-b47b-536b2d6e1bec")
+                    uuid: lldap_domain::uuid!("986765a5-3f03-389e-b47b-536b2d6e1bec")
                 }
             ]
         );

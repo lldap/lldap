@@ -12,10 +12,10 @@ use crate::domain::{
         UpdateUserRequest, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
     },
     schema::PublicSchema,
-    types::{
-        AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, User,
-        UserAndGroups, UserId,
-    },
+};
+use lldap_domain::types::{
+    AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, User, UserAndGroups,
+    UserId,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

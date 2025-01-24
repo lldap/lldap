@@ -17,7 +17,9 @@ use crate::domain::{
         },
     },
     schema::{PublicSchema, SchemaGroupAttributeExtractor},
-    types::{AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid},
+};
+use lldap_domain::types::{
+    AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid,
 };
 
 pub fn get_group_attribute(

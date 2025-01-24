@@ -11,7 +11,6 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
 
-pub use super::model::UserColumn;
 pub use lldap_auth::types::UserId;
 
 #[derive(
@@ -66,11 +65,11 @@ impl<'a> std::convert::TryFrom<&'a str> for Uuid {
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "test")]
 #[macro_export]
 macro_rules! uuid {
     ($s:literal) => {
-        <$crate::domain::types::Uuid as std::convert::TryFrom<_>>::try_from($s).unwrap()
+        <lldap_domain::types::Uuid as std::convert::TryFrom<_>>::try_from($s).unwrap()
     };
 }
 
@@ -372,7 +371,7 @@ impl JpegPhoto {
         self.0
     }
 
-    #[cfg(test)]
+    #[cfg(any(feature = "test", test))]
     pub fn for_tests() -> Self {
         use image::{ImageOutputFormat, Rgb, RgbImage};
         let img = RgbImage::from_fn(32, 32, |x, y| {
@@ -424,7 +423,7 @@ pub struct User {
     pub attributes: Vec<AttributeValue>,
 }
 
-#[cfg(test)]
+#[cfg(feature = "test")]
 impl Default for User {
     fn default() -> Self {
         let epoch = chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc();

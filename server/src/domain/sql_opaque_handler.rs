@@ -4,11 +4,11 @@ use super::{
     model::{self, UserColumn},
     opaque_handler::{login, registration, OpaqueHandler},
     sql_backend_handler::SqlBackendHandler,
-    types::UserId,
 };
 use async_trait::async_trait;
 use base64::Engine;
 use lldap_auth::opaque;
+use lldap_domain::types::UserId;
 use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, QuerySelect};
 use secstr::SecUtf8;
 use tracing::{debug, info, instrument, warn};

@@ -6,9 +6,9 @@ use crate::domain::{
     },
     model,
     sql_backend_handler::SqlBackendHandler,
-    types::{AttributeName, LdapObjectClass},
 };
 use async_trait::async_trait;
+use lldap_domain::types::{AttributeName, LdapObjectClass};
 use sea_orm::{
     ActiveModelTrait, DatabaseTransaction, EntityTrait, QueryOrder, Set, TransactionTrait,
 };
@@ -177,8 +177,8 @@ mod tests {
     use crate::domain::{
         handler::{AttributeList, UpdateUserRequest, UserBackendHandler, UserRequestFilter},
         sql_backend_handler::tests::*,
-        types::{AttributeType, AttributeValue, Serialized},
     };
+    use lldap_domain::types::{AttributeType, AttributeValue, Serialized};
     use pretty_assertions::assert_eq;
 
     #[tokio::test]
