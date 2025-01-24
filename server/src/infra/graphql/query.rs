@@ -7,9 +7,6 @@ use crate::{
         ldap::utils::{map_user_field, UserFieldType},
         model::UserColumn,
         schema::PublicSchema,
-        types::{
-            AttributeType, GroupDetails, GroupId, JpegPhoto, LdapObjectClass, Serialized, UserId,
-        },
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
@@ -19,16 +16,19 @@ use crate::{
 use anyhow::Context as AnyhowContext;
 use chrono::{NaiveDateTime, TimeZone};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
+use lldap_domain::types::{
+    AttributeType, GroupDetails, GroupId, JpegPhoto, LdapObjectClass, Serialized, UserId,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument, Span};
 
 type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
-type DomainUser = crate::domain::types::User;
-type DomainGroup = crate::domain::types::Group;
-type DomainUserAndGroups = crate::domain::types::UserAndGroups;
+type DomainUser = lldap_domain::types::User;
+type DomainGroup = lldap_domain::types::Group;
+type DomainUserAndGroups = lldap_domain::types::UserAndGroups;
 type DomainAttributeList = crate::domain::handler::AttributeList;
 type DomainAttributeSchema = crate::domain::handler::AttributeSchema;
-type DomainAttributeValue = crate::domain::types::AttributeValue;
+type DomainAttributeValue = lldap_domain::types::AttributeValue;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
 /// A filter for requests, specifying a boolean expression based on field constraints. Only one of
@@ -802,10 +802,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
 mod tests {
     use super::*;
     use crate::{
-        domain::{
-            handler::AttributeList,
-            types::{AttributeName, AttributeType, LdapObjectClass, Serialized},
-        },
+        domain::handler::AttributeList,
         infra::{
             access_control::{Permission, ValidationResults},
             test_utils::{setup_default_schema, MockTestBackendHandler},
@@ -816,6 +813,7 @@ mod tests {
         execute, graphql_value, DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType,
         RootNode, Variables,
     };
+    use lldap_domain::types::{AttributeName, AttributeType, LdapObjectClass, Serialized};
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
@@ -908,7 +906,7 @@ mod tests {
                     user_id: UserId::new("bob"),
                     email: "bob@bobbers.on".into(),
                     creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
-                    uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                    uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     attributes: vec![
                         DomainAttributeValue {
                             name: "first_name".into(),
@@ -927,7 +925,7 @@ mod tests {
             group_id: GroupId(3),
             display_name: "Bobbersons".into(),
             creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
-            uuid: crate::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+            uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: vec![DomainAttributeValue {
                 name: "club_name".into(),
                 value: Serialized::from("Gang of Four"),
@@ -937,7 +935,7 @@ mod tests {
             group_id: GroupId(7),
             display_name: "Jefferees".into(),
             creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
-            uuid: crate::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+            uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: Vec::new(),
         });
         mock.expect_get_user_groups()

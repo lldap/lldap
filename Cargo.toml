@@ -1,10 +1,11 @@
 [workspace]
 members = [
-  "server",
-  "auth",
-  "app",
-  "migration-tool",
-  "set-password",
+    "crates/domain",
+    "server",
+    "auth",
+    "app",
+    "migration-tool",
+    "set-password",
 ]
 
 default-members = ["server"]

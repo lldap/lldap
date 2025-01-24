@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::types::{AttributeName, AttributeValue, GroupId, Serialized};
+use lldap_domain::types::{AttributeName, AttributeValue, GroupId, Serialized};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "group_attributes")]

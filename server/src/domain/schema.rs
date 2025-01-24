@@ -1,7 +1,5 @@
-use crate::domain::{
-    handler::{AttributeList, AttributeSchema, Schema},
-    types::AttributeType,
-};
+use crate::domain::handler::{AttributeList, AttributeSchema, Schema};
+use lldap_domain::types::AttributeType;
 use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]

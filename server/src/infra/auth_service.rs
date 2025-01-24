@@ -21,14 +21,15 @@ use std::{
 use time::ext::NumericalDuration;
 use tracing::{debug, info, instrument, warn};
 
+use crate::domain::model::UserColumn;
 use lldap_auth::{login, password_reset, registration, JWTClaims};
+use lldap_domain::types::{GroupDetails, GroupName, UserId};
 
 use crate::{
     domain::{
         error::DomainError,
         handler::{BackendHandler, BindRequest, LoginHandler, UserRequestFilter},
         opaque_handler::OpaqueHandler,
-        types::{GroupDetails, GroupName, UserColumn, UserId},
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler, ValidationResults},

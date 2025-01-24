@@ -1,12 +1,9 @@
-use crate::domain::{
-    error::Result,
-    types::{
-        AttributeName, AttributeType, AttributeValue, Email, Group, GroupDetails, GroupId,
-        GroupName, JpegPhoto, LdapObjectClass, Serialized, User, UserAndGroups, UserColumn, UserId,
-        Uuid,
-    },
-};
+use crate::domain::{error::Result, model::UserColumn};
 use async_trait::async_trait;
+use lldap_domain::types::{
+    AttributeName, AttributeType, AttributeValue, Email, Group, GroupDetails, GroupId, GroupName,
+    JpegPhoto, LdapObjectClass, Serialized, User, UserAndGroups, UserId, Uuid,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 

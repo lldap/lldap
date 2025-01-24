@@ -1,10 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    domain::{
-        sql_tables::{ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation},
-        types::{AttributeName, UserId},
-    },
+    domain::sql_tables::{ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation},
     infra::{
         cli::{
             GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts,
@@ -20,6 +17,7 @@ use figment::{
 };
 use figment_file_provider_adapter::FileAdapter;
 use lldap_auth::opaque::{server::ServerSetup, KeyPair};
+use lldap_domain::types::{AttributeName, UserId};
 use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -623,7 +621,7 @@ where
             Either set the `jwt_secret` config value or the `LLDAP_JWT_SECRET` environment variable. \
             You can generate the value by running\n\
             LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\\''()*+,-./:;<=>?@[\\]^_{{|}}~' </dev/urandom | head -c 32; echo ''\n\
-            or you can use this random value: {}", 
+            or you can use this random value: {}",
         rand::thread_rng()
             .sample_iter(&Symbols)
             .take(32)

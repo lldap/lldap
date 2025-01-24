@@ -85,6 +85,13 @@ version = "0.10.1"
 path = "../auth"
 features = ["opaque_server", "opaque_client", "sea_orm"]
 
+[dependencies.lldap_domain]
+path = "../crates/domain"
+
+[dev-dependencies.lldap_domain]
+path = "../crates/domain"
+features = ["test"]
+
 [dependencies.lldap_validation]
 path = "../validation"
 
@@ -128,11 +135,11 @@ version = "0.24"
 version = "0.12"
 default-features = false
 features = [
-  "macros",
-  "with-chrono",
-  "with-uuid",
-  "sqlx-all",
-  "runtime-actix-rustls",
+    "macros",
+    "with-chrono",
+    "with-uuid",
+    "sqlx-all",
+    "runtime-actix-rustls",
 ]
 
 [dependencies.reqwest]

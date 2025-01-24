@@ -1,16 +1,15 @@
-use crate::{
-    domain::{handler::BackendHandler, types::UserId},
-    infra::{
-        access_control::{
-            AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
-            UserReadableBackendHandler, UserWriteableBackendHandler, ValidationResults,
-        },
-        auth_service::check_if_token_is_valid,
-        cli::ExportGraphQLSchemaOpts,
-        graphql::{mutation::Mutation, query::Query},
-        tcp_server::AppState,
+use crate::domain::handler::BackendHandler;
+use crate::infra::{
+    access_control::{
+        AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
+        UserReadableBackendHandler, UserWriteableBackendHandler, ValidationResults,
     },
+    auth_service::check_if_token_is_valid,
+    cli::ExportGraphQLSchemaOpts,
+    graphql::{mutation::Mutation, query::Query},
+    tcp_server::AppState,
 };
+
 use actix_web::FromRequest;
 use actix_web::HttpMessage;
 use actix_web::{error::JsonPayloadError, web, Error, HttpRequest, HttpResponse};
@@ -22,6 +21,7 @@ use juniper::{
     },
     EmptySubscription, FieldError, RootNode, ScalarValue,
 };
+use lldap_domain::types::UserId;
 use tracing::debug;
 
 pub struct Context<Handler: BackendHandler> {

@@ -6,9 +6,11 @@ use crate::domain::{
     },
     model::{self, GroupColumn, MembershipColumn},
     sql_backend_handler::SqlBackendHandler,
-    types::{AttributeName, AttributeValue, Group, GroupDetails, GroupId, Serialized, Uuid},
 };
 use async_trait::async_trait;
+use lldap_domain::types::{
+    AttributeName, AttributeValue, Group, GroupDetails, GroupId, Serialized, Uuid,
+};
 use sea_orm::{
     sea_query::{Alias, Cond, Expr, Func, IntoCondition, OnConflict, SimpleExpr},
     ActiveModelTrait, ColumnTrait, DatabaseTransaction, EntityTrait, QueryFilter, QueryOrder,
@@ -316,8 +318,8 @@ mod tests {
     use crate::domain::{
         handler::{CreateAttributeRequest, SchemaBackendHandler, SubStringFilter},
         sql_backend_handler::tests::*,
-        types::{AttributeType, GroupName, Serialized, UserId},
     };
+    use lldap_domain::types::{AttributeType, GroupName, Serialized, UserId};
     use pretty_assertions::assert_eq;
 
     async fn get_group_ids(

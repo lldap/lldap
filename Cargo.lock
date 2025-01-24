@@ -2536,6 +2536,7 @@ dependencies = [
  "ldap3_proto",
  "lettre",
  "lldap_auth",
+ "lldap_domain",
  "lldap_validation",
  "log",
  "mockall",
@@ -2623,6 +2624,26 @@ dependencies = [
  "serde",
  "sha2 0.9.9",
  "thiserror",
+]
+
+[[package]]
+name = "lldap_domain"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.21.7",
+ "bincode",
+ "chrono",
+ "derive_more 1.0.0",
+ "image",
+ "juniper",
+ "lldap_auth",
+ "pretty_assertions",
+ "sea-orm",
+ "serde",
+ "serde_bytes",
+ "strum",
+ "uuid 1.11.0",
 ]
 
 [[package]]
