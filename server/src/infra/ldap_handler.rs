@@ -432,7 +432,10 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         user_is_admin: bool,
         change: &LdapModify,
     ) -> LdapResult<()> {
-        if change.modification.atype.to_ascii_lowercase() != "userpassword"
+        if !change
+            .modification
+            .atype
+            .eq_ignore_ascii_case("userpassword")
             || change.operation != LdapModifyType::Replace
         {
             return Err(LdapError {
@@ -530,7 +533,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     ) -> LdapResult<Vec<LdapOp>> {
         if request.base.is_empty() && request.scope == LdapSearchScope::Base {
             if let LdapFilter::Present(attribute) = &request.filter {
-                if attribute.to_ascii_lowercase() == "objectclass" {
+                if attribute.eq_ignore_ascii_case("objectclass") {
                     debug!("rootDSE request");
                     return Ok(vec![
                         root_dse_response(&self.ldap_info.base_dn_str),
@@ -563,7 +566,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             let need_groups = request
                 .attrs
                 .iter()
-                .any(|s| s.to_ascii_lowercase() == "memberof");
+                .any(|s| s.eq_ignore_ascii_case("memberof"));
             get_user_list(
                 &self.ldap_info,
                 filter,
