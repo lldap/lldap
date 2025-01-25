@@ -79,6 +79,11 @@ rev = "4b9fabffb63393ec7626a4477fd36de12a07fac9"
 [lib]
 crate-type = ["cdylib"]
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(wasm_bindgen_unstable_test_coverage)',
+] }
+
 [package.metadata.wasm-pack.profile.dev]
 wasm-opt = ['--enable-bulk-memory']
 [package.metadata.wasm-pack.profile.profiling]
