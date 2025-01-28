@@ -26,8 +26,8 @@ type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
 type DomainUser = lldap_domain::types::User;
 type DomainGroup = lldap_domain::types::Group;
 type DomainUserAndGroups = lldap_domain::types::UserAndGroups;
-type DomainAttributeList = crate::domain::handler::AttributeList;
-type DomainAttributeSchema = crate::domain::handler::AttributeSchema;
+type DomainAttributeList = lldap_domain::schema::AttributeList;
+type DomainAttributeSchema = lldap_domain::schema::AttributeSchema;
 type DomainAttributeValue = lldap_domain::types::AttributeValue;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
@@ -801,19 +801,19 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        domain::handler::AttributeList,
-        infra::{
-            access_control::{Permission, ValidationResults},
-            test_utils::{setup_default_schema, MockTestBackendHandler},
-        },
+    use crate::infra::{
+        access_control::{Permission, ValidationResults},
+        test_utils::{setup_default_schema, MockTestBackendHandler},
     };
     use chrono::TimeZone;
     use juniper::{
         execute, graphql_value, DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType,
         RootNode, Variables,
     };
-    use lldap_domain::types::{AttributeName, AttributeType, LdapObjectClass, Serialized};
+    use lldap_domain::{
+        schema::{AttributeList, Schema},
+        types::{AttributeName, AttributeType, LdapObjectClass, Serialized},
+    };
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
@@ -858,7 +858,7 @@ mod tests {
 
         let mut mock = MockTestBackendHandler::new();
         mock.expect_get_schema().returning(|| {
-            Ok(crate::domain::handler::Schema {
+            Ok(Schema {
                 user_attributes: DomainAttributeList {
                     attributes: vec![
                         DomainAttributeSchema {
@@ -1297,7 +1297,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
 
         mock.expect_get_schema().times(1).return_once(|| {
-            Ok(crate::domain::handler::Schema {
+            Ok(Schema {
                 user_attributes: AttributeList {
                     attributes: vec![DomainAttributeSchema {
                         name: "invisible".into(),

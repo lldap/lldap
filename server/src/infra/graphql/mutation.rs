@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     domain::{
-        deserialize::deserialize_attribute_value,
-        handler::{AttributeList, BackendHandler},
-        schema::PublicSchema,
+        deserialize::deserialize_attribute_value, handler::BackendHandler, schema::PublicSchema,
     },
     infra::{
         access_control::{
@@ -21,6 +19,7 @@ use lldap_domain::requests::{
     CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
     UpdateUserRequest,
 };
+use lldap_domain::schema::AttributeList;
 use lldap_domain::types::{
     AttributeName, AttributeType, AttributeValue as DomainAttributeValue, Email, GroupId,
     JpegPhoto, LdapObjectClass, UserId,

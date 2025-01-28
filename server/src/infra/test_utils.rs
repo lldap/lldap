@@ -3,7 +3,10 @@ use lldap_domain::requests::{
     CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
     UpdateUserRequest,
 };
-use lldap_domain::types::*;
+use lldap_domain::{
+    schema::{AttributeList, AttributeSchema, Schema},
+    types::*,
+};
 
 use async_trait::async_trait;
 use std::collections::HashSet;

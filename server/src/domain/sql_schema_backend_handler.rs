@@ -1,14 +1,13 @@
 use crate::domain::{
     error::{DomainError, Result},
-    handler::{
-        AttributeList, AttributeSchema, ReadSchemaBackendHandler, Schema, SchemaBackendHandler,
-    },
+    handler::{ReadSchemaBackendHandler, SchemaBackendHandler},
     model,
     sql_backend_handler::SqlBackendHandler,
 };
 use async_trait::async_trait;
 use lldap_domain::{
     requests::CreateAttributeRequest,
+    schema::{AttributeList, AttributeSchema, Schema},
     types::{AttributeName, LdapObjectClass},
 };
 use sea_orm::{
@@ -177,10 +176,11 @@ impl SqlBackendHandler {
 mod tests {
     use super::*;
     use crate::domain::{
-        handler::{AttributeList, UserBackendHandler, UserRequestFilter},
+        handler::{UserBackendHandler, UserRequestFilter},
         sql_backend_handler::tests::*,
     };
     use lldap_domain::requests::UpdateUserRequest;
+    use lldap_domain::schema::AttributeList;
     use lldap_domain::types::{AttributeType, AttributeValue, Serialized};
     use pretty_assertions::assert_eq;
 
