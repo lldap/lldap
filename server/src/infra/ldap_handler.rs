@@ -884,6 +884,7 @@ mod tests {
     };
     use chrono::TimeZone;
     use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope, LdapSubstringFilter};
+    use lldap_domain::schema::{AttributeList, AttributeSchema, Schema};
     use lldap_domain::types::*;
     use lldap_domain::uuid;
     use mockall::predicate::eq;
@@ -1692,7 +1693,7 @@ mod tests {
                 }])
             });
         mock.expect_get_schema().returning(|| {
-            Ok(crate::domain::handler::Schema {
+            Ok(Schema {
                 user_attributes: AttributeList {
                     attributes: Vec::new(),
                 },
@@ -3021,7 +3022,7 @@ mod tests {
             }])
         });
         mock.expect_get_schema().returning(|| {
-            Ok(crate::domain::handler::Schema {
+            Ok(Schema {
                 user_attributes: AttributeList {
                     attributes: vec![AttributeSchema {
                         name: "nickname".into(),
