@@ -23,14 +23,15 @@ pub mod tests {
     use crate::{
         domain::{
             handler::{
-                CreateGroupRequest, CreateUserRequest, GroupBackendHandler, UserBackendHandler,
-                UserListerBackendHandler, UserRequestFilter,
+                GroupBackendHandler, UserBackendHandler, UserListerBackendHandler,
+                UserRequestFilter,
             },
             sql_tables::init_table,
         },
         infra::configuration::ConfigurationBuilder,
     };
     use lldap_auth::{opaque, registration};
+    use lldap_domain::requests::{CreateGroupRequest, CreateUserRequest};
     use lldap_domain::types::{GroupId, UserId};
     use pretty_assertions::assert_eq;
     use sea_orm::Database;

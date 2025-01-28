@@ -1,8 +1,12 @@
 use crate::domain::{error::Result, model::UserColumn};
 use async_trait::async_trait;
+use lldap_domain::requests::{
+    CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
+    UpdateUserRequest,
+};
 use lldap_domain::types::{
-    AttributeName, AttributeType, AttributeValue, Email, Group, GroupDetails, GroupId, GroupName,
-    JpegPhoto, LdapObjectClass, Serialized, User, UserAndGroups, UserId, Uuid,
+    AttributeName, AttributeType, Group, GroupDetails, GroupId, GroupName, LdapObjectClass,
+    Serialized, User, UserAndGroups, UserId, Uuid,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -96,45 +100,6 @@ impl From<bool> for GroupRequestFilter {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
-pub struct CreateUserRequest {
-    // Same fields as User, but no creation_date, and with password.
-    pub user_id: UserId,
-    pub email: Email,
-    pub display_name: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub avatar: Option<JpegPhoto>,
-    pub attributes: Vec<AttributeValue>,
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
-pub struct UpdateUserRequest {
-    // Same fields as CreateUserRequest, but no with an extra layer of Option.
-    pub user_id: UserId,
-    pub email: Option<Email>,
-    pub display_name: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub avatar: Option<JpegPhoto>,
-    pub delete_attributes: Vec<AttributeName>,
-    pub insert_attributes: Vec<AttributeValue>,
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
-pub struct CreateGroupRequest {
-    pub display_name: GroupName,
-    pub attributes: Vec<AttributeValue>,
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub struct UpdateGroupRequest {
-    pub group_id: GroupId,
-    pub display_name: Option<GroupName>,
-    pub delete_attributes: Vec<AttributeName>,
-    pub insert_attributes: Vec<AttributeValue>,
-}
-
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct AttributeSchema {
     pub name: AttributeName,
@@ -146,16 +111,6 @@ pub struct AttributeSchema {
     pub is_hardcoded: bool,
     pub is_readonly: bool,
 }
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub struct CreateAttributeRequest {
-    pub name: AttributeName,
-    pub attribute_type: AttributeType,
-    pub is_list: bool,
-    pub is_visible: bool,
-    pub is_editable: bool,
-}
-
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct AttributeList {
     pub attributes: Vec<AttributeSchema>,
@@ -254,6 +209,7 @@ pub trait BackendHandler:
 mod tests {
     use super::*;
     use base64::Engine;
+    use lldap_domain::types::JpegPhoto;
     use pretty_assertions::assert_ne;
 
     #[test]

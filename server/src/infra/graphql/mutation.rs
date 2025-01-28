@@ -3,10 +3,7 @@ use std::sync::Arc;
 use crate::{
     domain::{
         deserialize::deserialize_attribute_value,
-        handler::{
-            AttributeList, BackendHandler, CreateAttributeRequest, CreateGroupRequest,
-            CreateUserRequest, UpdateGroupRequest, UpdateUserRequest,
-        },
+        handler::{AttributeList, BackendHandler},
         schema::PublicSchema,
     },
     infra::{
@@ -20,6 +17,10 @@ use crate::{
 use anyhow::{anyhow, Context as AnyhowContext};
 use base64::Engine;
 use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject, GraphQLObject};
+use lldap_domain::requests::{
+    CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
+    UpdateUserRequest,
+};
 use lldap_domain::types::{
     AttributeName, AttributeType, AttributeValue as DomainAttributeValue, Email, GroupId,
     JpegPhoto, LdapObjectClass, UserId,

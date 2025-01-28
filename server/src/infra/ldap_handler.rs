@@ -1,8 +1,6 @@
 use crate::{
     domain::{
-        handler::{
-            BackendHandler, BindRequest, CreateUserRequest, LoginHandler, ReadSchemaBackendHandler,
-        },
+        handler::{BackendHandler, BindRequest, LoginHandler, ReadSchemaBackendHandler},
         ldap::{
             error::{LdapError, LdapResult},
             group::{convert_groups_to_ldap_op, get_groups_list},
@@ -27,6 +25,7 @@ use ldap3_proto::proto::{
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
     LdapSearchScope,
 };
+use lldap_domain::requests::CreateUserRequest;
 use lldap_domain::types::{AttributeName, Email, Group, JpegPhoto, UserAndGroups, UserId};
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
