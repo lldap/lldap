@@ -22,6 +22,7 @@ use figment_file_provider_adapter::FileAdapter;
 use lldap_auth::opaque::{server::ServerSetup, KeyPair};
 use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use url::Url;
 
 #[derive(
@@ -125,6 +126,8 @@ pub struct Configuration {
     // "***SECRET***".
     #[builder(default)]
     pub key_seed: Option<SecUtf8>,
+    #[builder(default = r#"PathBuf::from("./app")"#)]
+    pub assets_path: PathBuf,
     #[builder(default)]
     pub smtp_options: MailOptions,
     #[builder(default)]
