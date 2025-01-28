@@ -1,4 +1,8 @@
 use crate::domain::{error::Result, handler::*, opaque_handler::*};
+use lldap_domain::requests::{
+    CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
+    UpdateUserRequest,
+};
 use lldap_domain::types::*;
 
 use async_trait::async_trait;

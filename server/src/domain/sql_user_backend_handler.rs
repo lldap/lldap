@@ -1,13 +1,11 @@
 use crate::domain::{
     error::{DomainError, Result},
-    handler::{
-        CreateUserRequest, UpdateUserRequest, UserBackendHandler, UserListerBackendHandler,
-        UserRequestFilter,
-    },
+    handler::{UserBackendHandler, UserListerBackendHandler, UserRequestFilter},
     model::{self, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
 };
 use async_trait::async_trait;
+use lldap_domain::requests::{CreateUserRequest, UpdateUserRequest};
 use lldap_domain::types::{
     AttributeName, AttributeValue, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId,
     Uuid,
