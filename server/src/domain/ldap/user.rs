@@ -283,8 +283,7 @@ fn convert_user_filter(
                 UserFieldType::PrimaryField(UserColumn::UserId) => Ok(
                     UserRequestFilter::UserIdSubString(substring_filter.clone().into()),
                 ),
-                UserFieldType::Attribute(_, _, _)
-                | UserFieldType::ObjectClass
+                UserFieldType::ObjectClass
                 | UserFieldType::MemberOf
                 | UserFieldType::Dn
                 | UserFieldType::EntryDn
@@ -303,6 +302,10 @@ fn convert_user_filter(
                 )),
                 UserFieldType::PrimaryField(field) => Ok(UserRequestFilter::SubString(
                     field,
+                    substring_filter.clone().into(),
+                )),
+                UserFieldType::Attribute(name, _, _) => Ok(UserRequestFilter::AttributeSubString(
+                    name,
                     substring_filter.clone().into(),
                 )),
             }

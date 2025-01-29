@@ -9,6 +9,7 @@ pub mod users;
 
 pub mod user_attribute_schema;
 pub mod user_attributes;
+pub mod user_attributes_search;
 pub mod user_object_classes;
 
 pub mod group_attribute_schema;
