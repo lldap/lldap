@@ -20,6 +20,22 @@ use crate::domain::{
     types::{AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid},
 };
 
+const DEFAULT_GROUP_OBJECT_CLASSES: &[&str] = &["groupOfUniqueNames"];
+
+fn get_default_group_object_classes_vec_u8() -> Vec<Vec<u8>> {
+    DEFAULT_GROUP_OBJECT_CLASSES
+        .iter()
+        .map(|c| c.as_bytes().to_vec()) 
+        .collect()
+}
+
+pub fn get_default_group_object_classes() -> Vec<LdapObjectClass> {
+    DEFAULT_GROUP_OBJECT_CLASSES
+        .iter()
+        .map(|&c| LdapObjectClass::from(c))
+        .collect()
+}
+
 pub fn get_group_attribute(
     group: &Group,
     base_dn_str: &str,
@@ -30,7 +46,8 @@ pub fn get_group_attribute(
 ) -> Option<Vec<Vec<u8>>> {
     let attribute_values = match map_group_field(attribute, schema) {
         GroupFieldType::ObjectClass => {
-            let mut classes = vec![b"groupOfUniqueNames".to_vec()];
+            let mut classes: Vec<Vec<u8>> = get_default_group_object_classes_vec_u8();
+
             classes.extend(
                 schema
                     .get_schema()
