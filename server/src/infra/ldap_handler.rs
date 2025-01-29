@@ -225,7 +225,7 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
 pub struct ObjectClassList(Vec<LdapObjectClass>);
 
 impl ObjectClassList {
-    fn format_for_schema(&self) -> String {
+    fn format_for_ldap_schema_description(&self) -> String {
         self.0
             .iter()
             .map(|c| format!("'{}'", c))
@@ -519,15 +519,15 @@ fn schema_response(schema: &Schema) -> LdapOp {
             vals: vec![
                     format!(
                         "( 3.0 NAME ( {} ) DESC 'LLDAP builtin: a person' STRUCTURAL MUST ( {} ) MAY ( {} ) )",
-                        full_schema.user_object_classes.format_for_schema(),
-                        full_schema.user_attributes_must.format_for_schema(),
-                        full_schema.user_attributes_may.format_for_schema(),
+                        full_schema.user_object_classes.format_for_ldap_schema_description(),
+                        full_schema.user_attributes_must.format_for_ldap_schema_description(),
+                        full_schema.user_attributes_may.format_for_ldap_schema_description(),
                     ).into_bytes(),
                     format!(
                         "( 3.1 NAME ( {} ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( {} ) MAY ( {} ) )",
-                        full_schema.group_object_classes.format_for_schema(),
-                        full_schema.group_attributes_must.format_for_schema(),
-                        full_schema.group_attributes_may.format_for_schema(),
+                        full_schema.group_object_classes.format_for_ldap_schema_description(),
+                        full_schema.group_attributes_must.format_for_ldap_schema_description(),
+                        full_schema.group_attributes_may.format_for_ldap_schema_description(),
                     ).into_bytes(),
                 ],
            },

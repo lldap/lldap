@@ -175,7 +175,7 @@ impl AttributeList {
             .map(|a| (a.attribute_type, a.is_list))
     }
 
-    pub fn format_for_schema(&self) -> String {
+    pub fn format_for_ldap_schema_description(&self) -> String {
         self.attributes
             .iter()
             .map(|a| a.name.as_str())
