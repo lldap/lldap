@@ -235,7 +235,7 @@ impl ObjectClassList {
     }
 }
 
-pub struct LldapBuiltinSchema {
+pub struct LdapSchemaDescription {
     user_attributes_must: AttributeList,
     user_attributes_may: AttributeList,
     group_attributes_must: AttributeList,
@@ -244,7 +244,7 @@ pub struct LldapBuiltinSchema {
     group_object_classes: ObjectClassList,
 }
 
-impl LldapBuiltinSchema {
+impl LdapSchemaDescription {
     fn extend_with_custom_schema(mut self, schema: &Schema) -> Self {
         self.user_attributes_may
             .attributes
@@ -303,8 +303,8 @@ impl LldapBuiltinSchema {
     }
 }
 
-fn get_lldap_builtin_schema() -> LldapBuiltinSchema {
-    LldapBuiltinSchema {
+fn get_lldap_builtin_schema() -> LdapSchemaDescription {
+    LdapSchemaDescription {
         user_attributes_must: AttributeList {
             attributes: vec![
                 AttributeSchema {
@@ -466,7 +466,7 @@ fn get_lldap_builtin_schema() -> LldapBuiltinSchema {
 }
 
 fn schema_response(schema: &Schema) -> LdapOp {
-    let full_schema: LldapBuiltinSchema =
+    let full_schema: LdapSchemaDescription =
         get_lldap_builtin_schema().extend_with_custom_schema(schema);
 
     let current_time_utc = Utc::now().format("%Y%m%d%H%M%SZ").to_string().into_bytes();
