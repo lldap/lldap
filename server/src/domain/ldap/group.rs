@@ -20,7 +20,14 @@ use crate::domain::{
     types::{AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid},
 };
 
-pub const DEFAULT_GROUP_OBJECT_CLASSES: &[&str] = &["groupOfUniqueNames"];
+const DEFAULT_GROUP_OBJECT_CLASSES: &[&str] = &["groupOfUniqueNames"];
+
+pub fn get_default_group_object_classes() -> Vec<Vec<u8>> {
+    DEFAULT_GROUP_OBJECT_CLASSES
+        .iter()
+        .map(|c| c.as_bytes().to_vec()) 
+        .collect()
+}
 
 pub fn get_group_attribute(
     group: &Group,

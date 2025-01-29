@@ -5,8 +5,8 @@ use crate::{
         deserialize::deserialize_attribute_value,
         handler::{BackendHandler, ReadSchemaBackendHandler},
         ldap::{
-            group::DEFAULT_GROUP_OBJECT_CLASSES,
-            user::DEFAULT_USER_OBJECT_CLASSES,
+            group::get_default_group_object_classes,
+            user::get_default_user_object_classes,
             utils::{map_user_field, UserFieldType},
         },
         model::UserColumn,
@@ -606,9 +606,9 @@ impl<Handler: BackendHandler> Schema<Handler> {
     fn user_schema(&self) -> AttributeList<Handler> {
         AttributeList::<Handler>::new(
             self.schema.get_schema().user_attributes.clone(),
-            DEFAULT_USER_OBJECT_CLASSES
+            get_default_user_object_classes()
                 .iter()
-                .map(|&c| LdapObjectClass::from(c))
+                .map(|c| LdapObjectClass::from(String::from_utf8(c.to_vec()).unwrap()))
                 .collect(),
             self.schema.get_schema().extra_user_object_classes.clone(),
         )
@@ -616,9 +616,9 @@ impl<Handler: BackendHandler> Schema<Handler> {
     fn group_schema(&self) -> AttributeList<Handler> {
         AttributeList::<Handler>::new(
             self.schema.get_schema().group_attributes.clone(),
-            DEFAULT_GROUP_OBJECT_CLASSES
+            get_default_group_object_classes()
                 .iter()
-                .map(|&c| LdapObjectClass::from(c))
+                .map(|c| LdapObjectClass::from(String::from_utf8(c.to_vec()).unwrap()))
                 .collect(),
             self.schema.get_schema().extra_group_object_classes.clone(),
         )
@@ -1198,7 +1198,7 @@ mod tests {
                     isEditable
                     isHardcoded
                 }
-                extraObjectClasses
+                extraLdapObjectClasses
             }
             groupSchema {
                 attributes {
@@ -1209,7 +1209,7 @@ mod tests {
                     isEditable
                     isHardcoded
                 }
-                extraObjectClasses
+                extraLdapObjectClasses
             }
           }
         }"#;
@@ -1295,7 +1295,7 @@ mod tests {
                                     "isHardcoded": true,
                                 },
                             ],
-                            "extraObjectClasses": ["customUserClass"],
+                            "extraLdapObjectClasses": ["customUserClass"],
                         },
                         "groupSchema": {
                             "attributes": [
@@ -1332,7 +1332,7 @@ mod tests {
                                     "isHardcoded": true,
                                 },
                             ],
-                            "extraObjectClasses": [],
+                            "extraLdapObjectClasses": [],
                         }
                     }
                 }),
@@ -1349,7 +1349,7 @@ mod tests {
                 attributes {
                     name
                 }
-                extraObjectClasses
+                extraLdapObjectClasses
             }
           }
         }"#;
@@ -1400,7 +1400,7 @@ mod tests {
                                 {"name": "user_id"},
                                 {"name": "uuid"},
                             ],
-                            "extraObjectClasses": ["customUserClass"],
+                            "extraLdapObjectClasses": ["customUserClass"],
                         }
                     }
                 } ),

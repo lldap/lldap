@@ -23,8 +23,16 @@ use crate::domain::{
     },
 };
 
-pub const DEFAULT_USER_OBJECT_CLASSES: &[&str] =
+const DEFAULT_USER_OBJECT_CLASSES: &[&str] =
     &["inetOrgPerson", "posixAccount", "mailAccount", "person"];
+
+
+pub fn get_default_user_object_classes() -> Vec<Vec<u8>> {
+    DEFAULT_USER_OBJECT_CLASSES
+        .iter()
+        .map(|c| c.as_bytes().to_vec()) 
+        .collect()
+}
 
 pub fn get_user_attribute(
     user: &User,
@@ -36,10 +44,7 @@ pub fn get_user_attribute(
 ) -> Option<Vec<Vec<u8>>> {
     let attribute_values = match map_user_field(attribute, schema) {
         UserFieldType::ObjectClass => {
-            let mut classes: Vec<Vec<u8>> = DEFAULT_USER_OBJECT_CLASSES
-                .iter()
-                .map(|&c| c.as_bytes().to_vec())
-                .collect();
+            let mut classes: Vec<Vec<u8>> = get_default_user_object_classes();
 
             classes.extend(
                 schema
