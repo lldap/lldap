@@ -6,8 +6,12 @@ use crate::{
         },
         ldap::{
             error::{LdapError, LdapResult},
-            group::{convert_groups_to_ldap_op, get_groups_list, get_default_group_object_classes},
-            user::{convert_users_to_ldap_op, get_user_list, get_default_user_object_classes},
+            group::{
+                convert_groups_to_ldap_op, get_default_group_object_classes, get_groups_list,
+            },
+            user::{
+                convert_users_to_ldap_op, get_default_user_object_classes, get_user_list,
+            },
             utils::{
                 get_user_id_from_distinguished_name, is_subtree, parse_distinguished_name, LdapInfo,
             },
@@ -454,15 +458,9 @@ fn get_lldap_builtin_schema() -> LldapBuiltinSchema {
         },
         user_object_classes: ObjectClassList(
             get_default_user_object_classes()
-                .iter()
-                .map(|c| LdapObjectClass::from(String::from_utf8(c.to_vec()).unwrap()))
-                .collect(),
         ),
         group_object_classes: ObjectClassList(
             get_default_group_object_classes()
-                .iter()
-                .map(|c| LdapObjectClass::from(String::from_utf8(c.to_vec()).unwrap()))
-                .collect(),
         ),
     }
 }

@@ -606,20 +606,14 @@ impl<Handler: BackendHandler> Schema<Handler> {
     fn user_schema(&self) -> AttributeList<Handler> {
         AttributeList::<Handler>::new(
             self.schema.get_schema().user_attributes.clone(),
-            get_default_user_object_classes()
-                .iter()
-                .map(|c| LdapObjectClass::from(String::from_utf8(c.to_vec()).unwrap()))
-                .collect(),
+            get_default_user_object_classes(),
             self.schema.get_schema().extra_user_object_classes.clone(),
         )
     }
     fn group_schema(&self) -> AttributeList<Handler> {
         AttributeList::<Handler>::new(
             self.schema.get_schema().group_attributes.clone(),
-            get_default_group_object_classes()
-                .iter()
-                .map(|c| LdapObjectClass::from(String::from_utf8(c.to_vec()).unwrap()))
-                .collect(),
+            get_default_group_object_classes(),
             self.schema.get_schema().extra_group_object_classes.clone(),
         )
     }
