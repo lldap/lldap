@@ -95,10 +95,7 @@ async fn main_js_handler<Backend>(
 async fn wasm_handler<Backend>(
     data: web::Data<AppState<Backend>>,
 ) -> actix_web::Result<impl Responder> {
-    Ok(
-        actix_files::NamedFile::open_async(data.assets_path.join("pkg/lldap_app_bg.wasm.gz"))
-            .await?,
-    )
+    Ok(actix_files::NamedFile::open_async(data.assets_path.join("pkg/lldap_app_bg.wasm")).await?)
 }
 
 async fn wasm_handler_compressed<Backend>(
