@@ -552,11 +552,11 @@ impl<Handler: BackendHandler> AttributeList<Handler> {
             .collect()
     }
 
-    fn extra_object_classes(&self) -> Vec<String> {
+    fn extra_ldap_object_classes(&self) -> Vec<String> {
         self.extra_classes.iter().map(|c| c.to_string()).collect()
     }
 
-    fn object_classes(&self) -> Vec<ObjectClassGQL> {
+    fn ldap_object_classes(&self) -> Vec<ObjectClassGQL> {
         let mut all_object_classes: Vec<ObjectClassGQL> = self
             .default_classes
             .iter()
