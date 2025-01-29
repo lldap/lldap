@@ -871,8 +871,16 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             }
         } else if request.base == "cn=Subschema" && request.scope == LdapSearchScope::Base {
             debug!("Subschema request made");
-            let backend_handler = self.backend_handler.get_schema_only_handler();
-            let schema = &backend_handler.get_schema().await.map_err(|e| LdapError {
+            let backend_handler = self
+                .user_info
+                .as_ref()
+                .and_then(|u| self.backend_handler.get_schema_only_handler(u))
+                .ok_or_else(|| LdapError {
+                    code: LdapResultCode::InsufficentAccessRights,
+                    message: "No user currently bound".to_string(),
+                })?;
+
+                let schema = &backend_handler.get_schema().await.map_err(|e| LdapError {
                 code: LdapResultCode::OperationsError,
                 message: format!("Unable to get schema: {:#}", e),
             })?;
@@ -3030,7 +3038,7 @@ mod tests {
     async fn test_subschema_response() {
         let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
 
-        let backend_handler = ldap_handler.backend_handler.get_schema_only_handler();
+        let backend_handler = ldap_handler.user_info.as_ref().and_then(|u| ldap_handler.backend_handler.get_schema_only_handler(u)).unwrap();
         let schema = &backend_handler.get_schema().await.unwrap();
 
         let request = LdapSearchRequest {
