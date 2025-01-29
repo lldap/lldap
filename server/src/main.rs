@@ -8,8 +8,8 @@ use std::time::Duration;
 use crate::{
     domain::{
         handler::{
-            CreateGroupRequest, CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler,
-            GroupRequestFilter, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
+            GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter, UserBackendHandler,
+            UserListerBackendHandler, UserRequestFilter,
         },
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
@@ -29,6 +29,8 @@ use anyhow::{anyhow, bail, Context, Result};
 use futures_util::TryFutureExt;
 use sea_orm::{Database, DatabaseConnection};
 use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
+
+use lldap_domain::requests::{CreateGroupRequest, CreateUserRequest};
 
 mod domain;
 mod infra;

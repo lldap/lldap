@@ -3,7 +3,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::types::{GroupId, GroupName, Uuid};
+use lldap_domain::types::{GroupId, GroupName, Uuid};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "groups")]
@@ -30,7 +30,7 @@ impl Related<super::memberships::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-impl From<Model> for crate::domain::types::Group {
+impl From<Model> for lldap_domain::types::Group {
     fn from(group: Model) -> Self {
         Self {
             id: group.group_id,
@@ -43,7 +43,7 @@ impl From<Model> for crate::domain::types::Group {
     }
 }
 
-impl From<Model> for crate::domain::types::GroupDetails {
+impl From<Model> for lldap_domain::types::GroupDetails {
     fn from(group: Model) -> Self {
         Self {
             group_id: group.group_id,

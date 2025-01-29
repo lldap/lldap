@@ -6,16 +6,20 @@ use tracing::info;
 use crate::domain::{
     error::Result,
     handler::{
-        AttributeSchema, BackendHandler, CreateAttributeRequest, CreateGroupRequest,
-        CreateUserRequest, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
-        ReadSchemaBackendHandler, Schema, SchemaBackendHandler, UpdateGroupRequest,
-        UpdateUserRequest, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
+        BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+        ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler,
+        UserListerBackendHandler, UserRequestFilter,
     },
     schema::PublicSchema,
-    types::{
-        AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, User,
-        UserAndGroups, UserId,
-    },
+};
+use lldap_domain::requests::{
+    CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
+    UpdateUserRequest,
+};
+use lldap_domain::schema::{AttributeSchema, Schema};
+use lldap_domain::types::{
+    AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, User, UserAndGroups,
+    UserId,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
