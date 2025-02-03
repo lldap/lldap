@@ -102,7 +102,7 @@ pub fn get_user_attribute(
                 )
                 .or_else(|| {
                     warn!(
-                        r#"Ignoring unrecognized group attribute: {}\n\
+                        r#"Ignoring unrecognized user attribute: {}\n\
                       To disable this warning, add it to "ignored_user_attributes" in the config."#,
                         attribute
                     );
