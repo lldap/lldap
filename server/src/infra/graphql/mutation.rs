@@ -2,16 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     domain::{
-        deserialize::deserialize_attribute_value,
-        handler::{
-            AttributeList, BackendHandler, CreateAttributeRequest, CreateGroupRequest,
-            CreateUserRequest, UpdateGroupRequest, UpdateUserRequest,
-        },
-        schema::PublicSchema,
-        types::{
-            AttributeName, AttributeType, AttributeValue as DomainAttributeValue, Email, GroupId,
-            JpegPhoto, LdapObjectClass, UserId,
-        },
+        deserialize::deserialize_attribute_value, handler::BackendHandler, schema::PublicSchema,
     },
     infra::{
         access_control::{
@@ -24,6 +15,17 @@ use crate::{
 use anyhow::{anyhow, Context as AnyhowContext};
 use base64::Engine;
 use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject, GraphQLObject};
+use lldap_domain::{
+    requests::{
+        CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
+        UpdateUserRequest,
+    },
+    schema::AttributeList,
+    types::{
+        AttributeName, AttributeType, AttributeValue as DomainAttributeValue, Email, GroupId,
+        JpegPhoto, LdapObjectClass, UserId,
+    },
+};
 use lldap_validation::attributes::{validate_attribute_name, ALLOWED_CHARACTERS_DESCRIPTION};
 use tracing::{debug, debug_span, Instrument, Span};
 
@@ -731,18 +733,16 @@ fn deserialize_attribute(
 mod tests {
 
     use super::*;
-    use crate::{
-        domain::types::{AttributeName, AttributeType},
-        infra::{
-            access_control::{Permission, ValidationResults},
-            graphql::query::Query,
-            test_utils::MockTestBackendHandler,
-        },
+    use crate::infra::{
+        access_control::{Permission, ValidationResults},
+        graphql::query::Query,
+        test_utils::MockTestBackendHandler,
     };
     use juniper::{
         execute, graphql_value, DefaultScalarValue, EmptySubscription, GraphQLType, InputValue,
         RootNode, Variables,
     };
+    use lldap_domain::types::{AttributeName, AttributeType};
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
 

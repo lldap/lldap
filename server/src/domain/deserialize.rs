@@ -1,5 +1,5 @@
-use crate::domain::types::{AttributeType, JpegPhoto, Serialized};
 use anyhow::{bail, Context as AnyhowContext};
+use lldap_domain::types::{AttributeType, JpegPhoto, Serialized};
 
 pub fn deserialize_attribute_value(
     value: &[String],

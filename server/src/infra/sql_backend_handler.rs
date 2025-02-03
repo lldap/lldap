@@ -3,10 +3,10 @@ use crate::domain::{
     error::*,
     model::{self, JwtRefreshStorageColumn, JwtStorageColumn, PasswordResetTokensColumn},
     sql_backend_handler::SqlBackendHandler,
-    types::UserId,
 };
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
+use lldap_domain::types::UserId;
 use sea_orm::{
     sea_query::{Cond, Expr},
     ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QuerySelect,

@@ -1,5 +1,5 @@
 use crate::{
-    domain::{handler::BackendHandler, types::UserId},
+    domain::handler::BackendHandler,
     infra::{
         access_control::{
             AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
@@ -11,6 +11,7 @@ use crate::{
         tcp_server::AppState,
     },
 };
+
 use actix_web::FromRequest;
 use actix_web::HttpMessage;
 use actix_web::{error::JsonPayloadError, web, Error, HttpRequest, HttpResponse};
@@ -22,6 +23,7 @@ use juniper::{
     },
     EmptySubscription, FieldError, RootNode, ScalarValue,
 };
+use lldap_domain::types::UserId;
 use tracing::debug;
 
 pub struct Context<Handler: BackendHandler> {

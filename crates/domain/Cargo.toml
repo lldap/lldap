@@ -1,0 +1,59 @@
+[package]
+authors = [
+    "Valentin Tolmer <valentin@tolmer.fr>",
+    "Simon Broeng Jensen <sbj@cwconsult.dk>",
+]
+name = "lldap_domain"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+test = []
+
+[dependencies]
+anyhow = "*"
+base64 = "0.21"
+bincode = "1.3"
+juniper = "0.15"
+serde = "*"
+serde_bytes = "0.11"
+
+[dev-dependencies]
+pretty_assertions = "1"
+
+[dependencies.chrono]
+features = ["serde"]
+version = "*"
+
+[dependencies.derive_more]
+features = ["debug", "display", "from", "from_str"]
+default-features = false
+version = "1"
+
+[dependencies.image]
+features = ["jpeg"]
+default-features = false
+version = "0.24"
+
+[dependencies.lldap_auth]
+path = "../../auth"
+features = ["opaque_server", "opaque_client", "sea_orm"]
+
+[dependencies.sea-orm]
+version = "0.12"
+default-features = false
+features = [
+    "macros",
+    "with-chrono",
+    "with-uuid",
+    "sqlx-all",
+    "runtime-actix-rustls",
+]
+
+[dependencies.strum]
+features = ["derive"]
+version = "0.25"
+
+[dependencies.uuid]
+features = ["v1", "v3"]
+version = "1"

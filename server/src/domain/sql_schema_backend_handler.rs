@@ -1,14 +1,15 @@
 use crate::domain::{
     error::{DomainError, Result},
-    handler::{
-        AttributeList, AttributeSchema, CreateAttributeRequest, ReadSchemaBackendHandler, Schema,
-        SchemaBackendHandler,
-    },
+    handler::{ReadSchemaBackendHandler, SchemaBackendHandler},
     model,
     sql_backend_handler::SqlBackendHandler,
-    types::{AttributeName, LdapObjectClass},
 };
 use async_trait::async_trait;
+use lldap_domain::{
+    requests::CreateAttributeRequest,
+    schema::{AttributeList, AttributeSchema, Schema},
+    types::{AttributeName, LdapObjectClass},
+};
 use sea_orm::{
     ActiveModelTrait, DatabaseTransaction, EntityTrait, QueryOrder, Set, TransactionTrait,
 };
@@ -175,10 +176,12 @@ impl SqlBackendHandler {
 mod tests {
     use super::*;
     use crate::domain::{
-        handler::{AttributeList, UpdateUserRequest, UserBackendHandler, UserRequestFilter},
+        handler::{UserBackendHandler, UserRequestFilter},
         sql_backend_handler::tests::*,
-        types::{AttributeType, AttributeValue, Serialized},
     };
+    use lldap_domain::requests::UpdateUserRequest;
+    use lldap_domain::schema::AttributeList;
+    use lldap_domain::types::{AttributeType, AttributeValue, Serialized};
     use pretty_assertions::assert_eq;
 
     #[tokio::test]

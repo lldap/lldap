@@ -1,17 +1,17 @@
 use crate::domain::{
     error::{DomainError, Result},
-    handler::{
-        CreateUserRequest, UpdateUserRequest, UserBackendHandler, UserListerBackendHandler,
-        UserRequestFilter,
-    },
+    handler::{UserBackendHandler, UserListerBackendHandler, UserRequestFilter},
     model::{self, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
+};
+use async_trait::async_trait;
+use lldap_domain::{
+    requests::{CreateUserRequest, UpdateUserRequest},
     types::{
         AttributeName, AttributeValue, GroupDetails, GroupId, Serialized, User, UserAndGroups,
         UserId, Uuid,
     },
 };
-use async_trait::async_trait;
 use sea_orm::{
     sea_query::{
         query::OnConflict, Alias, Cond, Expr, Func, IntoColumnRef, IntoCondition, SimpleExpr,
@@ -430,10 +430,9 @@ impl UserBackendHandler for SqlBackendHandler {
 mod tests {
     use super::*;
     use crate::domain::{
-        handler::SubStringFilter,
-        sql_backend_handler::tests::*,
-        types::{JpegPhoto, UserColumn},
+        handler::SubStringFilter, model::UserColumn, sql_backend_handler::tests::*,
     };
+    use lldap_domain::types::JpegPhoto;
     use pretty_assertions::{assert_eq, assert_ne};
 
     #[tokio::test]

@@ -1,12 +1,16 @@
-use crate::domain::{
-    error::Result,
+use crate::domain::{error::Result, model::UserColumn};
+use async_trait::async_trait;
+use lldap_domain::{
+    requests::{
+        CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
+        UpdateUserRequest,
+    },
+    schema::Schema,
     types::{
-        AttributeName, AttributeType, AttributeValue, Email, Group, GroupDetails, GroupId,
-        GroupName, JpegPhoto, LdapObjectClass, Serialized, User, UserAndGroups, UserColumn, UserId,
-        Uuid,
+        AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, Serialized, User,
+        UserAndGroups, UserId, Uuid,
     },
 };
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -99,90 +103,6 @@ impl From<bool> for GroupRequestFilter {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
-pub struct CreateUserRequest {
-    // Same fields as User, but no creation_date, and with password.
-    pub user_id: UserId,
-    pub email: Email,
-    pub display_name: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub avatar: Option<JpegPhoto>,
-    pub attributes: Vec<AttributeValue>,
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
-pub struct UpdateUserRequest {
-    // Same fields as CreateUserRequest, but no with an extra layer of Option.
-    pub user_id: UserId,
-    pub email: Option<Email>,
-    pub display_name: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub avatar: Option<JpegPhoto>,
-    pub delete_attributes: Vec<AttributeName>,
-    pub insert_attributes: Vec<AttributeValue>,
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
-pub struct CreateGroupRequest {
-    pub display_name: GroupName,
-    pub attributes: Vec<AttributeValue>,
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub struct UpdateGroupRequest {
-    pub group_id: GroupId,
-    pub display_name: Option<GroupName>,
-    pub delete_attributes: Vec<AttributeName>,
-    pub insert_attributes: Vec<AttributeValue>,
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub struct AttributeSchema {
-    pub name: AttributeName,
-    //TODO: pub aliases: Vec<String>,
-    pub attribute_type: AttributeType,
-    pub is_list: bool,
-    pub is_visible: bool,
-    pub is_editable: bool,
-    pub is_hardcoded: bool,
-    pub is_readonly: bool,
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub struct CreateAttributeRequest {
-    pub name: AttributeName,
-    pub attribute_type: AttributeType,
-    pub is_list: bool,
-    pub is_visible: bool,
-    pub is_editable: bool,
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub struct AttributeList {
-    pub attributes: Vec<AttributeSchema>,
-}
-
-impl AttributeList {
-    pub fn get_attribute_schema(&self, name: &AttributeName) -> Option<&AttributeSchema> {
-        self.attributes.iter().find(|a| a.name == *name)
-    }
-
-    pub fn get_attribute_type(&self, name: &AttributeName) -> Option<(AttributeType, bool)> {
-        self.get_attribute_schema(name)
-            .map(|a| (a.attribute_type, a.is_list))
-    }
-}
-
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
-pub struct Schema {
-    pub user_attributes: AttributeList,
-    pub group_attributes: AttributeList,
-    pub extra_user_object_classes: Vec<LdapObjectClass>,
-    pub extra_group_object_classes: Vec<LdapObjectClass>,
-}
-
 #[async_trait]
 pub trait LoginHandler: Send + Sync {
     async fn bind(&self, request: BindRequest) -> Result<()>;
@@ -257,6 +177,7 @@ pub trait BackendHandler:
 mod tests {
     use super::*;
     use base64::Engine;
+    use lldap_domain::types::JpegPhoto;
     use pretty_assertions::assert_ne;
 
     #[test]

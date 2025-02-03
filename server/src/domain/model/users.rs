@@ -3,7 +3,7 @@
 use sea_orm::{entity::prelude::*, sea_query::BlobSize};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::types::{Email, UserId, Uuid};
+use lldap_domain::types::{Email, UserId, Uuid};
 
 #[derive(Copy, Clone, Default, Debug, DeriveEntity)]
 pub struct Entity;
@@ -112,7 +112,7 @@ impl Related<super::password_reset_tokens::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-impl From<Model> for crate::domain::types::User {
+impl From<Model> for lldap_domain::types::User {
     fn from(user: Model) -> Self {
         Self {
             user_id: user.user_id,

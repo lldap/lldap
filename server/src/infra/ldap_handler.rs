@@ -1,8 +1,6 @@
 use crate::{
     domain::{
-        handler::{
-            BackendHandler, BindRequest, CreateUserRequest, LoginHandler, ReadSchemaBackendHandler,
-        },
+        handler::{BackendHandler, BindRequest, LoginHandler, ReadSchemaBackendHandler},
         ldap::{
             error::{LdapError, LdapResult},
             group::{convert_groups_to_ldap_op, get_groups_list},
@@ -13,7 +11,6 @@ use crate::{
         },
         opaque_handler::OpaqueHandler,
         schema::PublicSchema,
-        types::{AttributeName, Email, Group, JpegPhoto, UserAndGroups, UserId},
     },
     infra::access_control::{
         AccessControlledBackendHandler, AdminBackendHandler, UserAndGroupListerBackendHandler,
@@ -27,6 +24,10 @@ use ldap3_proto::proto::{
     LdapModifyRequest, LdapModifyType, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
     LdapSearchScope,
+};
+use lldap_domain::{
+    requests::CreateUserRequest,
+    types::{AttributeName, Email, Group, JpegPhoto, UserAndGroups, UserId},
 };
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
@@ -879,12 +880,15 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 mod tests {
     use super::*;
     use crate::{
-        domain::{handler::*, types::*},
+        domain::handler::*,
+        domain::model::UserColumn,
         infra::test_utils::{setup_default_schema, MockTestBackendHandler},
-        uuid,
     };
     use chrono::TimeZone;
     use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope, LdapSubstringFilter};
+    use lldap_domain::schema::{AttributeList, AttributeSchema, Schema};
+    use lldap_domain::types::*;
+    use lldap_domain::uuid;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
@@ -1691,7 +1695,7 @@ mod tests {
                 }])
             });
         mock.expect_get_schema().returning(|| {
-            Ok(crate::domain::handler::Schema {
+            Ok(Schema {
                 user_attributes: AttributeList {
                     attributes: Vec::new(),
                 },
@@ -3020,7 +3024,7 @@ mod tests {
             }])
         });
         mock.expect_get_schema().returning(|| {
-            Ok(crate::domain::handler::Schema {
+            Ok(Schema {
                 user_attributes: AttributeList {
                     attributes: vec![AttributeSchema {
                         name: "nickname".into(),

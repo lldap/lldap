@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use std::collections::HashSet;
 
-use crate::domain::{error::Result, types::UserId};
+use crate::domain::error::Result;
+use lldap_domain::types::UserId;
 
 #[async_trait]
 pub trait TcpBackendHandler: Sync {

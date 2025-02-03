@@ -7,10 +7,11 @@ use tracing::{debug, instrument, warn};
 use crate::domain::{
     handler::SubStringFilter,
     ldap::error::{LdapError, LdapResult},
+    model::UserColumn,
     schema::{PublicSchema, SchemaAttributeExtractor},
-    types::{
-        AttributeName, AttributeType, AttributeValue, GroupName, JpegPhoto, UserColumn, UserId,
-    },
+};
+use lldap_domain::types::{
+    AttributeName, AttributeType, AttributeValue, GroupName, JpegPhoto, UserId,
 };
 
 impl From<LdapSubstringFilter> for SubStringFilter {

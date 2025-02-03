@@ -2527,7 +2527,6 @@ dependencies = [
  "graphql_client 0.11.0",
  "hmac 0.12.1",
  "http 0.2.12",
- "image",
  "itertools",
  "juniper",
  "jwt 0.16.0",
@@ -2536,6 +2535,7 @@ dependencies = [
  "ldap3_proto",
  "lettre",
  "lldap_auth",
+ "lldap_domain",
  "lldap_validation",
  "log",
  "mockall",
@@ -2551,7 +2551,6 @@ dependencies = [
  "sea-orm",
  "secstr",
  "serde",
- "serde_bytes",
  "serde_json",
  "serial_test",
  "sha2 0.10.8",
@@ -2623,6 +2622,26 @@ dependencies = [
  "serde",
  "sha2 0.9.9",
  "thiserror",
+]
+
+[[package]]
+name = "lldap_domain"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.21.7",
+ "bincode",
+ "chrono",
+ "derive_more 1.0.0",
+ "image",
+ "juniper",
+ "lldap_auth",
+ "pretty_assertions",
+ "sea-orm",
+ "serde",
+ "serde_bytes",
+ "strum",
+ "uuid 1.11.0",
 ]
 
 [[package]]
