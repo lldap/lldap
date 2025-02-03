@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     domain::{
@@ -13,7 +13,6 @@ use crate::{
     },
 };
 use anyhow::{anyhow, Context as AnyhowContext};
-use base64::Engine;
 use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject, GraphQLObject};
 use lldap_domain::{
     requests::{
@@ -23,7 +22,7 @@ use lldap_domain::{
     schema::AttributeList,
     types::{
         AttributeName, AttributeType, AttributeValue as DomainAttributeValue, Email, GroupId,
-        JpegPhoto, LdapObjectClass, UserId,
+        LdapObjectClass, UserId,
     },
 };
 use lldap_validation::attributes::{validate_attribute_name, ALLOWED_CHARACTERS_DESCRIPTION};
@@ -65,11 +64,16 @@ pub struct CreateUserInput {
     // The email can be specified as an attribute, but one of the two is required.
     email: Option<String>,
     display_name: Option<String>,
+    /// First name of user. Deprecated: use attribute instead.
+    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
     first_name: Option<String>,
+    /// Last name of user. Deprecated: use attribute instead.
+    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
     last_name: Option<String>,
-    /// Base64 encoded JpegPhoto.
+    /// Base64 encoded JpegPhoto. Deprecated: use attribute instead.
+    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
     avatar: Option<String>,
-    /// User-defined attributes.
+    /// Attributes.
     attributes: Option<Vec<AttributeValue>>,
 }
 
@@ -87,9 +91,14 @@ pub struct UpdateUserInput {
     id: String,
     email: Option<String>,
     display_name: Option<String>,
+    /// First name of user. Deprecated: use attribute instead.
+    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
     first_name: Option<String>,
+    /// Last name of user. Deprecated: use attribute instead.
+    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
     last_name: Option<String>,
-    /// Base64 encoded JpegPhoto.
+    /// Base64 encoded JpegPhoto. Deprecated: use attribute instead.
+    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
     avatar: Option<String>,
     /// Attribute names to remove.
     /// They are processed before insertions.
@@ -163,6 +172,52 @@ fn unpack_attributes(
     })
 }
 
+/// Consolidates caller supplied user fields and attributes into a list of attributes.
+///
+/// A number of user fields are internally represented as attributes, but are still also
+/// available as fields on user objects. This function consolidates these fields and the
+/// given attributes into a resulting attribute list. If a value is supplied for both a
+/// field and the corresponding attribute, the attribute will take precedence.
+fn consolidate_attributes(
+    attributes: Vec<AttributeValue>,
+    first_name: Option<String>,
+    last_name: Option<String>,
+    avatar: Option<String>,
+) -> Vec<AttributeValue> {
+    // Prepare map of the client provided attributes
+    let mut provided_attributes: BTreeMap<AttributeName, AttributeValue> = attributes
+        .into_iter()
+        .map(|x| {
+            (
+                x.name.clone().into(),
+                AttributeValue {
+                    name: x.name.to_ascii_lowercase(),
+                    value: x.value,
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    // Prepare list of fallback attribute values
+    let field_attrs = [
+        ("first_name", first_name),
+        ("last_name", last_name),
+        ("avatar", avatar),
+    ];
+    for (name, value) in field_attrs.into_iter() {
+        if let Some(val) = value {
+            let attr_name: AttributeName = name.into();
+            provided_attributes
+                .entry(attr_name)
+                .or_insert_with(|| AttributeValue {
+                    name: name.to_string(),
+                    value: vec![val],
+                });
+        }
+    }
+    // Return the values of the resulting map
+    provided_attributes.into_values().collect()
+}
+
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> Mutation<Handler> {
     async fn create_user(
@@ -177,20 +232,18 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized user creation"))?;
         let user_id = UserId::new(&user.id);
-        let avatar = user
-            .avatar
-            .map(|bytes| base64::engine::general_purpose::STANDARD.decode(bytes))
-            .transpose()
-            .context("Invalid base64 image")?
-            .map(JpegPhoto::try_from)
-            .transpose()
-            .context("Provided image is not a valid JPEG")?;
         let schema = handler.get_schema().await?;
+        let consolidated_attributes = consolidate_attributes(
+            user.attributes.unwrap_or_default(),
+            user.first_name,
+            user.last_name,
+            user.avatar,
+        );
         let UnpackedAttributes {
             email,
             display_name,
             attributes,
-        } = unpack_attributes(user.attributes.unwrap_or_default(), &schema, true)?;
+        } = unpack_attributes(consolidated_attributes, &schema, true)?;
         handler
             .create_user(CreateUserRequest {
                 user_id: user_id.clone(),
@@ -200,9 +253,6 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                     .or(email)
                     .ok_or_else(|| anyhow!("Email is required when creating a new user"))?,
                 display_name: user.display_name.or(display_name),
-                first_name: user.first_name,
-                last_name: user.last_name,
-                avatar,
                 attributes,
             })
             .instrument(span.clone())
@@ -253,26 +303,32 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .get_writeable_handler(&user_id)
             .ok_or_else(field_error_callback(&span, "Unauthorized user update"))?;
         let is_admin = context.validation_result.is_admin();
-        let avatar = user
-            .avatar
-            .map(|bytes| base64::engine::general_purpose::STANDARD.decode(bytes))
-            .transpose()
-            .context("Invalid base64 image")?
-            .map(JpegPhoto::try_from)
-            .transpose()
-            .context("Provided image is not a valid JPEG")?;
         let schema = handler.get_schema().await?;
-        let user_insert_attributes = user.insert_attributes.unwrap_or_default();
+        // Consolidate attributes and fields into a combined attribute list
+        let consolidated_attributes = consolidate_attributes(
+            user.insert_attributes.unwrap_or_default(),
+            user.first_name,
+            user.last_name,
+            user.avatar,
+        );
+        // Extract any empty attributes into a list of attributes for deletion
+        let (delete_attrs, insert_attrs): (Vec<_>, Vec<_>) = consolidated_attributes
+            .into_iter()
+            .partition(|a| a.value == vec!["".to_string()]);
+        // Combine lists of attributes for removal
+        let mut delete_attributes: Vec<String> =
+            delete_attrs.iter().map(|a| a.name.to_owned()).collect();
+        delete_attributes.extend(user.remove_attributes.unwrap_or_default());
+        // Unpack attributes for update
         let UnpackedAttributes {
             email,
             display_name,
             attributes: insert_attributes,
-        } = unpack_attributes(user_insert_attributes, &schema, is_admin)?;
+        } = unpack_attributes(insert_attrs, &schema, is_admin)?;
         let display_name = display_name.or_else(|| {
             // If the display name is not inserted, but removed, reset it.
-            user.remove_attributes
+            delete_attributes
                 .iter()
-                .flatten()
                 .find(|attr| *attr == "display_name")
                 .map(|_| String::new())
         });
@@ -281,12 +337,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 user_id,
                 email: user.email.map(Into::into).or(email),
                 display_name: user.display_name.or(display_name),
-                first_name: user.first_name,
-                last_name: user.last_name,
-                avatar,
-                delete_attributes: user
-                    .remove_attributes
-                    .unwrap_or_default()
+                delete_attributes: delete_attributes
                     .into_iter()
                     .filter(|attr| attr != "mail" && attr != "display_name")
                     .map(Into::into)
@@ -961,5 +1012,105 @@ mod tests {
                 panic!();
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_attribute_consolidation_attr_precedence() {
+        let attributes = vec![
+            AttributeValue {
+                name: "first_name".to_string(),
+                value: vec!["expected-first".to_string()],
+            },
+            AttributeValue {
+                name: "last_name".to_string(),
+                value: vec!["expected-last".to_string()],
+            },
+            AttributeValue {
+                name: "avatar".to_string(),
+                value: vec!["expected-avatar".to_string()],
+            },
+        ];
+        let res = consolidate_attributes(
+            attributes.clone(),
+            Some("overridden-first".to_string()),
+            Some("overridden-last".to_string()),
+            Some("overriden-avatar".to_string()),
+        );
+        assert_eq!(
+            res,
+            vec![
+                AttributeValue {
+                    name: "avatar".to_string(),
+                    value: vec!["expected-avatar".to_string()],
+                },
+                AttributeValue {
+                    name: "first_name".to_string(),
+                    value: vec!["expected-first".to_string()],
+                },
+                AttributeValue {
+                    name: "last_name".to_string(),
+                    value: vec!["expected-last".to_string()],
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_attribute_consolidation_field_fallback() {
+        let attributes = Vec::new();
+        let res = consolidate_attributes(
+            attributes.clone(),
+            Some("expected-first".to_string()),
+            Some("expected-last".to_string()),
+            Some("expected-avatar".to_string()),
+        );
+        assert_eq!(
+            res,
+            vec![
+                AttributeValue {
+                    name: "avatar".to_string(),
+                    value: vec!["expected-avatar".to_string()],
+                },
+                AttributeValue {
+                    name: "first_name".to_string(),
+                    value: vec!["expected-first".to_string()],
+                },
+                AttributeValue {
+                    name: "last_name".to_string(),
+                    value: vec!["expected-last".to_string()],
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_attribute_consolidation_field_fallback_2() {
+        let attributes = vec![AttributeValue {
+            name: "First_Name".to_string(),
+            value: vec!["expected-first".to_string()],
+        }];
+        let res = consolidate_attributes(
+            attributes.clone(),
+            Some("overriden-first".to_string()),
+            Some("expected-last".to_string()),
+            Some("expected-avatar".to_string()),
+        );
+        assert_eq!(
+            res,
+            vec![
+                AttributeValue {
+                    name: "avatar".to_string(),
+                    value: vec!["expected-avatar".to_string()],
+                },
+                AttributeValue {
+                    name: "first_name".to_string(),
+                    value: vec!["expected-first".to_string()],
+                },
+                AttributeValue {
+                    name: "last_name".to_string(),
+                    value: vec!["expected-last".to_string()],
+                },
+            ]
+        );
     }
 }

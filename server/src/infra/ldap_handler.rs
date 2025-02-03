@@ -1,5 +1,6 @@
 use crate::{
     domain::{
+        deserialize,
         handler::{BackendHandler, BindRequest, LoginHandler, ReadSchemaBackendHandler},
         ldap::{
             error::{LdapError, LdapResult},
@@ -27,7 +28,7 @@ use ldap3_proto::proto::{
 };
 use lldap_domain::{
     requests::CreateUserRequest,
-    types::{AttributeName, Email, Group, JpegPhoto, UserAndGroups, UserId},
+    types::{AttributeName, AttributeType, AttributeValue, Email, Group, UserAndGroups, UserId},
 };
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
@@ -769,6 +770,39 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 .map(Vec::as_slice)
                 .map(decode_attribute_value)
         };
+        let make_encoded_attribute = |name: &str, typ: AttributeType, value: String| {
+            Ok(AttributeValue {
+                name: AttributeName::from(name),
+                value: deserialize::deserialize_attribute_value(&[value], typ, false).map_err(
+                    |e| LdapError {
+                        code: LdapResultCode::ConstraintViolation,
+                        message: format!("Invalid attribute value: {}", e),
+                    },
+                )?,
+            })
+        };
+        let mut new_user_attributes: Vec<AttributeValue> = Vec::new();
+        if let Some(first_name) = get_attribute("givenname").transpose()? {
+            new_user_attributes.push(make_encoded_attribute(
+                "first_name",
+                AttributeType::String,
+                first_name,
+            )?);
+        }
+        if let Some(last_name) = get_attribute("sn").transpose()? {
+            new_user_attributes.push(make_encoded_attribute(
+                "last_name",
+                AttributeType::String,
+                last_name,
+            )?);
+        }
+        if let Some(avatar) = get_attribute("avatar").transpose()? {
+            new_user_attributes.push(make_encoded_attribute(
+                "avatar",
+                AttributeType::JpegPhoto,
+                avatar,
+            )?);
+        }
         backend_handler
             .create_user(CreateUserRequest {
                 user_id,
@@ -779,18 +813,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                         .unwrap_or_default(),
                 ),
                 display_name: get_attribute("cn").transpose()?,
-                first_name: get_attribute("givenname").transpose()?,
-                last_name: get_attribute("sn").transpose()?,
-                avatar: attributes
-                    .get("avatar")
-                    .map(Vec::as_slice)
-                    .map(JpegPhoto::try_from)
-                    .transpose()
-                    .map_err(|e| LdapError {
-                        code: LdapResultCode::ConstraintViolation,
-                        message: format!("Invalid JPEG photo: {:#?}", e),
-                    })?,
-                ..Default::default()
+                attributes: new_user_attributes,
             })
             .await
             .map_err(|e| LdapError {

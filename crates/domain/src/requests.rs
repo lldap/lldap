@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::types::{
-    AttributeName, AttributeType, AttributeValue, Email, GroupId, GroupName, JpegPhoto, UserId,
+    AttributeName, AttributeType, AttributeValue, Email, GroupId, GroupName, UserId,
 };
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
@@ -10,9 +10,6 @@ pub struct CreateUserRequest {
     pub user_id: UserId,
     pub email: Email,
     pub display_name: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub avatar: Option<JpegPhoto>,
     pub attributes: Vec<AttributeValue>,
 }
 
@@ -22,9 +19,6 @@ pub struct UpdateUserRequest {
     pub user_id: UserId,
     pub email: Option<Email>,
     pub display_name: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub avatar: Option<JpegPhoto>,
     pub delete_attributes: Vec<AttributeName>,
     pub insert_attributes: Vec<AttributeValue>,
 }

@@ -16,8 +16,8 @@ use sea_orm::{
     sea_query::{
         query::OnConflict, Alias, Cond, Expr, Func, IntoColumnRef, IntoCondition, SimpleExpr,
     },
-    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseTransaction, EntityTrait, IntoActiveValue,
-    ModelTrait, QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
+    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseTransaction, EntityTrait, ModelTrait,
+    QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use std::collections::HashSet;
 use tracing::instrument;
@@ -185,11 +185,6 @@ impl SqlBackendHandler {
             display_name: to_value(&request.display_name),
             ..Default::default()
         };
-        let to_serialized_value = |s: &Option<String>| match s.as_ref().map(|s| s.as_str()) {
-            None => None,
-            Some("") => Some(ActiveValue::NotSet),
-            Some(s) => Some(ActiveValue::Set(Serialized::from(s))),
-        };
         let mut update_user_attributes = Vec::new();
         let mut remove_user_attributes = Vec::new();
         let mut process_serialized =
@@ -206,15 +201,6 @@ impl SqlBackendHandler {
                 }
                 _ => unreachable!(),
             };
-        if let Some(value) = to_serialized_value(&request.first_name) {
-            process_serialized(value, "first_name".into());
-        }
-        if let Some(value) = to_serialized_value(&request.last_name) {
-            process_serialized(value, "last_name".into());
-        }
-        if let Some(avatar) = request.avatar {
-            process_serialized(avatar.into_active_value(), "avatar".into());
-        }
         let schema = Self::get_schema_with_transaction(transaction).await?;
         for attribute in request.insert_attributes {
             if schema
@@ -318,27 +304,6 @@ impl UserBackendHandler for SqlBackendHandler {
             ..Default::default()
         };
         let mut new_user_attributes = Vec::new();
-        if let Some(first_name) = request.first_name {
-            new_user_attributes.push(model::user_attributes::ActiveModel {
-                user_id: Set(request.user_id.clone()),
-                attribute_name: Set("first_name".into()),
-                value: Set(Serialized::from(&first_name)),
-            });
-        }
-        if let Some(last_name) = request.last_name {
-            new_user_attributes.push(model::user_attributes::ActiveModel {
-                user_id: Set(request.user_id.clone()),
-                attribute_name: Set("last_name".into()),
-                value: Set(Serialized::from(&last_name)),
-            });
-        }
-        if let Some(avatar) = request.avatar {
-            new_user_attributes.push(model::user_attributes::ActiveModel {
-                user_id: Set(request.user_id.clone()),
-                attribute_name: Set("avatar".into()),
-                value: Set(Serialized::from(&avatar)),
-            });
-        }
         self.sql_pool
             .transaction::<_, (), DomainError>(|transaction| {
                 Box::pin(async move {
@@ -845,11 +810,21 @@ mod tests {
                 user_id: UserId::new("bob"),
                 email: Some("email".into()),
                 display_name: Some("display_name".to_string()),
-                first_name: Some("first_name".to_string()),
-                last_name: Some("last_name".to_string()),
-                avatar: Some(JpegPhoto::for_tests()),
                 delete_attributes: Vec::new(),
-                insert_attributes: Vec::new(),
+                insert_attributes: vec![
+                    AttributeValue {
+                        name: "first_name".into(),
+                        value: Serialized::from("first_name"),
+                    },
+                    AttributeValue {
+                        name: "last_name".into(),
+                        value: Serialized::from("last_name"),
+                    },
+                    AttributeValue {
+                        name: "avatar".into(),
+                        value: Serialized::from(&JpegPhoto::for_tests()),
+                    },
+                ],
             })
             .await
             .unwrap();
@@ -888,9 +863,11 @@ mod tests {
             .handler
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
-                first_name: None,
-                last_name: Some(String::new()),
-                avatar: Some(JpegPhoto::for_tests()),
+                delete_attributes: vec!["last_name".into()],
+                insert_attributes: vec![AttributeValue {
+                    name: "avatar".into(),
+                    value: Serialized::from(&JpegPhoto::for_tests()),
+                }],
                 ..Default::default()
             })
             .await
@@ -925,9 +902,6 @@ mod tests {
             .handler
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
-                first_name: None,
-                last_name: None,
-                avatar: None,
                 insert_attributes: vec![AttributeValue {
                     name: "first_name".into(),
                     value: Serialized::from("new first"),
@@ -965,9 +939,6 @@ mod tests {
             .handler
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
-                first_name: None,
-                last_name: None,
-                avatar: None,
                 delete_attributes: vec!["first_name".into()],
                 ..Default::default()
             })
@@ -996,9 +967,6 @@ mod tests {
             .handler
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
-                first_name: None,
-                last_name: None,
-                avatar: None,
                 delete_attributes: vec!["first_name".into()],
                 insert_attributes: vec![AttributeValue {
                     name: "first_name".into(),
@@ -1037,7 +1005,10 @@ mod tests {
             .handler
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
-                avatar: Some(JpegPhoto::for_tests()),
+                insert_attributes: vec![AttributeValue {
+                    name: "avatar".into(),
+                    value: Serialized::from(&JpegPhoto::for_tests()),
+                }],
                 ..Default::default()
             })
             .await
@@ -1057,7 +1028,10 @@ mod tests {
             .handler
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
-                avatar: Some(JpegPhoto::null()),
+                insert_attributes: vec![AttributeValue {
+                    name: "avatar".into(),
+                    value: Serialized::from(&JpegPhoto::null()),
+                }],
                 ..Default::default()
             })
             .await
@@ -1081,13 +1055,20 @@ mod tests {
                 user_id: UserId::new("james"),
                 email: "email".into(),
                 display_name: Some("display_name".to_string()),
-                first_name: None,
-                last_name: Some("last_name".to_string()),
-                avatar: Some(JpegPhoto::for_tests()),
-                attributes: vec![AttributeValue {
-                    name: "first_name".into(),
-                    value: Serialized::from("First Name"),
-                }],
+                attributes: vec![
+                    AttributeValue {
+                        name: "first_name".into(),
+                        value: Serialized::from("First Name"),
+                    },
+                    AttributeValue {
+                        name: "last_name".into(),
+                        value: Serialized::from("last_name"),
+                    },
+                    AttributeValue {
+                        name: "avatar".into(),
+                        value: Serialized::from(&JpegPhoto::for_tests()),
+                    },
+                ],
             })
             .await
             .unwrap();
