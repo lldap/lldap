@@ -25,8 +25,10 @@ use ldap3_proto::proto::{
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
     LdapSearchScope,
 };
-use lldap_domain::requests::CreateUserRequest;
-use lldap_domain::types::{AttributeName, Email, Group, JpegPhoto, UserAndGroups, UserId};
+use lldap_domain::{
+    requests::CreateUserRequest,
+    types::{AttributeName, Email, Group, JpegPhoto, UserAndGroups, UserId},
+};
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
 

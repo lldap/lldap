@@ -1,9 +1,9 @@
 use crate::domain::{error::Result, handler::*, opaque_handler::*};
-use lldap_domain::requests::{
-    CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
-    UpdateUserRequest,
-};
 use lldap_domain::{
+    requests::{
+        CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
+        UpdateUserRequest,
+    },
     schema::{AttributeList, AttributeSchema, Schema},
     types::*,
 };

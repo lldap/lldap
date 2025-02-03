@@ -15,14 +15,16 @@ use crate::{
 use anyhow::{anyhow, Context as AnyhowContext};
 use base64::Engine;
 use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject, GraphQLObject};
-use lldap_domain::requests::{
-    CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
-    UpdateUserRequest,
-};
-use lldap_domain::schema::AttributeList;
-use lldap_domain::types::{
-    AttributeName, AttributeType, AttributeValue as DomainAttributeValue, Email, GroupId,
-    JpegPhoto, LdapObjectClass, UserId,
+use lldap_domain::{
+    requests::{
+        CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
+        UpdateUserRequest,
+    },
+    schema::AttributeList,
+    types::{
+        AttributeName, AttributeType, AttributeValue as DomainAttributeValue, Email, GroupId,
+        JpegPhoto, LdapObjectClass, UserId,
+    },
 };
 use lldap_validation::attributes::{validate_attribute_name, ALLOWED_CHARACTERS_DESCRIPTION};
 use tracing::{debug, debug_span, Instrument, Span};

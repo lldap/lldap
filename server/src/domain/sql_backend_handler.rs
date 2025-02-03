@@ -31,8 +31,10 @@ pub mod tests {
         infra::configuration::ConfigurationBuilder,
     };
     use lldap_auth::{opaque, registration};
-    use lldap_domain::requests::{CreateGroupRequest, CreateUserRequest};
-    use lldap_domain::types::{GroupId, UserId};
+    use lldap_domain::{
+        requests::{CreateGroupRequest, CreateUserRequest},
+        types::{GroupId, UserId},
+    };
     use pretty_assertions::assert_eq;
     use sea_orm::Database;
 

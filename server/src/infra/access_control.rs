@@ -12,14 +12,16 @@ use crate::domain::{
     },
     schema::PublicSchema,
 };
-use lldap_domain::requests::{
-    CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
-    UpdateUserRequest,
-};
-use lldap_domain::schema::{AttributeSchema, Schema};
-use lldap_domain::types::{
-    AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, User, UserAndGroups,
-    UserId,
+use lldap_domain::{
+    requests::{
+        CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
+        UpdateUserRequest,
+    },
+    schema::{AttributeSchema, Schema},
+    types::{
+        AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, User,
+        UserAndGroups, UserId,
+    },
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

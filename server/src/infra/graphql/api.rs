@@ -1,13 +1,15 @@
-use crate::domain::handler::BackendHandler;
-use crate::infra::{
-    access_control::{
-        AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
-        UserReadableBackendHandler, UserWriteableBackendHandler, ValidationResults,
+use crate::{
+    domain::handler::BackendHandler,
+    infra::{
+        access_control::{
+            AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
+            UserReadableBackendHandler, UserWriteableBackendHandler, ValidationResults,
+        },
+        auth_service::check_if_token_is_valid,
+        cli::ExportGraphQLSchemaOpts,
+        graphql::{mutation::Mutation, query::Query},
+        tcp_server::AppState,
     },
-    auth_service::check_if_token_is_valid,
-    cli::ExportGraphQLSchemaOpts,
-    graphql::{mutation::Mutation, query::Query},
-    tcp_server::AppState,
 };
 
 use actix_web::FromRequest;

@@ -5,10 +5,12 @@ use crate::domain::{
     sql_backend_handler::SqlBackendHandler,
 };
 use async_trait::async_trait;
-use lldap_domain::requests::{CreateUserRequest, UpdateUserRequest};
-use lldap_domain::types::{
-    AttributeName, AttributeValue, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId,
-    Uuid,
+use lldap_domain::{
+    requests::{CreateUserRequest, UpdateUserRequest},
+    types::{
+        AttributeName, AttributeValue, GroupDetails, GroupId, Serialized, User, UserAndGroups,
+        UserId, Uuid,
+    },
 };
 use sea_orm::{
     sea_query::{
