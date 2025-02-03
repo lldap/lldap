@@ -23,7 +23,7 @@ use ldap3_proto::proto::{
     LdapDerefAliases, LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapModify,
     LdapModifyRequest, LdapModifyType, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
-    LdapSearchScope,
+    LdapSearchScope, OID_PASSWORD_MODIFY, OID_WHOAMI,
 };
 use lldap_domain::{
     requests::CreateUserRequest,
@@ -181,8 +181,10 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
             },
             LdapPartialAttribute {
                 atype: "supportedExtension".to_string(),
-                // Password modification extension.
-                vals: vec![b"1.3.6.1.4.1.4203.1.11.1".to_vec()],
+                vals: vec![
+                    OID_PASSWORD_MODIFY.as_bytes().to_vec(),
+                    OID_WHOAMI.as_bytes().to_vec(),
+                ],
             },
             LdapPartialAttribute {
                 atype: "supportedControl".to_string(),
@@ -414,12 +416,32 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     #[instrument(skip_all, level = "debug")]
     async fn do_extended_request(&mut self, request: &LdapExtendedRequest) -> Vec<LdapOp> {
-        match LdapPasswordModifyRequest::try_from(request) {
-            Ok(password_request) => self
-                .do_password_modification(&password_request)
-                .await
-                .unwrap_or_else(|e: LdapError| vec![make_extended_response(e.code, e.message)]),
-            Err(_) => vec![make_extended_response(
+        match request.name.as_str() {
+            OID_PASSWORD_MODIFY => match LdapPasswordModifyRequest::try_from(request) {
+                Ok(password_request) => self
+                    .do_password_modification(&password_request)
+                    .await
+                    .unwrap_or_else(|e: LdapError| vec![make_extended_response(e.code, e.message)]),
+                Err(e) => vec![make_extended_response(
+                    LdapResultCode::ProtocolError,
+                    format!("Error while parsing password modify request: {:#?}", e),
+                )],
+            },
+            OID_WHOAMI => {
+                let authz_id = self
+                    .user_info
+                    .as_ref()
+                    .map(|user_info| {
+                        format!(
+                            "dn:uid={},ou=people,{}",
+                            user_info.user.as_str(),
+                            self.ldap_info.base_dn_str
+                        )
+                    })
+                    .unwrap_or_default();
+                vec![make_extended_response(LdapResultCode::Success, authz_id)]
+            }
+            _ => vec![make_extended_response(
                 LdapResultCode::UnwillingToPerform,
                 format!("Unsupported extended operation: {}", &request.name),
             )],
@@ -885,7 +907,9 @@ mod tests {
         infra::test_utils::{setup_default_schema, MockTestBackendHandler},
     };
     use chrono::TimeZone;
-    use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope, LdapSubstringFilter};
+    use ldap3_proto::proto::{
+        LdapDerefAliases, LdapSearchScope, LdapSubstringFilter, LdapWhoamiRequest,
+    };
     use lldap_domain::schema::{AttributeList, AttributeSchema, Schema};
     use lldap_domain::types::*;
     use lldap_domain::uuid;
@@ -2462,6 +2486,34 @@ mod tests {
             Some(vec![make_extended_response(
                 LdapResultCode::Success,
                 "".to_string(),
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_whoami_empty() {
+        let mut ldap_handler =
+            LdapHandler::new_for_tests(MockTestBackendHandler::new(), "dc=example,dc=com");
+        let request = LdapOp::ExtendedRequest(LdapWhoamiRequest {}.into());
+        assert_eq!(
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![make_extended_response(
+                LdapResultCode::Success,
+                "".to_string(),
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_whoami_bound() {
+        let mock = MockTestBackendHandler::new();
+        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = LdapOp::ExtendedRequest(LdapWhoamiRequest {}.into());
+        assert_eq!(
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![make_extended_response(
+                LdapResultCode::Success,
+                "dn:uid=test,ou=people,dc=example,dc=com".to_string(),
             )])
         );
     }
