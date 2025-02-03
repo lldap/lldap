@@ -1,8 +1,8 @@
 [workspace]
 members = [
+    "crates/auth",
     "crates/domain",
     "server",
-    "auth",
     "app",
     "migration-tool",
     "set-password",

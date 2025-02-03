@@ -36,7 +36,7 @@ default-features = false
 version = "0.24"
 
 [dependencies.lldap_auth]
-path = "../../auth"
+path = "../auth"
 features = ["opaque_server", "opaque_client", "sea_orm"]
 
 [dependencies.sea-orm]

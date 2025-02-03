@@ -57,7 +57,7 @@ features = [
 ]
 
 [dependencies.lldap_auth]
-path = "../auth"
+path = "../crates/auth"
 features = [ "opaque_client" ]
 
 [dependencies.lldap_validation]
