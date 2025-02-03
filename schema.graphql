@@ -65,10 +65,19 @@ input CreateUserInput {
   id: String!
   email: String
   displayName: String
-  firstName: String
-  lastName: String
-  "Base64 encoded JpegPhoto." avatar: String
-  "User-defined attributes." attributes: [AttributeValueInput!]
+  """
+    First name of user. Deprecated: use attribute instead.
+    If both field and corresponding attribute is supplied, the attribute will take precedence.
+  """ firstName: String
+  """
+    Last name of user. Deprecated: use attribute instead.
+    If both field and corresponding attribute is supplied, the attribute will take precedence.
+  """ lastName: String
+  """
+    Base64 encoded JpegPhoto. Deprecated: use attribute instead.
+    If both field and corresponding attribute is supplied, the attribute will take precedence.
+  """ avatar: String
+  "Attributes." attributes: [AttributeValueInput!]
 }
 
 type AttributeSchema {
@@ -86,9 +95,18 @@ input UpdateUserInput {
   id: String!
   email: String
   displayName: String
-  firstName: String
-  lastName: String
-  "Base64 encoded JpegPhoto." avatar: String
+  """
+    First name of user. Deprecated: use attribute instead.
+    If both field and corresponding attribute is supplied, the attribute will take precedence.
+  """ firstName: String
+  """
+    Last name of user. Deprecated: use attribute instead.
+    If both field and corresponding attribute is supplied, the attribute will take precedence.
+  """ lastName: String
+  """
+    Base64 encoded JpegPhoto. Deprecated: use attribute instead.
+    If both field and corresponding attribute is supplied, the attribute will take precedence.
+  """ avatar: String
   """
     Attribute names to remove.
     They are processed before insertions.
