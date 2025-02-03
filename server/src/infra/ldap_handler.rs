@@ -23,7 +23,7 @@ use ldap3_proto::proto::{
     LdapDerefAliases, LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapModify,
     LdapModifyRequest, LdapModifyType, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
-    LdapSearchScope,
+    LdapSearchScope, OID_PASSWORD_MODIFY, OID_WHOAMI,
 };
 use lldap_domain::{
     requests::CreateUserRequest,
@@ -182,7 +182,7 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
             LdapPartialAttribute {
                 atype: "supportedExtension".to_string(),
                 // Password modification extension.
-                vals: vec![b"1.3.6.1.4.1.4203.1.11.1".to_vec()],
+                vals: vec![OID_PASSWORD_MODIFY.as_bytes().to_vec()],
             },
             LdapPartialAttribute {
                 atype: "supportedControl".to_string(),
@@ -204,6 +204,11 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
             LdapPartialAttribute {
                 atype: "isGlobalCatalogReady".to_string(),
                 vals: vec![b"false".to_vec()],
+            },
+            LdapPartialAttribute {
+                atype: "supportedExtension".to_string(),
+                // whoami extension.
+                vals: vec![OID_WHOAMI.as_bytes().to_vec()],
             },
         ],
     })
@@ -414,16 +419,33 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     #[instrument(skip_all, level = "debug")]
     async fn do_extended_request(&mut self, request: &LdapExtendedRequest) -> Vec<LdapOp> {
-        match LdapPasswordModifyRequest::try_from(request) {
-            Ok(password_request) => self
+        if let Ok(password_request) = LdapPasswordModifyRequest::try_from(request) {
+            return self
                 .do_password_modification(&password_request)
                 .await
-                .unwrap_or_else(|e: LdapError| vec![make_extended_response(e.code, e.message)]),
-            Err(_) => vec![make_extended_response(
-                LdapResultCode::UnwillingToPerform,
-                format!("Unsupported extended operation: {}", &request.name),
-            )],
+                .unwrap_or_else(|e: LdapError| vec![make_extended_response(e.code, e.message)]);
         }
+
+        if request.name == OID_WHOAMI {
+            let dn = self
+                .user_info
+                .as_ref()
+                .map(|user_info| {
+                    format!(
+                        "dn:uid={},ou=people,{}",
+                        user_info.user.clone().into_string(),
+                        self.ldap_info.base_dn_str
+                    )
+                })
+                .unwrap_or_default();
+
+            return vec![make_extended_response(LdapResultCode::Success, dn)];
+        }
+
+        return vec![make_extended_response(
+            LdapResultCode::UnwillingToPerform,
+            format!("Unsupported extended operation: {}", &request.name),
+        )];
     }
 
     async fn handle_modify_change(
