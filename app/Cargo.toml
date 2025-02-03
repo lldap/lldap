@@ -61,7 +61,7 @@ path = "../crates/auth"
 features = [ "opaque_client" ]
 
 [dependencies.lldap_validation]
-path = "../validation"
+path = "../crates/validation"
 
 [dependencies.image]
 features = ["jpeg"]
