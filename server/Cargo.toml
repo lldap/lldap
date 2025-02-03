@@ -40,7 +40,6 @@ orion = "0.17"
 rand_chacha = "0.3"
 rustls-pemfile = "1"
 serde = "*"
-serde_bytes = "0.11"
 serde_json = "1"
 sha2 = "0.10"
 thiserror = "*"
@@ -125,11 +124,6 @@ version = "^0.1.6"
 [dependencies.actix-tls]
 features = ["default", "rustls"]
 version = "3"
-
-[dependencies.image]
-features = ["jpeg"]
-default-features = false
-version = "0.24"
 
 [dependencies.sea-orm]
 version = "0.12"
