@@ -21,7 +21,7 @@ features = ["std", "color", "suggestions", "derive", "env"]
 version = "4"
 
 [dependencies.lldap_auth]
-path = "../auth"
+path = "../crates/auth"
 features = ["opaque_client"]
 
 [dependencies.reqwest]

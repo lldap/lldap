@@ -81,7 +81,7 @@ default-features = false
 version = "0.10.1"
 
 [dependencies.lldap_auth]
-path = "../auth"
+path = "../crates/auth"
 features = ["opaque_server", "opaque_client", "sea_orm"]
 
 [dependencies.lldap_domain]
