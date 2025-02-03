@@ -1,4 +1,8 @@
 [package]
+authors = [
+    "Valentin Tolmer <valentin@tolmer.fr>",
+    "Simon Broeng Jensen <sbj@cwconsult.dk>",
+]
 name = "lldap_domain"
 version = "0.1.0"
 edition = "2021"
