@@ -1,19 +1,27 @@
 use crate::{
     domain::{
         handler::{
-            BackendHandler, BindRequest, CreateUserRequest, LoginHandler, ReadSchemaBackendHandler,
+            AttributeList, AttributeSchema, BackendHandler, BindRequest, CreateUserRequest,
+            LoginHandler, ReadSchemaBackendHandler, Schema,
         },
         ldap::{
             error::{LdapError, LdapResult},
-            group::{convert_groups_to_ldap_op, get_groups_list},
-            user::{convert_users_to_ldap_op, get_user_list},
+            group::{
+                convert_groups_to_ldap_op, get_default_group_object_classes, get_groups_list,
+            },
+            user::{
+                convert_users_to_ldap_op, get_default_user_object_classes, get_user_list,
+            },
             utils::{
                 get_user_id_from_distinguished_name, is_subtree, parse_distinguished_name, LdapInfo,
             },
         },
         opaque_handler::OpaqueHandler,
         schema::PublicSchema,
-        types::{AttributeName, Email, Group, JpegPhoto, UserAndGroups, UserId},
+        types::{
+            AttributeName, AttributeType, Email, Group, JpegPhoto, LdapObjectClass, UserAndGroups,
+            UserId,
+        },
     },
     infra::access_control::{
         AccessControlledBackendHandler, AdminBackendHandler, UserAndGroupListerBackendHandler,
@@ -21,6 +29,8 @@ use crate::{
     },
 };
 use anyhow::Result;
+use chrono::Utc;
+use itertools::Itertools;
 use ldap3_proto::proto::{
     LdapAddRequest, LdapBindCred, LdapBindRequest, LdapBindResponse, LdapCompareRequest,
     LdapDerefAliases, LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapModify,
@@ -204,6 +214,327 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
                 atype: "isGlobalCatalogReady".to_string(),
                 vals: vec![b"false".to_vec()],
             },
+            LdapPartialAttribute {
+                atype: "subschemaSubentry".to_string(),
+                vals: vec![b"cn=Subschema".to_vec()],
+            },
+        ],
+    })
+}
+
+pub struct ObjectClassList(Vec<LdapObjectClass>);
+
+impl ObjectClassList {
+    fn format_for_ldap_schema_description(&self) -> String {
+        self.0
+            .iter()
+            .map(|c| format!("'{}'", c))
+            .unique()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+pub struct LdapSchemaDescription {
+    user_attributes_must: AttributeList,
+    user_attributes_may: AttributeList,
+    group_attributes_must: AttributeList,
+    group_attributes_may: AttributeList,
+    user_object_classes: ObjectClassList,
+    group_object_classes: ObjectClassList,
+}
+
+impl LdapSchemaDescription {
+    fn extend_with_custom_schema(mut self, schema: &Schema) -> Self {
+        self.user_attributes_may
+            .attributes
+            .extend(schema.user_attributes.attributes.clone());
+        self.group_attributes_may
+            .attributes
+            .extend(schema.group_attributes.attributes.clone());
+        self.user_object_classes
+            .0
+            .extend(schema.extra_user_object_classes.clone());
+        self.group_object_classes
+            .0
+            .extend(schema.extra_group_object_classes.clone());
+
+        self
+    }
+
+    fn formatted_attribute_list(&self) -> Vec<Vec<u8>> {
+        let mut formatted_list: Vec<Vec<u8>> = Vec::new();
+
+        for (index, attribute) in self.all_attributes().attributes.into_iter().enumerate() {
+            formatted_list.push(
+                format!(
+                    "( 2.{} NAME '{}' DESC 'LLDAP: {}' SUP {:?} )",
+                    (index + 4),
+                    attribute.name,
+                    if attribute.is_hardcoded {
+                        "builtin attribute"
+                    } else {
+                        "custom attribute"
+                    },
+                    attribute.attribute_type
+                )
+                .into_bytes()
+                .to_vec(),
+            )
+        }
+
+        formatted_list
+    }
+
+    pub fn all_attributes(&self) -> AttributeList {
+        AttributeList {
+            attributes: [
+                self.user_attributes_must.attributes.clone(),
+                self.user_attributes_may.attributes.clone(),
+                self.group_attributes_must.attributes.clone(),
+                self.group_attributes_may.attributes.clone(),
+            ]
+            .concat()
+            .iter()
+            .unique_by(|a| &a.name)
+            .cloned()
+            .collect::<Vec<_>>(),
+        }
+    }
+}
+
+fn get_lldap_builtin_schema() -> LdapSchemaDescription {
+    LdapSchemaDescription {
+        user_attributes_must: AttributeList {
+            attributes: vec![
+                AttributeSchema {
+                    name: "uid".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "mail".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+            ],
+        },
+        user_attributes_may: AttributeList {
+            attributes: vec![
+                AttributeSchema {
+                    name: "objectclass".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "givenname".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "sn".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "cn".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "jpegPhoto".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "createtimestamp".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "entryuuid".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+            ],
+        },
+        group_attributes_must: AttributeList {
+            attributes: vec![
+                AttributeSchema {
+                    name: "uid".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "cn".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+            ],
+        },
+        group_attributes_may: AttributeList {
+            attributes: vec![
+                AttributeSchema {
+                    name: "objectclass".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "member".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "uniquemember".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+                AttributeSchema {
+                    name: "entryuuid".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: true,
+                    is_editable: false,
+                    is_hardcoded: true,
+                    is_readonly: true,
+                },
+            ],
+        },
+        user_object_classes: ObjectClassList(
+            get_default_user_object_classes()
+        ),
+        group_object_classes: ObjectClassList(
+            get_default_group_object_classes()
+        ),
+    }
+}
+
+fn schema_response(schema: &Schema) -> LdapOp {
+    let full_schema: LdapSchemaDescription =
+        get_lldap_builtin_schema().extend_with_custom_schema(schema);
+
+    let current_time_utc = Utc::now().format("%Y%m%d%H%M%SZ").to_string().into_bytes();
+
+    LdapOp::SearchResultEntry(LdapSearchResultEntry {
+        dn: "cn=Subschema".to_string(),
+        attributes: vec![
+           LdapPartialAttribute {
+            atype: "structuralObjectClass".to_string(),
+            vals: vec![b"subentry".to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "objectClass".to_string(),
+            vals: vec![b"top".to_vec(), b"subentry".to_vec(), b"subschema".to_vec(), b"extensibleObject".to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "cn".to_string(),
+            vals: vec![b"Subschema".to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "createTimestamp".to_string(),
+            vals: vec![current_time_utc.to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "modifyTimestamp".to_string(),
+            vals: vec![current_time_utc.to_vec()],
+           },
+           LdapPartialAttribute {
+            atype: "ldapSyntaxes".to_string(),
+            vals: vec![
+                b"( 1.3.6.1.4.1.1466.115.121.1.15 DESC 'Directory String' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.27 DESC 'Integer' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.28 DESC 'JPEG' X-NOT-HUMAN-READABLE 'TRUE' )".to_vec(),
+                ],
+           },
+           LdapPartialAttribute {
+            atype: "attributeTypes".to_string(),
+            vals: vec![
+                b"( 2.0 NAME 'String' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
+                b"( 2.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
+                b"( 2.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
+                b"( 2.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                ].into_iter().chain(
+                    full_schema.formatted_attribute_list()
+                ).collect()
+           },
+           LdapPartialAttribute {
+            atype: "objectClasses".to_string(),
+            vals: vec![
+                    format!(
+                        "( 3.0 NAME ( {} ) DESC 'LLDAP builtin: a person' STRUCTURAL MUST ( {} ) MAY ( {} ) )",
+                        full_schema.user_object_classes.format_for_ldap_schema_description(),
+                        full_schema.user_attributes_must.format_for_ldap_schema_description(),
+                        full_schema.user_attributes_may.format_for_ldap_schema_description(),
+                    ).into_bytes(),
+                    format!(
+                        "( 3.1 NAME ( {} ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( {} ) MAY ( {} ) )",
+                        full_schema.group_object_classes.format_for_ldap_schema_description(),
+                        full_schema.group_attributes_must.format_for_ldap_schema_description(),
+                        full_schema.group_attributes_may.format_for_ldap_schema_description(),
+                    ).into_bytes(),
+                ],
+           },
+           LdapPartialAttribute {
+            atype: "subschemaSubentry".to_string(),
+            vals: vec![b"cn=Subschema".to_vec()],
+           },
         ],
     })
 }
@@ -541,6 +872,22 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     ]);
                 }
             }
+        } else if request.base == "cn=Subschema" && request.scope == LdapSearchScope::Base {
+            debug!("Schema request made");
+            let backend_handler = self
+                .user_info
+                .as_ref()
+                .and_then(|u| self.backend_handler.get_schema_only_handler(u))
+                .ok_or_else(|| LdapError {
+                    code: LdapResultCode::InsufficentAccessRights,
+                    message: "No user currently bound".to_string(),
+                })?;
+
+                let schema = &backend_handler.get_schema().await.map_err(|e| LdapError {
+                code: LdapResultCode::OperationsError,
+                message: format!("Unable to get schema: {:#}", e),
+            })?;
+            return Ok(vec![schema_response(&schema), make_search_success()]);
         }
         self.do_search(request).await
     }
@@ -2688,6 +3035,29 @@ mod tests {
                 make_search_success()
             ])
         );
+    }
+
+    #[tokio::test]
+    async fn test_subschema_response() {
+        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+
+        let backend_handler = ldap_handler.user_info.as_ref().and_then(|u| ldap_handler.backend_handler.get_schema_only_handler(u)).unwrap();
+        let schema = &backend_handler.get_schema().await.unwrap();
+
+        let request = LdapSearchRequest {
+            base: "cn=Subschema".to_string(),
+            scope: LdapSearchScope::Base,
+            aliases: LdapDerefAliases::Never,
+            sizelimit: 0,
+            timelimit: 0,
+            typesonly: false,
+            filter: LdapFilter::Present("objectClass".to_string()),
+            attrs: vec!["supportedExtension".to_string()],
+        };
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![schema_response(&schema), make_search_success()])
+        )
     }
 
     #[tokio::test]
