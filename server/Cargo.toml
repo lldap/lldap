@@ -92,7 +92,7 @@ path = "../crates/domain"
 features = ["test"]
 
 [dependencies.lldap_validation]
-path = "../validation"
+path = "../crates/validation"
 
 [dependencies.opaque-ke]
 version = "0.7"
