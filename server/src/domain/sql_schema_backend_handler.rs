@@ -181,7 +181,7 @@ mod tests {
     };
     use lldap_domain::requests::UpdateUserRequest;
     use lldap_domain::schema::AttributeList;
-    use lldap_domain::types::{AttributeType, AttributeValue, Serialized};
+    use lldap_domain::types::{Attribute, AttributeType, Serialized};
     use pretty_assertions::assert_eq;
 
     #[tokio::test]
@@ -296,7 +296,7 @@ mod tests {
             .handler
             .update_user(UpdateUserRequest {
                 user_id: "bob".into(),
-                insert_attributes: vec![AttributeValue {
+                insert_attributes: vec![Attribute {
                     name: "new_attribute".into(),
                     value: Serialized::from(&3),
                 }],

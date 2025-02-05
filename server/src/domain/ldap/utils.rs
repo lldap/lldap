@@ -10,9 +10,7 @@ use crate::domain::{
     model::UserColumn,
     schema::{PublicSchema, SchemaAttributeExtractor},
 };
-use lldap_domain::types::{
-    AttributeName, AttributeType, AttributeValue, GroupName, JpegPhoto, UserId,
-};
+use lldap_domain::types::{Attribute, AttributeName, AttributeType, GroupName, JpegPhoto, UserId};
 
 impl From<LdapSubstringFilter> for SubStringFilter {
     fn from(
@@ -287,7 +285,7 @@ pub struct LdapInfo {
 }
 
 pub fn get_custom_attribute<Extractor: SchemaAttributeExtractor>(
-    attributes: &[AttributeValue],
+    attributes: &[Attribute],
     attribute_name: &AttributeName,
     schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {

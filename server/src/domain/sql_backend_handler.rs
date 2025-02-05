@@ -33,7 +33,7 @@ pub mod tests {
     use lldap_auth::{opaque, registration};
     use lldap_domain::{
         requests::{CreateGroupRequest, CreateUserRequest},
-        types::{AttributeValue as DomainAttributeValue, GroupId, Serialized, UserId},
+        types::{Attribute as DomainAttribute, GroupId, Serialized, UserId},
     };
     use pretty_assertions::assert_eq;
     use sea_orm::Database;
@@ -93,11 +93,11 @@ pub mod tests {
                 email: format!("{}@bob.bob", name).into(),
                 display_name: Some("display ".to_string() + name),
                 attributes: vec![
-                    DomainAttributeValue {
+                    DomainAttribute {
                         name: "first_name".into(),
                         value: Serialized::from(("first ".to_string() + name).as_str()),
                     },
-                    DomainAttributeValue {
+                    DomainAttribute {
                         name: "last_name".into(),
                         value: Serialized::from(("last ".to_string() + name).as_str()),
                     },

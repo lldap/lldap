@@ -28,7 +28,7 @@ type DomainGroup = lldap_domain::types::Group;
 type DomainUserAndGroups = lldap_domain::types::UserAndGroups;
 type DomainAttributeList = lldap_domain::schema::AttributeList;
 type DomainAttributeSchema = lldap_domain::schema::AttributeSchema;
-type DomainAttributeValue = lldap_domain::types::AttributeValue;
+type DomainAttribute = lldap_domain::types::Attribute;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
 /// A filter for requests, specifying a boolean expression based on field constraints. Only one of
@@ -578,7 +578,7 @@ impl<Handler: BackendHandler> From<PublicSchema> for Schema<Handler> {
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct AttributeValue<Handler: BackendHandler> {
-    attribute: DomainAttributeValue,
+    attribute: DomainAttribute,
     schema: AttributeSchema<Handler>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
@@ -599,7 +599,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
 }
 
 impl<Handler: BackendHandler> AttributeValue<Handler> {
-    fn from_domain(value: DomainAttributeValue, schema: DomainAttributeSchema) -> Self {
+    fn from_domain(value: DomainAttribute, schema: DomainAttributeSchema) -> Self {
         Self {
             attribute: value,
             schema: AttributeSchema::<Handler> {
@@ -622,7 +622,7 @@ impl<Handler: BackendHandler> Clone for AttributeValue<Handler> {
 }
 
 pub fn serialize_attribute(
-    attribute: &DomainAttributeValue,
+    attribute: &DomainAttribute,
     attribute_schema: &DomainAttributeSchema,
 ) -> Vec<String> {
     let convert_date = |date| chrono::Utc.from_utc_datetime(&date).to_rfc3339();
@@ -665,7 +665,7 @@ pub fn serialize_attribute(
 }
 
 impl<Handler: BackendHandler> AttributeValue<Handler> {
-    fn from_schema(a: DomainAttributeValue, schema: &DomainAttributeList) -> Option<Self> {
+    fn from_schema(a: DomainAttribute, schema: &DomainAttributeList) -> Option<Self> {
         schema
             .get_attribute_schema(&a.name)
             .map(|s| AttributeValue::<Handler>::from_domain(a, s.clone()))
@@ -696,7 +696,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
             })
             .map(|(attribute, value)| {
                 AttributeValue::<Handler>::from_domain(
-                    DomainAttributeValue {
+                    DomainAttribute {
                         name: attribute.name.clone(),
                         value,
                     },
@@ -738,7 +738,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
             })
             .map(|(attribute, value)| {
                 AttributeValue::<Handler>::from_domain(
-                    DomainAttributeValue {
+                    DomainAttribute {
                         name: attribute.name.clone(),
                         value,
                     },
@@ -780,7 +780,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
             })
             .map(|(attribute, value)| {
                 AttributeValue::<Handler>::from_domain(
-                    DomainAttributeValue {
+                    DomainAttribute {
                         name: attribute.name.clone(),
                         value,
                     },
@@ -908,11 +908,11 @@ mod tests {
                     creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
                     uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     attributes: vec![
-                        DomainAttributeValue {
+                        DomainAttribute {
                             name: "first_name".into(),
                             value: Serialized::from("Bob"),
                         },
-                        DomainAttributeValue {
+                        DomainAttribute {
                             name: "last_name".into(),
                             value: Serialized::from("Bobberson"),
                         },
@@ -926,7 +926,7 @@ mod tests {
             display_name: "Bobbersons".into(),
             creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
             uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
-            attributes: vec![DomainAttributeValue {
+            attributes: vec![DomainAttribute {
                 name: "club_name".into(),
                 value: Serialized::from("Gang of Four"),
             }],

@@ -408,7 +408,7 @@ impl IntoActiveValue<Serialized> for JpegPhoto {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct AttributeValue {
+pub struct Attribute {
     pub name: AttributeName,
     pub value: Serialized,
 }
@@ -420,7 +420,7 @@ pub struct User {
     pub display_name: Option<String>,
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
-    pub attributes: Vec<AttributeValue>,
+    pub attributes: Vec<Attribute>,
 }
 
 #[cfg(feature = "test")]
@@ -528,7 +528,7 @@ pub struct Group {
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
     pub users: Vec<UserId>,
-    pub attributes: Vec<AttributeValue>,
+    pub attributes: Vec<Attribute>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -537,7 +537,7 @@ pub struct GroupDetails {
     pub display_name: GroupName,
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
-    pub attributes: Vec<AttributeValue>,
+    pub attributes: Vec<Attribute>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
