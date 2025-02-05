@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{
-    AttributeName, AttributeType, AttributeValue, Email, GroupId, GroupName, UserId,
-};
+use crate::types::{Attribute, AttributeName, AttributeType, Email, GroupId, GroupName, UserId};
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
 pub struct CreateUserRequest {
@@ -10,7 +8,7 @@ pub struct CreateUserRequest {
     pub user_id: UserId,
     pub email: Email,
     pub display_name: Option<String>,
-    pub attributes: Vec<AttributeValue>,
+    pub attributes: Vec<Attribute>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
@@ -20,13 +18,13 @@ pub struct UpdateUserRequest {
     pub email: Option<Email>,
     pub display_name: Option<String>,
     pub delete_attributes: Vec<AttributeName>,
-    pub insert_attributes: Vec<AttributeValue>,
+    pub insert_attributes: Vec<Attribute>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Default)]
 pub struct CreateGroupRequest {
     pub display_name: GroupName,
-    pub attributes: Vec<AttributeValue>,
+    pub attributes: Vec<Attribute>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
@@ -34,7 +32,7 @@ pub struct UpdateGroupRequest {
     pub group_id: GroupId,
     pub display_name: Option<GroupName>,
     pub delete_attributes: Vec<AttributeName>,
-    pub insert_attributes: Vec<AttributeValue>,
+    pub insert_attributes: Vec<Attribute>,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]

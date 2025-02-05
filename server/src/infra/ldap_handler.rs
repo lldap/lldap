@@ -28,7 +28,7 @@ use ldap3_proto::proto::{
 };
 use lldap_domain::{
     requests::CreateUserRequest,
-    types::{AttributeName, AttributeType, AttributeValue, Email, Group, UserAndGroups, UserId},
+    types::{Attribute, AttributeName, AttributeType, Email, Group, UserAndGroups, UserId},
 };
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
@@ -771,7 +771,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 .map(decode_attribute_value)
         };
         let make_encoded_attribute = |name: &str, typ: AttributeType, value: String| {
-            Ok(AttributeValue {
+            Ok(Attribute {
                 name: AttributeName::from(name),
                 value: deserialize::deserialize_attribute_value(&[value], typ, false).map_err(
                     |e| LdapError {
@@ -781,7 +781,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 )?,
             })
         };
-        let mut new_user_attributes: Vec<AttributeValue> = Vec::new();
+        let mut new_user_attributes: Vec<Attribute> = Vec::new();
         if let Some(first_name) = get_attribute("givenname").transpose()? {
             new_user_attributes.push(make_encoded_attribute(
                 "first_name",
@@ -1298,11 +1298,11 @@ mod tests {
                         display_name: Some("Bôb Böbberson".to_string()),
                         uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
                         attributes: vec![
-                            AttributeValue {
+                            Attribute {
                                 name: "first_name".into(),
                                 value: Serialized::from("Bôb"),
                             },
-                            AttributeValue {
+                            Attribute {
                                 name: "last_name".into(),
                                 value: Serialized::from("Böbberson"),
                             },
@@ -1317,15 +1317,15 @@ mod tests {
                         email: "jim@cricket.jim".into(),
                         display_name: Some("Jimminy Cricket".to_string()),
                         attributes: vec![
-                            AttributeValue {
+                            Attribute {
                                 name: "avatar".into(),
                                 value: Serialized::from(&JpegPhoto::for_tests()),
                             },
-                            AttributeValue {
+                            Attribute {
                                 name: "first_name".into(),
                                 value: Serialized::from("Jim"),
                             },
-                            AttributeValue {
+                            Attribute {
                                 name: "last_name".into(),
                                 value: Serialized::from("Cricket"),
                             },
@@ -1735,7 +1735,7 @@ mod tests {
                     creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     users: vec![],
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                    attributes: vec![AttributeValue {
+                    attributes: vec![Attribute {
                         name: "Attr".into(),
                         value: Serialized::from("TEST"),
                     }],
@@ -2171,11 +2171,11 @@ mod tests {
                     email: "bob@bobmail.bob".into(),
                     display_name: Some("Bôb Böbberson".to_string()),
                     attributes: vec![
-                        AttributeValue {
+                        Attribute {
                             name: "first_name".into(),
                             value: Serialized::from("Bôb"),
                         },
-                        AttributeValue {
+                        Attribute {
                             name: "last_name".into(),
                             value: Serialized::from("Böbberson"),
                         },
@@ -2255,11 +2255,11 @@ mod tests {
                     email: "bob@bobmail.bob".into(),
                     display_name: Some("Bôb Böbberson".to_string()),
                     attributes: vec![
-                        AttributeValue {
+                        Attribute {
                             name: "avatar".into(),
                             value: Serialized::from(&JpegPhoto::for_tests()),
                         },
-                        AttributeValue {
+                        Attribute {
                             name: "last_name".into(),
                             value: Serialized::from("Böbberson"),
                         },
@@ -3076,7 +3076,7 @@ mod tests {
             Ok(vec![UserAndGroups {
                 user: User {
                     user_id: UserId::new("test"),
-                    attributes: vec![AttributeValue {
+                    attributes: vec![Attribute {
                         name: "nickname".into(),
                         value: Serialized::from("Bob the Builder"),
                     }],
@@ -3092,7 +3092,7 @@ mod tests {
                 creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                 users: vec![UserId::new("bob")],
                 uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                attributes: vec![AttributeValue {
+                attributes: vec![Attribute {
                     name: "club_name".into(),
                     value: Serialized::from("Breakfast Club"),
                 }],

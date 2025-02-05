@@ -21,7 +21,7 @@ use lldap_domain::{
     },
     schema::AttributeList,
     types::{
-        AttributeName, AttributeType, AttributeValue as DomainAttributeValue, Email, GroupId,
+        Attribute as DomainAttribute, AttributeName, AttributeType, Email, GroupId,
         LdapObjectClass, UserId,
     },
 };
@@ -137,7 +137,7 @@ impl Success {
 struct UnpackedAttributes {
     email: Option<Email>,
     display_name: Option<String>,
-    attributes: Vec<DomainAttributeValue>,
+    attributes: Vec<DomainAttribute>,
 }
 
 fn unpack_attributes(
@@ -749,7 +749,7 @@ fn deserialize_attribute(
     attribute_schema: &AttributeList,
     attribute: AttributeValue,
     is_admin: bool,
-) -> FieldResult<DomainAttributeValue> {
+) -> FieldResult<DomainAttribute> {
     let attribute_name = AttributeName::from(attribute.name.as_str());
     let attribute_schema = attribute_schema
         .get_attribute_schema(&attribute_name)
@@ -774,7 +774,7 @@ fn deserialize_attribute(
         attribute_schema.is_list,
     )
     .context(format!("While deserializing attribute {}", attribute.name))?;
-    Ok(DomainAttributeValue {
+    Ok(DomainAttribute {
         name: attribute_name,
         value: deserialized_values,
     })

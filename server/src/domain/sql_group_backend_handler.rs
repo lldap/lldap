@@ -7,7 +7,7 @@ use crate::domain::{
 use async_trait::async_trait;
 use lldap_domain::{
     requests::{CreateGroupRequest, UpdateGroupRequest},
-    types::{AttributeName, AttributeValue, Group, GroupDetails, GroupId, Serialized, Uuid},
+    types::{Attribute, AttributeName, Group, GroupDetails, GroupId, Serialized, Uuid},
 };
 use sea_orm::{
     sea_query::{Alias, Cond, Expr, Func, IntoCondition, OnConflict, SimpleExpr},
@@ -133,7 +133,7 @@ impl GroupListerBackendHandler for SqlBackendHandler {
         for group in groups.iter_mut() {
             group.attributes = attributes_iter
                 .take_while_ref(|u| u.group_id == group.id)
-                .map(AttributeValue::from)
+                .map(Attribute::from)
                 .collect();
         }
         groups.sort_by(|g1, g2| g1.display_name.cmp(&g2.display_name));
@@ -155,7 +155,7 @@ impl GroupBackendHandler for SqlBackendHandler {
             .order_by_asc(model::GroupAttributesColumn::AttributeName)
             .all(&self.sql_pool)
             .await?;
-        group_details.attributes = attributes.into_iter().map(AttributeValue::from).collect();
+        group_details.attributes = attributes.into_iter().map(Attribute::from).collect();
         Ok(group_details)
     }
 
@@ -447,7 +447,7 @@ mod tests {
                 group_id: fixture.groups[0],
                 display_name: None,
                 delete_attributes: Vec::new(),
-                insert_attributes: vec![AttributeValue {
+                insert_attributes: vec![Attribute {
                     name: "gid".into(),
                     value: Serialized::from(&512),
                 }],
@@ -548,7 +548,7 @@ mod tests {
             .handler
             .create_group(CreateGroupRequest {
                 display_name: "New Group".into(),
-                attributes: vec![AttributeValue {
+                attributes: vec![Attribute {
                     name: "new_attribute".into(),
                     value: Serialized::from("value"),
                 }],
@@ -563,7 +563,7 @@ mod tests {
         assert_eq!(group_details.display_name, "New Group".into());
         assert_eq!(
             group_details.attributes,
-            vec![AttributeValue {
+            vec![Attribute {
                 name: "new_attribute".into(),
                 value: Serialized::from("value"),
             }]
@@ -585,7 +585,7 @@ mod tests {
             .await
             .unwrap();
         let group_id = fixture.groups[0];
-        let attributes = vec![AttributeValue {
+        let attributes = vec![Attribute {
             name: "new_attribute".into(),
             value: Serialized::from(&42i64),
         }];
