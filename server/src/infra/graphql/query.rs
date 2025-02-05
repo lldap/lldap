@@ -17,7 +17,8 @@ use anyhow::Context as AnyhowContext;
 use chrono::{NaiveDateTime, TimeZone};
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use lldap_domain::types::{
-    AttributeType, GroupDetails, GroupId, JpegPhoto, LdapObjectClass, Serialized, UserId,
+    AttributeName, AttributeType, GroupDetails, GroupId, JpegPhoto, LdapObjectClass, Serialized,
+    UserId,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument, Span};
@@ -576,9 +577,24 @@ impl<Handler: BackendHandler> From<PublicSchema> for Schema<Handler> {
     }
 }
 
+#[derive(PartialEq, Clone, Eq, Debug, Serialize, Deserialize)]
+pub struct GraphQLAttributeValue {
+    pub name: AttributeName,
+    pub value: Serialized,
+}
+
+impl From<DomainAttribute> for GraphQLAttributeValue {
+    fn from(a: DomainAttribute) -> Self {
+        GraphQLAttributeValue {
+            name: a.name,
+            value: a.value.into(),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct AttributeValue<Handler: BackendHandler> {
-    attribute: DomainAttribute,
+    attribute: GraphQLAttributeValue,
     schema: AttributeSchema<Handler>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
@@ -599,7 +615,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
 }
 
 impl<Handler: BackendHandler> AttributeValue<Handler> {
-    fn from_domain(value: DomainAttribute, schema: DomainAttributeSchema) -> Self {
+    fn from_value(value: GraphQLAttributeValue, schema: DomainAttributeSchema) -> Self {
         Self {
             attribute: value,
             schema: AttributeSchema::<Handler> {
@@ -622,7 +638,7 @@ impl<Handler: BackendHandler> Clone for AttributeValue<Handler> {
 }
 
 pub fn serialize_attribute(
-    attribute: &DomainAttribute,
+    attribute: &GraphQLAttributeValue,
     attribute_schema: &DomainAttributeSchema,
 ) -> Vec<String> {
     let convert_date = |date| chrono::Utc.from_utc_datetime(&date).to_rfc3339();
@@ -665,10 +681,10 @@ pub fn serialize_attribute(
 }
 
 impl<Handler: BackendHandler> AttributeValue<Handler> {
-    fn from_schema(a: DomainAttribute, schema: &DomainAttributeList) -> Option<Self> {
+    fn from_schema(a: GraphQLAttributeValue, schema: &DomainAttributeList) -> Option<Self> {
         schema
             .get_attribute_schema(&a.name)
-            .map(|s| AttributeValue::<Handler>::from_domain(a, s.clone()))
+            .map(|s| AttributeValue::<Handler>::from_value(a, s.clone()))
     }
 
     fn user_attributes_from_schema(
@@ -695,8 +711,8 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                 value.map(|v| (attribute, v))
             })
             .map(|(attribute, value)| {
-                AttributeValue::<Handler>::from_domain(
-                    DomainAttribute {
+                AttributeValue::<Handler>::from_value(
+                    GraphQLAttributeValue {
                         name: attribute.name.clone(),
                         value,
                     },
@@ -707,7 +723,10 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
         user_attributes
             .into_iter()
             .flat_map(|a| {
-                AttributeValue::<Handler>::from_schema(a, &schema.get_schema().user_attributes)
+                AttributeValue::<Handler>::from_schema(
+                    a.into(),
+                    &schema.get_schema().user_attributes,
+                )
             })
             .for_each(|value| all_attributes.push(value));
         all_attributes
@@ -737,8 +756,8 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                 )
             })
             .map(|(attribute, value)| {
-                AttributeValue::<Handler>::from_domain(
-                    DomainAttribute {
+                AttributeValue::<Handler>::from_value(
+                    GraphQLAttributeValue {
                         name: attribute.name.clone(),
                         value,
                     },
@@ -749,7 +768,10 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
         group_attributes
             .into_iter()
             .flat_map(|a| {
-                AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
+                AttributeValue::<Handler>::from_schema(
+                    a.into(),
+                    &schema.get_schema().group_attributes,
+                )
             })
             .for_each(|value| all_attributes.push(value));
         all_attributes
@@ -779,8 +801,8 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                 )
             })
             .map(|(attribute, value)| {
-                AttributeValue::<Handler>::from_domain(
-                    DomainAttribute {
+                AttributeValue::<Handler>::from_value(
+                    GraphQLAttributeValue {
                         name: attribute.name.clone(),
                         value,
                     },
@@ -791,7 +813,10 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
         group_attributes
             .into_iter()
             .flat_map(|a| {
-                AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
+                AttributeValue::<Handler>::from_schema(
+                    a.into(),
+                    &schema.get_schema().group_attributes,
+                )
             })
             .for_each(|value| all_attributes.push(value));
         all_attributes
@@ -812,7 +837,7 @@ mod tests {
     };
     use lldap_domain::{
         schema::{AttributeList, Schema},
-        types::{AttributeName, AttributeType, LdapObjectClass, Serialized},
+        types::{AttributeName, AttributeType, LdapObjectClass},
     };
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
@@ -910,11 +935,11 @@ mod tests {
                     attributes: vec![
                         DomainAttribute {
                             name: "first_name".into(),
-                            value: Serialized::from("Bob"),
+                            value: "Bob".into(),
                         },
                         DomainAttribute {
                             name: "last_name".into(),
-                            value: Serialized::from("Bobberson"),
+                            value: "Bobberson".into(),
                         },
                     ],
                     ..Default::default()
@@ -928,7 +953,7 @@ mod tests {
             uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: vec![DomainAttribute {
                 name: "club_name".into(),
-                value: Serialized::from("Gang of Four"),
+                value: "Gang of Four".into(),
             }],
         });
         groups.insert(GroupDetails {
@@ -1074,7 +1099,7 @@ mod tests {
                     ),
                     DomainRequestFilter::AttributeEquality(
                         AttributeName::from("first_name"),
-                        Serialized::from("robert"),
+                        "robert".into(),
                     ),
                 ]))),
                 eq(false),

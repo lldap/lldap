@@ -16,7 +16,7 @@ use crate::domain::{
             GroupFieldType, LdapInfo,
         },
     },
-    schema::{PublicSchema, SchemaGroupAttributeExtractor},
+    schema::PublicSchema,
 };
 use lldap_domain::types::{
     AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid,
@@ -62,9 +62,7 @@ pub fn get_group_attribute(
             .map(|u| format!("uid={},ou=people,{}", u, base_dn_str).into_bytes())
             .collect(),
         GroupFieldType::Uuid => vec![group.uuid.to_string().into_bytes()],
-        GroupFieldType::Attribute(attr, _, _) => {
-            get_custom_attribute::<SchemaGroupAttributeExtractor>(&group.attributes, &attr, schema)?
-        }
+        GroupFieldType::Attribute(attr, _, _) => get_custom_attribute(&group.attributes, &attr)?,
         GroupFieldType::NoMatch => match attribute.as_str() {
             "1.1" => return None,
             // We ignore the operational attribute wildcard
@@ -79,10 +77,9 @@ pub fn get_group_attribute(
                 if ignored_group_attributes.contains(attribute) {
                     return None;
                 }
-                get_custom_attribute::<SchemaGroupAttributeExtractor>(
+                get_custom_attribute(
                         &group.attributes,
                         attribute,
-                        schema,
                     ).or_else(||{warn!(
                             r#"Ignoring unrecognized group attribute: {}. To disable this warning, add it to "ignored_group_attributes" in the config."#,
                             attribute

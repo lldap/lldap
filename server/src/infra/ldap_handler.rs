@@ -1300,11 +1300,11 @@ mod tests {
                         attributes: vec![
                             Attribute {
                                 name: "first_name".into(),
-                                value: Serialized::from("Bôb"),
+                                value: "Bôb".into(),
                             },
                             Attribute {
                                 name: "last_name".into(),
-                                value: Serialized::from("Böbberson"),
+                                value: "Böbberson".into(),
                             },
                         ],
                         ..Default::default()
@@ -1319,15 +1319,15 @@ mod tests {
                         attributes: vec![
                             Attribute {
                                 name: "avatar".into(),
-                                value: Serialized::from(&JpegPhoto::for_tests()),
+                                value: JpegPhoto::for_tests().into(),
                             },
                             Attribute {
                                 name: "first_name".into(),
-                                value: Serialized::from("Jim"),
+                                value: "Jim".into(),
                             },
                             Attribute {
                                 name: "last_name".into(),
-                                value: Serialized::from("Cricket"),
+                                value: "Cricket".into(),
                             },
                         ],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -1718,14 +1718,8 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
             .with(eq(Some(GroupRequestFilter::Or(vec![
-                GroupRequestFilter::AttributeEquality(
-                    AttributeName::from("attr"),
-                    Serialized::from("TEST"),
-                ),
-                GroupRequestFilter::AttributeEquality(
-                    AttributeName::from("attr"),
-                    Serialized::from("test"),
-                ),
+                GroupRequestFilter::AttributeEquality(AttributeName::from("attr"), "TEST".into()),
+                GroupRequestFilter::AttributeEquality(AttributeName::from("attr"), "test".into()),
             ]))))
             .times(1)
             .return_once(|_| {
@@ -1737,7 +1731,7 @@ mod tests {
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                     attributes: vec![Attribute {
                         name: "Attr".into(),
-                        value: Serialized::from("TEST"),
+                        value: "TEST".into(),
                     }],
                 }])
             });
@@ -1914,11 +1908,11 @@ mod tests {
                         UserRequestFilter::Or(vec![
                             UserRequestFilter::AttributeEquality(
                                 AttributeName::from("first_name"),
-                                Serialized::from("FirstName"),
+                                "FirstName".into(),
                             ),
                             UserRequestFilter::AttributeEquality(
                                 AttributeName::from("first_name"),
-                                Serialized::from("firstname"),
+                                "firstname".into(),
                             ),
                         ]),
                         false.into(),
@@ -2173,11 +2167,11 @@ mod tests {
                     attributes: vec![
                         Attribute {
                             name: "first_name".into(),
-                            value: Serialized::from("Bôb"),
+                            value: "Bôb".into(),
                         },
                         Attribute {
                             name: "last_name".into(),
-                            value: Serialized::from("Böbberson"),
+                            value: "Böbberson".into(),
                         },
                     ],
                     ..Default::default()
@@ -2257,11 +2251,11 @@ mod tests {
                     attributes: vec![
                         Attribute {
                             name: "avatar".into(),
-                            value: Serialized::from(&JpegPhoto::for_tests()),
+                            value: JpegPhoto::for_tests().into(),
                         },
                         Attribute {
                             name: "last_name".into(),
-                            value: Serialized::from("Böbberson"),
+                            value: "Böbberson".into(),
                         },
                     ],
                     uuid: uuid!("b4ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -3078,7 +3072,7 @@ mod tests {
                     user_id: UserId::new("test"),
                     attributes: vec![Attribute {
                         name: "nickname".into(),
-                        value: Serialized::from("Bob the Builder"),
+                        value: "Bob the Builder".into(),
                     }],
                     ..Default::default()
                 },
@@ -3094,7 +3088,7 @@ mod tests {
                 uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 attributes: vec![Attribute {
                     name: "club_name".into(),
-                    value: Serialized::from("Breakfast Club"),
+                    value: "Breakfast Club".into(),
                 }],
             }])
         });

@@ -7,8 +7,8 @@ use lldap_domain::{
     },
     schema::Schema,
     types::{
-        AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, Serialized, User,
-        UserAndGroups, UserId, Uuid,
+        AttributeName, AttributeValue, Group, GroupDetails, GroupId, GroupName, LdapObjectClass,
+        User, UserAndGroups, UserId, Uuid,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -59,7 +59,7 @@ pub enum UserRequestFilter {
     UserId(UserId),
     UserIdSubString(SubStringFilter),
     Equality(UserColumn, String),
-    AttributeEquality(AttributeName, Serialized),
+    AttributeEquality(AttributeName, AttributeValue),
     SubString(UserColumn, SubStringFilter),
     // Check if a user belongs to a group identified by name.
     MemberOf(GroupName),
@@ -89,7 +89,7 @@ pub enum GroupRequestFilter {
     GroupId(GroupId),
     // Check if the group contains a user identified by uid.
     Member(UserId),
-    AttributeEquality(AttributeName, Serialized),
+    AttributeEquality(AttributeName, AttributeValue),
     CustomAttributePresent(AttributeName),
 }
 
