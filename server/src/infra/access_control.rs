@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use tracing::info;
 
 use crate::domain::{
-    error::Result,
     handler::{
         BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
         ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler,
@@ -23,6 +22,7 @@ use lldap_domain::{
         UserAndGroups, UserId,
     },
 };
+use lldap_domain_model::error::Result;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Permission {

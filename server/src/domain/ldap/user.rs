@@ -16,12 +16,12 @@ use crate::domain::{
             LdapInfo, UserFieldType,
         },
     },
-    model::UserColumn,
     schema::PublicSchema,
 };
 use lldap_domain::types::{
     AttributeName, AttributeType, GroupDetails, LdapObjectClass, User, UserAndGroups, UserId,
 };
+use lldap_domain_model::model::UserColumn;
 
 pub fn get_user_attribute(
     user: &User,

@@ -91,6 +91,9 @@ path = "../crates/domain"
 path = "../crates/domain"
 features = ["test"]
 
+[dependencies.lldap_domain_model]
+path = "../crates/domain-model"
+
 [dependencies.lldap_validation]
 path = "../crates/validation"
 

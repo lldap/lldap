@@ -1,4 +1,4 @@
-use crate::domain::error::DomainError;
+use crate::error::DomainError;
 use lldap_domain::{
     schema::AttributeList,
     types::{Attribute, AttributeName, AttributeType, AttributeValue, Cardinality, Serialized},
@@ -6,7 +6,7 @@ use lldap_domain::{
 
 // Value must be a serialized attribute value of the type denoted by typ,
 // and either a singleton or unbounded list, depending on is_list.
-pub(crate) fn deserialize_attribute_value(
+pub fn deserialize_attribute_value(
     value: &Serialized,
     typ: AttributeType,
     is_list: bool,
@@ -39,7 +39,7 @@ pub(crate) fn deserialize_attribute_value(
     }
 }
 
-pub(crate) fn deserialize_attribute(
+pub fn deserialize_attribute(
     name: AttributeName,
     value: &Serialized,
     schema: &AttributeList,

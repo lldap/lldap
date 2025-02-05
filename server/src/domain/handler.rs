@@ -1,4 +1,3 @@
-use crate::domain::{error::Result, model::UserColumn};
 use async_trait::async_trait;
 use lldap_domain::{
     requests::{
@@ -11,6 +10,7 @@ use lldap_domain::{
         User, UserAndGroups, UserId, Uuid,
     },
 };
+use lldap_domain_model::{error::Result, model::UserColumn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 

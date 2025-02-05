@@ -1,7 +1,5 @@
 use crate::domain::{
-    error::{DomainError, Result},
     handler::{ReadSchemaBackendHandler, SchemaBackendHandler},
-    model,
     sql_backend_handler::SqlBackendHandler,
 };
 use async_trait::async_trait;
@@ -9,6 +7,10 @@ use lldap_domain::{
     requests::CreateAttributeRequest,
     schema::{AttributeList, AttributeSchema, Schema},
     types::{AttributeName, LdapObjectClass},
+};
+use lldap_domain_model::{
+    error::{DomainError, Result},
+    model,
 };
 use sea_orm::{
     ActiveModelTrait, DatabaseTransaction, EntityTrait, QueryOrder, Set, TransactionTrait,

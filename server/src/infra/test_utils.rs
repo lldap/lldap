@@ -1,4 +1,4 @@
-use crate::domain::{error::Result, handler::*, opaque_handler::*};
+use crate::domain::{handler::*, opaque_handler::*};
 use lldap_domain::{
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
@@ -7,6 +7,7 @@ use lldap_domain::{
     schema::{AttributeList, AttributeSchema, Schema},
     types::*,
 };
+use lldap_domain_model::error::Result;
 
 use async_trait::async_trait;
 use std::collections::HashSet;

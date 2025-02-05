@@ -1,9 +1,9 @@
-use crate::domain::{
-    model::{self, JwtRefreshStorageColumn, JwtStorageColumn, PasswordResetTokensColumn},
-    sql_tables::DbConnection,
-};
+use crate::domain::sql_tables::DbConnection;
 use actix::prelude::{Actor, AsyncContext, Context};
 use cron::Schedule;
+use lldap_domain_model::model::{
+    self, JwtRefreshStorageColumn, JwtStorageColumn, PasswordResetTokensColumn,
+};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use std::{str::FromStr, time::Duration};
 use tracing::{error, info, instrument};

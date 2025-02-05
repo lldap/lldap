@@ -1,12 +1,12 @@
 use super::tcp_backend_handler::TcpBackendHandler;
-use crate::domain::{
-    error::*,
-    model::{self, JwtRefreshStorageColumn, JwtStorageColumn, PasswordResetTokensColumn},
-    sql_backend_handler::SqlBackendHandler,
-};
+use crate::domain::sql_backend_handler::SqlBackendHandler;
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use lldap_domain::types::UserId;
+use lldap_domain_model::{
+    error::*,
+    model::{self, JwtRefreshStorageColumn, JwtStorageColumn, PasswordResetTokensColumn},
+};
 use sea_orm::{
     sea_query::{Cond, Expr},
     ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QuerySelect,
