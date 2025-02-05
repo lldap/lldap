@@ -1,6 +1,6 @@
-use crate::domain::error::Result;
 use async_trait::async_trait;
 use lldap_domain::types::UserId;
+use lldap_domain_model::error::Result;
 
 pub use lldap_auth::{login, registration};
 

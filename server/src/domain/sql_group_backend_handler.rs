@@ -1,8 +1,6 @@
 use crate::{
     domain::{
-        error::{DomainError, Result},
         handler::{GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter},
-        model::{self, deserialize, GroupColumn, MembershipColumn},
         sql_backend_handler::SqlBackendHandler,
     },
     infra::access_control::UserReadableBackendHandler,
@@ -11,6 +9,10 @@ use async_trait::async_trait;
 use lldap_domain::{
     requests::{CreateGroupRequest, UpdateGroupRequest},
     types::{AttributeName, Group, GroupDetails, GroupId, Serialized, Uuid},
+};
+use lldap_domain_model::{
+    error::{DomainError, Result},
+    model::{self, deserialize, GroupColumn, MembershipColumn},
 };
 use sea_orm::{
     sea_query::{Alias, Cond, Expr, Func, IntoCondition, OnConflict, SimpleExpr},

@@ -2,6 +2,7 @@
 members = [
     "crates/auth",
     "crates/domain",
+    "crates/domain-model",
     "crates/validation",
     "server",
     "app",

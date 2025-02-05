@@ -5,7 +5,6 @@ use crate::{
         deserialize::deserialize_attribute_value,
         handler::{BackendHandler, ReadSchemaBackendHandler},
         ldap::utils::{map_user_field, UserFieldType},
-        model::UserColumn,
         schema::PublicSchema,
     },
     infra::{
@@ -19,6 +18,7 @@ use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use lldap_domain::types::{
     AttributeType, Cardinality, GroupDetails, GroupId, LdapObjectClass, UserId,
 };
+use lldap_domain_model::model::UserColumn;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument, Span};
 

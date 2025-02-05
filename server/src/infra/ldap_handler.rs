@@ -926,16 +926,18 @@ mod tests {
     use super::*;
     use crate::{
         domain::handler::*,
-        domain::model::UserColumn,
         infra::test_utils::{setup_default_schema, MockTestBackendHandler},
     };
     use chrono::TimeZone;
     use ldap3_proto::proto::{
         LdapDerefAliases, LdapSearchScope, LdapSubstringFilter, LdapWhoamiRequest,
     };
-    use lldap_domain::schema::{AttributeList, AttributeSchema, Schema};
-    use lldap_domain::types::*;
-    use lldap_domain::uuid;
+    use lldap_domain::{
+        schema::{AttributeList, AttributeSchema, Schema},
+        types::*,
+        uuid,
+    };
+    use lldap_domain_model::model::UserColumn;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
@@ -1854,7 +1856,7 @@ mod tests {
             ]))))
             .times(1)
             .return_once(|_| {
-                Err(crate::domain::error::DomainError::InternalError(
+                Err(lldap_domain_model::error::DomainError::InternalError(
                     "Error getting groups".to_string(),
                 ))
             });

@@ -7,7 +7,6 @@ use tracing::{debug, instrument, warn};
 use crate::domain::{
     handler::SubStringFilter,
     ldap::error::{LdapError, LdapResult},
-    model::UserColumn,
     schema::PublicSchema,
 };
 use lldap_domain::types::{
@@ -29,6 +28,7 @@ impl From<LdapSubstringFilter> for SubStringFilter {
         }
     }
 }
+use lldap_domain_model::model::UserColumn;
 
 fn make_dn_pair<I>(mut iter: I) -> LdapResult<(String, String)>
 where

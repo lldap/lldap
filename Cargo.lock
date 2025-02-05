@@ -2536,6 +2536,7 @@ dependencies = [
  "lettre",
  "lldap_auth",
  "lldap_domain",
+ "lldap_domain_model",
  "lldap_validation",
  "log",
  "mockall",
@@ -2641,6 +2642,25 @@ dependencies = [
  "serde",
  "serde_bytes",
  "strum",
+ "uuid 1.11.0",
+]
+
+[[package]]
+name = "lldap_domain_model"
+version = "0.1.0"
+dependencies = [
+ "base64 0.21.7",
+ "bincode",
+ "chrono",
+ "derive_more 1.0.0",
+ "lldap_auth",
+ "lldap_domain",
+ "orion",
+ "pretty_assertions",
+ "sea-orm",
+ "serde",
+ "serde_bytes",
+ "thiserror",
  "uuid 1.11.0",
 ]
 

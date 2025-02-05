@@ -1,6 +1,5 @@
 use crate::{
     domain::{
-        error::DomainError,
         handler::{BackendHandler, LoginHandler},
         opaque_handler::OpaqueHandler,
     },
@@ -19,6 +18,7 @@ use actix_service::map_config;
 use actix_web::{dev::AppConfig, guard, web, App, HttpResponse, Responder};
 use anyhow::{Context, Result};
 use hmac::Hmac;
+use lldap_domain_model::error::DomainError;
 use sha2::Sha512;
 use std::collections::HashSet;
 use std::path::PathBuf;

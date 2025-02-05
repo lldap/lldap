@@ -1,6 +1,6 @@
 pub mod prelude;
 
-pub(crate) mod deserialize;
+pub mod deserialize;
 pub mod groups;
 pub mod jwt_refresh_storage;
 pub mod jwt_storage;
