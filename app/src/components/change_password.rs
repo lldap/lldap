@@ -17,6 +17,8 @@ use yew_form::Form;
 use yew_form_derive::Model;
 use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 
+use regex::Regex;
+
 #[derive(PartialEq, Eq, Default)]
 enum OpaqueData {
     #[default]
@@ -39,14 +41,33 @@ pub struct FormModel {
         message = "Password should be longer than 8 characters"
     ))]
     old_password: String,
-    #[validate(length(min = 8, message = "Invalid password. Min length: 8"))]
+
+    #[validate(custom(
+        function = "validate_password_complexity",
+        message = "Password must contain at least one uppercase letter, one lowercase letter, one symbol, one number, and be eight characters or longer."
+    ))]
     password: String,
+
     #[validate(must_match(other = "password", message = "Passwords must match"))]
     confirm_password: String,
 }
 
 fn empty_or_long(value: &str) -> Result<(), validator::ValidationError> {
     if value.is_empty() || value.len() >= 8 {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new(""))
+    }
+}
+
+fn validate_password_complexity(value: &str) -> Result<(), validator::ValidationError> {
+    let has_uppercase = Regex::new(r"[A-Z]").unwrap().is_match(value);
+    let has_lowercase = Regex::new(r"[a-z]").unwrap().is_match(value);
+    let has_symbol = Regex::new(r"[^A-Za-z0-9]").unwrap().is_match(value);
+    let has_number = Regex::new(r"\d").unwrap().is_match(value);
+    let has_length = value.is_empty() || value.len() >= 8;
+
+    if has_uppercase && has_lowercase && has_symbol && has_number && has_length {
         Ok(())
     } else {
         Err(validator::ValidationError::new(""))
