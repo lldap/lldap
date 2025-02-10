@@ -14,11 +14,10 @@ use crate::{
     },
 };
 use anyhow::Context as AnyhowContext;
-use chrono::{NaiveDateTime, TimeZone};
+use chrono::TimeZone;
 use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use lldap_domain::types::{
-    AttributeName, AttributeType, GroupDetails, GroupId, JpegPhoto, LdapObjectClass, Serialized,
-    UserId,
+    AttributeType, Cardinality, GroupDetails, GroupId, LdapObjectClass, UserId,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument, Span};
@@ -30,6 +29,7 @@ type DomainUserAndGroups = lldap_domain::types::UserAndGroups;
 type DomainAttributeList = lldap_domain::schema::AttributeList;
 type DomainAttributeSchema = lldap_domain::schema::AttributeSchema;
 type DomainAttribute = lldap_domain::types::Attribute;
+type DomainAttributeValue = lldap_domain::types::AttributeValue;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
 /// A filter for requests, specifying a boolean expression based on field constraints. Only one of
@@ -297,7 +297,7 @@ impl<Handler: BackendHandler> User<Handler> {
         self.attributes
             .iter()
             .find(|a| a.attribute.name.as_str() == "first_name")
-            .map(|a| a.attribute.value.unwrap())
+            .map(|a| a.attribute.value.as_str().unwrap_or(""))
             .unwrap_or("")
     }
 
@@ -305,7 +305,7 @@ impl<Handler: BackendHandler> User<Handler> {
         self.attributes
             .iter()
             .find(|a| a.attribute.name.as_str() == "last_name")
-            .map(|a| a.attribute.value.unwrap())
+            .map(|a| a.attribute.value.as_str().unwrap_or(""))
             .unwrap_or("")
     }
 
@@ -313,7 +313,7 @@ impl<Handler: BackendHandler> User<Handler> {
         self.attributes
             .iter()
             .find(|a| a.attribute.name.as_str() == "avatar")
-            .map(|a| String::from(&a.attribute.value.unwrap::<JpegPhoto>()))
+            .map(|a| String::from(a.attribute.value.as_jpeg_photo().unwrap()))
     }
 
     fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
@@ -577,24 +577,9 @@ impl<Handler: BackendHandler> From<PublicSchema> for Schema<Handler> {
     }
 }
 
-#[derive(PartialEq, Clone, Eq, Debug, Serialize, Deserialize)]
-pub struct GraphQLAttributeValue {
-    pub name: AttributeName,
-    pub value: Serialized,
-}
-
-impl From<DomainAttribute> for GraphQLAttributeValue {
-    fn from(a: DomainAttribute) -> Self {
-        GraphQLAttributeValue {
-            name: a.name,
-            value: a.value.into(),
-        }
-    }
-}
-
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct AttributeValue<Handler: BackendHandler> {
-    attribute: GraphQLAttributeValue,
+    attribute: DomainAttribute,
     schema: AttributeSchema<Handler>,
     _phantom: std::marker::PhantomData<Box<Handler>>,
 }
@@ -606,7 +591,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
     }
 
     fn value(&self) -> FieldResult<Vec<String>> {
-        Ok(serialize_attribute(&self.attribute, &self.schema.schema))
+        Ok(serialize_attribute_to_graphql(&self.attribute.value))
     }
 
     fn schema(&self) -> &AttributeSchema<Handler> {
@@ -615,9 +600,9 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
 }
 
 impl<Handler: BackendHandler> AttributeValue<Handler> {
-    fn from_value(value: GraphQLAttributeValue, schema: DomainAttributeSchema) -> Self {
+    fn from_value(attr: DomainAttribute, schema: DomainAttributeSchema) -> Self {
         Self {
-            attribute: value,
+            attribute: attr,
             schema: AttributeSchema::<Handler> {
                 schema,
                 _phantom: std::marker::PhantomData,
@@ -637,51 +622,28 @@ impl<Handler: BackendHandler> Clone for AttributeValue<Handler> {
     }
 }
 
-pub fn serialize_attribute(
-    attribute: &GraphQLAttributeValue,
-    attribute_schema: &DomainAttributeSchema,
-) -> Vec<String> {
-    let convert_date = |date| chrono::Utc.from_utc_datetime(&date).to_rfc3339();
-    match (attribute_schema.attribute_type, attribute_schema.is_list) {
-        (AttributeType::String, false) => vec![attribute.value.unwrap::<String>()],
-        (AttributeType::Integer, false) => {
-            // LDAP integers are encoded as strings.
-            vec![attribute.value.unwrap::<i64>().to_string()]
+pub fn serialize_attribute_to_graphql(attribute_value: &DomainAttributeValue) -> Vec<String> {
+    let convert_date = |&date| chrono::Utc.from_utc_datetime(&date).to_rfc3339();
+    match attribute_value {
+        DomainAttributeValue::String(Cardinality::Singleton(s)) => vec![s.clone()],
+        DomainAttributeValue::String(Cardinality::Unbounded(l)) => l.clone(),
+        DomainAttributeValue::Integer(Cardinality::Singleton(i)) => vec![i.to_string()],
+        DomainAttributeValue::Integer(Cardinality::Unbounded(l)) => {
+            l.iter().map(|i| i.to_string()).collect()
         }
-        (AttributeType::JpegPhoto, false) => {
-            vec![String::from(&attribute.value.unwrap::<JpegPhoto>())]
+        DomainAttributeValue::DateTime(Cardinality::Singleton(dt)) => vec![convert_date(dt)],
+        DomainAttributeValue::DateTime(Cardinality::Unbounded(l)) => {
+            l.iter().map(convert_date).collect()
         }
-        (AttributeType::DateTime, false) => {
-            vec![convert_date(attribute.value.unwrap::<NaiveDateTime>())]
+        DomainAttributeValue::JpegPhoto(Cardinality::Singleton(p)) => vec![String::from(p)],
+        DomainAttributeValue::JpegPhoto(Cardinality::Unbounded(l)) => {
+            l.iter().map(String::from).collect()
         }
-        (AttributeType::String, true) => attribute
-            .value
-            .unwrap::<Vec<String>>()
-            .into_iter()
-            .collect(),
-        (AttributeType::Integer, true) => attribute
-            .value
-            .unwrap::<Vec<i64>>()
-            .into_iter()
-            .map(|i| i.to_string())
-            .collect(),
-        (AttributeType::JpegPhoto, true) => attribute
-            .value
-            .unwrap::<Vec<JpegPhoto>>()
-            .iter()
-            .map(String::from)
-            .collect(),
-        (AttributeType::DateTime, true) => attribute
-            .value
-            .unwrap::<Vec<NaiveDateTime>>()
-            .into_iter()
-            .map(convert_date)
-            .collect(),
     }
 }
 
 impl<Handler: BackendHandler> AttributeValue<Handler> {
-    fn from_schema(a: GraphQLAttributeValue, schema: &DomainAttributeList) -> Option<Self> {
+    fn from_schema(a: DomainAttribute, schema: &DomainAttributeList) -> Option<Self> {
         schema
             .get_attribute_schema(&a.name)
             .map(|s| AttributeValue::<Handler>::from_value(a, s.clone()))
@@ -698,35 +660,32 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
             .attributes
             .iter()
             .filter(|a| a.is_hardcoded)
-            .flat_map(|attribute| {
-                let value = match attribute.name.as_str() {
-                    "user_id" => Some(Serialized::from(&user.user_id)),
-                    "creation_date" => Some(Serialized::from(&user.creation_date)),
-                    "mail" => Some(Serialized::from(&user.email)),
-                    "uuid" => Some(Serialized::from(&user.uuid)),
-                    "display_name" => user.display_name.as_ref().map(Serialized::from),
+            .flat_map(|attribute_schema| {
+                let value: Option<DomainAttributeValue> = match attribute_schema.name.as_str() {
+                    "user_id" => Some(user.user_id.as_str().into()),
+                    "creation_date" => Some(user.creation_date.into()),
+                    "mail" => Some(user.email.as_str().into()),
+                    "uuid" => Some(user.uuid.as_str().into()),
+                    "display_name" => user.display_name.as_ref().map(|d| d.into()),
                     "avatar" | "first_name" | "last_name" => None,
-                    _ => panic!("Unexpected hardcoded attribute: {}", attribute.name),
+                    _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
                 };
-                value.map(|v| (attribute, v))
+                value.map(|v| (attribute_schema, v))
             })
-            .map(|(attribute, value)| {
+            .map(|(attribute_schema, value)| {
                 AttributeValue::<Handler>::from_value(
-                    GraphQLAttributeValue {
-                        name: attribute.name.clone(),
+                    DomainAttribute {
+                        name: attribute_schema.name.clone(),
                         value,
                     },
-                    attribute.clone(),
+                    attribute_schema.clone(),
                 )
             })
             .collect::<Vec<_>>();
         user_attributes
             .into_iter()
             .flat_map(|a| {
-                AttributeValue::<Handler>::from_schema(
-                    a.into(),
-                    &schema.get_schema().user_attributes,
-                )
+                AttributeValue::<Handler>::from_schema(a, &schema.get_schema().user_attributes)
             })
             .for_each(|value| all_attributes.push(value));
         all_attributes
@@ -743,35 +702,32 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
             .attributes
             .iter()
             .filter(|a| a.is_hardcoded)
-            .map(|attribute| {
+            .map(|attribute_schema| {
                 (
-                    attribute,
-                    match attribute.name.as_str() {
-                        "group_id" => Serialized::from(&(group.id.0 as i64)),
-                        "creation_date" => Serialized::from(&group.creation_date),
-                        "uuid" => Serialized::from(&group.uuid),
-                        "display_name" => Serialized::from(&group.display_name),
-                        _ => panic!("Unexpected hardcoded attribute: {}", attribute.name),
+                    attribute_schema,
+                    match attribute_schema.name.as_str() {
+                        "group_id" => (group.id.0 as i64).into(),
+                        "creation_date" => group.creation_date.into(),
+                        "uuid" => group.uuid.as_str().into(),
+                        "display_name" => group.display_name.as_str().into(),
+                        _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
                     },
                 )
             })
-            .map(|(attribute, value)| {
+            .map(|(attribute_schema, value)| {
                 AttributeValue::<Handler>::from_value(
-                    GraphQLAttributeValue {
-                        name: attribute.name.clone(),
+                    DomainAttribute {
+                        name: attribute_schema.name.clone(),
                         value,
                     },
-                    attribute.clone(),
+                    attribute_schema.clone(),
                 )
             })
             .collect::<Vec<_>>();
         group_attributes
             .into_iter()
             .flat_map(|a| {
-                AttributeValue::<Handler>::from_schema(
-                    a.into(),
-                    &schema.get_schema().group_attributes,
-                )
+                AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
             })
             .for_each(|value| all_attributes.push(value));
         all_attributes
@@ -788,35 +744,32 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
             .attributes
             .iter()
             .filter(|a| a.is_hardcoded)
-            .map(|attribute| {
+            .map(|attribute_schema| {
                 (
-                    attribute,
-                    match attribute.name.as_str() {
-                        "group_id" => Serialized::from(&(group.group_id.0 as i64)),
-                        "creation_date" => Serialized::from(&group.creation_date),
-                        "uuid" => Serialized::from(&group.uuid),
-                        "display_name" => Serialized::from(&group.display_name),
-                        _ => panic!("Unexpected hardcoded attribute: {}", attribute.name),
+                    attribute_schema,
+                    match attribute_schema.name.as_str() {
+                        "group_id" => (group.group_id.0 as i64).into(),
+                        "creation_date" => group.creation_date.into(),
+                        "uuid" => group.uuid.as_str().into(),
+                        "display_name" => group.display_name.as_str().into(),
+                        _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
                     },
                 )
             })
-            .map(|(attribute, value)| {
+            .map(|(attribute_schema, value)| {
                 AttributeValue::<Handler>::from_value(
-                    GraphQLAttributeValue {
-                        name: attribute.name.clone(),
+                    DomainAttribute {
+                        name: attribute_schema.name.clone(),
                         value,
                     },
-                    attribute.clone(),
+                    attribute_schema.clone(),
                 )
             })
             .collect::<Vec<_>>();
         group_attributes
             .into_iter()
             .flat_map(|a| {
-                AttributeValue::<Handler>::from_schema(
-                    a.into(),
-                    &schema.get_schema().group_attributes,
-                )
+                AttributeValue::<Handler>::from_schema(a, &schema.get_schema().group_attributes)
             })
             .for_each(|value| all_attributes.push(value));
         all_attributes

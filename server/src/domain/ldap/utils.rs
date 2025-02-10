@@ -312,8 +312,8 @@ pub fn get_custom_attribute(
             }
             AttributeValue::Integer(Cardinality::Unbounded(l)) => l
                 .iter()
-                .map(|i| i.to_string())
-                .map(String::into_bytes)
+                // LDAP integers are encoded as strings.
+                .map(|i| i.to_string().into_bytes())
                 .collect(),
             AttributeValue::JpegPhoto(Cardinality::Singleton(p)) => {
                 vec![p.clone().into_bytes()]

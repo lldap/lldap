@@ -422,6 +422,8 @@ impl IntoActiveValue<Serialized> for JpegPhoto {
     }
 }
 
+// Cardinality enum for containing either a singleton, or a Vec of a specific type
+// Used by the AttributeValue enum with types that can potentially be a list.
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum Cardinality<T: Clone> {
     Singleton(T),
@@ -429,16 +431,10 @@ pub enum Cardinality<T: Clone> {
 }
 
 impl<T: Clone> Cardinality<T> {
-    pub fn as_vec(self) -> Vec<T> {
+    pub fn into_vec(self) -> Vec<T> {
         match self {
             Self::Singleton(v) => vec![v],
             Self::Unbounded(l) => l,
-        }
-    }
-    pub fn head_option(self) -> Option<T> {
-        match self {
-            Self::Singleton(v) => Some(v),
-            Self::Unbounded(l) => l.first().cloned(),
         }
     }
 }
@@ -460,42 +456,26 @@ impl AttributeValue {
             Self::DateTime(_) => AttributeType::DateTime,
         }
     }
-
-    pub fn as_string_vec(&self) -> Vec<String> {
-        self.clone().into()
+    pub fn as_str(&self) -> Option<&str> {
+        if let AttributeValue::String(Cardinality::Singleton(s)) = self {
+            Some(s.as_str())
+        } else {
+            None
+        }
     }
-    pub fn as_string(&self) -> Option<&String> {
+    pub fn into_string(self) -> Option<String> {
         if let AttributeValue::String(Cardinality::Singleton(s)) = self {
             Some(s)
         } else {
             None
         }
     }
-    pub fn as_str(&self) -> Option<&str> {
-        self.as_string().map(|s| s.as_str())
-    }
-    pub fn as_i64_vec(&self) -> Vec<i64> {
-        self.clone().into()
-    }
-    pub fn as_i64(&self) -> Option<&i64> {
-        if let AttributeValue::Integer(Cardinality::Singleton(i)) = self {
-            Some(i)
-        } else {
-            None
-        }
-    }
-    pub fn as_jpegphoto_vec(&self) -> Vec<JpegPhoto> {
-        self.clone().into()
-    }
-    pub fn as_jpegphoto(&self) -> Option<&JpegPhoto> {
+    pub fn as_jpeg_photo(&self) -> Option<&JpegPhoto> {
         if let AttributeValue::JpegPhoto(Cardinality::Singleton(p)) = self {
             Some(p)
         } else {
             None
         }
-    }
-    pub fn datetime_vec(&self) -> Vec<NaiveDateTime> {
-        self.clone().into()
     }
 }
 
@@ -524,22 +504,6 @@ impl From<Vec<String>> for AttributeValue {
         AttributeValue::String(Cardinality::Unbounded(l))
     }
 }
-impl From<AttributeValue> for Option<String> {
-    fn from(val: AttributeValue) -> Self {
-        match val {
-            AttributeValue::String(a) => a.head_option(),
-            _ => None,
-        }
-    }
-}
-impl From<AttributeValue> for Vec<String> {
-    fn from(val: AttributeValue) -> Self {
-        match val {
-            AttributeValue::String(a) => a.as_vec(),
-            _ => vec![],
-        }
-    }
-}
 
 impl From<i64> for AttributeValue {
     fn from(i: i64) -> Self {
@@ -556,22 +520,6 @@ impl From<&[i64]> for AttributeValue {
         AttributeValue::Integer(Cardinality::Unbounded(l.to_vec()))
     }
 }
-impl From<AttributeValue> for Option<i64> {
-    fn from(val: AttributeValue) -> Self {
-        match val {
-            AttributeValue::Integer(a) => a.head_option(),
-            _ => None,
-        }
-    }
-}
-impl From<AttributeValue> for Vec<i64> {
-    fn from(val: AttributeValue) -> Self {
-        match val {
-            AttributeValue::Integer(a) => a.as_vec(),
-            _ => vec![],
-        }
-    }
-}
 
 impl From<JpegPhoto> for AttributeValue {
     fn from(j: JpegPhoto) -> Self {
@@ -583,22 +531,6 @@ impl From<Vec<JpegPhoto>> for AttributeValue {
         AttributeValue::JpegPhoto(Cardinality::Unbounded(l))
     }
 }
-impl From<AttributeValue> for Option<JpegPhoto> {
-    fn from(val: AttributeValue) -> Self {
-        match val {
-            AttributeValue::JpegPhoto(a) => a.head_option(),
-            _ => None,
-        }
-    }
-}
-impl From<AttributeValue> for Vec<JpegPhoto> {
-    fn from(val: AttributeValue) -> Self {
-        match val {
-            AttributeValue::JpegPhoto(a) => a.as_vec(),
-            _ => vec![],
-        }
-    }
-}
 
 impl From<NaiveDateTime> for AttributeValue {
     fn from(dt: NaiveDateTime) -> Self {
@@ -608,22 +540,6 @@ impl From<NaiveDateTime> for AttributeValue {
 impl From<Vec<NaiveDateTime>> for AttributeValue {
     fn from(l: Vec<NaiveDateTime>) -> Self {
         AttributeValue::DateTime(Cardinality::Unbounded(l))
-    }
-}
-impl From<AttributeValue> for Option<NaiveDateTime> {
-    fn from(val: AttributeValue) -> Self {
-        match val {
-            AttributeValue::DateTime(a) => a.head_option(),
-            _ => None,
-        }
-    }
-}
-impl From<AttributeValue> for Vec<NaiveDateTime> {
-    fn from(val: AttributeValue) -> Vec<NaiveDateTime> {
-        match val {
-            AttributeValue::DateTime(a) => a.as_vec(),
-            _ => vec![],
-        }
     }
 }
 
