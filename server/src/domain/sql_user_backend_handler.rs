@@ -1,16 +1,15 @@
 use crate::domain::{
     error::{DomainError, Result},
-    handler::{UserBackendHandler, UserListerBackendHandler, UserRequestFilter},
-    model::{self, GroupColumn, UserColumn},
+    handler::{
+        ReadSchemaBackendHandler, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
+    },
+    model::{self, deserialize, GroupColumn, UserColumn},
     sql_backend_handler::SqlBackendHandler,
 };
 use async_trait::async_trait;
 use lldap_domain::{
     requests::{CreateUserRequest, UpdateUserRequest},
-    types::{
-        Attribute, AttributeName, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId,
-        Uuid,
-    },
+    types::{AttributeName, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId, Uuid},
 };
 use sea_orm::{
     sea_query::{
@@ -83,7 +82,7 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
                 ColumnTrait::eq(&column, value).into_condition()
             }
         }
-        AttributeEquality(column, value) => attribute_condition(column, Some(value)),
+        AttributeEquality(column, value) => attribute_condition(column, Some(value.into())),
         MemberOf(group) => user_id_subcondition(
             Expr::col((group_table, GroupColumn::LowercaseDisplayName))
                 .eq(group.as_str().to_lowercase())
@@ -161,12 +160,20 @@ impl UserListerBackendHandler for SqlBackendHandler {
             .all(&self.sql_pool)
             .await?;
         let mut attributes_iter = attributes.into_iter().peekable();
+        // TODO: should be wrapped in a transaction
         use itertools::Itertools; // For take_while_ref
+        let schema = self.get_schema().await?;
         for user in users.iter_mut() {
             user.user.attributes = attributes_iter
                 .take_while_ref(|u| u.user_id == user.user.user_id)
-                .map(Attribute::from)
-                .collect();
+                .map(|a| {
+                    deserialize::deserialize_attribute(
+                        a.attribute_name,
+                        &a.value,
+                        &schema.user_attributes,
+                    )
+                })
+                .collect::<Result<Vec<_>>>()?;
         }
         Ok(users)
     }
@@ -208,7 +215,10 @@ impl SqlBackendHandler {
                 .get_attribute_type(&attribute.name)
                 .is_some()
             {
-                process_serialized(ActiveValue::Set(attribute.value), attribute.name.clone());
+                process_serialized(
+                    ActiveValue::Set(attribute.value.into()),
+                    attribute.name.clone(),
+                );
             } else {
                 return Err(DomainError::InternalError(format!(
                     "User attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
@@ -270,7 +280,17 @@ impl UserBackendHandler for SqlBackendHandler {
             .order_by_asc(model::UserAttributesColumn::AttributeName)
             .all(&self.sql_pool)
             .await?;
-        user.attributes = attributes.into_iter().map(Attribute::from).collect();
+        let schema = self.get_schema().await?;
+        user.attributes = attributes
+            .into_iter()
+            .map(|a| {
+                deserialize::deserialize_attribute(
+                    a.attribute_name,
+                    &a.value,
+                    &schema.user_attributes,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
         Ok(user)
     }
 
@@ -317,7 +337,7 @@ impl UserBackendHandler for SqlBackendHandler {
                             new_user_attributes.push(model::user_attributes::ActiveModel {
                                 user_id: Set(request.user_id.clone()),
                                 attribute_name: Set(attribute.name),
-                                value: Set(attribute.value),
+                                value: Set(attribute.value.into()),
                             });
                         } else {
                             return Err(DomainError::InternalError(format!(
@@ -397,7 +417,7 @@ mod tests {
     use crate::domain::{
         handler::SubStringFilter, model::UserColumn, sql_backend_handler::tests::*,
     };
-    use lldap_domain::types::JpegPhoto;
+    use lldap_domain::types::{Attribute, JpegPhoto};
     use pretty_assertions::{assert_eq, assert_ne};
 
     #[tokio::test]
@@ -439,7 +459,7 @@ mod tests {
             &fixture.handler,
             Some(UserRequestFilter::AttributeEquality(
                 AttributeName::from("first_name"),
-                Serialized::from("first bob"),
+                "first bob".to_string().into(),
             )),
         )
         .await;
@@ -814,15 +834,15 @@ mod tests {
                 insert_attributes: vec![
                     Attribute {
                         name: "first_name".into(),
-                        value: Serialized::from("first_name"),
+                        value: "first_name".to_string().into(),
                     },
                     Attribute {
                         name: "last_name".into(),
-                        value: Serialized::from("last_name"),
+                        value: "last_name".to_string().into(),
                     },
                     Attribute {
                         name: "avatar".into(),
-                        value: Serialized::from(&JpegPhoto::for_tests()),
+                        value: JpegPhoto::for_tests().into(),
                     },
                 ],
             })
@@ -841,15 +861,15 @@ mod tests {
             vec![
                 Attribute {
                     name: "avatar".into(),
-                    value: Serialized::from(&JpegPhoto::for_tests())
+                    value: JpegPhoto::for_tests().into()
                 },
                 Attribute {
                     name: "first_name".into(),
-                    value: Serialized::from("first_name")
+                    value: "first_name".to_string().into()
                 },
                 Attribute {
                     name: "last_name".into(),
-                    value: Serialized::from("last_name")
+                    value: "last_name".to_string().into()
                 }
             ]
         );
@@ -866,7 +886,7 @@ mod tests {
                 delete_attributes: vec!["last_name".into()],
                 insert_attributes: vec![Attribute {
                     name: "avatar".into(),
-                    value: Serialized::from(&JpegPhoto::for_tests()),
+                    value: JpegPhoto::for_tests().into(),
                 }],
                 ..Default::default()
             })
@@ -884,11 +904,11 @@ mod tests {
             vec![
                 Attribute {
                     name: "avatar".into(),
-                    value: Serialized::from(&JpegPhoto::for_tests())
+                    value: JpegPhoto::for_tests().into()
                 },
                 Attribute {
                     name: "first_name".into(),
-                    value: Serialized::from("first bob")
+                    value: "first bob".to_string().into()
                 }
             ]
         );
@@ -904,7 +924,7 @@ mod tests {
                 user_id: UserId::new("bob"),
                 insert_attributes: vec![Attribute {
                     name: "first_name".into(),
-                    value: Serialized::from("new first"),
+                    value: "new first".to_string().into(),
                 }],
                 ..Default::default()
             })
@@ -921,11 +941,11 @@ mod tests {
             vec![
                 Attribute {
                     name: "first_name".into(),
-                    value: Serialized::from("new first")
+                    value: "new first".to_string().into()
                 },
                 Attribute {
                     name: "last_name".into(),
-                    value: Serialized::from("last bob")
+                    value: "last bob".to_string().into()
                 }
             ]
         );
@@ -954,7 +974,7 @@ mod tests {
             user.attributes,
             vec![Attribute {
                 name: "last_name".into(),
-                value: Serialized::from("last bob")
+                value: "last bob".to_string().into()
             }]
         );
     }
@@ -970,7 +990,7 @@ mod tests {
                 delete_attributes: vec!["first_name".into()],
                 insert_attributes: vec![Attribute {
                     name: "first_name".into(),
-                    value: Serialized::from("new first"),
+                    value: "new first".to_string().into(),
                 }],
                 ..Default::default()
             })
@@ -987,11 +1007,11 @@ mod tests {
             vec![
                 Attribute {
                     name: "first_name".into(),
-                    value: Serialized::from("new first")
+                    value: "new first".to_string().into()
                 },
                 Attribute {
                     name: "last_name".into(),
-                    value: Serialized::from("last bob")
+                    value: "last bob".to_string().into()
                 },
             ]
         );
@@ -1007,7 +1027,7 @@ mod tests {
                 user_id: UserId::new("bob"),
                 insert_attributes: vec![Attribute {
                     name: "avatar".into(),
-                    value: Serialized::from(&JpegPhoto::for_tests()),
+                    value: JpegPhoto::for_tests().into(),
                 }],
                 ..Default::default()
             })
@@ -1021,7 +1041,7 @@ mod tests {
             .unwrap();
         let avatar = Attribute {
             name: "avatar".into(),
-            value: Serialized::from(&JpegPhoto::for_tests()),
+            value: JpegPhoto::for_tests().into(),
         };
         assert!(user.attributes.contains(&avatar));
         fixture
@@ -1030,7 +1050,7 @@ mod tests {
                 user_id: UserId::new("bob"),
                 insert_attributes: vec![Attribute {
                     name: "avatar".into(),
-                    value: Serialized::from(&JpegPhoto::null()),
+                    value: JpegPhoto::null().into(),
                 }],
                 ..Default::default()
             })
@@ -1058,15 +1078,15 @@ mod tests {
                 attributes: vec![
                     Attribute {
                         name: "first_name".into(),
-                        value: Serialized::from("First Name"),
+                        value: "First Name".to_string().into(),
                     },
                     Attribute {
                         name: "last_name".into(),
-                        value: Serialized::from("last_name"),
+                        value: "last_name".to_string().into(),
                     },
                     Attribute {
                         name: "avatar".into(),
-                        value: Serialized::from(&JpegPhoto::for_tests()),
+                        value: JpegPhoto::for_tests().into(),
                     },
                 ],
             })
@@ -1085,15 +1105,15 @@ mod tests {
             vec![
                 Attribute {
                     name: "avatar".into(),
-                    value: Serialized::from(&JpegPhoto::for_tests())
+                    value: JpegPhoto::for_tests().into()
                 },
                 Attribute {
                     name: "first_name".into(),
-                    value: Serialized::from("First Name")
+                    value: "First Name".to_string().into()
                 },
                 Attribute {
                     name: "last_name".into(),
-                    value: Serialized::from("last_name")
+                    value: "last_name".to_string().into()
                 }
             ]
         );

@@ -1,5 +1,5 @@
 use lldap_domain::{
-    schema::{AttributeList, AttributeSchema, Schema},
+    schema::{AttributeSchema, Schema},
     types::AttributeType,
 };
 use serde::{Deserialize, Serialize};
@@ -10,26 +10,6 @@ pub struct PublicSchema(Schema);
 impl PublicSchema {
     pub fn get_schema(&self) -> &Schema {
         &self.0
-    }
-}
-
-pub trait SchemaAttributeExtractor: std::marker::Send {
-    fn get_attributes(schema: &PublicSchema) -> &AttributeList;
-}
-
-pub struct SchemaUserAttributeExtractor;
-
-impl SchemaAttributeExtractor for SchemaUserAttributeExtractor {
-    fn get_attributes(schema: &PublicSchema) -> &AttributeList {
-        &schema.get_schema().user_attributes
-    }
-}
-
-pub struct SchemaGroupAttributeExtractor;
-
-impl SchemaAttributeExtractor for SchemaGroupAttributeExtractor {
-    fn get_attributes(schema: &PublicSchema) -> &AttributeList {
-        &schema.get_schema().group_attributes
     }
 }
 

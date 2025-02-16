@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use chrono::{NaiveDateTime, TimeZone};
+use chrono::TimeZone;
 use ldap3_proto::{proto::LdapSubstringFilter, LdapResultCode};
 use tracing::{debug, instrument, warn};
 
@@ -8,9 +8,11 @@ use crate::domain::{
     handler::SubStringFilter,
     ldap::error::{LdapError, LdapResult},
     model::UserColumn,
-    schema::{PublicSchema, SchemaAttributeExtractor},
+    schema::PublicSchema,
 };
-use lldap_domain::types::{Attribute, AttributeName, AttributeType, GroupName, JpegPhoto, UserId};
+use lldap_domain::types::{
+    Attribute, AttributeName, AttributeType, AttributeValue, Cardinality, GroupName, UserId,
+};
 
 impl From<LdapSubstringFilter> for SubStringFilter {
     fn from(
@@ -284,62 +286,44 @@ pub struct LdapInfo {
     pub ignored_group_attributes: Vec<AttributeName>,
 }
 
-pub fn get_custom_attribute<Extractor: SchemaAttributeExtractor>(
+pub fn get_custom_attribute(
     attributes: &[Attribute],
     attribute_name: &AttributeName,
-    schema: &PublicSchema,
 ) -> Option<Vec<Vec<u8>>> {
     let convert_date = |date| {
         chrono::Utc
-            .from_utc_datetime(&date)
+            .from_utc_datetime(date)
             .to_rfc3339()
             .into_bytes()
     };
-    Extractor::get_attributes(schema)
-        .get_attribute_type(attribute_name)
-        .and_then(|attribute_type| {
-            attributes
+    attributes
+        .iter()
+        .find(|a| &a.name == attribute_name)
+        .map(|attribute| match &attribute.value {
+            AttributeValue::String(Cardinality::Singleton(s)) => {
+                vec![s.clone().into_bytes()]
+            }
+            AttributeValue::String(Cardinality::Unbounded(l)) => {
+                l.iter().map(|s| s.clone().into_bytes()).collect()
+            }
+            AttributeValue::Integer(Cardinality::Singleton(i)) => {
+                // LDAP integers are encoded as strings.
+                vec![i.to_string().into_bytes()]
+            }
+            AttributeValue::Integer(Cardinality::Unbounded(l)) => l
                 .iter()
-                .find(|a| &a.name == attribute_name)
-                .map(|attribute| match attribute_type {
-                    (AttributeType::String, false) => {
-                        vec![attribute.value.unwrap::<String>().into_bytes()]
-                    }
-                    (AttributeType::Integer, false) => {
-                        // LDAP integers are encoded as strings.
-                        vec![attribute.value.unwrap::<i64>().to_string().into_bytes()]
-                    }
-                    (AttributeType::JpegPhoto, false) => {
-                        vec![attribute.value.unwrap::<JpegPhoto>().into_bytes()]
-                    }
-                    (AttributeType::DateTime, false) => {
-                        vec![convert_date(attribute.value.unwrap::<NaiveDateTime>())]
-                    }
-                    (AttributeType::String, true) => attribute
-                        .value
-                        .unwrap::<Vec<String>>()
-                        .into_iter()
-                        .map(String::into_bytes)
-                        .collect(),
-                    (AttributeType::Integer, true) => attribute
-                        .value
-                        .unwrap::<Vec<i64>>()
-                        .into_iter()
-                        .map(|i| i.to_string())
-                        .map(String::into_bytes)
-                        .collect(),
-                    (AttributeType::JpegPhoto, true) => attribute
-                        .value
-                        .unwrap::<Vec<JpegPhoto>>()
-                        .into_iter()
-                        .map(JpegPhoto::into_bytes)
-                        .collect(),
-                    (AttributeType::DateTime, true) => attribute
-                        .value
-                        .unwrap::<Vec<NaiveDateTime>>()
-                        .into_iter()
-                        .map(convert_date)
-                        .collect(),
-                })
+                // LDAP integers are encoded as strings.
+                .map(|i| i.to_string().into_bytes())
+                .collect(),
+            AttributeValue::JpegPhoto(Cardinality::Singleton(p)) => {
+                vec![p.clone().into_bytes()]
+            }
+            AttributeValue::JpegPhoto(Cardinality::Unbounded(l)) => {
+                l.iter().map(|p| p.clone().into_bytes()).collect()
+            }
+            AttributeValue::DateTime(Cardinality::Singleton(dt)) => vec![convert_date(dt)],
+            AttributeValue::DateTime(Cardinality::Unbounded(l)) => {
+                l.iter().map(convert_date).collect()
+            }
         })
 }

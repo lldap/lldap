@@ -130,6 +130,21 @@ impl Serialized {
     }
 }
 
+impl From<AttributeValue> for Serialized {
+    fn from(val: AttributeValue) -> Serialized {
+        match &val {
+            AttributeValue::String(Cardinality::Singleton(s)) => Serialized::from(s),
+            AttributeValue::String(Cardinality::Unbounded(l)) => Serialized::from(l),
+            AttributeValue::Integer(Cardinality::Singleton(i)) => Serialized::from(i),
+            AttributeValue::Integer(Cardinality::Unbounded(l)) => Serialized::from(l),
+            AttributeValue::JpegPhoto(Cardinality::Singleton(p)) => Serialized::from(p),
+            AttributeValue::JpegPhoto(Cardinality::Unbounded(l)) => Serialized::from(l),
+            AttributeValue::DateTime(Cardinality::Singleton(dt)) => Serialized::from(dt),
+            AttributeValue::DateTime(Cardinality::Unbounded(l)) => Serialized::from(l),
+        }
+    }
+}
+
 fn compare_str_case_insensitive(s1: &str, s2: &str) -> Ordering {
     let mut it_1 = s1.chars().flat_map(|c| c.to_lowercase());
     let mut it_2 = s2.chars().flat_map(|c| c.to_lowercase());
@@ -292,7 +307,7 @@ impl AsRef<GroupName> for GroupName {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Serialize, Deserialize, DeriveValueType)]
+#[derive(PartialEq, Eq, Clone, Serialize, Deserialize, DeriveValueType, Hash)]
 #[sea_orm(column_type = "Binary(BlobSize::Long)", array_type = "Bytes")]
 pub struct JpegPhoto(#[serde(with = "serde_bytes")] Vec<u8>);
 
@@ -407,10 +422,111 @@ impl IntoActiveValue<Serialized> for JpegPhoto {
     }
 }
 
+// Represents values that can be either a singleton or a list of a specific type
+// Used by AttributeValue to model attributes with types that might be a list.
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
+pub enum Cardinality<T: Clone> {
+    Singleton(T),
+    Unbounded(Vec<T>),
+}
+
+impl<T: Clone> Cardinality<T> {
+    pub fn into_vec(self) -> Vec<T> {
+        match self {
+            Self::Singleton(v) => vec![v],
+            Self::Unbounded(l) => l,
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
+pub enum AttributeValue {
+    String(Cardinality<String>),
+    Integer(Cardinality<i64>),
+    JpegPhoto(Cardinality<JpegPhoto>),
+    DateTime(Cardinality<NaiveDateTime>),
+}
+
+impl AttributeValue {
+    pub fn get_attribute_type(&self) -> AttributeType {
+        match self {
+            Self::String(_) => AttributeType::String,
+            Self::Integer(_) => AttributeType::Integer,
+            Self::JpegPhoto(_) => AttributeType::JpegPhoto,
+            Self::DateTime(_) => AttributeType::DateTime,
+        }
+    }
+    pub fn as_str(&self) -> Option<&str> {
+        if let AttributeValue::String(Cardinality::Singleton(s)) = self {
+            Some(s.as_str())
+        } else {
+            None
+        }
+    }
+    pub fn into_string(self) -> Option<String> {
+        if let AttributeValue::String(Cardinality::Singleton(s)) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+    pub fn as_jpeg_photo(&self) -> Option<&JpegPhoto> {
+        if let AttributeValue::JpegPhoto(Cardinality::Singleton(p)) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+}
+
+impl From<String> for AttributeValue {
+    fn from(s: String) -> Self {
+        AttributeValue::String(Cardinality::Singleton(s))
+    }
+}
+impl From<Vec<String>> for AttributeValue {
+    fn from(l: Vec<String>) -> Self {
+        AttributeValue::String(Cardinality::Unbounded(l))
+    }
+}
+
+impl From<i64> for AttributeValue {
+    fn from(i: i64) -> Self {
+        AttributeValue::Integer(Cardinality::Singleton(i))
+    }
+}
+impl From<Vec<i64>> for AttributeValue {
+    fn from(l: Vec<i64>) -> Self {
+        AttributeValue::Integer(Cardinality::Unbounded(l))
+    }
+}
+
+impl From<JpegPhoto> for AttributeValue {
+    fn from(j: JpegPhoto) -> Self {
+        AttributeValue::JpegPhoto(Cardinality::Singleton(j))
+    }
+}
+impl From<Vec<JpegPhoto>> for AttributeValue {
+    fn from(l: Vec<JpegPhoto>) -> Self {
+        AttributeValue::JpegPhoto(Cardinality::Unbounded(l))
+    }
+}
+
+impl From<NaiveDateTime> for AttributeValue {
+    fn from(dt: NaiveDateTime) -> Self {
+        AttributeValue::DateTime(Cardinality::Singleton(dt))
+    }
+}
+impl From<Vec<NaiveDateTime>> for AttributeValue {
+    fn from(l: Vec<NaiveDateTime>) -> Self {
+        AttributeValue::DateTime(Cardinality::Unbounded(l))
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct Attribute {
     pub name: AttributeName,
-    pub value: Serialized,
+    pub value: AttributeValue,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
