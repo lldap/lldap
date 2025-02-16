@@ -620,6 +620,7 @@ folder for help with:
 - [PowerDNS Admin](example_configs/powerdns_admin.md)
 - [Prosody](example_configs/prosody.md)
 - [Proxmox VE](example_configs/proxmox.md)
+- [Quay](example_configs/quay.md)
 - [Radicale](example_configs/radicale.md)
 - [Rancher](example_configs/rancher.md)
 - [Seafile](example_configs/seafile.md)
