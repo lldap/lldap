@@ -297,23 +297,30 @@ impl<Handler: BackendHandler> User<Handler> {
         self.attributes
             .iter()
             .find(|a| a.attribute.name.as_str() == "first_name")
-            .map(|a| a.attribute.value.as_str().unwrap_or(""))
-            .unwrap_or("")
+            .map(|a| a.attribute.value.as_str().unwrap_or_default())
+            .unwrap_or_default()
     }
 
     fn last_name(&self) -> &str {
         self.attributes
             .iter()
             .find(|a| a.attribute.name.as_str() == "last_name")
-            .map(|a| a.attribute.value.as_str().unwrap_or(""))
-            .unwrap_or("")
+            .map(|a| a.attribute.value.as_str().unwrap_or_default())
+            .unwrap_or_default()
     }
 
     fn avatar(&self) -> Option<String> {
         self.attributes
             .iter()
             .find(|a| a.attribute.name.as_str() == "avatar")
-            .map(|a| String::from(a.attribute.value.as_jpeg_photo().unwrap()))
+            .map(|a| {
+                String::from(
+                    a.attribute
+                        .value
+                        .as_jpeg_photo()
+                        .expect("Invalid JPEG returned by the DB"),
+                )
+            })
     }
 
     fn creation_date(&self) -> chrono::DateTime<chrono::Utc> {
@@ -662,11 +669,11 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
             .filter(|a| a.is_hardcoded)
             .flat_map(|attribute_schema| {
                 let value: Option<DomainAttributeValue> = match attribute_schema.name.as_str() {
-                    "user_id" => Some(user.user_id.as_str().into()),
+                    "user_id" => Some(user.user_id.clone().into_string().into()),
                     "creation_date" => Some(user.creation_date.into()),
-                    "mail" => Some(user.email.as_str().into()),
-                    "uuid" => Some(user.uuid.as_str().into()),
-                    "display_name" => user.display_name.as_ref().map(|d| d.into()),
+                    "mail" => Some(user.email.clone().into_string().into()),
+                    "uuid" => Some(user.uuid.clone().into_string().into()),
+                    "display_name" => user.display_name.as_ref().map(|d| d.clone().into()),
                     "avatar" | "first_name" | "last_name" => None,
                     _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
                 };
@@ -708,8 +715,8 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                     match attribute_schema.name.as_str() {
                         "group_id" => (group.id.0 as i64).into(),
                         "creation_date" => group.creation_date.into(),
-                        "uuid" => group.uuid.as_str().into(),
-                        "display_name" => group.display_name.as_str().into(),
+                        "uuid" => group.uuid.clone().into_string().into(),
+                        "display_name" => group.display_name.clone().into_string().into(),
                         _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
                     },
                 )
@@ -750,8 +757,8 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                     match attribute_schema.name.as_str() {
                         "group_id" => (group.group_id.0 as i64).into(),
                         "creation_date" => group.creation_date.into(),
-                        "uuid" => group.uuid.as_str().into(),
-                        "display_name" => group.display_name.as_str().into(),
+                        "uuid" => group.uuid.clone().into_string().into(),
+                        "display_name" => group.display_name.clone().into_string().into(),
                         _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
                     },
                 )
@@ -888,11 +895,11 @@ mod tests {
                     attributes: vec![
                         DomainAttribute {
                             name: "first_name".into(),
-                            value: "Bob".into(),
+                            value: "Bob".to_string().into(),
                         },
                         DomainAttribute {
                             name: "last_name".into(),
-                            value: "Bobberson".into(),
+                            value: "Bobberson".to_string().into(),
                         },
                     ],
                     ..Default::default()
@@ -906,7 +913,7 @@ mod tests {
             uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: vec![DomainAttribute {
                 name: "club_name".into(),
-                value: "Gang of Four".into(),
+                value: "Gang of Four".to_string().into(),
             }],
         });
         groups.insert(GroupDetails {
@@ -1052,7 +1059,7 @@ mod tests {
                     ),
                     DomainRequestFilter::AttributeEquality(
                         AttributeName::from("first_name"),
-                        "robert".into(),
+                        "robert".to_string().into(),
                     ),
                 ]))),
                 eq(false),

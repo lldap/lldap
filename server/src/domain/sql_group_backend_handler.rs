@@ -117,6 +117,7 @@ impl GroupListerBackendHandler for SqlBackendHandler {
                 }
             })
             .collect();
+        // TODO: should be wrapped in a transaction
         let schema = self.get_schema().await?;
         let attributes = model::GroupAttributes::find()
             .filter(
@@ -570,7 +571,7 @@ mod tests {
                 display_name: "New Group".into(),
                 attributes: vec![Attribute {
                     name: "new_attribute".into(),
-                    value: "value".into(),
+                    value: "value".to_string().into(),
                 }],
             })
             .await
@@ -585,7 +586,7 @@ mod tests {
             group_details.attributes,
             vec![Attribute {
                 name: "new_attribute".into(),
-                value: "value".into(),
+                value: "value".to_string().into(),
             }]
         );
     }

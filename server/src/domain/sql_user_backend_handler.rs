@@ -160,6 +160,7 @@ impl UserListerBackendHandler for SqlBackendHandler {
             .all(&self.sql_pool)
             .await?;
         let mut attributes_iter = attributes.into_iter().peekable();
+        // TODO: should be wrapped in a transaction
         use itertools::Itertools; // For take_while_ref
         let schema = self.get_schema().await?;
         for user in users.iter_mut() {
@@ -458,7 +459,7 @@ mod tests {
             &fixture.handler,
             Some(UserRequestFilter::AttributeEquality(
                 AttributeName::from("first_name"),
-                "first bob".into(),
+                "first bob".to_string().into(),
             )),
         )
         .await;
@@ -833,11 +834,11 @@ mod tests {
                 insert_attributes: vec![
                     Attribute {
                         name: "first_name".into(),
-                        value: "first_name".into(),
+                        value: "first_name".to_string().into(),
                     },
                     Attribute {
                         name: "last_name".into(),
-                        value: "last_name".into(),
+                        value: "last_name".to_string().into(),
                     },
                     Attribute {
                         name: "avatar".into(),
@@ -864,11 +865,11 @@ mod tests {
                 },
                 Attribute {
                     name: "first_name".into(),
-                    value: "first_name".into()
+                    value: "first_name".to_string().into()
                 },
                 Attribute {
                     name: "last_name".into(),
-                    value: "last_name".into()
+                    value: "last_name".to_string().into()
                 }
             ]
         );
@@ -907,7 +908,7 @@ mod tests {
                 },
                 Attribute {
                     name: "first_name".into(),
-                    value: "first bob".into()
+                    value: "first bob".to_string().into()
                 }
             ]
         );
@@ -923,7 +924,7 @@ mod tests {
                 user_id: UserId::new("bob"),
                 insert_attributes: vec![Attribute {
                     name: "first_name".into(),
-                    value: "new first".into(),
+                    value: "new first".to_string().into(),
                 }],
                 ..Default::default()
             })
@@ -940,11 +941,11 @@ mod tests {
             vec![
                 Attribute {
                     name: "first_name".into(),
-                    value: "new first".into()
+                    value: "new first".to_string().into()
                 },
                 Attribute {
                     name: "last_name".into(),
-                    value: "last bob".into()
+                    value: "last bob".to_string().into()
                 }
             ]
         );
@@ -973,7 +974,7 @@ mod tests {
             user.attributes,
             vec![Attribute {
                 name: "last_name".into(),
-                value: "last bob".into()
+                value: "last bob".to_string().into()
             }]
         );
     }
@@ -989,7 +990,7 @@ mod tests {
                 delete_attributes: vec!["first_name".into()],
                 insert_attributes: vec![Attribute {
                     name: "first_name".into(),
-                    value: "new first".into(),
+                    value: "new first".to_string().into(),
                 }],
                 ..Default::default()
             })
@@ -1006,11 +1007,11 @@ mod tests {
             vec![
                 Attribute {
                     name: "first_name".into(),
-                    value: "new first".into()
+                    value: "new first".to_string().into()
                 },
                 Attribute {
                     name: "last_name".into(),
-                    value: "last bob".into()
+                    value: "last bob".to_string().into()
                 },
             ]
         );
@@ -1077,11 +1078,11 @@ mod tests {
                 attributes: vec![
                     Attribute {
                         name: "first_name".into(),
-                        value: "First Name".into(),
+                        value: "First Name".to_string().into(),
                     },
                     Attribute {
                         name: "last_name".into(),
-                        value: "last_name".into(),
+                        value: "last_name".to_string().into(),
                     },
                     Attribute {
                         name: "avatar".into(),
@@ -1108,11 +1109,11 @@ mod tests {
                 },
                 Attribute {
                     name: "first_name".into(),
-                    value: "First Name".into()
+                    value: "First Name".to_string().into()
                 },
                 Attribute {
                     name: "last_name".into(),
-                    value: "last_name".into()
+                    value: "last_name".to_string().into()
                 }
             ]
         );

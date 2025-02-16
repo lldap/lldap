@@ -1300,11 +1300,11 @@ mod tests {
                         attributes: vec![
                             Attribute {
                                 name: "first_name".into(),
-                                value: "Bôb".into(),
+                                value: "Bôb".to_string().into(),
                             },
                             Attribute {
                                 name: "last_name".into(),
-                                value: "Böbberson".into(),
+                                value: "Böbberson".to_string().into(),
                             },
                         ],
                         ..Default::default()
@@ -1323,11 +1323,11 @@ mod tests {
                             },
                             Attribute {
                                 name: "first_name".into(),
-                                value: "Jim".into(),
+                                value: "Jim".to_string().into(),
                             },
                             Attribute {
                                 name: "last_name".into(),
-                                value: "Cricket".into(),
+                                value: "Cricket".to_string().into(),
                             },
                         ],
                         uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -1718,8 +1718,14 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
             .with(eq(Some(GroupRequestFilter::Or(vec![
-                GroupRequestFilter::AttributeEquality(AttributeName::from("attr"), "TEST".into()),
-                GroupRequestFilter::AttributeEquality(AttributeName::from("attr"), "test".into()),
+                GroupRequestFilter::AttributeEquality(
+                    AttributeName::from("attr"),
+                    "TEST".to_string().into(),
+                ),
+                GroupRequestFilter::AttributeEquality(
+                    AttributeName::from("attr"),
+                    "test".to_string().into(),
+                ),
             ]))))
             .times(1)
             .return_once(|_| {
@@ -1731,7 +1737,7 @@ mod tests {
                     uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                     attributes: vec![Attribute {
                         name: "Attr".into(),
-                        value: "TEST".into(),
+                        value: "TEST".to_string().into(),
                     }],
                 }])
             });
@@ -1908,11 +1914,11 @@ mod tests {
                         UserRequestFilter::Or(vec![
                             UserRequestFilter::AttributeEquality(
                                 AttributeName::from("first_name"),
-                                "FirstName".into(),
+                                "FirstName".to_string().into(),
                             ),
                             UserRequestFilter::AttributeEquality(
                                 AttributeName::from("first_name"),
-                                "firstname".into(),
+                                "firstname".to_string().into(),
                             ),
                         ]),
                         false.into(),
@@ -2167,11 +2173,11 @@ mod tests {
                     attributes: vec![
                         Attribute {
                             name: "first_name".into(),
-                            value: "Bôb".into(),
+                            value: "Bôb".to_string().into(),
                         },
                         Attribute {
-                            name: "last_name".into(),
-                            value: "Böbberson".into(),
+                            name: "last_name".to_string().into(),
+                            value: "Böbberson".to_string().into(),
                         },
                     ],
                     ..Default::default()
@@ -2255,7 +2261,7 @@ mod tests {
                         },
                         Attribute {
                             name: "last_name".into(),
-                            value: "Böbberson".into(),
+                            value: "Böbberson".to_string().into(),
                         },
                     ],
                     uuid: uuid!("b4ac75e0-2900-3e21-926c-2f732c26b3fc"),
@@ -3072,7 +3078,7 @@ mod tests {
                     user_id: UserId::new("test"),
                     attributes: vec![Attribute {
                         name: "nickname".into(),
-                        value: "Bob the Builder".into(),
+                        value: "Bob the Builder".to_string().into(),
                     }],
                     ..Default::default()
                 },
@@ -3088,7 +3094,7 @@ mod tests {
                 uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 attributes: vec![Attribute {
                     name: "club_name".into(),
-                    value: "Breakfast Club".into(),
+                    value: "Breakfast Club".to_string().into(),
                 }],
             }])
         });

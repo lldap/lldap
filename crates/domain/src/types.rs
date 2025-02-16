@@ -422,8 +422,8 @@ impl IntoActiveValue<Serialized> for JpegPhoto {
     }
 }
 
-// Cardinality enum for containing either a singleton, or a Vec of a specific type
-// Used by the AttributeValue enum with types that can potentially be a list.
+// Represents values that can be either a singleton or a list of a specific type
+// Used by AttributeValue to model attributes with types that might be a list.
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum Cardinality<T: Clone> {
     Singleton(T),
@@ -484,21 +484,6 @@ impl From<String> for AttributeValue {
         AttributeValue::String(Cardinality::Singleton(s))
     }
 }
-impl From<&String> for AttributeValue {
-    fn from(s: &String) -> Self {
-        AttributeValue::String(Cardinality::Singleton(s.clone()))
-    }
-}
-impl From<&str> for AttributeValue {
-    fn from(s: &str) -> Self {
-        AttributeValue::String(Cardinality::Singleton(s.to_string()))
-    }
-}
-impl From<&[String]> for AttributeValue {
-    fn from(l: &[String]) -> Self {
-        AttributeValue::String(Cardinality::Unbounded(l.to_vec()))
-    }
-}
 impl From<Vec<String>> for AttributeValue {
     fn from(l: Vec<String>) -> Self {
         AttributeValue::String(Cardinality::Unbounded(l))
@@ -513,11 +498,6 @@ impl From<i64> for AttributeValue {
 impl From<Vec<i64>> for AttributeValue {
     fn from(l: Vec<i64>) -> Self {
         AttributeValue::Integer(Cardinality::Unbounded(l))
-    }
-}
-impl From<&[i64]> for AttributeValue {
-    fn from(l: &[i64]) -> Self {
-        AttributeValue::Integer(Cardinality::Unbounded(l.to_vec()))
     }
 }
 
