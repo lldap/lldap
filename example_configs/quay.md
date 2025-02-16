@@ -12,7 +12,7 @@ This example assists with a basic LDAP configuration.
 
 ```yaml
 AUTHENTICATION_TYPE: LDAP
-LDAP_ADMIN_DN: cn=admin,ou=people,dc=example,dc=com
+LDAP_ADMIN_DN: cn=bind_user,ou=people,dc=example,dc=com # The admin DN user must be a member of the lldap_strict_readonly group.
 LDAP_ADMIN_PASSWD: password
 LDAP_ALLOW_INSECURE_FALLBACK: false
 LDAP_BASE_DN:
