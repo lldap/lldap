@@ -7,10 +7,6 @@ use std::time::Duration;
 
 use crate::{
     domain::{
-        handler::{
-            GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter, UserBackendHandler,
-            UserListerBackendHandler, UserRequestFilter,
-        },
         sql_backend_handler::SqlBackendHandler,
         sql_opaque_handler::register_password,
         sql_tables::{get_private_key_info, set_private_key_info},
@@ -31,6 +27,10 @@ use sea_orm::{Database, DatabaseConnection};
 use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
 
 use lldap_domain::requests::{CreateGroupRequest, CreateUserRequest};
+use lldap_domain_handlers::handler::{
+    GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter, UserBackendHandler,
+    UserListerBackendHandler, UserRequestFilter,
+};
 
 mod domain;
 mod infra;

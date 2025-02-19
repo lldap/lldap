@@ -1,14 +1,14 @@
 use crate::{
-    domain::{
-        handler::{GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter},
-        sql_backend_handler::SqlBackendHandler,
-    },
+    domain::sql_backend_handler::SqlBackendHandler,
     infra::access_control::UserReadableBackendHandler,
 };
 use async_trait::async_trait;
 use lldap_domain::{
     requests::{CreateGroupRequest, UpdateGroupRequest},
     types::{AttributeName, Group, GroupDetails, GroupId, Serialized, Uuid},
+};
+use lldap_domain_handlers::handler::{
+    GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
 };
 use lldap_domain_model::{
     error::{DomainError, Result},
@@ -336,14 +336,12 @@ impl SqlBackendHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{
-        handler::{SchemaBackendHandler, SubStringFilter},
-        sql_backend_handler::tests::*,
-    };
+    use crate::domain::sql_backend_handler::tests::*;
     use lldap_domain::{
         requests::CreateAttributeRequest,
         types::{Attribute, AttributeType, GroupName, UserId},
     };
+    use lldap_domain_handlers::handler::{SchemaBackendHandler, SubStringFilter};
     use pretty_assertions::assert_eq;
 
     async fn get_group_ids(

@@ -1,33 +1,16 @@
 use std::collections::BTreeMap;
 
 use chrono::TimeZone;
-use ldap3_proto::{proto::LdapSubstringFilter, LdapResultCode};
+use ldap3_proto::LdapResultCode;
 use tracing::{debug, instrument, warn};
 
 use crate::domain::{
-    handler::SubStringFilter,
     ldap::error::{LdapError, LdapResult},
     schema::PublicSchema,
 };
 use lldap_domain::types::{
     Attribute, AttributeName, AttributeType, AttributeValue, Cardinality, GroupName, UserId,
 };
-
-impl From<LdapSubstringFilter> for SubStringFilter {
-    fn from(
-        LdapSubstringFilter {
-            initial,
-            any,
-            final_,
-        }: LdapSubstringFilter,
-    ) -> Self {
-        Self {
-            initial,
-            any,
-            final_,
-        }
-    }
-}
 use lldap_domain_model::model::UserColumn;
 
 fn make_dn_pair<I>(mut iter: I) -> LdapResult<(String, String)>

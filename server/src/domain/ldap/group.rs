@@ -6,7 +6,6 @@ use tracing::{debug, instrument, warn};
 
 use crate::domain::{
     deserialize::deserialize_attribute_value,
-    handler::{GroupListerBackendHandler, GroupRequestFilter},
     ldap::{
         error::{LdapError, LdapResult},
         utils::{
@@ -21,6 +20,7 @@ use crate::domain::{
 use lldap_domain::types::{
     AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid,
 };
+use lldap_domain_handlers::handler::{GroupListerBackendHandler, GroupRequestFilter};
 
 pub fn get_group_attribute(
     group: &Group,

@@ -1,8 +1,5 @@
 use crate::{
-    domain::{
-        handler::{BackendHandler, LoginHandler},
-        opaque_handler::OpaqueHandler,
-    },
+    domain::opaque_handler::OpaqueHandler,
     infra::{
         access_control::AccessControlledBackendHandler,
         configuration::{Configuration, LdapsOptions},
@@ -15,6 +12,7 @@ use actix_service::{fn_service, ServiceFactoryExt};
 use anyhow::{anyhow, Context, Result};
 use ldap3_proto::{control::LdapControl, proto::LdapMsg, proto::LdapOp, LdapCodec};
 use lldap_domain::types::AttributeName;
+use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
 use rustls::PrivateKey;
 use tokio_rustls::TlsAcceptor as RustlsTlsAcceptor;
 use tokio_util::codec::{FramedRead, FramedWrite};

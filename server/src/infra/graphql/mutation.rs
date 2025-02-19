@@ -1,9 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
-    domain::{
-        deserialize::deserialize_attribute_value, handler::BackendHandler, schema::PublicSchema,
-    },
+    domain::{deserialize::deserialize_attribute_value, schema::PublicSchema},
     infra::{
         access_control::{
             AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
@@ -25,6 +23,7 @@ use lldap_domain::{
         LdapObjectClass, UserId,
     },
 };
+use lldap_domain_handlers::handler::BackendHandler;
 use lldap_validation::attributes::{validate_attribute_name, ALLOWED_CHARACTERS_DESCRIPTION};
 use tracing::{debug, debug_span, Instrument, Span};
 
