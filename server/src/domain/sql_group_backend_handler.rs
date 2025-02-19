@@ -1,13 +1,16 @@
-use crate::domain::{
-    error::{DomainError, Result},
-    handler::{GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter},
-    model::{self, GroupColumn, MembershipColumn},
-    sql_backend_handler::SqlBackendHandler,
+use crate::{
+    domain::{
+        error::{DomainError, Result},
+        handler::{GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter},
+        model::{self, deserialize, GroupColumn, MembershipColumn},
+        sql_backend_handler::SqlBackendHandler,
+    },
+    infra::access_control::UserReadableBackendHandler,
 };
 use async_trait::async_trait;
 use lldap_domain::{
     requests::{CreateGroupRequest, UpdateGroupRequest},
-    types::{Attribute, AttributeName, Group, GroupDetails, GroupId, Serialized, Uuid},
+    types::{AttributeName, Group, GroupDetails, GroupId, Serialized, Uuid},
 };
 use sea_orm::{
     sea_query::{Alias, Cond, Expr, Func, IntoCondition, OnConflict, SimpleExpr},
@@ -75,7 +78,7 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
         ))))
         .like(filter.to_sql_filter())
         .into_condition(),
-        AttributeEquality(name, value) => attribute_condition(name, Some(value)),
+        AttributeEquality(name, value) => attribute_condition(name, Some(value.into())),
         CustomAttributePresent(name) => attribute_condition(name, None),
     }
 }
@@ -114,6 +117,8 @@ impl GroupListerBackendHandler for SqlBackendHandler {
                 }
             })
             .collect();
+        // TODO: should be wrapped in a transaction
+        let schema = self.get_schema().await?;
         let attributes = model::GroupAttributes::find()
             .filter(
                 model::GroupAttributesColumn::GroupId.in_subquery(
@@ -133,8 +138,14 @@ impl GroupListerBackendHandler for SqlBackendHandler {
         for group in groups.iter_mut() {
             group.attributes = attributes_iter
                 .take_while_ref(|u| u.group_id == group.id)
-                .map(Attribute::from)
-                .collect();
+                .map(|a| {
+                    deserialize::deserialize_attribute(
+                        a.attribute_name,
+                        &a.value,
+                        &schema.get_schema().group_attributes,
+                    )
+                })
+                .collect::<Result<Vec<_>>>()?;
         }
         groups.sort_by(|g1, g2| g1.display_name.cmp(&g2.display_name));
         Ok(groups)
@@ -155,7 +166,17 @@ impl GroupBackendHandler for SqlBackendHandler {
             .order_by_asc(model::GroupAttributesColumn::AttributeName)
             .all(&self.sql_pool)
             .await?;
-        group_details.attributes = attributes.into_iter().map(Attribute::from).collect();
+        let schema = self.get_schema().await?;
+        group_details.attributes = attributes
+            .into_iter()
+            .map(|a| {
+                deserialize::deserialize_attribute(
+                    a.attribute_name,
+                    &a.value,
+                    &schema.get_schema().group_attributes,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
         Ok(group_details)
     }
 
@@ -199,7 +220,7 @@ impl GroupBackendHandler for SqlBackendHandler {
                             new_group_attributes.push(model::group_attributes::ActiveModel {
                                 group_id: Set(group_id),
                                 attribute_name: Set(attribute.name),
-                                value: Set(attribute.value),
+                                value: Set(attribute.value.into()),
                             });
                         } else {
                             return Err(DomainError::InternalError(format!(
@@ -263,7 +284,7 @@ impl SqlBackendHandler {
                 update_group_attributes.push(model::group_attributes::ActiveModel {
                     group_id: Set(request.group_id),
                     attribute_name: Set(attribute.name.to_owned()),
-                    value: Set(attribute.value),
+                    value: Set(attribute.value.into()),
                 });
             } else {
                 return Err(DomainError::InternalError(format!(
@@ -319,7 +340,7 @@ mod tests {
     };
     use lldap_domain::{
         requests::CreateAttributeRequest,
-        types::{AttributeType, GroupName, Serialized, UserId},
+        types::{Attribute, AttributeType, GroupName, UserId},
     };
     use pretty_assertions::assert_eq;
 
@@ -449,7 +470,7 @@ mod tests {
                 delete_attributes: Vec::new(),
                 insert_attributes: vec![Attribute {
                     name: "gid".into(),
-                    value: Serialized::from(&512),
+                    value: 512.into(),
                 }],
             })
             .await
@@ -459,7 +480,7 @@ mod tests {
                 &fixture.handler,
                 Some(GroupRequestFilter::AttributeEquality(
                     AttributeName::from("gid"),
-                    Serialized::from(&512),
+                    512.into(),
                 )),
             )
             .await,
@@ -550,7 +571,7 @@ mod tests {
                 display_name: "New Group".into(),
                 attributes: vec![Attribute {
                     name: "new_attribute".into(),
-                    value: Serialized::from("value"),
+                    value: "value".to_string().into(),
                 }],
             })
             .await
@@ -565,7 +586,7 @@ mod tests {
             group_details.attributes,
             vec![Attribute {
                 name: "new_attribute".into(),
-                value: Serialized::from("value"),
+                value: "value".to_string().into(),
             }]
         );
     }
@@ -587,7 +608,7 @@ mod tests {
         let group_id = fixture.groups[0];
         let attributes = vec![Attribute {
             name: "new_attribute".into(),
-            value: Serialized::from(&42i64),
+            value: 42i64.into(),
         }];
         fixture
             .handler

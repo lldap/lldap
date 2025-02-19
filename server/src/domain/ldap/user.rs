@@ -17,7 +17,7 @@ use crate::domain::{
         },
     },
     model::UserColumn,
-    schema::{PublicSchema, SchemaUserAttributeExtractor},
+    schema::PublicSchema,
 };
 use lldap_domain::types::{
     AttributeName, AttributeType, GroupDetails, LdapObjectClass, User, UserAndGroups, UserId,
@@ -78,9 +78,7 @@ pub fn get_user_attribute(
             .from_utc_datetime(&user.creation_date)
             .to_rfc3339()
             .into_bytes()],
-        UserFieldType::Attribute(attr, _, _) => {
-            get_custom_attribute::<SchemaUserAttributeExtractor>(&user.attributes, &attr, schema)?
-        }
+        UserFieldType::Attribute(attr, _, _) => get_custom_attribute(&user.attributes, &attr)?,
         UserFieldType::NoMatch => match attribute.as_str() {
             "1.1" => return None,
             // We ignore the operational attribute wildcard.
@@ -95,12 +93,7 @@ pub fn get_user_attribute(
                 if ignored_user_attributes.contains(attribute) {
                     return None;
                 }
-                get_custom_attribute::<SchemaUserAttributeExtractor>(
-                    &user.attributes,
-                    attribute,
-                    schema,
-                )
-                .or_else(|| {
+                get_custom_attribute(&user.attributes, attribute).or_else(|| {
                     warn!(
                         r#"Ignoring unrecognized user attribute: {}. To disable this warning, add it to "ignored_user_attributes" in the config."#,
                         attribute

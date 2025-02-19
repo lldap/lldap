@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use lldap_domain::types::{Attribute, AttributeName, GroupId, Serialized};
+use lldap_domain::types::{AttributeName, GroupId, Serialized};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "group_attributes")]
@@ -55,18 +55,3 @@ impl Related<super::GroupAttributeSchema> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
-impl From<Model> for Attribute {
-    fn from(
-        Model {
-            group_id: _,
-            attribute_name,
-            value,
-        }: Model,
-    ) -> Self {
-        Self {
-            name: attribute_name,
-            value,
-        }
-    }
-}

@@ -151,7 +151,7 @@ fn unpack_attributes(
         .cloned()
         .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
         .transpose()?
-        .map(|attr| attr.value.unwrap::<String>())
+        .map(|attr| attr.value.into_string().unwrap())
         .map(Email::from);
     let display_name = attributes
         .iter()
@@ -159,7 +159,7 @@ fn unpack_attributes(
         .cloned()
         .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
         .transpose()?
-        .map(|attr| attr.value.unwrap::<String>());
+        .map(|attr| attr.value.into_string().unwrap());
     let attributes = attributes
         .into_iter()
         .filter(|attr| attr.name != "mail" && attr.name != "display_name")
