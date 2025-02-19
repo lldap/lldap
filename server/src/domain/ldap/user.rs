@@ -6,7 +6,6 @@ use tracing::{debug, instrument, warn};
 
 use crate::domain::{
     deserialize::deserialize_attribute_value,
-    handler::{UserListerBackendHandler, UserRequestFilter},
     ldap::{
         error::{LdapError, LdapResult},
         utils::{
@@ -21,6 +20,7 @@ use crate::domain::{
 use lldap_domain::types::{
     AttributeName, AttributeType, GroupDetails, LdapObjectClass, User, UserAndGroups, UserId,
 };
+use lldap_domain_handlers::handler::{UserListerBackendHandler, UserRequestFilter};
 use lldap_domain_model::model::UserColumn;
 
 pub fn get_user_attribute(

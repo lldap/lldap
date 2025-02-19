@@ -1,13 +1,11 @@
-use crate::domain::{
-    handler::{
-        ReadSchemaBackendHandler, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
-    },
-    sql_backend_handler::SqlBackendHandler,
-};
+use crate::domain::sql_backend_handler::SqlBackendHandler;
 use async_trait::async_trait;
 use lldap_domain::{
     requests::{CreateUserRequest, UpdateUserRequest},
     types::{AttributeName, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId, Uuid},
+};
+use lldap_domain_handlers::handler::{
+    ReadSchemaBackendHandler, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
 };
 use lldap_domain_model::{
     error::{DomainError, Result},
@@ -416,8 +414,9 @@ impl UserBackendHandler for SqlBackendHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{handler::SubStringFilter, sql_backend_handler::tests::*};
+    use crate::domain::sql_backend_handler::tests::*;
     use lldap_domain::types::{Attribute, JpegPhoto};
+    use lldap_domain_handlers::handler::SubStringFilter;
     use lldap_domain_model::model::UserColumn;
     use pretty_assertions::{assert_eq, assert_ne};
 

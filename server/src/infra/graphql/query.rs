@@ -3,7 +3,6 @@ use std::sync::Arc;
 use crate::{
     domain::{
         deserialize::deserialize_attribute_value,
-        handler::{BackendHandler, ReadSchemaBackendHandler},
         ldap::utils::{map_user_field, UserFieldType},
         schema::PublicSchema,
     },
@@ -18,11 +17,12 @@ use juniper::{graphql_object, FieldResult, GraphQLInputObject};
 use lldap_domain::types::{
     AttributeType, Cardinality, GroupDetails, GroupId, LdapObjectClass, UserId,
 };
+use lldap_domain_handlers::handler::{BackendHandler, ReadSchemaBackendHandler};
 use lldap_domain_model::model::UserColumn;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, Instrument, Span};
 
-type DomainRequestFilter = crate::domain::handler::UserRequestFilter;
+type DomainRequestFilter = lldap_domain_handlers::handler::UserRequestFilter;
 type DomainUser = lldap_domain::types::User;
 type DomainGroup = lldap_domain::types::Group;
 type DomainUserAndGroups = lldap_domain::types::UserAndGroups;

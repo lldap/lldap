@@ -3,14 +3,13 @@ use std::collections::HashSet;
 use async_trait::async_trait;
 use tracing::info;
 
-use crate::domain::{
-    handler::{
-        BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
-        ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler,
-        UserListerBackendHandler, UserRequestFilter,
-    },
-    schema::PublicSchema,
+use lldap_domain_handlers::handler::{
+    BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+    ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler, UserListerBackendHandler,
+    UserRequestFilter,
 };
+
+use crate::domain::schema::PublicSchema;
 use lldap_domain::{
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,

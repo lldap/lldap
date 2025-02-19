@@ -1,5 +1,4 @@
 use super::{
-    handler::{BindRequest, LoginHandler},
     opaque_handler::{login, registration, OpaqueHandler},
     sql_backend_handler::SqlBackendHandler,
 };
@@ -7,6 +6,7 @@ use async_trait::async_trait;
 use base64::Engine;
 use lldap_auth::opaque;
 use lldap_domain::types::UserId;
+use lldap_domain_handlers::handler::{BindRequest, LoginHandler};
 use lldap_domain_model::{
     error::{DomainError, Result},
     model::{self, UserColumn},

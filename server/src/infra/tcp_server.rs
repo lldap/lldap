@@ -1,8 +1,5 @@
 use crate::{
-    domain::{
-        handler::{BackendHandler, LoginHandler},
-        opaque_handler::OpaqueHandler,
-    },
+    domain::opaque_handler::OpaqueHandler,
     infra::{
         access_control::{AccessControlledBackendHandler, ReadonlyBackendHandler},
         auth_service,
@@ -18,6 +15,7 @@ use actix_service::map_config;
 use actix_web::{dev::AppConfig, guard, web, App, HttpResponse, Responder};
 use anyhow::{Context, Result};
 use hmac::Hmac;
+use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
 use lldap_domain_model::error::DomainError;
 use sha2::Sha512;
 use std::collections::HashSet;

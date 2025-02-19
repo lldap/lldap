@@ -1,5 +1,4 @@
 pub mod deserialize;
-pub mod handler;
 pub mod ldap;
 pub mod opaque_handler;
 pub mod schema;

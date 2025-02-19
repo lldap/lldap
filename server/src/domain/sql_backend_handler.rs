@@ -1,6 +1,7 @@
-use crate::domain::{handler::BackendHandler, sql_tables::DbConnection};
-use crate::infra::configuration::Configuration;
+use crate::{domain::sql_tables::DbConnection, infra::configuration::Configuration};
 use async_trait::async_trait;
+
+use lldap_domain_handlers::handler::BackendHandler;
 
 #[derive(Clone)]
 pub struct SqlBackendHandler {
@@ -20,20 +21,14 @@ impl BackendHandler for SqlBackendHandler {}
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{
-        domain::{
-            handler::{
-                GroupBackendHandler, UserBackendHandler, UserListerBackendHandler,
-                UserRequestFilter,
-            },
-            sql_tables::init_table,
-        },
-        infra::configuration::ConfigurationBuilder,
-    };
+    use crate::{domain::sql_tables::init_table, infra::configuration::ConfigurationBuilder};
     use lldap_auth::{opaque, registration};
     use lldap_domain::{
         requests::{CreateGroupRequest, CreateUserRequest},
         types::{Attribute as DomainAttribute, GroupId, UserId},
+    };
+    use lldap_domain_handlers::handler::{
+        GroupBackendHandler, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
     };
     use pretty_assertions::assert_eq;
     use sea_orm::Database;

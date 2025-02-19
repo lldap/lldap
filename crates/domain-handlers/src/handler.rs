@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use ldap3_proto::proto::LdapSubstringFilter;
 use lldap_domain::{
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
@@ -48,6 +49,22 @@ impl SubStringFilter {
             filter.push_str(&f.to_ascii_lowercase());
         }
         filter
+    }
+}
+
+impl From<LdapSubstringFilter> for SubStringFilter {
+    fn from(
+        LdapSubstringFilter {
+            initial,
+            any,
+            final_,
+        }: LdapSubstringFilter,
+    ) -> Self {
+        Self {
+            initial,
+            any,
+            final_,
+        }
     }
 }
 

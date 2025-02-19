@@ -2536,6 +2536,7 @@ dependencies = [
  "lettre",
  "lldap_auth",
  "lldap_domain",
+ "lldap_domain_handlers",
  "lldap_domain_model",
  "lldap_validation",
  "log",
@@ -2642,6 +2643,24 @@ dependencies = [
  "serde",
  "serde_bytes",
  "strum",
+ "uuid 1.11.0",
+]
+
+[[package]]
+name = "lldap_domain_handlers"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.21.7",
+ "chrono",
+ "derive_more 1.0.0",
+ "ldap3_proto",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_model",
+ "pretty_assertions",
+ "serde",
+ "serde_bytes",
  "uuid 1.11.0",
 ]
 

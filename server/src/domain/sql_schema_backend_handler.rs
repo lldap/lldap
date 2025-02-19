@@ -1,13 +1,11 @@
-use crate::domain::{
-    handler::{ReadSchemaBackendHandler, SchemaBackendHandler},
-    sql_backend_handler::SqlBackendHandler,
-};
+use crate::domain::sql_backend_handler::SqlBackendHandler;
 use async_trait::async_trait;
 use lldap_domain::{
     requests::CreateAttributeRequest,
     schema::{AttributeList, AttributeSchema, Schema},
     types::{AttributeName, LdapObjectClass},
 };
+use lldap_domain_handlers::handler::{ReadSchemaBackendHandler, SchemaBackendHandler};
 use lldap_domain_model::{
     error::{DomainError, Result},
     model,
@@ -177,13 +175,11 @@ impl SqlBackendHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{
-        handler::{UserBackendHandler, UserRequestFilter},
-        sql_backend_handler::tests::*,
-    };
+    use crate::domain::sql_backend_handler::tests::*;
     use lldap_domain::requests::UpdateUserRequest;
     use lldap_domain::schema::AttributeList;
     use lldap_domain::types::{Attribute, AttributeType};
+    use lldap_domain_handlers::handler::{UserBackendHandler, UserRequestFilter};
     use pretty_assertions::assert_eq;
 
     #[tokio::test]

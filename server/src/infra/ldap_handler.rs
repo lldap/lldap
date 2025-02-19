@@ -1,7 +1,6 @@
 use crate::{
     domain::{
         deserialize,
-        handler::{BackendHandler, BindRequest, LoginHandler, ReadSchemaBackendHandler},
         ldap::{
             error::{LdapError, LdapResult},
             group::{convert_groups_to_ldap_op, get_groups_list},
@@ -29,6 +28,9 @@ use ldap3_proto::proto::{
 use lldap_domain::{
     requests::CreateUserRequest,
     types::{Attribute, AttributeName, AttributeType, Email, Group, UserAndGroups, UserId},
+};
+use lldap_domain_handlers::handler::{
+    BackendHandler, BindRequest, LoginHandler, ReadSchemaBackendHandler,
 };
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
@@ -924,10 +926,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        domain::handler::*,
-        infra::test_utils::{setup_default_schema, MockTestBackendHandler},
-    };
+    use crate::infra::test_utils::{setup_default_schema, MockTestBackendHandler};
     use chrono::TimeZone;
     use ldap3_proto::proto::{
         LdapDerefAliases, LdapSearchScope, LdapSubstringFilter, LdapWhoamiRequest,
@@ -937,6 +936,7 @@ mod tests {
         types::*,
         uuid,
     };
+    use lldap_domain_handlers::handler::*;
     use lldap_domain_model::model::UserColumn;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
@@ -1016,7 +1016,7 @@ mod tests {
     async fn test_bind() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_bind()
-            .with(eq(crate::domain::handler::BindRequest {
+            .with(eq(lldap_domain_handlers::handler::BindRequest {
                 name: UserId::new("bob"),
                 password: "pass".to_string(),
             }))
@@ -1049,7 +1049,7 @@ mod tests {
     async fn test_admin_bind() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_bind()
-            .with(eq(crate::domain::handler::BindRequest {
+            .with(eq(lldap_domain_handlers::handler::BindRequest {
                 name: UserId::new("test"),
                 password: "pass".to_string(),
             }))
