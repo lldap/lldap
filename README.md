@@ -57,6 +57,7 @@
   - [vs FreeIPA](#vs-freeipa)
   - [vs Kanidm](#vs-kanidm)
 - [I can't log in!](#i-cant-log-in)
+- [Discord Integration](#discord-integration)
 - [Contributions](#contributions)
 
 ## About
@@ -733,6 +734,10 @@ set isn't working, try the following:
 - Make sure you restart the server.
 - If it's still not working, join the
   [Discord server](https://discord.gg/h5PEdRMNyP) to ask for help.
+
+## Discord Integration
+[Use this bot](https://github.com/JaidenW/LLDAP-Discord) to Automate discord role syncronization for paid memberships.
+- Allows users with the Subscriber role to self-serve create an LLDAP account based on their Discord username, using the `/register` command.
 
 ## Contributions
 
