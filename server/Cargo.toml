@@ -171,6 +171,10 @@ version = "*"
 default-features = false
 features = ["sync", "tls-rustls"]
 
+[dev-dependencies.lldap_auth]
+path = "../crates/auth"
+features = ["test"]
+
 [dev-dependencies.reqwest]
 version = "*"
 default-features = false

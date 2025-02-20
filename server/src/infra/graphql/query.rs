@@ -786,15 +786,13 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infra::{
-        access_control::{Permission, ValidationResults},
-        test_utils::{setup_default_schema, MockTestBackendHandler},
-    };
+    use crate::infra::test_utils::{setup_default_schema, MockTestBackendHandler};
     use chrono::TimeZone;
     use juniper::{
         execute, graphql_value, DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType,
         RootNode, Variables,
     };
+    use lldap_auth::access_control::{Permission, ValidationResults};
     use lldap_domain::{
         schema::{AttributeList, Schema},
         types::{AttributeName, AttributeType, LdapObjectClass},

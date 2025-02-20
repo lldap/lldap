@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt;
 
+pub mod access_control;
 pub mod opaque;
 
 /// The messages for the 3-step OPAQUE and simple login process.

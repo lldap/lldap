@@ -14,7 +14,7 @@ use crate::{
     },
     infra::access_control::{
         AccessControlledBackendHandler, AdminBackendHandler, UserAndGroupListerBackendHandler,
-        UserReadableBackendHandler, ValidationResults,
+        UserReadableBackendHandler,
     },
 };
 use anyhow::Result;
@@ -25,6 +25,7 @@ use ldap3_proto::proto::{
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
     LdapSearchScope, OID_PASSWORD_MODIFY, OID_WHOAMI,
 };
+use lldap_auth::access_control::ValidationResults;
 use lldap_domain::{
     requests::CreateUserRequest,
     types::{Attribute, AttributeName, AttributeType, Email, Group, UserAndGroups, UserId},
