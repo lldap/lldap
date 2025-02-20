@@ -11,6 +11,7 @@ use lldap_domain_handlers::handler::{
 
 use crate::domain::schema::PublicSchema;
 use lldap_domain::{
+    access_control::{Permission, ValidationResults},
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
         UpdateUserRequest,
@@ -22,62 +23,6 @@ use lldap_domain::{
     },
 };
 use lldap_domain_model::error::Result;
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Permission {
-    Admin,
-    PasswordManager,
-    Readonly,
-    Regular,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ValidationResults {
-    pub user: UserId,
-    pub permission: Permission,
-}
-
-impl ValidationResults {
-    #[cfg(test)]
-    pub fn admin() -> Self {
-        Self {
-            user: UserId::new("admin"),
-            permission: Permission::Admin,
-        }
-    }
-
-    #[must_use]
-    pub fn is_admin(&self) -> bool {
-        self.permission == Permission::Admin
-    }
-
-    #[must_use]
-    pub fn can_read_all(&self) -> bool {
-        self.permission == Permission::Admin
-            || self.permission == Permission::Readonly
-            || self.permission == Permission::PasswordManager
-    }
-
-    #[must_use]
-    pub fn can_read(&self, user: &UserId) -> bool {
-        self.permission == Permission::Admin
-            || self.permission == Permission::PasswordManager
-            || self.permission == Permission::Readonly
-            || &self.user == user
-    }
-
-    #[must_use]
-    pub fn can_change_password(&self, user: &UserId, user_is_admin: bool) -> bool {
-        self.permission == Permission::Admin
-            || (self.permission == Permission::PasswordManager && !user_is_admin)
-            || &self.user == user
-    }
-
-    #[must_use]
-    pub fn can_write(&self, user: &UserId) -> bool {
-        self.permission == Permission::Admin || &self.user == user
-    }
-}
 
 #[async_trait]
 pub trait UserReadableBackendHandler: ReadSchemaBackendHandler {
