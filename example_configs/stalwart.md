@@ -6,6 +6,9 @@ To integrate with LLDAP, ensure you correctly add these ldap setting to your `co
 
 ## Config.toml File Sample - (only the ldap portion)
 ```toml
+[storage]
+  directory = "ldap"
+
 [directory]
   [directory.ldap]
     base-dn = "dc=example,dc=org"
