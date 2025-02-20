@@ -1,7 +1,7 @@
 use crate::infra::{
     access_control::{
         AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
-        UserReadableBackendHandler, UserWriteableBackendHandler, ValidationResults,
+        UserReadableBackendHandler, UserWriteableBackendHandler,
     },
     auth_service::check_if_token_is_valid,
     cli::ExportGraphQLSchemaOpts,
@@ -20,7 +20,7 @@ use juniper::{
     },
     EmptySubscription, FieldError, RootNode, ScalarValue,
 };
-use lldap_domain::types::UserId;
+use lldap_auth::{access_control::ValidationResults, types::UserId};
 use lldap_domain_handlers::handler::BackendHandler;
 use tracing::debug;
 

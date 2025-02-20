@@ -21,7 +21,9 @@ use std::{
 use time::ext::NumericalDuration;
 use tracing::{debug, info, instrument, warn};
 
-use lldap_auth::{login, password_reset, registration, JWTClaims};
+use lldap_auth::{
+    access_control::ValidationResults, login, password_reset, registration, JWTClaims,
+};
 use lldap_domain::types::{GroupDetails, GroupName, UserId};
 use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, UserRequestFilter,
@@ -31,7 +33,7 @@ use lldap_domain_model::{error::DomainError, model::UserColumn};
 use crate::{
     domain::opaque_handler::OpaqueHandler,
     infra::{
-        access_control::{ReadonlyBackendHandler, UserReadableBackendHandler, ValidationResults},
+        access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
         tcp_backend_handler::*,
         tcp_server::{error_to_http_response, AppState, TcpError, TcpResult},
     },
