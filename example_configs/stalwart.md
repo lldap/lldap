@@ -26,7 +26,7 @@ To integrate with LLDAP,
       email = "mail"
       groups = "member"
       name = "uid"
-      secret = "userPassword"
+      secret = "dummyStalwartSecret"
       [directory.ldap.attributes.description]
         0 = "displayName"
     [directory.ldap.bind]
