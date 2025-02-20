@@ -2,7 +2,13 @@
 
 [Stalwart-mailserver](https://github.com/stalwartlabs/mail-server) is a Production-ready full-stack but simple mail server (SMTP, IMAP, LDAP, Antispam, Antivirus, etc.) written in Rust.
 
-To integrate with LLDAP, ensure you correctly add these ldap setting to your `config.toml`.
+To integrate with LLDAP, 
+
+1. Add manager user, & make sure to add to lldap_admin group for read/write permission
+   
+2. Create mail group, add users requiring email access 
+
+3. Ensure you correctly add the following ldap settings to your Stalwart `config.toml`.
 
 ## Config.toml File Sample - (only the ldap portion)
 ```toml
@@ -24,15 +30,15 @@ To integrate with LLDAP, ensure you correctly add these ldap setting to your `co
       [directory.ldap.attributes.description]
         0 = "displayName"
     [directory.ldap.bind]
-      dn = "uid=admin,ou=people,dc=example,dc=org"
+      dn = "uid=manager,ou=people,dc=example,dc=org"
       secret = "<YOUR_SECRET>"
       [directory.ldap.bind.auth]
         dn = "uid=?,ou=people,dc=example,dc=org"
         enable = true
         search = true
       [directory.ldap.bind.filter]
-        email = "(&(|(objectClass=person)((memberof=cn=mail,ou=groups,dc=example,dc=org))(|(mail=?)(mailAlias=?)(mailList=?)))"
-        name = "(&(|(objectClass=person)((memberof=cn=mail,ou=groups,dc=example,dc=org))(uid=?))"
+        email = "(&(|(objectClass=person)(member=cn=mail,ou=groups,dc=example,dc=org))(mail=?))"
+        name = "(&(|(objectClass=person)(member=cn=mail,ou=groups,dc=example,dc=org))(uid=?))"
     [directory.ldap.cache]
       entries = 500
     [directory.ldap.filter]
