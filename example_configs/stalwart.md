@@ -5,10 +5,11 @@
 To integrate with LLDAP, 
 
 1. Add manager user, & make sure to add to lldap_admin group for read/write permission
+   (TODO: Check if lldap_strict_readonly is enough)
    
-2. Create mail group, add users requiring email access 
+3. Create mail group, add users requiring email access 
 
-3. Ensure you correctly add the following ldap settings to your Stalwart `config.toml`.
+4. Ensure you correctly add the following ldap settings to your Stalwart `config.toml`.
 
 ## Config.toml File Sample - (only the ldap portion)
 ```toml
