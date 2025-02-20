@@ -628,6 +628,7 @@ folder for help with:
 - [Shaarli](example_configs/shaarli.md)
 - [SonarQube](example_configs/sonarqube.md)
 - [Squid](example_configs/squid.md)
+- [Stalwart](example_configs/stalwart.md)
 - [Syncthing](example_configs/syncthing.md)
 - [TheLounge](example_configs/thelounge.md)
 - [Traccar](example_configs/traccar.xml)
