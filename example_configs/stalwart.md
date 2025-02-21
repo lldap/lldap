@@ -1,13 +1,12 @@
 # Stalwart Mailserver
 
-[Stalwart-mailserver](https://github.com/stalwartlabs/mail-server) is a Production-ready full-stack but simple mail server (SMTP, IMAP, LDAP, Antispam, Antivirus, etc.) written in Rust.
+[Stalwart-mailserver](https://github.com/stalwartlabs/mail-server) is a Production-ready full-stack but simple mail server (SMTP, JMAP, IMAP, Sieve, LDAP, Antispam, Antivirus, etc.) written in Rust.
 
 To integrate with LLDAP, 
 
-1. Add manager user, & make sure to add to lldap_admin group for read/write permission
-   (TODO: Check if lldap_strict_readonly is enough)
+1. Create "manager" user, & make sure to add it to lldap_strict_readonly group for bind permission
    
-3. Create mail group, add users requiring email access 
+3. Create "mail" group, & add users requiring email access 
 
 4. Ensure you correctly add the following ldap settings to your Stalwart `config.toml`.
 
@@ -32,7 +31,7 @@ To integrate with LLDAP,
         0 = "displayName"
     [directory.ldap.bind]
       dn = "uid=manager,ou=people,dc=example,dc=org"
-      secret = "<YOUR_SECRET>"
+      secret = "<YOUR_MANAGER_PASSWORD>"
       [directory.ldap.bind.auth]
         dn = "uid=?,ou=people,dc=example,dc=org"
         enable = true
