@@ -783,16 +783,15 @@ fn deserialize_attribute(
 mod tests {
 
     use super::*;
-    use crate::infra::{
-        access_control::{Permission, ValidationResults},
-        graphql::query::Query,
-        test_utils::MockTestBackendHandler,
-    };
+    use crate::infra::{graphql::query::Query, test_utils::MockTestBackendHandler};
     use juniper::{
         execute, graphql_value, DefaultScalarValue, EmptySubscription, GraphQLType, InputValue,
         RootNode, Variables,
     };
-    use lldap_domain::types::{AttributeName, AttributeType};
+    use lldap_domain::{
+        access_control::{Permission, ValidationResults},
+        types::{AttributeName, AttributeType},
+    };
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
 
