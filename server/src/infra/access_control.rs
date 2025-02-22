@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use lldap_auth::access_control::{Permission, ValidationResults};
 use lldap_domain_handlers::handler::{
     BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
-    ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler, UserListerBackendHandler,
-    UserRequestFilter,
+    ReadSchemaBackendHandler, RequestContext, SchemaBackendHandler, UserBackendHandler,
+    UserListerBackendHandler, UserRequestFilter, WithContextHandler,
 };
 use tracing::info;
 
@@ -169,6 +169,14 @@ impl<Handler: Clone> Clone for AccessControlledBackendHandler<Handler> {
     }
 }
 
+impl<Handler: BackendHandler> WithContextHandler for AccessControlledBackendHandler<Handler> {
+    fn with_context(&self, context: RequestContext) -> Self {
+        AccessControlledBackendHandler {
+            handler: self.handler.with_context(context),
+        }
+    }
+}
+
 impl<Handler> AccessControlledBackendHandler<Handler> {
     pub fn unsafe_get_handler(&self) -> &Handler {
         &self.handler
@@ -183,41 +191,53 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
     pub fn get_admin_handler(
         &self,
         validation_result: &ValidationResults,
-    ) -> Option<&impl AdminBackendHandler> {
-        validation_result.is_admin().then_some(&self.handler)
+    ) -> Option<impl AdminBackendHandler> {
+        validation_result.is_admin().then_some(
+            self.handler
+                .with_context(RequestContext::new(validation_result.clone())),
+        )
     }
 
     pub fn get_readonly_handler(
         &self,
         validation_result: &ValidationResults,
-    ) -> Option<&impl ReadonlyBackendHandler> {
-        validation_result.can_read_all().then_some(&self.handler)
+    ) -> Option<impl ReadonlyBackendHandler> {
+        validation_result.can_read_all().then_some(
+            self.handler
+                .with_context(RequestContext::new(validation_result.clone())),
+        )
     }
 
     pub fn get_writeable_handler(
         &self,
         validation_result: &ValidationResults,
         user_id: &UserId,
-    ) -> Option<&impl UserWriteableBackendHandler> {
-        validation_result
-            .can_write(user_id)
-            .then_some(&self.handler)
+    ) -> Option<impl UserWriteableBackendHandler> {
+        validation_result.can_write(user_id).then_some(
+            self.handler
+                .with_context(RequestContext::new(validation_result.clone())),
+        )
     }
 
     pub fn get_readable_handler(
         &self,
         validation_result: &ValidationResults,
         user_id: &UserId,
-    ) -> Option<&impl UserReadableBackendHandler> {
-        validation_result.can_read(user_id).then_some(&self.handler)
+    ) -> Option<impl UserReadableBackendHandler> {
+        validation_result.can_read(user_id).then_some(
+            self.handler
+                .with_context(RequestContext::new(validation_result.clone())),
+        )
     }
 
     pub fn get_user_restricted_lister_handler(
         &self,
         validation_result: &ValidationResults,
-    ) -> UserRestrictedListerBackendHandler<'_, Handler> {
+    ) -> UserRestrictedListerBackendHandler<Handler> {
         UserRestrictedListerBackendHandler {
-            handler: &self.handler,
+            handler: self
+                .handler
+                .with_context(RequestContext::new(validation_result.clone())),
             user_filter: if validation_result.can_read_all() {
                 None
             } else {
@@ -257,14 +277,14 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
     }
 }
 
-pub struct UserRestrictedListerBackendHandler<'a, Handler> {
-    handler: &'a Handler,
+pub struct UserRestrictedListerBackendHandler<Handler> {
+    handler: Handler,
     pub user_filter: Option<UserId>,
 }
 
 #[async_trait]
 impl<Handler: ReadSchemaBackendHandler + Sync> ReadSchemaBackendHandler
-    for UserRestrictedListerBackendHandler<'_, Handler>
+    for UserRestrictedListerBackendHandler<Handler>
 {
     async fn get_schema(&self) -> Result<Schema> {
         let mut schema = self.handler.get_schema().await?;
@@ -281,7 +301,7 @@ impl<Handler: ReadSchemaBackendHandler + Sync> ReadSchemaBackendHandler
 
 #[async_trait]
 impl<Handler: UserListerBackendHandler + Sync> UserListerBackendHandler
-    for UserRestrictedListerBackendHandler<'_, Handler>
+    for UserRestrictedListerBackendHandler<Handler>
 {
     async fn list_users(
         &self,
@@ -304,7 +324,7 @@ impl<Handler: UserListerBackendHandler + Sync> UserListerBackendHandler
 
 #[async_trait]
 impl<Handler: GroupListerBackendHandler + Sync> GroupListerBackendHandler
-    for UserRestrictedListerBackendHandler<'_, Handler>
+    for UserRestrictedListerBackendHandler<Handler>
 {
     async fn list_groups(&self, filters: Option<GroupRequestFilter>) -> Result<Vec<Group>> {
         let group_filter = self
@@ -329,6 +349,6 @@ pub trait UserAndGroupListerBackendHandler:
 
 #[async_trait]
 impl<Handler: GroupListerBackendHandler + UserListerBackendHandler + Sync>
-    UserAndGroupListerBackendHandler for UserRestrictedListerBackendHandler<'_, Handler>
+    UserAndGroupListerBackendHandler for UserRestrictedListerBackendHandler<Handler>
 {
 }

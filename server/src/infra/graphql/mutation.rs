@@ -790,6 +790,7 @@ mod tests {
     };
     use lldap_auth::access_control::{Permission, ValidationResults};
     use lldap_domain::types::{AttributeName, AttributeType};
+    use lldap_domain_handlers::handler::RequestContext;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
 
@@ -813,8 +814,13 @@ mod tests {
                 }
             }
         "#;
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_add_user_attribute()
+        let credentials = ValidationResults {
+            user: UserId::new("bob"),
+            permission: Permission::Admin,
+        };
+        let mut mock_underlying = MockTestBackendHandler::new();
+        mock_underlying
+            .expect_add_user_attribute()
             .with(eq(CreateAttributeRequest {
                 name: AttributeName::new("AttrName0"),
                 attribute_type: AttributeType::String,
@@ -823,13 +829,11 @@ mod tests {
                 is_editable: false,
             }))
             .return_once(|_| Ok(()));
-        let context = Context::<MockTestBackendHandler>::new_for_tests(
-            mock,
-            ValidationResults {
-                user: UserId::new("bob"),
-                permission: Permission::Admin,
-            },
-        );
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_with_context()
+            .with(eq(RequestContext::new(credentials.clone())))
+            .return_once(|_| mock_underlying);
+        let context = Context::<MockTestBackendHandler>::new_for_tests(mock, credentials);
         let vars = Variables::from([
             ("name".to_string(), InputValue::scalar("AttrName0")),
             (
@@ -916,8 +920,13 @@ mod tests {
                 }
             }
         "#;
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_add_group_attribute()
+        let credentials = ValidationResults {
+            user: UserId::new("bob"),
+            permission: Permission::Admin,
+        };
+        let mut mock_underlying = MockTestBackendHandler::new();
+        mock_underlying
+            .expect_add_group_attribute()
             .with(eq(CreateAttributeRequest {
                 name: AttributeName::new("AttrName0"),
                 attribute_type: AttributeType::String,
@@ -926,13 +935,11 @@ mod tests {
                 is_editable: false,
             }))
             .return_once(|_| Ok(()));
-        let context = Context::<MockTestBackendHandler>::new_for_tests(
-            mock,
-            ValidationResults {
-                user: UserId::new("bob"),
-                permission: Permission::Admin,
-            },
-        );
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_with_context()
+            .with(eq(RequestContext::new(credentials.clone())))
+            .return_once(|_| mock_underlying);
+        let context = Context::<MockTestBackendHandler>::new_for_tests(mock, credentials);
         let vars = Variables::from([
             ("name".to_string(), InputValue::scalar("AttrName0")),
             (

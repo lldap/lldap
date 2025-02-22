@@ -1,7 +1,7 @@
 use crate::{domain::sql_tables::DbConnection, infra::configuration::Configuration};
 use async_trait::async_trait;
 
-use lldap_domain_handlers::handler::BackendHandler;
+use lldap_domain_handlers::handler::{BackendHandler, RequestContext, WithContextHandler};
 
 #[derive(Clone)]
 pub struct SqlBackendHandler {
@@ -17,6 +17,12 @@ impl SqlBackendHandler {
 
 #[async_trait]
 impl BackendHandler for SqlBackendHandler {}
+
+impl WithContextHandler for SqlBackendHandler {
+    fn with_context(&self, _context: RequestContext) -> Self {
+        self.clone()
+    }
+}
 
 #[cfg(test)]
 pub mod tests {
