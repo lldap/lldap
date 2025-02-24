@@ -42,7 +42,7 @@ To integrate with LLDAP,
     [directory.ldap.cache]
       entries = 500
     [directory.ldap.filter]
-      mail = "(&(objectclass=person)(mail=?))"
+      email = "(&(objectclass=person)(mail=?))"
       name = "(&(objectclass=person)(uid=?))"
     [directory.ldap.tls]
       allow-invalid-certs = true
