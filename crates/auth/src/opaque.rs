@@ -32,7 +32,6 @@ impl ArgonHasher {
         lanes: 1,
         mem_cost: 50 * 1024, // 50 MB, in KB
         secret: &[],
-        thread_mode: argon2::ThreadMode::Sequential,
         time_cost: 1,
         variant: argon2::Variant::Argon2id,
         version: argon2::Version::Version13,
