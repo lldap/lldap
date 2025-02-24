@@ -17,7 +17,7 @@ sea_orm = ["dep:sea-orm"]
 test = []
 
 [dependencies]
-rust-argon2 = "0.8"
+rust-argon2 = "2"
 curve25519-dalek = "3"
 digest = "0.9"
 generic-array = "0.14"
