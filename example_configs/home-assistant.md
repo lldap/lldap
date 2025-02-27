@@ -8,6 +8,7 @@ The [auth script](lldap-ha-auth.sh) attempts to authenticate a user against an L
 
 1. Copy the [auth script](lldap-ha-auth.sh) to your home assistant instance. In this example, we use `/config/lldap-ha-auth.sh`.
       - Set the script as executable by running `chmod +x /config/lldap-ha-auth.sh`
+      - If your lldap reverse proxy is using a local (insecure) certificate, you have to add `-k` to the `curl` commands
 2. Add the following to your configuration.yaml in Home assistant:
 ```yaml
 homeassistant:
@@ -32,4 +33,4 @@ homeassistant:
       args: ["https://lldap.example.com", "homeassistant_user", "homeassistant_admin", "homeassistant_local"]
       meta: true
 ```
-3. Reload your config or restart Home Assistant
+3. Restart Home Assistant
