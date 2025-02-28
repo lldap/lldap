@@ -4,6 +4,7 @@ members = [
     "crates/domain",
     "crates/domain-model",
     "crates/domain-handlers",
+    "crates/key-value-store",
     "crates/validation",
     "server",
     "app",
