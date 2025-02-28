@@ -2813,6 +2813,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "lldap_plugin_kv_store"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "lldap_domain",
+ "lldap_domain_model",
+ "lldap_key_value_store",
+ "log",
+ "sea-orm",
+ "serde",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "lldap_set_password"
 version = "0.1.0"
 dependencies = [

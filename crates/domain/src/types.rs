@@ -117,7 +117,7 @@ impl<'a, T: Serialize + ?Sized> From<&'a T> for Serialized {
 }
 
 impl Serialized {
-    fn convert_to<'a, T: Deserialize<'a>>(&'a self) -> bincode::Result<T> {
+    pub fn convert_to<'a, T: Deserialize<'a>>(&'a self) -> bincode::Result<T> {
         bincode::deserialize(&self.0)
     }
 
