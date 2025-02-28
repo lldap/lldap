@@ -33,6 +33,7 @@ use lldap_domain::{
 use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, ReadSchemaBackendHandler,
 };
+use lldap_plugin_engine::api::arguments::ldap_search_result::SearchResult;
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
 
@@ -49,10 +50,31 @@ enum SearchScope {
     Invalid,
 }
 
-enum InternalSearchResults {
+#[derive(Clone)]
+pub enum InternalSearchResults {
     UsersAndGroups(Vec<UserAndGroups>, Vec<Group>),
     Raw(Vec<LdapOp>),
     Empty,
+}
+
+impl From<SearchResult> for InternalSearchResults {
+    fn from(value: SearchResult) -> Self {
+        match value {
+            SearchResult::UsersAndGroups(u, g) => InternalSearchResults::UsersAndGroups(u, g),
+            SearchResult::Ldap(vec) => InternalSearchResults::Raw(vec),
+            SearchResult::Empty => InternalSearchResults::Empty,
+        }
+    }
+}
+
+impl Into<SearchResult> for InternalSearchResults {
+    fn into(self) -> SearchResult {
+        match self {
+            InternalSearchResults::UsersAndGroups(u, g) => SearchResult::UsersAndGroups(u, g),
+            InternalSearchResults::Raw(ldap_ops) => SearchResult::Ldap(ldap_ops),
+            InternalSearchResults::Empty => SearchResult::Empty,
+        }
+    }
 }
 
 fn get_search_scope(

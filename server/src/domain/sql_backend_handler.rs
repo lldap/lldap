@@ -3,7 +3,7 @@ use async_trait::async_trait;
 
 use lldap_domain_handlers::handler::{BackendHandler, RequestContext, WithContextHandler};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SqlBackendHandler {
     pub(crate) config: Configuration,
     pub(crate) sql_pool: DbConnection,
