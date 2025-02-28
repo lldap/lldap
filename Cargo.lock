@@ -2747,6 +2747,7 @@ dependencies = [
  "lldap_domain_handlers",
  "lldap_domain_model",
  "lldap_key_value_store",
+ "lldap_plugin_engine",
  "lldap_plugin_kv_store",
  "lldap_validation",
  "log",

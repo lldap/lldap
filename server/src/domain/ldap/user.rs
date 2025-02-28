@@ -185,7 +185,7 @@ fn get_user_attribute_equality_filter(
     }
 }
 
-fn convert_user_filter(
+pub fn convert_user_filter(
     ldap_info: &LdapInfo,
     filter: &LdapFilter,
     schema: &PublicSchema,
