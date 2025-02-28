@@ -15,8 +15,6 @@ use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, QuerySelect};
 use secstr::SecUtf8;
 use tracing::{debug, info, instrument, warn};
 
-type SqlOpaqueHandler = SqlBackendHandler;
-
 #[instrument(skip_all, level = "debug", err, fields(username = %username.as_str()))]
 fn passwords_match(
     password_file_bytes: &[u8],
@@ -97,7 +95,7 @@ impl LoginHandler for SqlBackendHandler {
 }
 
 #[async_trait]
-impl OpaqueHandler for SqlOpaqueHandler {
+impl OpaqueHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn login_start(
         &self,
@@ -212,8 +210,8 @@ impl OpaqueHandler for SqlOpaqueHandler {
 
 /// Convenience function to set a user's password.
 #[instrument(skip_all, level = "debug", err, fields(username = %username.as_str()))]
-pub(crate) async fn register_password(
-    opaque_handler: &SqlOpaqueHandler,
+pub(crate) async fn register_password<A: OpaqueHandler>(
+    opaque_handler: &A,
     username: UserId,
     password: &SecUtf8,
 ) -> Result<()> {
@@ -245,8 +243,8 @@ mod tests {
     use super::*;
     use crate::domain::sql_backend_handler::tests::*;
 
-    async fn attempt_login(
-        opaque_handler: &SqlOpaqueHandler,
+    async fn attempt_login<A: OpaqueHandler>(
+        opaque_handler: &A,
         username: &str,
         password: &str,
     ) -> Result<()> {
@@ -278,7 +276,7 @@ mod tests {
         crate::infra::logging::init_for_tests();
         let config = get_default_config();
         let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
-        let opaque_handler = SqlOpaqueHandler::new(config, sql_pool);
+        let opaque_handler = SqlBackendHandler::new(config, sql_pool);
         insert_user_no_password(&backend_handler, "bob").await;
         insert_user_no_password(&backend_handler, "john").await;
         attempt_login(&opaque_handler, "bob", "bob00")
@@ -301,7 +299,7 @@ mod tests {
     async fn test_bind_user() {
         let sql_pool = get_initialized_db().await;
         let config = get_default_config();
-        let handler = SqlOpaqueHandler::new(config, sql_pool.clone());
+        let handler = SqlBackendHandler::new(config, sql_pool.clone());
         insert_user(&handler, "bob", "bob00").await;
 
         handler

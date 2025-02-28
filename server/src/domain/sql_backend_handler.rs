@@ -27,7 +27,10 @@ impl WithContextHandler for SqlBackendHandler {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{domain::sql_tables::init_table, infra::configuration::ConfigurationBuilder};
+    use crate::{
+        domain::{opaque_handler::OpaqueHandler, sql_tables::init_table},
+        infra::configuration::ConfigurationBuilder,
+    };
     use lldap_auth::{opaque, registration};
     use lldap_domain::{
         requests::{CreateGroupRequest, CreateUserRequest},
@@ -59,8 +62,11 @@ pub mod tests {
         sql_pool
     }
 
-    pub async fn insert_user(handler: &SqlBackendHandler, name: &str, pass: &str) {
-        use crate::domain::opaque_handler::OpaqueHandler;
+    pub async fn insert_user<A: BackendHandler + OpaqueHandler>(
+        handler: &A,
+        name: &str,
+        pass: &str,
+    ) {
         insert_user_no_password(handler, name).await;
         let mut rng = rand::rngs::OsRng;
         let client_registration_start =
@@ -87,7 +93,7 @@ pub mod tests {
             .unwrap();
     }
 
-    pub async fn insert_user_no_password(handler: &SqlBackendHandler, name: &str) {
+    pub async fn insert_user_no_password<A: BackendHandler>(handler: &A, name: &str) {
         handler
             .create_user(CreateUserRequest {
                 user_id: UserId::new(name),

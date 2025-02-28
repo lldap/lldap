@@ -22,15 +22,18 @@ use crate::{
 use actix::Actor;
 use actix_server::ServerBuilder;
 use anyhow::{anyhow, bail, Context, Result};
+use domain::{opaque_handler::OpaqueHandler, plugin_backend_handler::PluginBackendHandler};
 use futures_util::TryFutureExt;
+use lldap_plugin_kv_store::store::PluginKeyValueStore;
 use sea_orm::{Database, DatabaseConnection};
 use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
 
 use lldap_domain::requests::{CreateGroupRequest, CreateUserRequest};
 use lldap_domain_handlers::handler::{
-    GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter, UserBackendHandler,
-    UserListerBackendHandler, UserRequestFilter,
+    BackendHandler, GroupRequestFilter, UserListerBackendHandler, UserRequestFilter,
 };
+
+use lldap_plugin_engine::api::{handler::PluginLoader, types::PluginConfig};
 
 mod domain;
 mod infra;
@@ -39,7 +42,10 @@ const ADMIN_PASSWORD_MISSING_ERROR : &str = "The LDAP admin password must be ini
             Either set the `ldap_user_pass` config value or the `LLDAP_LDAP_USER_PASS` environment variable. \
             A minimum of 8 characters is recommended.";
 
-async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) -> Result<()> {
+async fn create_admin_user<A: BackendHandler + OpaqueHandler>(
+    handler: &A,
+    config: &Configuration,
+) -> Result<()> {
     let pass_length = config
         .ldap_user_pass
         .as_ref()
@@ -77,7 +83,10 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
         .context("Error adding admin user to group")
 }
 
-async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> Result<()> {
+async fn ensure_group_exists<Handler: BackendHandler>(
+    handler: &Handler,
+    group_name: &str,
+) -> Result<()> {
     if handler
         .list_groups(Some(GroupRequestFilter::DisplayName(group_name.into())))
         .await?
@@ -93,6 +102,47 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
             .context(format!("while creating {} group", group_name))?;
     }
     Ok(())
+}
+
+async fn setup_plugin_handler(
+    config: Configuration,
+    sql_pool: DatabaseConnection,
+) -> Result<PluginBackendHandler> {
+    let plugin_configs: Vec<PluginConfig> = config
+        .plugin
+        .iter()
+        .filter(|p| p.enabled)
+        .map(|p| {
+            match PluginConfig::from(
+                p.plugin_path.clone(),
+                p.kvscope.clone(),
+                p.allow_on_password_update,
+                p.config.clone().unwrap_or_default(),
+            ) {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    debug!("Failed to load plugin: {:#?}. Error: {}", p.plugin_path, e);
+                    None
+                }
+            }
+        })
+        .flatten()
+        .collect::<Vec<PluginConfig>>();
+    let num_expected_plugins = config.plugin.iter().filter(|p| p.enabled).count();
+    if plugin_configs.len() != num_expected_plugins {
+        // We bail if we can't load all plugins. We may be depending on
+        // plugins maintaining consistencies in data.
+        bail!("Failed to load all configured plugins.");
+    }
+    let plugin_kv_store = PluginKeyValueStore::new(sql_pool.clone());
+    let plugin_handler = PluginLoader::from(plugin_configs, plugin_kv_store);
+    let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
+    let plugin_backend_handler = PluginBackendHandler::new(&backend_handler, plugin_handler);
+    // Initialize the plugins, ensure they were succesful
+    if let Err(e) = plugin_backend_handler.initialize_plugins().await {
+        bail!("A plugin failed to initialize. Exiting. Error: {}", e)
+    }
+    Ok(plugin_backend_handler)
 }
 
 async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnection> {
@@ -143,11 +193,13 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
             return Err(anyhow!("The private key encoding the passwords has changed since last successful startup. Changing the private key will invalidate all existing passwords. If you want to proceed, restart the server with the CLI arg --force-update-private-key=true or the env variable LLDAP_FORCE_UPDATE_PRIVATE_KEY=true. You probably also want --force-ldap-user-pass-reset / LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password to the value in the configuration.").context(e));
         }
     }
-    let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
-    ensure_group_exists(&backend_handler, "lldap_admin").await?;
-    ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
-    ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;
-    let admin_present = if let Ok(admins) = backend_handler
+    // Load plugin configs from configuration file
+    let plugin_backend_handler = setup_plugin_handler(config.clone(), sql_pool.clone()).await?;
+    // Ensure basic groups and users are present
+    ensure_group_exists(&plugin_backend_handler, "lldap_admin").await?;
+    ensure_group_exists(&plugin_backend_handler, "lldap_password_manager").await?;
+    ensure_group_exists(&plugin_backend_handler, "lldap_strict_readonly").await?;
+    let admin_present = if let Ok(admins) = plugin_backend_handler
         .list_users(
             Some(UserRequestFilter::MemberOf("lldap_admin".into())),
             false,
@@ -160,7 +212,7 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     };
     if !admin_present {
         warn!("Could not find an admin user, trying to create the user \"admin\" with the config-provided password");
-        create_admin_user(&backend_handler, &config)
+        create_admin_user(&plugin_backend_handler, &config)
             .await
             .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))
             .context("while creating the admin user")?;
@@ -174,7 +226,7 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
             span!(Level::INFO, "Resetting admin password")
         };
         register_password(
-            &backend_handler,
+            &plugin_backend_handler,
             config.ldap_user_dn.clone(),
             config
                 .ldap_user_pass
@@ -191,14 +243,16 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     if config.force_update_private_key || config.force_ldap_user_pass_reset.is_yes() {
         bail!("Restart the server without --force-update-private-key or --force-ldap-user-pass-reset to continue.");
     }
+
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,
-        backend_handler.clone(),
+        plugin_backend_handler.clone(),
+        plugin_backend_handler.clone(),
         actix_server::Server::build(),
     )
     .context("while binding the LDAP server")?;
     let server_builder =
-        infra::tcp_server::build_tcp_server(&config, backend_handler, server_builder)
+        infra::tcp_server::build_tcp_server(&config, plugin_backend_handler, server_builder)
             .await
             .context("while binding the TCP server")?;
     // Run every hour.
