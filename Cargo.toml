@@ -6,6 +6,7 @@ members = [
     "crates/domain-handlers",
     "crates/key-value-store",
     "crates/validation",
+    "crates/plugin-engine",
     "crates/plugin-kv-store",
     "server",
     "app",
