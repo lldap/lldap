@@ -171,7 +171,7 @@ fn get_group_attribute_equality_filter(
     }
 }
 
-fn convert_group_filter(
+pub fn convert_group_filter(
     ldap_info: &LdapInfo,
     filter: &LdapFilter,
     schema: &PublicSchema,

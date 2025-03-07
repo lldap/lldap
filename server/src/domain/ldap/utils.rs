@@ -262,11 +262,33 @@ pub fn map_group_field(field: &AttributeName, schema: &PublicSchema) -> GroupFie
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct LdapInfo {
     pub base_dn: Vec<(String, String)>,
     pub base_dn_str: String,
     pub ignored_user_attributes: Vec<AttributeName>,
     pub ignored_group_attributes: Vec<AttributeName>,
+}
+
+impl LdapInfo {
+    pub fn from(
+        ldap_base_dn: String,
+        ignored_user_attributes: Vec<AttributeName>,
+        ignored_group_attributes: Vec<AttributeName>,
+    ) -> LdapInfo {
+        let base_dn = ldap_base_dn.to_ascii_lowercase();
+        LdapInfo {
+            base_dn: parse_distinguished_name(&base_dn).unwrap_or_else(|_| {
+                panic!(
+                    "Invalid value for ldap_base_dn in configuration: {}",
+                    ldap_base_dn
+                )
+            }),
+            base_dn_str: base_dn,
+            ignored_user_attributes,
+            ignored_group_attributes,
+        }
+    }
 }
 
 pub fn get_custom_attribute(

@@ -797,6 +797,7 @@ mod tests {
         schema::{AttributeList, Schema},
         types::{AttributeName, AttributeType, LdapObjectClass},
     };
+    use lldap_domain_handlers::handler::RequestContext;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
@@ -839,91 +840,101 @@ mod tests {
           }
         }"#;
 
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_get_schema().returning(|| {
-            Ok(Schema {
-                user_attributes: DomainAttributeList {
-                    attributes: vec![
-                        DomainAttributeSchema {
-                            name: "first_name".into(),
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock_underlying = MockTestBackendHandler::new();
+            mock_underlying.expect_get_schema().returning(|| {
+                Ok(Schema {
+                    user_attributes: DomainAttributeList {
+                        attributes: vec![
+                            DomainAttributeSchema {
+                                name: "first_name".into(),
+                                attribute_type: AttributeType::String,
+                                is_list: false,
+                                is_visible: true,
+                                is_editable: true,
+                                is_hardcoded: true,
+                                is_readonly: false,
+                            },
+                            DomainAttributeSchema {
+                                name: "last_name".into(),
+                                attribute_type: AttributeType::String,
+                                is_list: false,
+                                is_visible: true,
+                                is_editable: true,
+                                is_hardcoded: true,
+                                is_readonly: false,
+                            },
+                        ],
+                    },
+                    group_attributes: DomainAttributeList {
+                        attributes: vec![DomainAttributeSchema {
+                            name: "club_name".into(),
                             attribute_type: AttributeType::String,
                             is_list: false,
                             is_visible: true,
                             is_editable: true,
-                            is_hardcoded: true,
+                            is_hardcoded: false,
                             is_readonly: false,
-                        },
-                        DomainAttributeSchema {
-                            name: "last_name".into(),
-                            attribute_type: AttributeType::String,
-                            is_list: false,
-                            is_visible: true,
-                            is_editable: true,
-                            is_hardcoded: true,
-                            is_readonly: false,
-                        },
+                        }],
+                    },
+                    extra_user_object_classes: vec![
+                        LdapObjectClass::from("customUserClass"),
+                        LdapObjectClass::from("myUserClass"),
                     ],
-                },
-                group_attributes: DomainAttributeList {
-                    attributes: vec![DomainAttributeSchema {
-                        name: "club_name".into(),
-                        attribute_type: AttributeType::String,
-                        is_list: false,
-                        is_visible: true,
-                        is_editable: true,
-                        is_hardcoded: false,
-                        is_readonly: false,
-                    }],
-                },
-                extra_user_object_classes: vec![
-                    LdapObjectClass::from("customUserClass"),
-                    LdapObjectClass::from("myUserClass"),
-                ],
-                extra_group_object_classes: vec![LdapObjectClass::from("customGroupClass")],
-            })
-        });
-        mock.expect_get_user_details()
-            .with(eq(UserId::new("bob")))
-            .return_once(|_| {
-                Ok(DomainUser {
-                    user_id: UserId::new("bob"),
-                    email: "bob@bobbers.on".into(),
-                    creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
-                    uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
-                    attributes: vec![
-                        DomainAttribute {
-                            name: "first_name".into(),
-                            value: "Bob".to_string().into(),
-                        },
-                        DomainAttribute {
-                            name: "last_name".into(),
-                            value: "Bobberson".to_string().into(),
-                        },
-                    ],
-                    ..Default::default()
+                    extra_group_object_classes: vec![LdapObjectClass::from("customGroupClass")],
                 })
             });
-        let mut groups = HashSet::new();
-        groups.insert(GroupDetails {
-            group_id: GroupId(3),
-            display_name: "Bobbersons".into(),
-            creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
-            uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
-            attributes: vec![DomainAttribute {
-                name: "club_name".into(),
-                value: "Gang of Four".to_string().into(),
-            }],
-        });
-        groups.insert(GroupDetails {
-            group_id: GroupId(7),
-            display_name: "Jefferees".into(),
-            creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
-            uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
-            attributes: Vec::new(),
-        });
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("bob")))
-            .return_once(|_| Ok(groups));
+            mock_underlying
+                .expect_get_user_details()
+                .with(eq(UserId::new("bob")))
+                .return_once(|_| {
+                    Ok(DomainUser {
+                        user_id: UserId::new("bob"),
+                        email: "bob@bobbers.on".into(),
+                        creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
+                        uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                        attributes: vec![
+                            DomainAttribute {
+                                name: "first_name".into(),
+                                value: "Bob".to_string().into(),
+                            },
+                            DomainAttribute {
+                                name: "last_name".into(),
+                                value: "Bobberson".to_string().into(),
+                            },
+                        ],
+                        ..Default::default()
+                    })
+                });
+            let mut groups = HashSet::new();
+            groups.insert(GroupDetails {
+                group_id: GroupId(3),
+                display_name: "Bobbersons".into(),
+                creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
+                uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                attributes: vec![DomainAttribute {
+                    name: "club_name".into(),
+                    value: "Gang of Four".to_string().into(),
+                }],
+            });
+            groups.insert(GroupDetails {
+                group_id: GroupId(7),
+                display_name: "Jefferees".into(),
+                creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
+                uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                attributes: Vec::new(),
+            });
+            mock_underlying
+                .expect_get_user_groups()
+                .with(eq(UserId::new("bob")))
+                .return_once(|_| Ok(groups));
+            mock_underlying
+        }
+
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_with_context()
+            .with(eq(RequestContext::new(ValidationResults::admin())))
+            .returning(|_| make_mock());
 
         let context =
             Context::<MockTestBackendHandler>::new_for_tests(mock, ValidationResults::admin());
@@ -1045,43 +1056,52 @@ mod tests {
           }
         }"#;
 
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock_underlying = MockTestBackendHandler::new();
+            setup_default_schema(&mut mock_underlying);
+            mock_underlying
+                .expect_list_users()
+                .with(
+                    eq(Some(DomainRequestFilter::Or(vec![
+                        DomainRequestFilter::UserId(UserId::new("bob")),
+                        DomainRequestFilter::Equality(
+                            UserColumn::Email,
+                            "robert@bobbers.on".to_owned(),
+                        ),
+                        DomainRequestFilter::AttributeEquality(
+                            AttributeName::from("first_name"),
+                            "robert".to_string().into(),
+                        ),
+                    ]))),
+                    eq(false),
+                )
+                .return_once(|_, _| {
+                    Ok(vec![
+                        DomainUserAndGroups {
+                            user: DomainUser {
+                                user_id: UserId::new("bob"),
+                                email: "bob@bobbers.on".into(),
+                                ..Default::default()
+                            },
+                            groups: None,
+                        },
+                        DomainUserAndGroups {
+                            user: DomainUser {
+                                user_id: UserId::new("robert"),
+                                email: "robert@bobbers.on".into(),
+                                ..Default::default()
+                            },
+                            groups: None,
+                        },
+                    ])
+                });
+            mock_underlying
+        }
+
         let mut mock = MockTestBackendHandler::new();
-        setup_default_schema(&mut mock);
-        mock.expect_list_users()
-            .with(
-                eq(Some(DomainRequestFilter::Or(vec![
-                    DomainRequestFilter::UserId(UserId::new("bob")),
-                    DomainRequestFilter::Equality(
-                        UserColumn::Email,
-                        "robert@bobbers.on".to_owned(),
-                    ),
-                    DomainRequestFilter::AttributeEquality(
-                        AttributeName::from("first_name"),
-                        "robert".to_string().into(),
-                    ),
-                ]))),
-                eq(false),
-            )
-            .return_once(|_, _| {
-                Ok(vec![
-                    DomainUserAndGroups {
-                        user: DomainUser {
-                            user_id: UserId::new("bob"),
-                            email: "bob@bobbers.on".into(),
-                            ..Default::default()
-                        },
-                        groups: None,
-                    },
-                    DomainUserAndGroups {
-                        user: DomainUser {
-                            user_id: UserId::new("robert"),
-                            email: "robert@bobbers.on".into(),
-                            ..Default::default()
-                        },
-                        groups: None,
-                    },
-                ])
-            });
+        mock.expect_with_context()
+            .with(eq(RequestContext::new(ValidationResults::admin())))
+            .returning(|_| make_mock());
 
         let context =
             Context::<MockTestBackendHandler>::new_for_tests(mock, ValidationResults::admin());
@@ -1137,9 +1157,14 @@ mod tests {
           }
         }"#;
 
-        let mut mock = MockTestBackendHandler::new();
+        let mut mock_underlying = MockTestBackendHandler::new();
 
-        setup_default_schema(&mut mock);
+        setup_default_schema(&mut mock_underlying);
+
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_with_context()
+            .with(eq(RequestContext::new(ValidationResults::admin())))
+            .return_once(|_| mock_underlying);
 
         let context =
             Context::<MockTestBackendHandler>::new_for_tests(mock, ValidationResults::admin());
@@ -1277,36 +1302,39 @@ mod tests {
           }
         }"#;
 
+        let mut mock_underlying = MockTestBackendHandler::new();
+        mock_underlying
+            .expect_get_schema()
+            .times(1)
+            .return_once(|| {
+                Ok(Schema {
+                    user_attributes: AttributeList {
+                        attributes: vec![DomainAttributeSchema {
+                            name: "invisible".into(),
+                            attribute_type: AttributeType::JpegPhoto,
+                            is_list: false,
+                            is_visible: false,
+                            is_editable: true,
+                            is_hardcoded: true,
+                            is_readonly: false,
+                        }],
+                    },
+                    group_attributes: AttributeList {
+                        attributes: Vec::new(),
+                    },
+                    extra_user_object_classes: vec![LdapObjectClass::from("customUserClass")],
+                    extra_group_object_classes: Vec::new(),
+                })
+            });
+        let credentials = ValidationResults {
+            user: UserId::new("bob"),
+            permission: Permission::Regular,
+        };
         let mut mock = MockTestBackendHandler::new();
-
-        mock.expect_get_schema().times(1).return_once(|| {
-            Ok(Schema {
-                user_attributes: AttributeList {
-                    attributes: vec![DomainAttributeSchema {
-                        name: "invisible".into(),
-                        attribute_type: AttributeType::JpegPhoto,
-                        is_list: false,
-                        is_visible: false,
-                        is_editable: true,
-                        is_hardcoded: true,
-                        is_readonly: false,
-                    }],
-                },
-                group_attributes: AttributeList {
-                    attributes: Vec::new(),
-                },
-                extra_user_object_classes: vec![LdapObjectClass::from("customUserClass")],
-                extra_group_object_classes: Vec::new(),
-            })
-        });
-
-        let context = Context::<MockTestBackendHandler>::new_for_tests(
-            mock,
-            ValidationResults {
-                user: UserId::new("bob"),
-                permission: Permission::Regular,
-            },
-        );
+        mock.expect_with_context()
+            .with(eq(RequestContext::new(credentials.clone())))
+            .return_once(|_| mock_underlying);
+        let context = Context::<MockTestBackendHandler>::new_for_tests(mock, credentials);
 
         let schema = schema(Query::<MockTestBackendHandler>::new());
         assert_eq!(
