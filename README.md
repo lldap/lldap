@@ -595,6 +595,7 @@ folder for help with:
 - [Dex](example_configs/dex_config.yml)
 - [Dokuwiki](example_configs/dokuwiki.md)
 - [Dolibarr](example_configs/dolibarr.md)
+- [Duo Auth Proxy](example_configs/duo_auth_proxy.md)
 - [Ejabberd](example_configs/ejabberd.md)
 - [Emby](example_configs/emby.md)
 - [Ergo IRCd](example_configs/ergo.md)
