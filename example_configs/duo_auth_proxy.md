@@ -2,8 +2,7 @@
 
 ## Configuring DuoAuthProxy
 
-To set up DuoAuthProxy with LLDAP, you need to configure the `authproxy.cfg` file properly. Replace the following placeholders accordingly:
-
+To set up DuoAuthProxy with LLDAP, you need to configure the `authproxy.cfg` file properly. 
 - `bind_dn`
 - `service_account_username`
 - `service_account_password`
