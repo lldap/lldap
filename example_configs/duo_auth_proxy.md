@@ -58,6 +58,8 @@ docker run -d \
 
 You can also choose to host it natively or generate your own image using the official instructions.
 
+# Connecting a Service to Duo Auth Proxy
+This section demonstrates how to connect a service to Duo Auth Proxy, using Jellyfin as an example. You can follow the same approach for other services.
 ## Preparing Jellyfin
 
 Ensure Jellyfin is set up and added to the `auth` network:
