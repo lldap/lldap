@@ -93,6 +93,7 @@ Click **Save and Test LDAP Server Settings** to check connectivity.
 - **LDAP Uid Attribute:** `uid`
 - **LDAP Username Attribute:** `uid`
 - **LDAP Password Attribute:** `userPassword`
+- **LDAP Admin Base DN:** `ou=people,dc=example,dc=com`
 - **LDAP Admin Filter:** `(memberof=cn=lldap_admin,ou=example,dc=com)`
 
 Click **Save and Test LDAP Filter Settings** to verify user detection.
