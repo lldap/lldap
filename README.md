@@ -36,6 +36,7 @@
 - [About](#about)
 - [Installation](#installation)
   - [With Docker](#with-docker)
+  - [With Podman](#with-podman)
   - [With Kubernetes](#with-kubernetes)
   - [From a package repository](#from-a-package-repository)
   - [With FreeBSD](#with-freebsd)
@@ -178,6 +179,13 @@ services:
 
 Then the service will listen on two ports, one for LDAP and one for the web
 front-end.
+
+### With Podman
+
+LLDAP works well with rootless Podman either through command line deployment
+or using [quadlets](example_configs/podman-quadlets/). The example quadlets
+include configuration with postgresql and file based secrets, but have comments
+for several other deployment strategies.
 
 ### With Kubernetes
 
