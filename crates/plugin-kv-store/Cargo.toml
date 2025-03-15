@@ -1,0 +1,39 @@
+[package]
+authors = ["Simon Broeng Jensen <sbj@cwconsult.dk>"]
+description = "Plugin Key-Value store for LLDAP"
+name = "lldap_plugin_kv_store"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1"
+serde = "*"
+thiserror = "1"
+
+[dev-dependencies.log]
+version = "*"
+
+[dependencies.sea-orm]
+version = "0.12"
+default-features = false
+features = [
+    "macros",
+    "with-chrono",
+    "with-uuid",
+    "sqlx-all",
+    "runtime-actix-rustls",
+]
+
+[dependencies.tokio]
+version = "*"
+features = ["macros", "rt"]
+
+[dependencies.lldap_domain]
+path = "../domain"
+
+[dependencies.lldap_domain_model]
+path = "../domain-model"
+
+[dependencies.lldap_key_value_store]
+path = "../key-value-store"
+features = ["seaorm"]

@@ -48,18 +48,18 @@ impl<Handler: BackendHandler> Context<Handler> {
         }
     }
 
-    pub fn get_admin_handler(&self) -> Option<&impl AdminBackendHandler> {
+    pub fn get_admin_handler(&self) -> Option<impl AdminBackendHandler> {
         self.handler.get_admin_handler(&self.validation_result)
     }
 
-    pub fn get_readonly_handler(&self) -> Option<&impl ReadonlyBackendHandler> {
+    pub fn get_readonly_handler(&self) -> Option<impl ReadonlyBackendHandler> {
         self.handler.get_readonly_handler(&self.validation_result)
     }
 
     pub fn get_writeable_handler(
         &self,
         user_id: &UserId,
-    ) -> Option<&impl UserWriteableBackendHandler> {
+    ) -> Option<impl UserWriteableBackendHandler> {
         self.handler
             .get_writeable_handler(&self.validation_result, user_id)
     }
@@ -67,7 +67,7 @@ impl<Handler: BackendHandler> Context<Handler> {
     pub fn get_readable_handler(
         &self,
         user_id: &UserId,
-    ) -> Option<&impl UserReadableBackendHandler> {
+    ) -> Option<impl UserReadableBackendHandler> {
         self.handler
             .get_readable_handler(&self.validation_result, user_id)
     }

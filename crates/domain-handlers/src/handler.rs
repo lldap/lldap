@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use ldap3_proto::proto::LdapSubstringFilter;
+use lldap_auth::access_control::ValidationResults;
 use lldap_domain::{
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
@@ -120,6 +121,24 @@ impl From<bool> for GroupRequestFilter {
     }
 }
 
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
+pub struct RequestContext {
+    pub validation_results: Option<ValidationResults>,
+}
+
+impl RequestContext {
+    pub fn new(validation_results: ValidationResults) -> Self {
+        Self {
+            validation_results: Some(validation_results),
+        }
+    }
+    pub fn empty() -> Self {
+        Self {
+            validation_results: None,
+        }
+    }
+}
+
 #[async_trait]
 pub trait LoginHandler: Send + Sync {
     async fn bind(&self, request: BindRequest) -> Result<()>;
@@ -177,6 +196,10 @@ pub trait SchemaBackendHandler: ReadSchemaBackendHandler {
     async fn delete_group_object_class(&self, name: &LdapObjectClass) -> Result<()>;
 }
 
+pub trait WithContextHandler: Sized {
+    fn with_context(&self, context: RequestContext) -> Self;
+}
+
 #[async_trait]
 pub trait BackendHandler:
     Send
@@ -187,6 +210,7 @@ pub trait BackendHandler:
     + GroupListerBackendHandler
     + ReadSchemaBackendHandler
     + SchemaBackendHandler
+    + WithContextHandler
 {
 }
 

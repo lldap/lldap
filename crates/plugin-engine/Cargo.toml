@@ -1,0 +1,77 @@
+[package]
+authors = ["Simon Broeng Jensen <sbj@cwconsult.dk>"]
+description = "Plugin engine for LLDAP"
+name = "lldap_plugin_engine"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+test = []
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+base64ct = "*"
+chrono = "*"
+digest = "0.10.3"
+serde_json = "*"
+tealr_derive = "0.10"
+tracing = "*"
+tracing-log = "*"
+utf16string = "*"
+md4 = "0.10.2"
+md-5 = "0.10.4"
+sha2 = "0.10.4"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+mockall = "0.11.4"
+nix = "0.26.2"
+pretty_assertions = "1"
+
+[dependencies.base16ct]
+version = "*"
+features = ["alloc"]
+
+[dependencies.ldap3_proto]
+version = "0.6.0"
+features = ["serde"]
+
+[dependencies.lldap_auth]
+path = "../auth"
+
+[dependencies.lldap_domain]
+path = "../domain"
+
+[dependencies.lldap_key_value_store]
+path = "../key-value-store"
+
+[dependencies.lldap_plugin_kv_store]
+path = "../plugin-kv-store"
+
+[dependencies.mlua]
+version = "0.10"
+features = ["serialize", "async", "send", "luajit", "vendored", "macros"]
+
+[dependencies.tealr]
+version = "0.10"
+features = [
+    "derive",
+    "compile",
+    "mlua_async",
+    "mlua_send",
+    "mlua_luajit",
+    "mlua_serialize",
+]
+
+[dependencies.tokio]
+version = "*"
+features = ["macros", "rt"]
+
+[dependencies.serde]
+version = "*"
+features = ["derive"]
+
+[dependencies.uuid]
+features = ["v1", "v3", "v4", "serde"]
+version = "1"

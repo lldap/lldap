@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use crate::{
     domain::sql_tables::{ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation},
@@ -81,6 +81,26 @@ impl std::default::Default for LdapsOptions {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[builder(pattern = "owned")]
+pub struct PluginOptions {
+    #[builder(default = "true")]
+    pub enabled: bool,
+    #[builder(default = "false")]
+    pub allow_on_password_update: bool,
+    #[builder(default = r#"None"#)]
+    pub kvscope: Option<String>,
+    pub plugin_path: PathBuf,
+    #[builder(default = r#"None"#)]
+    pub config: Option<BTreeMap<String, String>>,
+}
+
+impl std::default::Default for PluginOptions {
+    fn default() -> Self {
+        PluginOptionsBuilder::default().build().unwrap()
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize, derive_more::Debug)]
 #[debug(r#""{_0}""#)]
 pub struct HttpUrl(pub Url);
@@ -136,6 +156,8 @@ pub struct Configuration {
     #[serde(skip)]
     #[builder(field(private), default = "None")]
     server_setup: Option<ServerSetupConfig>,
+    #[builder(default = r#"Vec::new()"#)]
+    pub plugin: Vec<PluginOptions>,
 }
 
 impl std::default::Default for Configuration {
