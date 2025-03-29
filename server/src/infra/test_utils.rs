@@ -18,6 +18,9 @@ mockall::mock! {
     impl Clone for TestBackendHandler {
         fn clone(&self) -> Self;
     }
+    impl WithContextHandler for TestBackendHandler {
+        fn with_context(&self, context: RequestContext) -> Self;
+    }
     #[async_trait]
     impl LoginHandler for TestBackendHandler {
         async fn bind(&self, request: BindRequest) -> Result<()>;

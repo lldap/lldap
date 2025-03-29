@@ -1114,6 +1114,11 @@ async fn migrate_to_v10(transaction: DatabaseTransaction) -> Result<DatabaseTran
     Ok(transaction)
 }
 
+async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    lldap_plugin_kv_store::migration::create_plugin_kv_table(&transaction).await?;
+    Ok(transaction)
+}
+
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -1144,6 +1149,7 @@ pub async fn migrate_from_version(
         to_sync!(migrate_to_v8),
         to_sync!(migrate_to_v9),
         to_sync!(migrate_to_v10),
+        to_sync!(migrate_to_v11),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {

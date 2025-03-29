@@ -16,6 +16,8 @@ pub use super::memberships::Column as MembershipColumn;
 pub use super::memberships::Entity as Membership;
 pub use super::password_reset_tokens::Column as PasswordResetTokensColumn;
 pub use super::password_reset_tokens::Entity as PasswordResetTokens;
+pub use super::plugin_key_values::Column as PluginKeyValuesColumn;
+pub use super::plugin_key_values::Entity as PluginKeyValues;
 pub use super::user_attribute_schema::Column as UserAttributeSchemaColumn;
 pub use super::user_attribute_schema::Entity as UserAttributeSchema;
 pub use super::user_attributes::Column as UserAttributesColumn;

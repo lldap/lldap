@@ -16,4 +16,6 @@ pub mod group_attribute_schema;
 pub mod group_attributes;
 pub mod group_object_classes;
 
+pub mod plugin_key_values;
+
 pub use prelude::*;

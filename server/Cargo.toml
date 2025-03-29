@@ -100,6 +100,15 @@ path = "../crates/domain-handlers"
 [dependencies.lldap_validation]
 path = "../crates/validation"
 
+[dependencies.lldap_plugin_engine]
+path = "../crates/plugin-engine"
+
+[dependencies.lldap_key_value_store]
+path = "../crates/key-value-store"
+
+[dependencies.lldap_plugin_kv_store]
+path = "../crates/plugin-kv-store"
+
 [dependencies.opaque-ke]
 version = "0.7"
 

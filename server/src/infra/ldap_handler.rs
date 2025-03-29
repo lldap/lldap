@@ -10,6 +10,7 @@ use crate::{
             },
         },
         opaque_handler::OpaqueHandler,
+        plugin_backend_handler::LdapEventHandler,
         schema::PublicSchema,
     },
     infra::access_control::{
@@ -33,6 +34,9 @@ use lldap_domain::{
 use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, ReadSchemaBackendHandler,
 };
+use lldap_plugin_engine::api::arguments::{
+    ldap_bind_result::BindResult, ldap_search_result::SearchResult,
+};
 use std::collections::HashMap;
 use tracing::{debug, instrument, warn};
 
@@ -49,10 +53,31 @@ enum SearchScope {
     Invalid,
 }
 
-enum InternalSearchResults {
+#[derive(Clone)]
+pub enum InternalSearchResults {
     UsersAndGroups(Vec<UserAndGroups>, Vec<Group>),
     Raw(Vec<LdapOp>),
     Empty,
+}
+
+impl From<SearchResult> for InternalSearchResults {
+    fn from(value: SearchResult) -> Self {
+        match value {
+            SearchResult::UsersAndGroups(u, g) => InternalSearchResults::UsersAndGroups(u, g),
+            SearchResult::Ldap(vec) => InternalSearchResults::Raw(vec),
+            SearchResult::Empty => InternalSearchResults::Empty,
+        }
+    }
+}
+
+impl Into<SearchResult> for InternalSearchResults {
+    fn into(self) -> SearchResult {
+        match self {
+            InternalSearchResults::UsersAndGroups(u, g) => SearchResult::UsersAndGroups(u, g),
+            InternalSearchResults::Raw(ldap_ops) => SearchResult::Ldap(ldap_ops),
+            InternalSearchResults::Empty => SearchResult::Empty,
+        }
+    }
 }
 
 fn get_search_scope(
@@ -161,8 +186,8 @@ fn make_modify_response(code: LdapResultCode, message: String) -> LdapOp {
     })
 }
 
-fn root_dse_response(base_dn: &str) -> LdapOp {
-    LdapOp::SearchResultEntry(LdapSearchResultEntry {
+fn root_dse_response(base_dn: &str) -> LdapSearchResultEntry {
+    LdapSearchResultEntry {
         dn: "".to_string(),
         attributes: vec![
             LdapPartialAttribute {
@@ -212,37 +237,41 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
                 vals: vec![b"false".to_vec()],
             },
         ],
-    })
+    }
 }
 
-pub struct LdapHandler<Backend> {
+pub struct LdapHandler<Backend, Events> {
     user_info: Option<ValidationResults>,
     backend_handler: AccessControlledBackendHandler<Backend>,
+    event_handler: Events,
     ldap_info: LdapInfo,
     session_uuid: uuid::Uuid,
 }
 
-impl<Backend> LdapHandler<Backend> {
+impl<Backend, Events> LdapHandler<Backend, Events> {
     pub fn session_uuid(&self) -> &uuid::Uuid {
         &self.session_uuid
     }
 }
 
-impl<Backend: LoginHandler> LdapHandler<Backend> {
+impl<Backend: LoginHandler, Events: LdapEventHandler> LdapHandler<Backend, Events> {
     pub fn get_login_handler(&self) -> &impl LoginHandler {
         self.backend_handler.unsafe_get_handler()
     }
 }
 
-impl<Backend: OpaqueHandler> LdapHandler<Backend> {
+impl<Backend: OpaqueHandler, Events: LdapEventHandler> LdapHandler<Backend, Events> {
     pub fn get_opaque_handler(&self) -> &impl OpaqueHandler {
         self.backend_handler.unsafe_get_handler()
     }
 }
 
-impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
+impl<Backend: BackendHandler + LoginHandler + OpaqueHandler, Events: LdapEventHandler>
+    LdapHandler<Backend, Events>
+{
     pub fn new(
         backend_handler: AccessControlledBackendHandler<Backend>,
+        event_handler: Events,
         mut ldap_base_dn: String,
         ignored_user_attributes: Vec<AttributeName>,
         ignored_group_attributes: Vec<AttributeName>,
@@ -252,6 +281,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         Self {
             user_info: None,
             backend_handler,
+            event_handler,
             ldap_info: LdapInfo {
                 base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
                     panic!(
@@ -268,9 +298,14 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     #[cfg(test)]
-    pub fn new_for_tests(backend_handler: Backend, ldap_base_dn: &str) -> Self {
+    pub fn new_for_tests(
+        backend_handler: Backend,
+        event_handler: Events,
+        ldap_base_dn: &str,
+    ) -> Self {
         Self::new(
             AccessControlledBackendHandler::new(backend_handler),
+            event_handler,
             ldap_base_dn.to_string(),
             vec![],
             vec![],
@@ -391,7 +426,11 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                                 ),
                             })
                         } else if let Err(e) = self
-                            .change_password(self.get_opaque_handler(), uid, password.as_bytes())
+                            .change_password(
+                                self.get_opaque_handler(),
+                                uid.clone(),
+                                password.as_bytes(),
+                            )
                             .await
                         {
                             Err(LdapError {
@@ -399,6 +438,8 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                                 message: format!("Error while changing the password: {:#?}", e),
                             })
                         } else {
+                            // Notify any (allowed, and) registered plugins of the update
+                            self.event_handler.on_password_update(&uid, password).await;
                             Ok(vec![make_extended_response(
                                 LdapResultCode::Success,
                                 "".to_string(),
@@ -445,10 +486,17 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     .unwrap_or_default();
                 vec![make_extended_response(LdapResultCode::Success, authz_id)]
             }
-            _ => vec![make_extended_response(
-                LdapResultCode::UnwillingToPerform,
-                format!("Unsupported extended operation: {}", &request.name),
-            )],
+            _ => {
+                self.event_handler
+                    .on_ldap_extended_request(
+                        request.clone(),
+                        vec![make_extended_response(
+                            LdapResultCode::UnwillingToPerform,
+                            format!("Unsupported extended operation: {}", &request.name),
+                        )],
+                    )
+                    .await
+            }
         }
     }
 
@@ -549,9 +597,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
     async fn do_modify_request(&mut self, request: &LdapModifyRequest) -> Vec<LdapOp> {
-        self.handle_modify_request(request)
+        let result = self
+            .handle_modify_request(request)
             .await
-            .unwrap_or_else(|e: LdapError| vec![make_modify_response(e.code, e.message)])
+            .unwrap_or_else(|e: LdapError| vec![make_modify_response(e.code, e.message)]);
+        self.event_handler
+            .on_ldap_modify(request.clone(), result)
+            .await
     }
 
     pub async fn do_search_or_dse(
@@ -563,7 +615,11 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 if attribute.eq_ignore_ascii_case("objectclass") {
                     debug!("rootDSE request");
                     return Ok(vec![
-                        root_dse_response(&self.ldap_info.base_dn_str),
+                        LdapOp::SearchResultEntry(
+                            self.event_handler
+                                .on_ldap_root_dse(root_dse_response(&self.ldap_info.base_dn_str))
+                                .await,
+                        ),
                         make_search_success(),
                     ]);
                 }
@@ -695,8 +751,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 message: format!("Unable to get schema: {:#}", e),
             })?);
         let search_results = self
-            .do_search_internal(&backend_handler, request, &schema)
-            .await?;
+            .event_handler
+            .on_ldap_search_result(
+                &request,
+                self.do_search_internal(&backend_handler, request, &schema)
+                    .await?,
+            )
+            .await;
         let mut results = match search_results {
             InternalSearchResults::UsersAndGroups(users, groups) => {
                 convert_users_to_ldap_op(users, &request.attrs, &self.ldap_info, &schema)
@@ -880,11 +941,21 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         Some(match ldap_op {
             LdapOp::BindRequest(request) => {
                 let (code, message) = self.do_bind(&request).await;
+                let bind_result = self
+                    .event_handler
+                    .on_ldap_bind(
+                        &request,
+                        BindResult {
+                            result_code: code,
+                            message,
+                        },
+                    )
+                    .await;
                 vec![LdapOp::BindResponse(LdapBindResponse {
                     res: LdapResultOp {
-                        code,
+                        code: bind_result.result_code,
                         matcheddn: "".to_string(),
-                        message,
+                        message: bind_result.message,
                         referral: vec![],
                     },
                     saslcreds: None,
@@ -895,11 +966,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 .await
                 .unwrap_or_else(|e: LdapError| vec![make_search_error(e.code, e.message)]),
             LdapOp::UnbindRequest => {
+                let user_id = self.user_info.clone().map(|u| u.user);
+                self.event_handler.on_ldap_unbind(user_id.clone()).await;
                 debug!(
                     "Unbind request for {}",
-                    self.user_info
+                    user_id
                         .as_ref()
-                        .map(|u| u.user.as_str())
+                        .map(|u| u.as_str())
                         .unwrap_or("<not bound>"),
                 );
                 self.user_info = None;
@@ -927,11 +1000,15 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infra::test_utils::{setup_default_schema, MockTestBackendHandler};
+    use crate::{
+        domain::plugin_backend_handler::TestLdapEventHandler,
+        infra::test_utils::{setup_default_schema, MockTestBackendHandler},
+    };
     use chrono::TimeZone;
     use ldap3_proto::proto::{
         LdapDerefAliases, LdapSearchScope, LdapSubstringFilter, LdapWhoamiRequest,
     };
+    use lldap_auth::access_control::Permission;
     use lldap_domain::{
         schema::{AttributeList, AttributeSchema, Schema},
         types::*,
@@ -959,18 +1036,27 @@ mod tests {
     }
 
     async fn setup_bound_handler_with_group(
-        mut mock: MockTestBackendHandler,
+        make_base_mock: fn() -> MockTestBackendHandler,
+        make_mock: fn() -> MockTestBackendHandler,
         group: &str,
-    ) -> LdapHandler<MockTestBackendHandler> {
+        perm: Permission,
+    ) -> LdapHandler<MockTestBackendHandler, TestLdapEventHandler> {
+        let group = group.to_string();
+        let make_underlying_mock = move |_| {
+            let mut mock_base = make_base_mock();
+            setup_default_schema(&mut mock_base);
+            mock_base
+        };
+        let mut mock = make_mock();
+        let user_id = UserId::new("test");
         mock.expect_bind()
             .with(eq(BindRequest {
-                name: UserId::new("test"),
+                name: user_id.clone(),
                 password: "pass".to_string(),
             }))
             .return_once(|_| Ok(()));
-        let group = group.to_string();
         mock.expect_get_user_groups()
-            .with(eq(UserId::new("test")))
+            .with(eq(user_id.clone()))
             .return_once(|_| {
                 let mut set = HashSet::new();
                 set.insert(GroupDetails {
@@ -982,8 +1068,14 @@ mod tests {
                 });
                 Ok(set)
             });
-        setup_default_schema(&mut mock);
-        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=Example,dc=com");
+        mock.expect_with_context()
+            .with(eq(RequestContext::new(ValidationResults {
+                user: user_id,
+                permission: perm,
+            })))
+            .returning(make_underlying_mock);
+        let event_handler = TestLdapEventHandler {};
+        let mut ldap_handler = LdapHandler::new_for_tests(mock, event_handler, "dc=Example,dc=com");
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=coM".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
@@ -996,21 +1088,39 @@ mod tests {
     }
 
     async fn setup_bound_readonly_handler(
-        mock: MockTestBackendHandler,
-    ) -> LdapHandler<MockTestBackendHandler> {
-        setup_bound_handler_with_group(mock, "lldap_strict_readonly").await
+        make_base_mock: fn() -> MockTestBackendHandler,
+    ) -> LdapHandler<MockTestBackendHandler, TestLdapEventHandler> {
+        setup_bound_handler_with_group(
+            make_base_mock,
+            MockTestBackendHandler::new,
+            "lldap_strict_readonly",
+            Permission::Readonly,
+        )
+        .await
     }
 
     async fn setup_bound_password_manager_handler(
-        mock: MockTestBackendHandler,
-    ) -> LdapHandler<MockTestBackendHandler> {
-        setup_bound_handler_with_group(mock, "lldap_password_manager").await
+        make_base_mock: fn() -> MockTestBackendHandler,
+    ) -> LdapHandler<MockTestBackendHandler, TestLdapEventHandler> {
+        setup_bound_handler_with_group(
+            make_base_mock,
+            MockTestBackendHandler::new,
+            "lldap_password_manager",
+            Permission::PasswordManager,
+        )
+        .await
     }
 
     async fn setup_bound_admin_handler(
-        mock: MockTestBackendHandler,
-    ) -> LdapHandler<MockTestBackendHandler> {
-        setup_bound_handler_with_group(mock, "lldap_admin").await
+        make_base_mock: fn() -> MockTestBackendHandler,
+    ) -> LdapHandler<MockTestBackendHandler, TestLdapEventHandler> {
+        setup_bound_handler_with_group(
+            make_base_mock,
+            MockTestBackendHandler::new,
+            "lldap_admin",
+            Permission::Admin,
+        )
+        .await
     }
 
     #[tokio::test]
@@ -1026,7 +1136,8 @@ mod tests {
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
             .return_once(|_| Ok(HashSet::new()));
-        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=eXample,dc=com");
+        let event_handler = TestLdapEventHandler::new();
+        let mut ldap_handler = LdapHandler::new_for_tests(mock, event_handler, "dc=eXample,dc=com");
 
         let request = LdapOp::BindRequest(LdapBindRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
@@ -1069,7 +1180,8 @@ mod tests {
                 });
                 Ok(set)
             });
-        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=example,dc=com");
+        let mut ldap_handler =
+            LdapHandler::new_for_tests(mock, TestLdapEventHandler::new(), "dc=example,dc=com");
 
         let request = LdapBindRequest {
             dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
@@ -1083,26 +1195,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_regular_user() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .with(
-                eq(Some(UserRequestFilter::And(vec![
-                    true.into(),
-                    UserRequestFilter::UserId(UserId::new("test")),
-                ]))),
-                eq(false),
-            )
-            .times(1)
-            .return_once(|_, _| {
-                Ok(vec![UserAndGroups {
-                    user: User {
-                        user_id: UserId::new("test"),
-                        ..Default::default()
-                    },
-                    groups: None,
-                }])
-            });
-        let mut ldap_handler = setup_bound_handler_with_group(mock, "regular").await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users()
+                .with(
+                    eq(Some(UserRequestFilter::And(vec![
+                        true.into(),
+                        UserRequestFilter::UserId(UserId::new("test")),
+                    ]))),
+                    eq(false),
+                )
+                .times(1)
+                .return_once(|_, _| {
+                    Ok(vec![UserAndGroups {
+                        user: User {
+                            user_id: UserId::new("test"),
+                            ..Default::default()
+                        },
+                        groups: None,
+                    }])
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_handler_with_group(
+            make_mock,
+            MockTestBackendHandler::new,
+            "regular",
+            Permission::Regular,
+        )
+        .await;
 
         let request =
             make_user_search_request::<String>(LdapFilter::And(vec![]), vec!["1.1".to_string()]);
@@ -1120,12 +1241,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_readonly_user() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .with(eq(Some(true.into())), eq(false))
-            .times(1)
-            .return_once(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users()
+                .with(eq(Some(true.into())), eq(false))
+                .times(1)
+                .return_once(|_, _| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_readonly_handler(make_mock).await;
 
         let request =
             make_user_search_request::<String>(LdapFilter::And(vec![]), vec!["1.1".to_string()]);
@@ -1137,26 +1261,29 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_member_of() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .with(eq(Some(true.into())), eq(true))
-            .times(1)
-            .return_once(|_, _| {
-                Ok(vec![UserAndGroups {
-                    user: User {
-                        user_id: UserId::new("bob"),
-                        ..Default::default()
-                    },
-                    groups: Some(vec![GroupDetails {
-                        group_id: GroupId(42),
-                        display_name: "rockstars".into(),
-                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                        uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
-                        attributes: Vec::new(),
-                    }]),
-                }])
-            });
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users()
+                .with(eq(Some(true.into())), eq(true))
+                .times(1)
+                .return_once(|_, _| {
+                    Ok(vec![UserAndGroups {
+                        user: User {
+                            user_id: UserId::new("bob"),
+                            ..Default::default()
+                        },
+                        groups: Some(vec![GroupDetails {
+                            group_id: GroupId(42),
+                            display_name: "rockstars".into(),
+                            creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                            uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                            attributes: Vec::new(),
+                        }]),
+                    }])
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_readonly_handler(make_mock).await;
 
         let request = make_user_search_request::<String>(
             LdapFilter::And(vec![]),
@@ -1179,18 +1306,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_user_as_scope() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .with(
-                eq(Some(UserRequestFilter::And(vec![
-                    true.into(),
-                    UserRequestFilter::UserId(UserId::new("bob")),
-                ]))),
-                eq(false),
-            )
-            .times(1)
-            .return_once(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users()
+                .with(
+                    eq(Some(UserRequestFilter::And(vec![
+                        true.into(),
+                        UserRequestFilter::UserId(UserId::new("bob")),
+                    ]))),
+                    eq(false),
+                )
+                .times(1)
+                .return_once(|_, _| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_readonly_handler(make_mock).await;
 
         let request = LdapSearchRequest {
             base: "uid=bob,ou=people,Dc=example,dc=com".to_string(),
@@ -1211,7 +1341,8 @@ mod tests {
     #[tokio::test]
     async fn test_bind_invalid_dn() {
         let mock = MockTestBackendHandler::new();
-        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=example,dc=com");
+        let mut ldap_handler =
+            LdapHandler::new_for_tests(mock, TestLdapEventHandler::new(), "dc=example,dc=com");
 
         let request = LdapBindRequest {
             dn: "cn=bob,dc=example,dc=com".to_string(),
@@ -1291,59 +1422,62 @@ mod tests {
     #[tokio::test]
     async fn test_search_users() {
         use chrono::prelude::*;
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users().times(1).return_once(|_, _| {
-            Ok(vec![
-                UserAndGroups {
-                    user: User {
-                        user_id: UserId::new("bob_1"),
-                        email: "bob@bobmail.bob".into(),
-                        display_name: Some("Bôb Böbberson".to_string()),
-                        uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
-                        attributes: vec![
-                            Attribute {
-                                name: "first_name".into(),
-                                value: "Bôb".to_string().into(),
-                            },
-                            Attribute {
-                                name: "last_name".into(),
-                                value: "Böbberson".to_string().into(),
-                            },
-                        ],
-                        ..Default::default()
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users().times(1).return_once(|_, _| {
+                Ok(vec![
+                    UserAndGroups {
+                        user: User {
+                            user_id: UserId::new("bob_1"),
+                            email: "bob@bobmail.bob".into(),
+                            display_name: Some("Bôb Böbberson".to_string()),
+                            uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
+                            attributes: vec![
+                                Attribute {
+                                    name: "first_name".into(),
+                                    value: "Bôb".to_string().into(),
+                                },
+                                Attribute {
+                                    name: "last_name".into(),
+                                    value: "Böbberson".to_string().into(),
+                                },
+                            ],
+                            ..Default::default()
+                        },
+                        groups: None,
                     },
-                    groups: None,
-                },
-                UserAndGroups {
-                    user: User {
-                        user_id: UserId::new("jim"),
-                        email: "jim@cricket.jim".into(),
-                        display_name: Some("Jimminy Cricket".to_string()),
-                        attributes: vec![
-                            Attribute {
-                                name: "avatar".into(),
-                                value: JpegPhoto::for_tests().into(),
-                            },
-                            Attribute {
-                                name: "first_name".into(),
-                                value: "Jim".to_string().into(),
-                            },
-                            Attribute {
-                                name: "last_name".into(),
-                                value: "Cricket".to_string().into(),
-                            },
-                        ],
-                        uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                        creation_date: Utc
-                            .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
-                            .unwrap()
-                            .naive_utc(),
+                    UserAndGroups {
+                        user: User {
+                            user_id: UserId::new("jim"),
+                            email: "jim@cricket.jim".into(),
+                            display_name: Some("Jimminy Cricket".to_string()),
+                            attributes: vec![
+                                Attribute {
+                                    name: "avatar".into(),
+                                    value: JpegPhoto::for_tests().into(),
+                                },
+                                Attribute {
+                                    name: "first_name".into(),
+                                    value: "Jim".to_string().into(),
+                                },
+                                Attribute {
+                                    name: "last_name".into(),
+                                    value: "Cricket".to_string().into(),
+                                },
+                            ],
+                            uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                            creation_date: Utc
+                                .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
+                                .unwrap()
+                                .naive_utc(),
+                        },
+                        groups: None,
                     },
-                    groups: None,
-                },
-            ])
-        });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+                ])
+            });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_user_search_request(
             LdapFilter::And(vec![]),
             vec![
@@ -1459,31 +1593,34 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_groups()
-            .with(eq(Some(true.into())))
-            .times(1)
-            .return_once(|_| {
-                Ok(vec![
-                    Group {
-                        id: GroupId(1),
-                        display_name: "group_1".into(),
-                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                        users: vec![UserId::new("bob"), UserId::new("john")],
-                        uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                        attributes: Vec::new(),
-                    },
-                    Group {
-                        id: GroupId(3),
-                        display_name: "BestGroup".into(),
-                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                        users: vec![UserId::new("john")],
-                        uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                        attributes: Vec::new(),
-                    },
-                ])
-            });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_groups()
+                .with(eq(Some(true.into())))
+                .times(1)
+                .return_once(|_| {
+                    Ok(vec![
+                        Group {
+                            id: GroupId(1),
+                            display_name: "group_1".into(),
+                            creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                            users: vec![UserId::new("bob"), UserId::new("john")],
+                            uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                            attributes: Vec::new(),
+                        },
+                        Group {
+                            id: GroupId(3),
+                            display_name: "BestGroup".into(),
+                            creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                            users: vec![UserId::new("john")],
+                            uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                            attributes: Vec::new(),
+                        },
+                    ])
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_group_search_request(
             LdapFilter::And(vec![]),
             vec![
@@ -1558,21 +1695,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups_by_groupid() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::GroupId(GroupId(1)))))
-            .times(1)
-            .return_once(|_| {
-                Ok(vec![Group {
-                    id: GroupId(1),
-                    display_name: "group_1".into(),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                    users: vec![UserId::new("bob"), UserId::new("john")],
-                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                    attributes: Vec::new(),
-                }])
-            });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_groups()
+                .with(eq(Some(GroupRequestFilter::GroupId(GroupId(1)))))
+                .times(1)
+                .return_once(|_| {
+                    Ok(vec![Group {
+                        id: GroupId(1),
+                        display_name: "group_1".into(),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                        users: vec![UserId::new("bob"), UserId::new("john")],
+                        uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                        attributes: Vec::new(),
+                    }])
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_group_search_request(
             LdapFilter::Equality("groupid".to_string(), "1".to_string()),
             vec!["dn"],
@@ -1591,38 +1731,41 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups_filter() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::And(vec![
-                GroupRequestFilter::DisplayName("group_1".into()),
-                GroupRequestFilter::Member(UserId::new("bob")),
-                GroupRequestFilter::DisplayName("rockstars".into()),
-                false.into(),
-                GroupRequestFilter::Uuid(uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc")),
-                true.into(),
-                true.into(),
-                true.into(),
-                true.into(),
-                GroupRequestFilter::Not(Box::new(false.into())),
-                false.into(),
-                GroupRequestFilter::DisplayNameSubString(SubStringFilter {
-                    initial: Some("iNIt".to_owned()),
-                    any: vec!["1".to_owned(), "2aA".to_owned()],
-                    final_: Some("finAl".to_owned()),
-                }),
-            ]))))
-            .times(1)
-            .return_once(|_| {
-                Ok(vec![Group {
-                    display_name: "group_1".into(),
-                    id: GroupId(1),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                    users: vec![],
-                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                    attributes: Vec::new(),
-                }])
-            });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_groups()
+                .with(eq(Some(GroupRequestFilter::And(vec![
+                    GroupRequestFilter::DisplayName("group_1".into()),
+                    GroupRequestFilter::Member(UserId::new("bob")),
+                    GroupRequestFilter::DisplayName("rockstars".into()),
+                    false.into(),
+                    GroupRequestFilter::Uuid(uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc")),
+                    true.into(),
+                    true.into(),
+                    true.into(),
+                    true.into(),
+                    GroupRequestFilter::Not(Box::new(false.into())),
+                    false.into(),
+                    GroupRequestFilter::DisplayNameSubString(SubStringFilter {
+                        initial: Some("iNIt".to_owned()),
+                        any: vec!["1".to_owned(), "2aA".to_owned()],
+                        final_: Some("finAl".to_owned()),
+                    }),
+                ]))))
+                .times(1)
+                .return_once(|_| {
+                    Ok(vec![Group {
+                        display_name: "group_1".into(),
+                        id: GroupId(1),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                        users: vec![],
+                        uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                        attributes: Vec::new(),
+                    }])
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_group_search_request(
             LdapFilter::And(vec![
                 LdapFilter::Equality("cN".to_string(), "Group_1".to_string()),
@@ -1675,25 +1818,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups_filter_2() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::Or(vec![
-                GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
-                    "group_2".into(),
-                ))),
-            ]))))
-            .times(1)
-            .return_once(|_| {
-                Ok(vec![Group {
-                    display_name: "group_1".into(),
-                    id: GroupId(1),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                    users: vec![],
-                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                    attributes: Vec::new(),
-                }])
-            });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_groups()
+                .with(eq(Some(GroupRequestFilter::Or(vec![
+                    GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
+                        "group_2".into(),
+                    ))),
+                ]))))
+                .times(1)
+                .return_once(|_| {
+                    Ok(vec![Group {
+                        display_name: "group_1".into(),
+                        id: GroupId(1),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                        users: vec![],
+                        uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                        attributes: Vec::new(),
+                    }])
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_group_search_request(
             LdapFilter::Or(vec![LdapFilter::Not(Box::new(LdapFilter::Equality(
                 "displayname".to_string(),
@@ -1718,53 +1864,56 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups_filter_3() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::Or(vec![
-                GroupRequestFilter::AttributeEquality(
-                    AttributeName::from("attr"),
-                    "TEST".to_string().into(),
-                ),
-                GroupRequestFilter::AttributeEquality(
-                    AttributeName::from("attr"),
-                    "test".to_string().into(),
-                ),
-            ]))))
-            .times(1)
-            .return_once(|_| {
-                Ok(vec![Group {
-                    display_name: "group_1".into(),
-                    id: GroupId(1),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                    users: vec![],
-                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                    attributes: vec![Attribute {
-                        name: "Attr".into(),
-                        value: "TEST".to_string().into(),
-                    }],
-                }])
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_groups()
+                .with(eq(Some(GroupRequestFilter::Or(vec![
+                    GroupRequestFilter::AttributeEquality(
+                        AttributeName::from("attr"),
+                        "TEST".to_string().into(),
+                    ),
+                    GroupRequestFilter::AttributeEquality(
+                        AttributeName::from("attr"),
+                        "test".to_string().into(),
+                    ),
+                ]))))
+                .times(1)
+                .return_once(|_| {
+                    Ok(vec![Group {
+                        display_name: "group_1".into(),
+                        id: GroupId(1),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                        users: vec![],
+                        uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                        attributes: vec![Attribute {
+                            name: "Attr".into(),
+                            value: "TEST".to_string().into(),
+                        }],
+                    }])
+                });
+            mock.expect_get_schema().returning(|| {
+                Ok(Schema {
+                    user_attributes: AttributeList {
+                        attributes: Vec::new(),
+                    },
+                    group_attributes: AttributeList {
+                        attributes: vec![AttributeSchema {
+                            name: "Attr".into(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: false,
+                            is_readonly: false,
+                        }],
+                    },
+                    extra_user_object_classes: Vec::new(),
+                    extra_group_object_classes: Vec::new(),
+                })
             });
-        mock.expect_get_schema().returning(|| {
-            Ok(Schema {
-                user_attributes: AttributeList {
-                    attributes: Vec::new(),
-                },
-                group_attributes: AttributeList {
-                    attributes: vec![AttributeSchema {
-                        name: "Attr".into(),
-                        attribute_type: AttributeType::String,
-                        is_list: false,
-                        is_visible: true,
-                        is_editable: true,
-                        is_hardcoded: false,
-                        is_readonly: false,
-                    }],
-                },
-                extra_user_object_classes: Vec::new(),
-                extra_group_object_classes: Vec::new(),
-            })
-        });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_group_search_request(
             LdapFilter::Equality("Attr".to_string(), "TEST".to_string()),
             vec!["cn"],
@@ -1786,15 +1935,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_group_as_scope() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::And(vec![
-                true.into(),
-                GroupRequestFilter::DisplayName("rockstars".into()),
-            ]))))
-            .times(1)
-            .return_once(|_| Ok(vec![]));
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_groups()
+                .with(eq(Some(GroupRequestFilter::And(vec![
+                    true.into(),
+                    GroupRequestFilter::DisplayName("rockstars".into()),
+                ]))))
+                .times(1)
+                .return_once(|_| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_readonly_handler(make_mock).await;
 
         let request = LdapSearchRequest {
             base: "uid=rockstars,ou=groups,Dc=example,dc=com".to_string(),
@@ -1814,7 +1966,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups_unsupported_substring() {
-        let mut ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new()).await;
+        let mut ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new).await;
         let request = make_group_search_request(
             LdapFilter::Substring("member".to_owned(), LdapSubstringFilter::default()),
             vec!["cn"],
@@ -1834,12 +1986,15 @@ mod tests {
             LdapFilter::Substring("nonexistent".to_owned(), LdapSubstringFilter::default()),
             vec!["cn"],
         );
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_groups()
-            .with(eq(Some(false.into())))
-            .times(1)
-            .return_once(|_| Ok(vec![]));
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_groups()
+                .with(eq(Some(false.into())))
+                .times(1)
+                .return_once(|_| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_readonly_handler(make_mock).await;
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
             Ok(vec![make_search_success()]),
@@ -1848,20 +2003,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups_error() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::Or(vec![
-                GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
-                    "group_2".into(),
-                ))),
-            ]))))
-            .times(1)
-            .return_once(|_| {
-                Err(lldap_domain_model::error::DomainError::InternalError(
-                    "Error getting groups".to_string(),
-                ))
-            });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_groups()
+                .with(eq(Some(GroupRequestFilter::Or(vec![
+                    GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
+                        "group_2".into(),
+                    ))),
+                ]))))
+                .times(1)
+                .return_once(|_| {
+                    Err(lldap_domain_model::error::DomainError::InternalError(
+                        "Error getting groups".to_string(),
+                    ))
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_group_search_request(
             LdapFilter::Or(vec![LdapFilter::Not(Box::new(LdapFilter::Equality(
                 "displayname".to_string(),
@@ -1880,7 +2038,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups_filter_error() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new).await;
         let request = make_group_search_request(
             LdapFilter::And(vec![LdapFilter::Approx(
                 "whatever".to_owned(),
@@ -1899,52 +2057,55 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_filters() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .with(
-                eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(
-                    vec![
-                        UserRequestFilter::Not(Box::new(UserRequestFilter::UserId(UserId::new(
-                            "bob",
-                        )))),
-                        UserRequestFilter::UserId("bob_1".to_string().into()),
-                        false.into(),
-                        true.into(),
-                        false.into(),
-                        true.into(),
-                        true.into(),
-                        false.into(),
-                        UserRequestFilter::Or(vec![
-                            UserRequestFilter::AttributeEquality(
-                                AttributeName::from("first_name"),
-                                "FirstName".to_string().into(),
-                            ),
-                            UserRequestFilter::AttributeEquality(
-                                AttributeName::from("first_name"),
-                                "firstname".to_string().into(),
-                            ),
-                        ]),
-                        false.into(),
-                        UserRequestFilter::UserIdSubString(SubStringFilter {
-                            initial: Some("iNIt".to_owned()),
-                            any: vec!["1".to_owned(), "2aA".to_owned()],
-                            final_: Some("finAl".to_owned()),
-                        }),
-                        UserRequestFilter::SubString(
-                            UserColumn::DisplayName,
-                            SubStringFilter {
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users()
+                .with(
+                    eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(
+                        vec![
+                            UserRequestFilter::Not(Box::new(UserRequestFilter::UserId(
+                                UserId::new("bob"),
+                            ))),
+                            UserRequestFilter::UserId("bob_1".to_string().into()),
+                            false.into(),
+                            true.into(),
+                            false.into(),
+                            true.into(),
+                            true.into(),
+                            false.into(),
+                            UserRequestFilter::Or(vec![
+                                UserRequestFilter::AttributeEquality(
+                                    AttributeName::from("first_name"),
+                                    "FirstName".to_string().into(),
+                                ),
+                                UserRequestFilter::AttributeEquality(
+                                    AttributeName::from("first_name"),
+                                    "firstname".to_string().into(),
+                                ),
+                            ]),
+                            false.into(),
+                            UserRequestFilter::UserIdSubString(SubStringFilter {
                                 initial: Some("iNIt".to_owned()),
                                 any: vec!["1".to_owned(), "2aA".to_owned()],
                                 final_: Some("finAl".to_owned()),
-                            },
-                        ),
-                    ],
-                )]))),
-                eq(false),
-            )
-            .times(1)
-            .return_once(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+                            }),
+                            UserRequestFilter::SubString(
+                                UserColumn::DisplayName,
+                                SubStringFilter {
+                                    initial: Some("iNIt".to_owned()),
+                                    any: vec!["1".to_owned(), "2aA".to_owned()],
+                                    final_: Some("finAl".to_owned()),
+                                },
+                            ),
+                        ],
+                    )]))),
+                    eq(false),
+                )
+                .times(1)
+                .return_once(|_, _| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_user_search_request(
             LdapFilter::And(vec![LdapFilter::Or(vec![
                 LdapFilter::Not(Box::new(LdapFilter::Equality(
@@ -1993,7 +2154,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_unsupported_substring_filter() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new).await;
         let request = make_user_search_request(
             LdapFilter::Substring(
                 "uuid".to_owned(),
@@ -2022,15 +2183,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_member_of_filter() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .with(
-                eq(Some(UserRequestFilter::MemberOf("group_1".into()))),
-                eq(false),
-            )
-            .times(2)
-            .returning(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users()
+                .with(
+                    eq(Some(UserRequestFilter::MemberOf("group_1".into()))),
+                    eq(false),
+                )
+                .times(1)
+                .returning(|_, _| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality(
                 "memberOf".to_string(),
@@ -2053,12 +2217,15 @@ mod tests {
     }
     #[tokio::test]
     async fn test_search_member_of_filter_error() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::from(false))), eq(false))
-            .times(1)
-            .returning(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users()
+                .with(eq(Some(UserRequestFilter::from(false))), eq(false))
+                .times(1)
+                .returning(|_, _| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality(
                 "memberOf".to_string(),
@@ -2075,27 +2242,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_filters_lowercase() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .with(
-                eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(
-                    vec![UserRequestFilter::Not(Box::new(
-                        UserRequestFilter::Equality(UserColumn::DisplayName, "bob".to_string()),
-                    ))],
-                )]))),
-                eq(false),
-            )
-            .times(1)
-            .return_once(|_, _| {
-                Ok(vec![UserAndGroups {
-                    user: User {
-                        user_id: UserId::new("bob_1"),
-                        ..Default::default()
-                    },
-                    groups: None,
-                }])
-            });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users()
+                .with(
+                    eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(
+                        vec![UserRequestFilter::Not(Box::new(
+                            UserRequestFilter::Equality(UserColumn::DisplayName, "bob".to_string()),
+                        ))],
+                    )]))),
+                    eq(false),
+                )
+                .times(1)
+                .return_once(|_, _| {
+                    Ok(vec![UserAndGroups {
+                        user: User {
+                            user_id: UserId::new("bob_1"),
+                            ..Default::default()
+                        },
+                        groups: None,
+                    }])
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_user_search_request(
             LdapFilter::And(vec![LdapFilter::Or(vec![LdapFilter::Not(Box::new(
                 LdapFilter::Equality("displayname".to_string(), "bob".to_string()),
@@ -2125,20 +2295,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_filters_custom_object_class() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::from(true))), eq(false))
-            .times(1)
-            .return_once(|_, _| {
-                Ok(vec![UserAndGroups {
-                    user: User {
-                        user_id: UserId::new("bob_1"),
-                        ..Default::default()
-                    },
-                    groups: None,
-                }])
-            });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users()
+                .with(eq(Some(UserRequestFilter::from(true))), eq(false))
+                .times(1)
+                .return_once(|_, _| {
+                    Ok(vec![UserAndGroups {
+                        user: User {
+                            user_id: UserId::new("bob_1"),
+                            ..Default::default()
+                        },
+                        groups: None,
+                    }])
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality("objectClass".to_owned(), "CUSTOMuserCLASS".to_owned()),
             vec!["objectclass"],
@@ -2166,42 +2339,45 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_both() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users().times(1).return_once(|_, _| {
-            Ok(vec![UserAndGroups {
-                user: User {
-                    user_id: UserId::new("bob_1"),
-                    email: "bob@bobmail.bob".into(),
-                    display_name: Some("Bôb Böbberson".to_string()),
-                    attributes: vec![
-                        Attribute {
-                            name: "first_name".into(),
-                            value: "Bôb".to_string().into(),
-                        },
-                        Attribute {
-                            name: "last_name".to_string().into(),
-                            value: "Böbberson".to_string().into(),
-                        },
-                    ],
-                    ..Default::default()
-                },
-                groups: None,
-            }])
-        });
-        mock.expect_list_groups()
-            .with(eq(Some(true.into())))
-            .times(1)
-            .return_once(|_| {
-                Ok(vec![Group {
-                    id: GroupId(1),
-                    display_name: "group_1".into(),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                    users: vec![UserId::new("bob"), UserId::new("john")],
-                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                    attributes: Vec::new(),
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users().times(1).return_once(|_, _| {
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("bob_1"),
+                        email: "bob@bobmail.bob".into(),
+                        display_name: Some("Bôb Böbberson".to_string()),
+                        attributes: vec![
+                            Attribute {
+                                name: "first_name".into(),
+                                value: "Bôb".to_string().into(),
+                            },
+                            Attribute {
+                                name: "last_name".to_string().into(),
+                                value: "Böbberson".to_string().into(),
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                    groups: None,
                 }])
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+            mock.expect_list_groups()
+                .with(eq(Some(true.into())))
+                .times(1)
+                .return_once(|_| {
+                    Ok(vec![Group {
+                        id: GroupId(1),
+                        display_name: "group_1".into(),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                        users: vec![UserId::new("bob"), UserId::new("john")],
+                        uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                        attributes: Vec::new(),
+                    }])
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_search_request(
             "dc=example,dc=com",
             LdapFilter::And(vec![]),
@@ -2249,43 +2425,46 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_wildcards() {
-        let mut mock = MockTestBackendHandler::new();
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
 
-        mock.expect_list_users().returning(|_, _| {
-            Ok(vec![UserAndGroups {
-                user: User {
-                    user_id: UserId::new("bob_1"),
-                    email: "bob@bobmail.bob".into(),
-                    display_name: Some("Bôb Böbberson".to_string()),
-                    attributes: vec![
-                        Attribute {
-                            name: "avatar".into(),
-                            value: JpegPhoto::for_tests().into(),
-                        },
-                        Attribute {
-                            name: "last_name".into(),
-                            value: "Böbberson".to_string().into(),
-                        },
-                    ],
-                    uuid: uuid!("b4ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                    ..Default::default()
-                },
-                groups: None,
-            }])
-        });
-        mock.expect_list_groups()
-            .with(eq(Some(true.into())))
-            .returning(|_| {
-                Ok(vec![Group {
-                    id: GroupId(1),
-                    display_name: "group_1".into(),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                    users: vec![UserId::new("bob"), UserId::new("john")],
-                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                    attributes: Vec::new(),
+            mock.expect_list_users().returning(|_, _| {
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("bob_1"),
+                        email: "bob@bobmail.bob".into(),
+                        display_name: Some("Bôb Böbberson".to_string()),
+                        attributes: vec![
+                            Attribute {
+                                name: "avatar".into(),
+                                value: JpegPhoto::for_tests().into(),
+                            },
+                            Attribute {
+                                name: "last_name".into(),
+                                value: "Böbberson".to_string().into(),
+                            },
+                        ],
+                        uuid: uuid!("b4ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                        ..Default::default()
+                    },
+                    groups: None,
                 }])
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+            mock.expect_list_groups()
+                .with(eq(Some(true.into())))
+                .returning(|_| {
+                    Ok(vec![Group {
+                        id: GroupId(1),
+                        display_name: "group_1".into(),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                        users: vec![UserId::new("bob"), UserId::new("john")],
+                        uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                        attributes: Vec::new(),
+                    }])
+                });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
 
         // Test simple wildcard
         let request =
@@ -2440,7 +2619,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_wrong_base() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new).await;
         let request = make_search_request(
             "ou=users,dc=example,dc=com",
             LdapFilter::And(vec![]),
@@ -2454,7 +2633,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_unsupported_filters() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new).await;
         let request = make_user_search_request(
             LdapFilter::Approx("uid".to_owned(), "value".to_owned()),
             vec!["objectClass"],
@@ -2470,35 +2649,48 @@ mod tests {
 
     #[tokio::test]
     async fn test_password_change() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("bob")))
-            .returning(|_| Ok(HashSet::new()));
-        use lldap_auth::*;
-        let mut rng = rand::rngs::OsRng;
-        let registration_start_request =
-            opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
-                .unwrap();
-        let request = registration::ClientRegistrationStartRequest {
-            username: "bob".into(),
-            registration_start_request: registration_start_request.message,
-        };
-        let start_response = opaque::server::registration::start_registration(
-            &opaque::server::ServerSetup::new(&mut rng),
-            request.registration_start_request,
-            &request.username,
+        fn make_base_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_get_user_groups()
+                .with(eq(UserId::new("bob")))
+                .returning(|_| Ok(HashSet::new()));
+            mock
+        }
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            use lldap_auth::*;
+            let mut rng = rand::rngs::OsRng;
+            let registration_start_request =
+                opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
+                    .unwrap();
+            let request = registration::ClientRegistrationStartRequest {
+                username: "bob".into(),
+                registration_start_request: registration_start_request.message,
+            };
+            let start_response = opaque::server::registration::start_registration(
+                &opaque::server::ServerSetup::new(&mut rng),
+                request.registration_start_request,
+                &request.username,
+            )
+            .unwrap();
+            mock.expect_registration_start().times(1).return_once(|_| {
+                Ok(registration::ServerRegistrationStartResponse {
+                    server_data: "".to_string(),
+                    registration_response: start_response.message,
+                })
+            });
+            mock.expect_registration_finish()
+                .times(1)
+                .return_once(|_| Ok(()));
+            mock
+        }
+        let mut ldap_handler = setup_bound_handler_with_group(
+            make_base_mock,
+            make_mock,
+            "lldap_admin",
+            Permission::Admin,
         )
-        .unwrap();
-        mock.expect_registration_start().times(1).return_once(|_| {
-            Ok(registration::ServerRegistrationStartResponse {
-                server_data: "".to_string(),
-                registration_response: start_response.message,
-            })
-        });
-        mock.expect_registration_finish()
-            .times(1)
-            .return_once(|_| Ok(()));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        .await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
                 user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
@@ -2518,8 +2710,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_whoami_empty() {
-        let mut ldap_handler =
-            LdapHandler::new_for_tests(MockTestBackendHandler::new(), "dc=example,dc=com");
+        let mut ldap_handler = LdapHandler::new_for_tests(
+            MockTestBackendHandler::new(),
+            TestLdapEventHandler::new(),
+            "dc=example,dc=com",
+        );
         let request = LdapOp::ExtendedRequest(LdapWhoamiRequest {}.into());
         assert_eq!(
             ldap_handler.handle_ldap_message(request).await,
@@ -2532,8 +2727,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_whoami_bound() {
-        let mock = MockTestBackendHandler::new();
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new).await;
         let request = LdapOp::ExtendedRequest(LdapWhoamiRequest {}.into());
         assert_eq!(
             ldap_handler.handle_ldap_message(request).await,
@@ -2546,35 +2740,48 @@ mod tests {
 
     #[tokio::test]
     async fn test_password_change_modify_request() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("bob")))
-            .returning(|_| Ok(HashSet::new()));
-        use lldap_auth::*;
-        let mut rng = rand::rngs::OsRng;
-        let registration_start_request =
-            opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
-                .unwrap();
-        let request = registration::ClientRegistrationStartRequest {
-            username: "bob".into(),
-            registration_start_request: registration_start_request.message,
-        };
-        let start_response = opaque::server::registration::start_registration(
-            &opaque::server::ServerSetup::new(&mut rng),
-            request.registration_start_request,
-            &request.username,
+        fn make_base_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_get_user_groups()
+                .with(eq(UserId::new("bob")))
+                .returning(|_| Ok(HashSet::new()));
+            mock
+        }
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            use lldap_auth::*;
+            let mut rng = rand::rngs::OsRng;
+            let registration_start_request =
+                opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
+                    .unwrap();
+            let request = registration::ClientRegistrationStartRequest {
+                username: "bob".into(),
+                registration_start_request: registration_start_request.message,
+            };
+            let start_response = opaque::server::registration::start_registration(
+                &opaque::server::ServerSetup::new(&mut rng),
+                request.registration_start_request,
+                &request.username,
+            )
+            .unwrap();
+            mock.expect_registration_start().times(1).return_once(|_| {
+                Ok(registration::ServerRegistrationStartResponse {
+                    server_data: "".to_string(),
+                    registration_response: start_response.message,
+                })
+            });
+            mock.expect_registration_finish()
+                .times(1)
+                .return_once(|_| Ok(()));
+            mock
+        }
+        let mut ldap_handler = setup_bound_handler_with_group(
+            make_base_mock,
+            make_mock,
+            "lldap_admin",
+            Permission::Admin,
         )
-        .unwrap();
-        mock.expect_registration_start().times(1).return_once(|_| {
-            Ok(registration::ServerRegistrationStartResponse {
-                server_data: "".to_string(),
-                registration_response: start_response.message,
-            })
-        });
-        mock.expect_registration_finish()
-            .times(1)
-            .return_once(|_| Ok(()));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        .await;
         let request = LdapOp::ModifyRequest(LdapModifyRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
             changes: vec![LdapModify {
@@ -2596,35 +2803,48 @@ mod tests {
 
     #[tokio::test]
     async fn test_password_change_password_manager() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("bob")))
-            .returning(|_| Ok(HashSet::new()));
-        use lldap_auth::*;
-        let mut rng = rand::rngs::OsRng;
-        let registration_start_request =
-            opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
-                .unwrap();
-        let request = registration::ClientRegistrationStartRequest {
-            username: "bob".into(),
-            registration_start_request: registration_start_request.message,
-        };
-        let start_response = opaque::server::registration::start_registration(
-            &opaque::server::ServerSetup::new(&mut rng),
-            request.registration_start_request,
-            &request.username,
+        fn make_base_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_get_user_groups()
+                .with(eq(UserId::new("bob")))
+                .returning(|_| Ok(HashSet::new()));
+            mock
+        }
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            use lldap_auth::*;
+            let mut rng = rand::rngs::OsRng;
+            let registration_start_request =
+                opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
+                    .unwrap();
+            let request = registration::ClientRegistrationStartRequest {
+                username: "bob".into(),
+                registration_start_request: registration_start_request.message,
+            };
+            let start_response = opaque::server::registration::start_registration(
+                &opaque::server::ServerSetup::new(&mut rng),
+                request.registration_start_request,
+                &request.username,
+            )
+            .unwrap();
+            mock.expect_registration_start().times(1).return_once(|_| {
+                Ok(registration::ServerRegistrationStartResponse {
+                    server_data: "".to_string(),
+                    registration_response: start_response.message,
+                })
+            });
+            mock.expect_registration_finish()
+                .times(1)
+                .return_once(|_| Ok(()));
+            mock
+        }
+        let mut ldap_handler = setup_bound_handler_with_group(
+            make_base_mock,
+            make_mock,
+            "lldap_password_manager",
+            Permission::PasswordManager,
         )
-        .unwrap();
-        mock.expect_registration_start().times(1).return_once(|_| {
-            Ok(registration::ServerRegistrationStartResponse {
-                server_data: "".to_string(),
-                registration_response: start_response.message,
-            })
-        });
-        mock.expect_registration_finish()
-            .times(1)
-            .return_once(|_| Ok(()));
-        let mut ldap_handler = setup_bound_password_manager_handler(mock).await;
+        .await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
                 user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
@@ -2644,11 +2864,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_password_change_errors() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("bob")))
-            .returning(|_| Ok(HashSet::new()));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_get_user_groups()
+                .with(eq(UserId::new("bob")))
+                .returning(|_| Ok(HashSet::new()));
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
                 user_identity: None,
@@ -2694,20 +2917,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_password_change_unauthorized_password_manager() {
-        let mut mock = MockTestBackendHandler::new();
-        let mut groups = HashSet::new();
-        groups.insert(GroupDetails {
-            group_id: GroupId(0),
-            display_name: "lldap_admin".into(),
-            creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-            uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
-            attributes: Vec::new(),
-        });
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("bob")))
-            .times(1)
-            .return_once(|_| Ok(groups));
-        let mut ldap_handler = setup_bound_password_manager_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            let mut groups = HashSet::new();
+            groups.insert(GroupDetails {
+                group_id: GroupId(0),
+                display_name: "lldap_admin".into(),
+                creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                attributes: Vec::new(),
+            });
+            mock.expect_get_user_groups()
+                .with(eq(UserId::new("bob")))
+                .times(1)
+                .return_once(|_| Ok(groups));
+            mock
+        }
+        let mut ldap_handler = setup_bound_password_manager_handler(make_mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
                 user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
@@ -2727,12 +2953,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_password_change_unauthorized_readonly() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("bob")))
-            .times(1)
-            .return_once(|_| Ok(HashSet::new()));
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_get_user_groups()
+                .with(eq(UserId::new("bob")))
+                .times(1)
+                .return_once(|_| Ok(HashSet::new()));
+            mock
+        }
+        let mut ldap_handler = setup_bound_readonly_handler(make_mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {
                 user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
@@ -2752,7 +2981,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_root_dse() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new).await;
         let request = LdapSearchRequest {
             base: "".to_string(),
             scope: LdapSearchScope::Base,
@@ -2766,7 +2995,7 @@ mod tests {
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
             Ok(vec![
-                root_dse_response("dc=example,dc=com"),
+                LdapOp::SearchResultEntry(root_dse_response("dc=example,dc=com")),
                 make_search_success()
             ])
         );
@@ -2774,17 +3003,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_user() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_create_user()
-            .with(eq(CreateUserRequest {
-                user_id: UserId::new("bob"),
-                email: "".into(),
-                display_name: Some("Bob".to_string()),
-                ..Default::default()
-            }))
-            .times(1)
-            .return_once(|_| Ok(()));
-        let ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_create_user()
+                .with(eq(CreateUserRequest {
+                    user_id: UserId::new("bob"),
+                    email: "".into(),
+                    display_name: Some("Bob".to_string()),
+                    ..Default::default()
+                }))
+                .times(1)
+                .return_once(|_| Ok(()));
+            mock
+        }
+        let ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = LdapAddRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_owned(),
             attributes: vec![LdapPartialAttribute {
@@ -2800,7 +3032,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_user_wrong_ou() {
-        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new).await;
         let request = LdapAddRequest {
             dn: "uid=bob,ou=groups,dc=example,dc=com".to_owned(),
             attributes: vec![LdapPartialAttribute {
@@ -2816,17 +3048,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_user_multiple_object_class() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_create_user()
-            .with(eq(CreateUserRequest {
-                user_id: UserId::new("bob"),
-                email: "".into(),
-                display_name: Some("Bob".to_string()),
-                ..Default::default()
-            }))
-            .times(1)
-            .return_once(|_| Ok(()));
-        let ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_create_user()
+                .with(eq(CreateUserRequest {
+                    user_id: UserId::new("bob"),
+                    email: "".into(),
+                    display_name: Some("Bob".to_string()),
+                    ..Default::default()
+                }))
+                .times(1)
+                .return_once(|_| Ok(()));
+            mock
+        }
+        let ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = LdapAddRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_owned(),
             attributes: vec![
@@ -2852,12 +3087,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_filter_non_attribute() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .with(eq(Some(true.into())), eq(false))
-            .times(1)
-            .return_once(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users()
+                .with(eq(Some(true.into())), eq(false))
+                .times(1)
+                .return_once(|_, _| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let request = make_user_search_request(
             LdapFilter::Present("displayname".to_owned()),
             vec!["objectClass"],
@@ -2870,21 +3108,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_compare_user() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users().returning(|f, g| {
-            assert_eq!(f, Some(UserRequestFilter::UserId(UserId::new("bob"))));
-            assert!(!g);
-            Ok(vec![UserAndGroups {
-                user: User {
-                    user_id: UserId::new("bob"),
-                    email: "bob@bobmail.bob".into(),
-                    ..Default::default()
-                },
-                groups: None,
-            }])
-        });
-        mock.expect_list_groups().returning(|_| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users().returning(|f, g| {
+                assert_eq!(f, Some(UserRequestFilter::UserId(UserId::new("bob"))));
+                assert!(!g);
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("bob"),
+                        email: "bob@bobmail.bob".into(),
+                        ..Default::default()
+                    },
+                    groups: None,
+                }])
+            });
+            mock.expect_list_groups().returning(|_| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let dn = "uid=bob,ou=people,dc=example,dc=com";
         let request = LdapCompareRequest {
             dn: dn.to_string(),
@@ -2919,20 +3160,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_compare_group() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users().returning(|_, _| Ok(vec![]));
-        mock.expect_list_groups().returning(|f| {
-            assert_eq!(f, Some(GroupRequestFilter::DisplayName("group".into())));
-            Ok(vec![Group {
-                id: GroupId(1),
-                display_name: "group".into(),
-                creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                users: vec![UserId::new("bob")],
-                uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                attributes: Vec::new(),
-            }])
-        });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users().returning(|_, _| Ok(vec![]));
+            mock.expect_list_groups().returning(|f| {
+                assert_eq!(f, Some(GroupRequestFilter::DisplayName("group".into())));
+                Ok(vec![Group {
+                    id: GroupId(1),
+                    display_name: "group".into(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                    users: vec![UserId::new("bob")],
+                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                    attributes: Vec::new(),
+                }])
+            });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let dn = "uid=group,ou=groups,dc=example,dc=com";
         let request = LdapCompareRequest {
             dn: dn.to_string(),
@@ -2952,14 +3196,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_compare_not_found() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users().returning(|f, g| {
-            assert_eq!(f, Some(UserRequestFilter::UserId(UserId::new("bob"))));
-            assert!(!g);
-            Ok(vec![])
-        });
-        mock.expect_list_groups().returning(|_| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users().returning(|f, g| {
+                assert_eq!(f, Some(UserRequestFilter::UserId(UserId::new("bob"))));
+                assert!(!g);
+                Ok(vec![])
+            });
+            mock.expect_list_groups().returning(|_| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let dn = "uid=bob,ou=people,dc=example,dc=com";
         let request = LdapCompareRequest {
             dn: dn.to_string(),
@@ -2979,21 +3226,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_compare_no_match() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users().returning(|f, g| {
-            assert_eq!(f, Some(UserRequestFilter::UserId(UserId::new("bob"))));
-            assert!(!g);
-            Ok(vec![UserAndGroups {
-                user: User {
-                    user_id: UserId::new("bob"),
-                    email: "bob@bobmail.bob".into(),
-                    ..Default::default()
-                },
-                groups: None,
-            }])
-        });
-        mock.expect_list_groups().returning(|_| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users().returning(|f, g| {
+                assert_eq!(f, Some(UserRequestFilter::UserId(UserId::new("bob"))));
+                assert!(!g);
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("bob"),
+                        email: "bob@bobmail.bob".into(),
+                        ..Default::default()
+                    },
+                    groups: None,
+                }])
+            });
+            mock.expect_list_groups().returning(|_| Ok(vec![]));
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let dn = "uid=bob,ou=people,dc=example,dc=com";
         let request = LdapCompareRequest {
             dn: dn.to_string(),
@@ -3013,20 +3263,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_compare_group_member() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users().returning(|_, _| Ok(vec![]));
-        mock.expect_list_groups().returning(|f| {
-            assert_eq!(f, Some(GroupRequestFilter::DisplayName("group".into())));
-            Ok(vec![Group {
-                id: GroupId(1),
-                display_name: "group".into(),
-                creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                users: vec![UserId::new("bob")],
-                uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                attributes: Vec::new(),
-            }])
-        });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users().returning(|_, _| Ok(vec![]));
+            mock.expect_list_groups().returning(|f| {
+                assert_eq!(f, Some(GroupRequestFilter::DisplayName("group".into())));
+                Ok(vec![Group {
+                    id: GroupId(1),
+                    display_name: "group".into(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                    users: vec![UserId::new("bob")],
+                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                    attributes: Vec::new(),
+                }])
+            });
+            mock
+        }
+        let mut ldap_handler = setup_bound_admin_handler(make_mock).await;
         let dn = "uid=group,ou=groups,dc=example,dc=com";
         let request = LdapCompareRequest {
             dn: dn.to_string(),
@@ -3046,7 +3299,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_user_ou_search() {
-        let mut ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new()).await;
+        let mut ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new).await;
         let request = LdapSearchRequest {
             base: "ou=people,dc=example,dc=com".to_owned(),
             scope: LdapSearchScope::Base,
@@ -3074,65 +3327,68 @@ mod tests {
 
     #[tokio::test]
     async fn test_custom_attribute_read() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users().times(1).return_once(|_, _| {
-            Ok(vec![UserAndGroups {
-                user: User {
-                    user_id: UserId::new("test"),
+        fn make_mock() -> MockTestBackendHandler {
+            let mut mock = MockTestBackendHandler::new();
+            mock.expect_list_users().times(1).return_once(|_, _| {
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("test"),
+                        attributes: vec![Attribute {
+                            name: "nickname".into(),
+                            value: "Bob the Builder".to_string().into(),
+                        }],
+                        ..Default::default()
+                    },
+                    groups: None,
+                }])
+            });
+            mock.expect_list_groups().times(1).return_once(|_| {
+                Ok(vec![Group {
+                    id: GroupId(1),
+                    display_name: "group".into(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                    users: vec![UserId::new("bob")],
+                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                     attributes: vec![Attribute {
-                        name: "nickname".into(),
-                        value: "Bob the Builder".to_string().into(),
-                    }],
-                    ..Default::default()
-                },
-                groups: None,
-            }])
-        });
-        mock.expect_list_groups().times(1).return_once(|_| {
-            Ok(vec![Group {
-                id: GroupId(1),
-                display_name: "group".into(),
-                creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                users: vec![UserId::new("bob")],
-                uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
-                attributes: vec![Attribute {
-                    name: "club_name".into(),
-                    value: "Breakfast Club".to_string().into(),
-                }],
-            }])
-        });
-        mock.expect_get_schema().returning(|| {
-            Ok(Schema {
-                user_attributes: AttributeList {
-                    attributes: vec![AttributeSchema {
-                        name: "nickname".into(),
-                        attribute_type: AttributeType::String,
-                        is_list: false,
-                        is_visible: true,
-                        is_editable: true,
-                        is_hardcoded: false,
-                        is_readonly: false,
-                    }],
-                },
-                group_attributes: AttributeList {
-                    attributes: vec![AttributeSchema {
                         name: "club_name".into(),
-                        attribute_type: AttributeType::String,
-                        is_list: false,
-                        is_visible: true,
-                        is_editable: true,
-                        is_hardcoded: false,
-                        is_readonly: false,
+                        value: "Breakfast Club".to_string().into(),
                     }],
-                },
-                extra_user_object_classes: vec![
-                    LdapObjectClass::from("customUserClass"),
-                    LdapObjectClass::from("myUserClass"),
-                ],
-                extra_group_object_classes: vec![LdapObjectClass::from("customGroupClass")],
-            })
-        });
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+                }])
+            });
+            mock.expect_get_schema().returning(|| {
+                Ok(Schema {
+                    user_attributes: AttributeList {
+                        attributes: vec![AttributeSchema {
+                            name: "nickname".into(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: false,
+                            is_readonly: false,
+                        }],
+                    },
+                    group_attributes: AttributeList {
+                        attributes: vec![AttributeSchema {
+                            name: "club_name".into(),
+                            attribute_type: AttributeType::String,
+                            is_list: false,
+                            is_visible: true,
+                            is_editable: true,
+                            is_hardcoded: false,
+                            is_readonly: false,
+                        }],
+                    },
+                    extra_user_object_classes: vec![
+                        LdapObjectClass::from("customUserClass"),
+                        LdapObjectClass::from("myUserClass"),
+                    ],
+                    extra_group_object_classes: vec![LdapObjectClass::from("customGroupClass")],
+                })
+            });
+            mock
+        }
+        let mut ldap_handler = setup_bound_readonly_handler(make_mock).await;
 
         let request = make_search_request(
             "dc=example,dc=com",
