@@ -19,7 +19,6 @@ graphql_client = "0.10"
 http = "0.2"
 jwt = "0.13"
 rand = "0.8"
-serde = "1"
 serde_json = "1"
 url-escape = "0.1.1"
 validator = "0.14"
@@ -60,6 +59,9 @@ features = [
 path = "../crates/auth"
 features = [ "opaque_client" ]
 
+[dependencies.lldap_frontend_options]
+path = "../crates/frontend-options"
+
 [dependencies.lldap_validation]
 path = "../crates/validation"
 
@@ -67,6 +69,9 @@ path = "../crates/validation"
 features = ["jpeg"]
 default-features = false
 version = "0.24"
+
+[dependencies.serde]
+workspace = true
 
 [dependencies.yew_form]
 git = "https://github.com/jfbilodeau/yew_form"

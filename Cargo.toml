@@ -4,6 +4,7 @@ members = [
     "crates/domain",
     "crates/domain-model",
     "crates/domain-handlers",
+    "crates/frontend-options",
     "crates/validation",
     "server",
     "app",
@@ -27,3 +28,6 @@ git = 'https://github.com/inejge/ldap3/'
 [workspace.dependencies.sea-orm]
 version = "1.1.8"
 default-features = false
+
+[workspace.dependencies.serde]
+version = "1"
