@@ -40,8 +40,7 @@ path = "../auth"
 features = ["opaque_server", "opaque_client", "sea_orm"]
 
 [dependencies.sea-orm]
-version = "0.12"
-default-features = false
+workspace = true
 features = [
     "macros",
     "with-chrono",

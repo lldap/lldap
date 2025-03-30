@@ -132,8 +132,7 @@ features = ["default", "rustls"]
 version = "3"
 
 [dependencies.sea-orm]
-version = "0.12"
-default-features = false
+workspace = true
 features = [
     "macros",
     "with-chrono",

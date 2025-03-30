@@ -3,8 +3,8 @@ use itertools::Itertools;
 use lldap_domain::types::{AttributeType, GroupId, JpegPhoto, Serialized, UserId, Uuid};
 use sea_orm::{
     sea_query::{
-        self, all, BinOper, BlobSize::Blob, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func,
-        Index, Query, SimpleExpr, Table, Value,
+        all, BinOper, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, Query,
+        SimpleExpr, Table, Value,
     },
     ConnectionTrait, DatabaseTransaction, DbErr, DeriveIden, FromQueryResult, Iden, Order,
     Statement, TransactionTrait,
@@ -163,7 +163,7 @@ pub async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<(), sea_o
                 .col(ColumnDef::new(Users::LastName).string_len(255))
                 .col(ColumnDef::new(Users::Avatar).binary())
                 .col(ColumnDef::new(Users::CreationDate).date_time().not_null())
-                .col(ColumnDef::new(Users::PasswordHash).binary())
+                .col(ColumnDef::new(Users::PasswordHash).blob())
                 .col(ColumnDef::new(Users::TotpSecret).string_len(64))
                 .col(ColumnDef::new(Users::MfaType).string_len(64))
                 .col(ColumnDef::new(Users::Uuid).string_len(36).not_null()),
@@ -502,9 +502,7 @@ async fn migrate_to_v3(transaction: DatabaseTransaction) -> Result<DatabaseTrans
         transaction,
         Users::Table,
         Users::Avatar,
-        ColumnDef::new(Users::Avatar)
-            .blob(sea_query::BlobSize::Long)
-            .to_owned(),
+        ColumnDef::new(Users::Avatar).blob().to_owned(),
         [],
     )
     .await?;
@@ -703,7 +701,7 @@ async fn migrate_to_v5(transaction: DatabaseTransaction) -> Result<DatabaseTrans
                     )
                     .col(
                         ColumnDef::new(UserAttributes::UserAttributeValue)
-                            .blob(sea_query::BlobSize::Long)
+                            .blob()
                             .not_null(),
                     )
                     .foreign_key(
@@ -751,7 +749,7 @@ async fn migrate_to_v5(transaction: DatabaseTransaction) -> Result<DatabaseTrans
                     )
                     .col(
                         ColumnDef::new(GroupAttributes::GroupAttributeValue)
-                            .blob(sea_query::BlobSize::Long)
+                            .blob()
                             .not_null(),
                     )
                     .foreign_key(
@@ -948,7 +946,7 @@ async fn migrate_to_v7(transaction: DatabaseTransaction) -> Result<DatabaseTrans
             builder.build(
                 Table::alter()
                     .table(Metadata::Table)
-                    .add_column(ColumnDef::new(Metadata::PrivateKeyHash).blob(Blob(Some(32)))),
+                    .add_column(ColumnDef::new(Metadata::PrivateKeyHash).blob()),
             ),
         )
         .await?;
