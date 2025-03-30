@@ -1,12 +1,12 @@
 [package]
-authors = ["Valentin Tolmer <valentin@tolmer.fr"]
-description = "Frontend options for LLDAP"
-edition = "2024"
-homepage = "https://github.com/lldap/lldap"
-license = "GPL-3.0-only"
 name = "lldap_frontend_options"
-repository = "https://github.com/lldap/lldap"
 version = "0.1.0"
+description = "Frontend options for LLDAP"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies.serde]
 workspace = true

@@ -1,12 +1,12 @@
 [package]
-authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
+name = "lldap_set_password"
+version = "0.1.0"
 description = "CLI tool to set a user password in LLDAP"
 edition = "2021"
-homepage = "https://github.com/lldap/lldap"
-license = "GPL-3.0-only"
-name = "lldap_set_password"
-repository = "https://github.com/lldap/lldap"
-version = "0.1.0"
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

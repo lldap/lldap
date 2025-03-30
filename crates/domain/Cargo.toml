@@ -1,11 +1,14 @@
 [package]
+name = "lldap_domain"
+version = "0.1.0"
 authors = [
     "Valentin Tolmer <valentin@tolmer.fr>",
     "Simon Broeng Jensen <sbj@cwconsult.dk>",
 ]
-name = "lldap_domain"
-version = "0.1.0"
 edition = "2021"
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [features]
 test = []

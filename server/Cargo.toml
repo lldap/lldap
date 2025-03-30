@@ -1,14 +1,14 @@
 [package]
-authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
-categories = ["authentication", "command-line-utilities"]
-description = "Super-simple and lightweight LDAP server"
-edition = "2021"
-homepage = "https://github.com/lldap/lldap"
-keywords = ["cli", "ldap", "graphql", "server", "authentication"]
-license = "GPL-3.0-only"
 name = "lldap"
-repository = "https://github.com/lldap/lldap"
 version = "0.6.2-alpha"
+description = "Super-simple and lightweight LDAP server"
+categories = ["authentication", "command-line-utilities"]
+edition = "2021"
+keywords = ["cli", "ldap", "graphql", "server", "authentication"]
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 actix = "0.13"
