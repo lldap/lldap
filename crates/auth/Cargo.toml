@@ -39,8 +39,7 @@ version = "*"
 features = ["serde"]
 
 [dependencies.sea-orm]
-version = "0.12"
-default-features = false
+workspace = true
 features = ["macros"]
 optional = true
 

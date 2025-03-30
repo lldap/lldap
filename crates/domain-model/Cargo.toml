@@ -35,8 +35,7 @@ features = ["opaque_server", "opaque_client", "sea_orm"]
 path = "../domain"
 
 [dependencies.sea-orm]
-version = "0.12"
-default-features = false
+workspace = true
 features = [
     "macros",
     "with-chrono",
