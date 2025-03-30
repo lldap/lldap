@@ -1,20 +1,21 @@
 [workspace]
 members = [
-    "crates/auth",
-    "crates/domain",
-    "crates/domain-model",
-    "crates/domain-handlers",
-    "crates/frontend-options",
-    "crates/validation",
     "server",
     "app",
     "migration-tool",
     "set-password",
+    "crates/*",
 ]
-
 default-members = ["server"]
-
 resolver = "2"
+
+[workspace.package]
+authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
+documentation = "https://github.com/lldap/lldap"
+edition = "2024"
+homepage = "https://github.com/lldap/lldap"
+license = "GPL-3.0-only"
+repository = "https://github.com/lldap/lldap"
 
 [profile.release]
 lto = true
