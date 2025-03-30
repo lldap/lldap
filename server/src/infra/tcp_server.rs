@@ -108,6 +108,12 @@ async fn wasm_handler_compressed<Backend>(
     )
 }
 
+async fn get_settings<Backend>(data: web::Data<AppState<Backend>>) -> HttpResponse {
+    HttpResponse::Ok().json(lldap_frontend_options::Options {
+        password_reset_enabled: data.mail_options.enable_password_reset,
+    })
+}
+
 fn http_config<Backend>(
     cfg: &mut web::ServiceConfig,
     backend_handler: Backend,
@@ -132,6 +138,7 @@ fn http_config<Backend>(
         "/health",
         web::get().to(|| async { HttpResponse::Ok().finish() }),
     )
+    .route("/settings", web::get().to(get_settings::<Backend>))
     .service(
         web::scope("/auth")
             .configure(|cfg| auth_service::configure_server::<Backend>(cfg, enable_password_reset)),

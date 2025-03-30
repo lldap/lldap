@@ -22,7 +22,6 @@ curve25519-dalek = "3"
 digest = "0.9"
 generic-array = "0.14"
 rand = "0.8"
-serde = "*"
 sha2 = "0.9"
 thiserror = "*"
 
@@ -42,6 +41,9 @@ features = ["serde"]
 workspace = true
 features = ["macros"]
 optional = true
+
+[dependencies.serde]
+workspace = true
 
 # For WASM targets, use the JS getrandom.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]

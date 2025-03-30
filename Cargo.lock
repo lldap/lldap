@@ -2545,6 +2545,7 @@ dependencies = [
  "lldap_domain",
  "lldap_domain_handlers",
  "lldap_domain_model",
+ "lldap_frontend_options",
  "lldap_validation",
  "log",
  "mockall",
@@ -2598,6 +2599,7 @@ dependencies = [
  "indexmap 1.6.2",
  "jwt 0.13.0",
  "lldap_auth",
+ "lldap_frontend_options",
  "lldap_validation",
  "rand 0.8.5",
  "serde",
@@ -2688,6 +2690,13 @@ dependencies = [
  "serde_bytes",
  "thiserror 1.0.66",
  "uuid 1.11.0",
+]
+
+[[package]]
+name = "lldap_frontend_options"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

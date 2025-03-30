@@ -11,7 +11,6 @@ test = []
 async-trait = "0.1"
 base64 = "0.21"
 ldap3_proto = "0.6.0"
-serde = "1"
 serde_bytes = "0.11"
 
 [dev-dependencies]
@@ -35,6 +34,9 @@ path = "../domain"
 
 [dependencies.lldap_domain_model]
 path = "../domain-model"
+
+[dependencies.serde]
+workspace = true
 
 [dependencies.uuid]
 features = ["v1", "v3"]
