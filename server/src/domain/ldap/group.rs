@@ -1,6 +1,6 @@
 use chrono::TimeZone;
 use ldap3_proto::{
-    proto::LdapOp, LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry,
+    LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry, proto::LdapOp,
 };
 use tracing::{debug, instrument, warn};
 
@@ -9,10 +9,9 @@ use crate::domain::{
     ldap::{
         error::{LdapError, LdapResult},
         utils::{
-            expand_attribute_wildcards, get_custom_attribute,
-            get_group_id_from_distinguished_name_or_plain_name,
-            get_user_id_from_distinguished_name_or_plain_name, map_group_field, ExpandedAttributes,
-            GroupFieldType, LdapInfo,
+            ExpandedAttributes, GroupFieldType, LdapInfo, expand_attribute_wildcards,
+            get_custom_attribute, get_group_id_from_distinguished_name_or_plain_name,
+            get_user_id_from_distinguished_name_or_plain_name, map_group_field,
         },
     },
     schema::PublicSchema,
@@ -51,10 +50,12 @@ pub fn get_group_attribute(
             vec![group.id.0.to_string().into_bytes()]
         }
         GroupFieldType::DisplayName => vec![group.display_name.to_string().into_bytes()],
-        GroupFieldType::CreationDate => vec![chrono::Utc
-            .from_utc_datetime(&group.creation_date)
-            .to_rfc3339()
-            .into_bytes()],
+        GroupFieldType::CreationDate => vec![
+            chrono::Utc
+                .from_utc_datetime(&group.creation_date)
+                .to_rfc3339()
+                .into_bytes(),
+        ],
         GroupFieldType::Member => group
             .users
             .iter()

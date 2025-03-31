@@ -1,10 +1,10 @@
 use crate::infra::configuration::Configuration;
 use actix_web::{
-    dev::{ServiceRequest, ServiceResponse},
     Error,
+    dev::{ServiceRequest, ServiceResponse},
 };
 use std::env;
-use tracing::{debug, error, Span};
+use tracing::{Span, debug, error};
 use tracing_actix_web::RootSpanBuilder;
 use tracing_subscriber::{filter::EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 

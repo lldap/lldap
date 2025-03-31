@@ -5,7 +5,7 @@ authors = [
     "Valentin Tolmer <valentin@tolmer.fr>",
     "Simon Broeng Jensen <sbj@cwconsult.dk>",
 ]
-edition = "2021"
+edition.workspace = true
 homepage.workspace = true
 license.workspace = true
 repository.workspace = true

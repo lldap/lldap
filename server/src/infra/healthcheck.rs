@@ -1,12 +1,12 @@
 use crate::infra::{configuration::LdapsOptions, ldap_server::read_certificates};
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use futures_util::SinkExt;
 use ldap3_proto::{
+    LdapCodec,
     proto::{
         LdapDerefAliases, LdapFilter, LdapMsg, LdapOp, LdapSearchRequest, LdapSearchResultEntry,
         LdapSearchScope,
     },
-    LdapCodec,
 };
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector as RustlsTlsConnector;

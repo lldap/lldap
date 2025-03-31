@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use clap::{builder::EnumValueParser, Parser};
+use clap::{Parser, builder::EnumValueParser};
 use lettre::message::Mailbox;
 use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};

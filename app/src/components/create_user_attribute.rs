@@ -6,10 +6,10 @@ use crate::{
     convert_attribute_type,
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
-        schema::{validate_attribute_type, AttributeType},
+        schema::{AttributeType, validate_attribute_type},
     },
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use lldap_validation::attributes::validate_attribute_name;

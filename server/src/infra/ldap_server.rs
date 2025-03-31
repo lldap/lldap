@@ -8,9 +8,9 @@ use crate::{
 };
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
-use actix_service::{fn_service, ServiceFactoryExt};
-use anyhow::{anyhow, Context, Result};
-use ldap3_proto::{control::LdapControl, proto::LdapMsg, proto::LdapOp, LdapCodec};
+use actix_service::{ServiceFactoryExt, fn_service};
+use anyhow::{Context, Result, anyhow};
+use ldap3_proto::{LdapCodec, control::LdapControl, proto::LdapMsg, proto::LdapOp};
 use lldap_domain::types::AttributeName;
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
 use rustls::PrivateKey;

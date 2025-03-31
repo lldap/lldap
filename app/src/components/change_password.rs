@@ -8,7 +8,7 @@ use crate::{
         common_component::{CommonComponent, CommonComponentParts},
     },
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use gloo_console::error;
 use lldap_auth::*;
 use validator_derive::Validate;

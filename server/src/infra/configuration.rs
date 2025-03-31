@@ -10,13 +10,13 @@ use crate::{
         database_string::DatabaseUrl,
     },
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use figment::{
-    providers::{Env, Format, Serialized, Toml},
     Figment,
+    providers::{Env, Format, Serialized, Toml},
 };
 use figment_file_provider_adapter::FileAdapter;
-use lldap_auth::opaque::{server::ServerSetup, KeyPair};
+use lldap_auth::opaque::{KeyPair, server::ServerSetup};
 use lldap_domain::types::{AttributeName, UserId};
 use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
@@ -219,23 +219,33 @@ pub fn compare_private_key_hashes(
                         PrivateKeyLocation::KeyFile(old_location, file_path),
                         PrivateKeyLocation::KeySeed(new_location),
                     ) => {
-                        bail!("The private key is configured to be generated from a seed (from {new_location:?}), but it used to come from the file {file_path:?} (defined in {old_location:?}). Did you just upgrade from <=v0.4 to >=v0.5? The key seed was not supported, revert to just using the file.");
+                        bail!(
+                            "The private key is configured to be generated from a seed (from {new_location:?}), but it used to come from the file {file_path:?} (defined in {old_location:?}). Did you just upgrade from <=v0.4 to >=v0.5? The key seed was not supported, revert to just using the file."
+                        );
                     }
                     (PrivateKeyLocation::Default, PrivateKeyLocation::KeySeed(new_location)) => {
-                        bail!("The private key is configured to be generated from a seed (from {new_location:?}), but it used to come from default key file \"server_key\". Did you just upgrade from <=v0.4 to >=v0.5? The key seed was not yet supported, revert to just using the file.");
+                        bail!(
+                            "The private key is configured to be generated from a seed (from {new_location:?}), but it used to come from default key file \"server_key\". Did you just upgrade from <=v0.4 to >=v0.5? The key seed was not yet supported, revert to just using the file."
+                        );
                     }
                     (
                         PrivateKeyLocation::KeyFile(old_location, old_path),
                         PrivateKeyLocation::KeyFile(new_location, new_path),
                     ) => {
                         if old_path == new_path {
-                            bail!("The contents of the private key file from {old_path:?} have changed. This usually means that the file was deleted and re-created. If using docker, make sure that the folder is made persistent (by mounting a volume or a directory). If you have several instances of LLDAP, make sure they share the same file (or switch to a key seed).");
+                            bail!(
+                                "The contents of the private key file from {old_path:?} have changed. This usually means that the file was deleted and re-created. If using docker, make sure that the folder is made persistent (by mounting a volume or a directory). If you have several instances of LLDAP, make sure they share the same file (or switch to a key seed)."
+                            );
                         } else {
-                            bail!("The private key file used to be {old_path:?} (defined in {old_location:?}), but now is {new_path:?} (defined in {new_location:?}. Make sure to copy the old file in the new location.");
+                            bail!(
+                                "The private key file used to be {old_path:?} (defined in {old_location:?}), but now is {new_path:?} (defined in {new_location:?}. Make sure to copy the old file in the new location."
+                            );
                         }
                     }
                     (old_location, new_location) => {
-                        bail!("The private key has changed. It used to come from {old_location:?}, but now it comes from {new_location:?}.");
+                        bail!(
+                            "The private key has changed. It used to come from {old_location:?}, but now it comes from {new_location:?}."
+                        );
                     }
                 }
             }
@@ -362,7 +372,9 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
                 file_path
             );
         } else if file_path == "server_key" {
-            eprintln!("WARNING: A key_seed was given, we will ignore the key_file and generate one from the seed! Set key_file to an empty string in the config to silence this message.");
+            eprintln!(
+                "WARNING: A key_seed was given, we will ignore the key_file and generate one from the seed! Set key_file to an empty string in the config to silence this message."
+            );
         } else {
             println!("Generating the private key from the key_seed");
         }
@@ -609,7 +621,7 @@ where
         figment_config,
     )?);
     if config.jwt_secret.is_none() {
-        use rand::{seq::SliceRandom, Rng};
+        use rand::{Rng, seq::SliceRandom};
         struct Symbols;
 
         impl rand::prelude::Distribution<char> for Symbols {
@@ -617,18 +629,22 @@ where
                 *b"01234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+,-./:;<=>?_~!@#$%^&*()[]{}:;".choose(rng).unwrap() as char
             }
         }
-        bail!("The JWT secret must be initialized to a random string, preferably at least 32 characters long. \
+        bail!(
+            "The JWT secret must be initialized to a random string, preferably at least 32 characters long. \
             Either set the `jwt_secret` config value or the `LLDAP_JWT_SECRET` environment variable. \
             You can generate the value by running\n\
             LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\\''()*+,-./:;<=>?@[\\]^_{{|}}~' </dev/urandom | head -c 32; echo ''\n\
             or you can use this random value: {}",
-        rand::thread_rng()
-            .sample_iter(&Symbols)
-            .take(32)
-            .collect::<String>());
+            rand::thread_rng()
+                .sample_iter(&Symbols)
+                .take(32)
+                .collect::<String>()
+        );
     }
     if config.smtp_options.tls_required.is_some() {
-        println!("DEPRECATED: smtp_options.tls_required field is deprecated, it never did anything. You can replace it with smtp_options.smtp_encryption.");
+        println!(
+            "DEPRECATED: smtp_options.tls_required field is deprecated, it never did anything. You can replace it with smtp_options.smtp_encryption."
+        );
     }
     Ok(config)
 }

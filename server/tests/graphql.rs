@@ -1,8 +1,8 @@
 use crate::common::{
     auth::get_token,
     env,
-    fixture::{new_id, LLDAPFixture, User},
-    graphql::{get_user_details, list_users, post, GetUserDetails, ListUsers},
+    fixture::{LLDAPFixture, User, new_id},
+    graphql::{GetUserDetails, ListUsers, get_user_details, list_users, post},
 };
 use reqwest::blocking::ClientBuilder;
 use serial_test::file_serial;

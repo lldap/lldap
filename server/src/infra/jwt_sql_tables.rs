@@ -1,6 +1,6 @@
 use sea_orm::{
-    sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Table},
     ConnectionTrait, DeriveIden,
+    sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Table},
 };
 
 pub use crate::domain::{sql_migrations::Users, sql_tables::DbConnection};

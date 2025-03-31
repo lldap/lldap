@@ -252,27 +252,31 @@ mod tests {
             is_hardcoded: false,
             is_readonly: false,
         };
-        assert!(fixture
-            .handler
-            .get_schema()
-            .await
-            .unwrap()
-            .user_attributes
-            .attributes
-            .contains(&expected_value));
+        assert!(
+            fixture
+                .handler
+                .get_schema()
+                .await
+                .unwrap()
+                .user_attributes
+                .attributes
+                .contains(&expected_value)
+        );
         fixture
             .handler
             .delete_user_attribute(&"new_attribute".into())
             .await
             .unwrap();
-        assert!(!fixture
-            .handler
-            .get_schema()
-            .await
-            .unwrap()
-            .user_attributes
-            .attributes
-            .contains(&expected_value));
+        assert!(
+            !fixture
+                .handler
+                .get_schema()
+                .await
+                .unwrap()
+                .user_attributes
+                .attributes
+                .contains(&expected_value)
+        );
     }
 
     #[tokio::test]
@@ -336,27 +340,31 @@ mod tests {
             is_hardcoded: false,
             is_readonly: false,
         };
-        assert!(fixture
-            .handler
-            .get_schema()
-            .await
-            .unwrap()
-            .group_attributes
-            .attributes
-            .contains(&expected_value));
+        assert!(
+            fixture
+                .handler
+                .get_schema()
+                .await
+                .unwrap()
+                .group_attributes
+                .attributes
+                .contains(&expected_value)
+        );
         fixture
             .handler
             .delete_group_attribute(&"new_attriBUte".into())
             .await
             .unwrap();
-        assert!(!fixture
-            .handler
-            .get_schema()
-            .await
-            .unwrap()
-            .group_attributes
-            .attributes
-            .contains(&expected_value));
+        assert!(
+            !fixture
+                .handler
+                .get_schema()
+                .await
+                .unwrap()
+                .group_attributes
+                .attributes
+                .contains(&expected_value)
+        );
     }
 
     #[tokio::test]
@@ -396,12 +404,14 @@ mod tests {
             .delete_user_object_class(&new_object_class)
             .await
             .unwrap();
-        assert!(fixture
-            .handler
-            .get_schema()
-            .await
-            .unwrap()
-            .extra_user_object_classes
-            .is_empty());
+        assert!(
+            fixture
+                .handler
+                .get_schema()
+                .await
+                .unwrap()
+                .extra_user_object_classes
+                .is_empty()
+        );
     }
 }

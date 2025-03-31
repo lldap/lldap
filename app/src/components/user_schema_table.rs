@@ -11,7 +11,7 @@ use crate::{
         schema::AttributeType,
     },
 };
-use anyhow::{anyhow, Error, Result};
+use anyhow::{Error, Result, anyhow};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
@@ -55,21 +55,21 @@ impl CommonComponent<UserSchemaTable> for UserSchemaTable {
                 Ok(true)
             }
             Msg::OnError(e) => Err(e),
-            Msg::OnAttributeDeleted(attribute_name) => {
-                match self.attributes {
-                    None => {
-                        log!(format!("Attribute {attribute_name} was  deleted but component has no attributes"));
-                        Err(anyhow!("invalid state"))
-                    }
-                    Some(_) => {
-                        self.attributes
-                            .as_mut()
-                            .unwrap()
-                            .retain(|a| a.name != attribute_name);
-                        Ok(true)
-                    }
+            Msg::OnAttributeDeleted(attribute_name) => match self.attributes {
+                None => {
+                    log!(format!(
+                        "Attribute {attribute_name} was  deleted but component has no attributes"
+                    ));
+                    Err(anyhow!("invalid state"))
                 }
-            }
+                Some(_) => {
+                    self.attributes
+                        .as_mut()
+                        .unwrap()
+                        .retain(|a| a.name != attribute_name);
+                    Ok(true)
+                }
+            },
         }
     }
 

@@ -4,12 +4,12 @@ use base64::Engine;
 use chrono::{NaiveDateTime, TimeZone};
 use lldap_auth::types::CaseInsensitiveString;
 use sea_orm::{
+    DbErr, DeriveValueType, QueryResult, TryFromU64, TryGetError, TryGetable, Value,
     entity::IntoActiveValue,
     sea_query::{
-        extension::mysql::MySqlType, value::ValueType, ArrayType, ColumnType, Nullable, SeaRc,
-        StringLen, ValueTypeErr,
+        ArrayType, ColumnType, Nullable, SeaRc, StringLen, ValueTypeErr,
+        extension::mysql::MySqlType, value::ValueType,
     },
-    DbErr, DeriveValueType, QueryResult, TryFromU64, TryGetError, TryGetable, Value,
 };
 use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
