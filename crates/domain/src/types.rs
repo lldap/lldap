@@ -4,9 +4,12 @@ use base64::Engine;
 use chrono::{NaiveDateTime, TimeZone};
 use lldap_auth::types::CaseInsensitiveString;
 use sea_orm::{
-    entity::IntoActiveValue,
-    sea_query::{value::ValueType, ArrayType, BlobSize, ColumnType, Nullable, ValueTypeErr},
     DbErr, DeriveValueType, QueryResult, TryFromU64, TryGetError, TryGetable, Value,
+    entity::IntoActiveValue,
+    sea_query::{
+        ArrayType, ColumnType, Nullable, SeaRc, StringLen, ValueTypeErr,
+        extension::mysql::MySqlType, value::ValueType,
+    },
 };
 use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
@@ -26,7 +29,7 @@ pub use lldap_auth::types::UserId;
     derive_more::Display,
 )]
 #[serde(try_from = "&str")]
-#[sea_orm(column_type = "String(Some(36))")]
+#[sea_orm(column_type = "String(StringLen::N(36))")]
 #[debug(r#""{_0}""#)]
 #[display("{_0}")]
 pub struct Uuid(String);
@@ -74,7 +77,10 @@ macro_rules! uuid {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, DeriveValueType)]
-#[sea_orm(column_type = "Binary(BlobSize::Long)", array_type = "Bytes")]
+#[sea_orm(
+    column_type = "Custom(SeaRc::new(MySqlType::LongBlob))",
+    array_type = "Bytes"
+)]
 pub struct Serialized(Vec<u8>);
 
 const SERIALIZED_I64_LEN: usize = 8;
@@ -308,7 +314,10 @@ impl AsRef<GroupName> for GroupName {
 }
 
 #[derive(PartialEq, Eq, Clone, Serialize, Deserialize, DeriveValueType, Hash)]
-#[sea_orm(column_type = "Binary(BlobSize::Long)", array_type = "Bytes")]
+#[sea_orm(
+    column_type = "Custom(SeaRc::new(MySqlType::LongBlob))",
+    array_type = "Bytes"
+)]
 pub struct JpegPhoto(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl From<&JpegPhoto> for Value {
@@ -633,7 +642,7 @@ impl ValueType for AttributeType {
     }
 
     fn column_type() -> ColumnType {
-        ColumnType::String(Some(64))
+        ColumnType::String(StringLen::N(64))
     }
 }
 

@@ -1,9 +1,9 @@
 use std::{fmt::Display, str::FromStr};
 
-use anyhow::{bail, Error, Ok, Result};
+use anyhow::{Error, Ok, Result, bail};
 use gloo_file::{
-    callbacks::{read_as_bytes, FileReader},
     File,
+    callbacks::{FileReader, read_as_bytes},
 };
 use web_sys::{FileList, HtmlInputElement, InputEvent};
 use yew::Properties;

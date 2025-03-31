@@ -1,6 +1,6 @@
 use chrono::TimeZone;
 use ldap3_proto::{
-    proto::LdapOp, LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry,
+    LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry, proto::LdapOp,
 };
 use tracing::{debug, instrument, warn};
 
@@ -9,10 +9,9 @@ use crate::domain::{
     ldap::{
         error::{LdapError, LdapResult},
         utils::{
-            expand_attribute_wildcards, get_custom_attribute,
-            get_group_id_from_distinguished_name_or_plain_name,
-            get_user_id_from_distinguished_name_or_plain_name, map_user_field, ExpandedAttributes,
-            LdapInfo, UserFieldType,
+            ExpandedAttributes, LdapInfo, UserFieldType, expand_attribute_wildcards,
+            get_custom_attribute, get_group_id_from_distinguished_name_or_plain_name,
+            get_user_id_from_distinguished_name_or_plain_name, map_user_field,
         },
     },
     schema::PublicSchema,
@@ -74,10 +73,12 @@ pub fn get_user_attribute(
         UserFieldType::PrimaryField(UserColumn::DisplayName) => {
             vec![user.display_name.clone()?.into_bytes()]
         }
-        UserFieldType::PrimaryField(UserColumn::CreationDate) => vec![chrono::Utc
-            .from_utc_datetime(&user.creation_date)
-            .to_rfc3339()
-            .into_bytes()],
+        UserFieldType::PrimaryField(UserColumn::CreationDate) => vec![
+            chrono::Utc
+                .from_utc_datetime(&user.creation_date)
+                .to_rfc3339()
+                .into_bytes(),
+        ],
         UserFieldType::Attribute(attr, _, _) => get_custom_attribute(&user.attributes, &attr)?,
         UserFieldType::NoMatch => match attribute.as_str() {
             "1.1" => return None,

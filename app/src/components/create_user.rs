@@ -12,13 +12,13 @@ use crate::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
         form_utils::{
-            read_all_form_attributes, AttributeValue, EmailIsRequired, GraphQlAttributeSchema,
-            IsAdmin,
+            AttributeValue, EmailIsRequired, GraphQlAttributeSchema, IsAdmin,
+            read_all_form_attributes,
         },
         schema::AttributeType,
     },
 };
-use anyhow::{ensure, Result};
+use anyhow::{Result, ensure};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use lldap_auth::{opaque, registration};

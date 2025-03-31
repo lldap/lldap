@@ -1,12 +1,12 @@
 [package]
-authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
-description = "Authentication protocol for LLDAP"
-edition = "2021"
-homepage = "https://github.com/lldap/lldap"
-license = "GPL-3.0-only"
 name = "lldap_auth"
-repository = "https://github.com/lldap/lldap"
 version = "0.6.0"
+description = "Authentication protocol for LLDAP"
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [features]
 default = ["opaque_server", "opaque_client"]
@@ -22,7 +22,6 @@ curve25519-dalek = "3"
 digest = "0.9"
 generic-array = "0.14"
 rand = "0.8"
-serde = "*"
 sha2 = "0.9"
 thiserror = "*"
 
@@ -39,10 +38,12 @@ version = "*"
 features = ["serde"]
 
 [dependencies.sea-orm]
-version = "0.12"
-default-features = false
+workspace = true
 features = ["macros"]
 optional = true
+
+[dependencies.serde]
+workspace = true
 
 # For WASM targets, use the JS getrandom.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]

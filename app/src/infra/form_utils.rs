@@ -1,4 +1,4 @@
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{Result, anyhow, ensure};
 use validator::validate_email;
 use web_sys::{FormData, HtmlFormElement};
 use yew::NodeRef;

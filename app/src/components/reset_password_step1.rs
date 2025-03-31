@@ -5,7 +5,7 @@ use crate::{
         common_component::{CommonComponent, CommonComponentParts},
     },
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;

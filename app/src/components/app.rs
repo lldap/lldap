@@ -21,16 +21,16 @@ use crate::{
 };
 
 use gloo_console::error;
+use lldap_frontend_options::Options;
 use yew::{
-    function_component,
+    Context, function_component,
     html::Scope,
-    prelude::{html, Component, Html},
-    Context,
+    prelude::{Component, Html, html},
 };
 use yew_router::{
+    BrowserRouter, Switch,
     prelude::{History, Location},
     scope_ext::RouterScopeExt,
-    BrowserRouter, Switch,
 };
 
 #[function_component(AppContainer)]
@@ -51,7 +51,7 @@ pub struct App {
 pub enum Msg {
     Login((String, bool)),
     Logout,
-    PasswordResetProbeFinished(anyhow::Result<bool>),
+    SettingsReceived(anyhow::Result<Options>),
 }
 
 impl Component for App {
@@ -76,9 +76,8 @@ impl Component for App {
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
         };
-        ctx.link().send_future(async move {
-            Msg::PasswordResetProbeFinished(HostService::probe_password_reset().await)
-        });
+        ctx.link()
+            .send_future(async move { Msg::SettingsReceived(HostService::get_settings().await) });
         app.apply_initial_redirections(ctx);
         app
     }
@@ -103,14 +102,11 @@ impl Component for App {
                 self.redirect_to = None;
                 history.push(AppRoute::Login);
             }
-            Msg::PasswordResetProbeFinished(Ok(enabled)) => {
-                self.password_reset_enabled = Some(enabled);
+            Msg::SettingsReceived(Ok(settings)) => {
+                self.password_reset_enabled = Some(settings.password_reset_enabled);
             }
-            Msg::PasswordResetProbeFinished(Err(err)) => {
-                self.password_reset_enabled = Some(false);
-                error!(&format!(
-                    "Could not probe for password reset support: {err:#}"
-                ));
+            Msg::SettingsReceived(Err(err)) => {
+                error!(err.to_string());
             }
         }
         true

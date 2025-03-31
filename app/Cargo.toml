@@ -1,13 +1,13 @@
 [package]
-authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
-description = "Frontend for LLDAP"
-edition = "2021"
-homepage = "https://github.com/lldap/lldap"
-license = "GPL-3.0-only"
 name = "lldap_app"
-repository = "https://github.com/lldap/lldap"
 version = "0.6.2-alpha"
+description = "Frontend for LLDAP"
+edition.workspace = true
 include = ["src/**/*", "queries/**/*", "Cargo.toml", "../schema.graphql"]
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 anyhow = "1"
@@ -19,12 +19,11 @@ graphql_client = "0.10"
 http = "0.2"
 jwt = "0.13"
 rand = "0.8"
-serde = "1"
 serde_json = "1"
 url-escape = "0.1.1"
 validator = "0.14"
 validator_derive = "0.14"
-wasm-bindgen = "0.2"
+wasm-bindgen = "0.2.100"
 wasm-bindgen-futures = "*"
 yew = "0.19.3"
 yew-router = "0.16"
@@ -60,6 +59,9 @@ features = [
 path = "../crates/auth"
 features = [ "opaque_client" ]
 
+[dependencies.lldap_frontend_options]
+path = "../crates/frontend-options"
+
 [dependencies.lldap_validation]
 path = "../crates/validation"
 
@@ -67,6 +69,9 @@ path = "../crates/validation"
 features = ["jpeg"]
 default-features = false
 version = "0.24"
+
+[dependencies.serde]
+workspace = true
 
 [dependencies.yew_form]
 git = "https://github.com/jfbilodeau/yew_form"

@@ -1,6 +1,6 @@
 use crate::infra::attributes::AttributeDescription;
-use lldap_validation::attributes::{validate_attribute_name, ALLOWED_CHARACTERS_DESCRIPTION};
-use yew::{html, Html};
+use lldap_validation::attributes::{ALLOWED_CHARACTERS_DESCRIPTION, validate_attribute_name};
+use yew::{Html, html};
 
 fn render_attribute_aliases(attribute_description: &AttributeDescription) -> Html {
     if attribute_description.aliases.is_empty() {

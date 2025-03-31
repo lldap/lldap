@@ -12,12 +12,12 @@ use lldap_domain_handlers::handler::{
 };
 use lldap_domain_model::{
     error::{DomainError, Result},
-    model::{self, deserialize, GroupColumn, MembershipColumn},
+    model::{self, GroupColumn, MembershipColumn, deserialize},
 };
 use sea_orm::{
-    sea_query::{Alias, Cond, Expr, Func, IntoCondition, OnConflict, SimpleExpr},
     ActiveModelTrait, ColumnTrait, DatabaseTransaction, EntityTrait, QueryFilter, QueryOrder,
     QuerySelect, QueryTrait, Set, TransactionTrait,
+    sea_query::{Alias, Cond, Expr, Func, IntoCondition, OnConflict, SimpleExpr},
 };
 use tracing::instrument;
 

@@ -2,8 +2,8 @@ use crate::common::{
     auth::get_token,
     env,
     graphql::{
-        add_user_to_group, create_group, create_user, delete_group_query, delete_user_query, post,
         AddUserToGroup, CreateGroup, CreateUser, DeleteGroupQuery, DeleteUserQuery,
+        add_user_to_group, create_group, create_user, delete_group_query, delete_user_query, post,
     },
 };
 use assert_cmd::prelude::*;

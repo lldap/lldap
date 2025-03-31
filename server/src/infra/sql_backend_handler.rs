@@ -8,14 +8,14 @@ use lldap_domain_model::{
     model::{self, JwtRefreshStorageColumn, JwtStorageColumn, PasswordResetTokensColumn},
 };
 use sea_orm::{
-    sea_query::{Cond, Expr},
     ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QuerySelect,
+    sea_query::{Cond, Expr},
 };
 use std::collections::HashSet;
 use tracing::{debug, instrument};
 
 fn gen_random_string(len: usize) -> String {
-    use rand::{distributions::Alphanumeric, rngs::SmallRng, Rng, SeedableRng};
+    use rand::{Rng, SeedableRng, distributions::Alphanumeric, rngs::SmallRng};
     let mut rng = SmallRng::from_entropy();
     std::iter::repeat(())
         .map(|()| rng.sample(Alphanumeric))

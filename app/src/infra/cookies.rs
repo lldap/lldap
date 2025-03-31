@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use chrono::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlDocument;

@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use graphql_client::GraphQLQuery;
-use requestty::{prompt_one, Question};
+use requestty::{Question, prompt_one};
 use reqwest::blocking::{Client, ClientBuilder};
 use smallvec::SmallVec;
 
-use crate::ldap::{check_host_exists, LdapGroup};
+use crate::ldap::{LdapGroup, check_host_exists};
 
 pub struct GraphQLClient {
     url: String,

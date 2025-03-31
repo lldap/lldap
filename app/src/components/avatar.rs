@@ -1,6 +1,6 @@
-use crate::infra::functional::{use_graphql_call, LoadableResult};
+use crate::infra::functional::{LoadableResult, use_graphql_call};
 use graphql_client::GraphQLQuery;
-use yew::{function_component, html, virtual_dom::AttrValue, Properties};
+use yew::{Properties, function_component, html, virtual_dom::AttrValue};
 
 #[derive(GraphQLQuery)]
 #[graphql(

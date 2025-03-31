@@ -1,10 +1,11 @@
 use super::cookies::set_cookie;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use gloo_net::http::{Method, RequestBuilder};
 use graphql_client::GraphQLQuery;
-use lldap_auth::{login, registration, JWTClaims};
+use lldap_auth::{JWTClaims, login, registration};
 
-use serde::{de::DeserializeOwned, Serialize};
+use lldap_frontend_options::Options;
+use serde::{Serialize, de::DeserializeOwned};
 use web_sys::RequestCredentials;
 
 #[derive(Default)]
@@ -137,6 +138,15 @@ impl HostService {
         .and_then(set_cookies_from_jwt)
     }
 
+    pub async fn get_settings() -> Result<Options> {
+        call_server_json_with_error_message::<Options, _>(
+            &(base_url() + "/settings"),
+            GET_REQUEST,
+            "Could not fetch settings: ",
+        )
+        .await
+    }
+
     pub async fn register_start(
         request: registration::ClientRegistrationStartRequest,
     ) -> Result<Box<registration::ServerRegistrationStartResponse>> {
@@ -201,16 +211,5 @@ impl HostService {
             "Could not validate token",
         )
         .await
-    }
-
-    pub async fn probe_password_reset() -> Result<bool> {
-        Ok(gloo_net::http::Request::post(
-            &(base_url() + "/auth/reset/step1/lldap_unlikely_very_long_user_name"),
-        )
-        .header("Content-Type", "application/json")
-        .send()
-        .await?
-        .status()
-            != http::StatusCode::NOT_FOUND)
     }
 }

@@ -1,14 +1,14 @@
 [package]
-authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
-categories = ["authentication", "command-line-utilities"]
-description = "Super-simple and lightweight LDAP server"
-edition = "2021"
-homepage = "https://github.com/lldap/lldap"
-keywords = ["cli", "ldap", "graphql", "server", "authentication"]
-license = "GPL-3.0-only"
 name = "lldap"
-repository = "https://github.com/lldap/lldap"
 version = "0.6.2-alpha"
+description = "Super-simple and lightweight LDAP server"
+categories = ["authentication", "command-line-utilities"]
+edition.workspace = true
+keywords = ["cli", "ldap", "graphql", "server", "authentication"]
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 actix = "0.13"
@@ -39,7 +39,6 @@ log = "*"
 orion = "0.17"
 rand_chacha = "0.3"
 rustls-pemfile = "1"
-serde = "*"
 serde_json = "1"
 sha2 = "0.10"
 thiserror = "*"
@@ -97,6 +96,9 @@ path = "../crates/domain-model"
 [dependencies.lldap_domain_handlers]
 path = "../crates/domain-handlers"
 
+[dependencies.lldap_frontend_options]
+path = "../crates/frontend-options"
+
 [dependencies.lldap_validation]
 path = "../crates/validation"
 
@@ -110,6 +112,9 @@ version = "0.8"
 [dependencies.secstr]
 features = ["serde"]
 version = "*"
+
+[dependencies.serde]
+workspace = true
 
 [dependencies.strum]
 features = ["derive"]
@@ -132,8 +137,7 @@ features = ["default", "rustls"]
 version = "3"
 
 [dependencies.sea-orm]
-version = "0.12"
-default-features = false
+workspace = true
 features = [
     "macros",
     "with-chrono",

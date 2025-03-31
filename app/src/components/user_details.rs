@@ -11,7 +11,7 @@ use crate::{
         form_utils::GraphQlAttributeSchema,
     },
 };
-use anyhow::{bail, Error, Result};
+use anyhow::{Error, Result, bail};
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
 

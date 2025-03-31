@@ -13,7 +13,7 @@ use crate::{
     },
     infra::{
         cli::*,
-        configuration::{compare_private_key_hashes, Configuration},
+        configuration::{Configuration, compare_private_key_hashes},
         database_string::DatabaseUrl,
         db_cleaner::Scheduler,
         healthcheck, mail,
@@ -21,10 +21,10 @@ use crate::{
 };
 use actix::Actor;
 use actix_server::ServerBuilder;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use futures_util::TryFutureExt;
 use sea_orm::{Database, DatabaseConnection};
-use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
+use tracing::{Instrument, Level, debug, error, info, instrument, span, warn};
 
 use lldap_domain::requests::{CreateGroupRequest, CreateUserRequest};
 use lldap_domain_handlers::handler::{
@@ -35,7 +35,7 @@ use lldap_domain_handlers::handler::{
 mod domain;
 mod infra;
 
-const ADMIN_PASSWORD_MISSING_ERROR : &str = "The LDAP admin password must be initialized. \
+const ADMIN_PASSWORD_MISSING_ERROR: &str = "The LDAP admin password must be initialized. \
             Either set the `ldap_user_pass` config value or the `LLDAP_LDAP_USER_PASS` environment variable. \
             A minimum of 8 characters is recommended.";
 
@@ -133,7 +133,9 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
         force_update_private_key,
     ) {
         (Ok(false), true) => {
-            bail!("The private key has not changed, but force_update_private_key/LLDAP_FORCE_UPDATE_PRIVATE_KEY is set to true. Please set force_update_private_key to false and restart the server.");
+            bail!(
+                "The private key has not changed, but force_update_private_key/LLDAP_FORCE_UPDATE_PRIVATE_KEY is set to true. Please set force_update_private_key to false and restart the server."
+            );
         }
         (Ok(true), _) | (Err(_), true) => {
             set_private_key_info(&sql_pool, private_key_info).await?;
@@ -159,7 +161,9 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
         false
     };
     if !admin_present {
-        warn!("Could not find an admin user, trying to create the user \"admin\" with the config-provided password");
+        warn!(
+            "Could not find an admin user, trying to create the user \"admin\" with the config-provided password"
+        );
         create_admin_user(&backend_handler, &config)
             .await
             .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))
@@ -189,7 +193,9 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
         ))?;
     }
     if config.force_update_private_key || config.force_ldap_user_pass_reset.is_yes() {
-        bail!("Restart the server without --force-update-private-key or --force-ldap-user-pass-reset to continue.");
+        bail!(
+            "Restart the server without --force-update-private-key or --force-ldap-user-pass-reset to continue."
+        );
     }
     let server_builder = infra::ldap_server::build_ldap_server(
         &config,

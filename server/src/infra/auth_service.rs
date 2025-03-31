@@ -1,13 +1,14 @@
 use actix_web::{
+    HttpRequest, HttpResponse,
     cookie::{Cookie, SameSite},
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
     error::{ErrorBadRequest, ErrorUnauthorized},
-    web, HttpRequest, HttpResponse,
+    web,
 };
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use anyhow::Result;
 use chrono::prelude::*;
-use futures::future::{ok, Ready};
+use futures::future::{Ready, ok};
 use futures_util::FutureExt;
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
@@ -22,7 +23,7 @@ use time::ext::NumericalDuration;
 use tracing::{debug, info, instrument, warn};
 
 use lldap_auth::{
-    access_control::ValidationResults, login, password_reset, registration, JWTClaims,
+    JWTClaims, access_control::ValidationResults, login, password_reset, registration,
 };
 use lldap_domain::types::{GroupDetails, GroupName, UserId};
 use lldap_domain_handlers::handler::{
@@ -35,7 +36,7 @@ use crate::{
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
         tcp_backend_handler::*,
-        tcp_server::{error_to_http_response, AppState, TcpError, TcpResult},
+        tcp_server::{AppState, TcpError, TcpResult, error_to_http_response},
     },
 };
 

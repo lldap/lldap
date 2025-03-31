@@ -1,5 +1,5 @@
 use yew::{
-    function_component, html, virtual_dom::AttrValue, Callback, Children, InputEvent, Properties,
+    Callback, Children, InputEvent, Properties, function_component, html, virtual_dom::AttrValue,
 };
 use yew_form::{Form, Model};
 

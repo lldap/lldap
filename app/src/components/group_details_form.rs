@@ -9,7 +9,7 @@ use crate::{
     },
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
-        form_utils::{read_all_form_attributes, AttributeValue, EmailIsRequired, IsAdmin},
+        form_utils::{AttributeValue, EmailIsRequired, IsAdmin, read_all_form_attributes},
         schema::AttributeType,
     },
 };

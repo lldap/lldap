@@ -1,11 +1,14 @@
 [package]
+name = "lldap_domain"
+version = "0.1.0"
 authors = [
     "Valentin Tolmer <valentin@tolmer.fr>",
     "Simon Broeng Jensen <sbj@cwconsult.dk>",
 ]
-name = "lldap_domain"
-version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [features]
 test = []
@@ -15,7 +18,6 @@ anyhow = "*"
 base64 = "0.21"
 bincode = "1.3"
 juniper = "0.15"
-serde = "*"
 serde_bytes = "0.11"
 
 [dev-dependencies]
@@ -40,8 +42,7 @@ path = "../auth"
 features = ["opaque_server", "opaque_client", "sea_orm"]
 
 [dependencies.sea-orm]
-version = "0.12"
-default-features = false
+workspace = true
 features = [
     "macros",
     "with-chrono",
@@ -49,6 +50,9 @@ features = [
     "sqlx-all",
     "runtime-actix-rustls",
 ]
+
+[dependencies.serde]
+workspace = true
 
 [dependencies.strum]
 features = ["derive"]

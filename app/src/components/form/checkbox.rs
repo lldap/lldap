@@ -1,4 +1,4 @@
-use yew::{function_component, html, virtual_dom::AttrValue, Callback, Properties};
+use yew::{Callback, Properties, function_component, html, virtual_dom::AttrValue};
 use yew_form::{Form, Model};
 
 #[derive(Properties, PartialEq)]

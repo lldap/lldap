@@ -1,5 +1,5 @@
 use super::{
-    opaque_handler::{login, registration, OpaqueHandler},
+    opaque_handler::{OpaqueHandler, login, registration},
     sql_backend_handler::SqlBackendHandler,
 };
 use async_trait::async_trait;
