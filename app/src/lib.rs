@@ -6,7 +6,7 @@
 pub mod components;
 pub mod infra;
 
-use wasm_bindgen::prelude::{wasm_bindgen, JsValue};
+use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
 #[wasm_bindgen]
 pub fn run_app() -> Result<(), JsValue> {

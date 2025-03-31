@@ -2,7 +2,7 @@ use crate::infra::api::HostService;
 use anyhow::Result;
 use graphql_client::GraphQLQuery;
 use wasm_bindgen_futures::spawn_local;
-use yew::{use_effect_with_deps, use_state_eq, UseStateHandle};
+use yew::{UseStateHandle, use_effect_with_deps, use_state_eq};
 
 // Enum to represent a result that is fetched asynchronously.
 #[derive(Debug)]

@@ -7,11 +7,11 @@ use crate::{
             AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
             UserWriteableBackendHandler,
         },
-        graphql::api::{field_error_callback, Context},
+        graphql::api::{Context, field_error_callback},
     },
 };
-use anyhow::{anyhow, Context as AnyhowContext};
-use juniper::{graphql_object, FieldError, FieldResult, GraphQLInputObject, GraphQLObject};
+use anyhow::{Context as AnyhowContext, anyhow};
+use juniper::{FieldError, FieldResult, GraphQLInputObject, GraphQLObject, graphql_object};
 use lldap_domain::{
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
@@ -24,8 +24,8 @@ use lldap_domain::{
     },
 };
 use lldap_domain_handlers::handler::BackendHandler;
-use lldap_validation::attributes::{validate_attribute_name, ALLOWED_CHARACTERS_DESCRIPTION};
-use tracing::{debug, debug_span, Instrument, Span};
+use lldap_validation::attributes::{ALLOWED_CHARACTERS_DESCRIPTION, validate_attribute_name};
+use tracing::{Instrument, Span, debug, debug_span};
 
 #[derive(PartialEq, Eq, Debug)]
 /// The top-level GraphQL mutation type.
@@ -785,8 +785,8 @@ mod tests {
     use super::*;
     use crate::infra::{graphql::query::Query, test_utils::MockTestBackendHandler};
     use juniper::{
-        execute, graphql_value, DefaultScalarValue, EmptySubscription, GraphQLType, InputValue,
-        RootNode, Variables,
+        DefaultScalarValue, EmptySubscription, GraphQLType, InputValue, RootNode, Variables,
+        execute, graphql_value,
     };
     use lldap_auth::access_control::{Permission, ValidationResults};
     use lldap_domain::types::{AttributeName, AttributeType};
@@ -897,9 +897,11 @@ mod tests {
                 let expected_error_msg =
                     "Cannot create attribute with invalid name. Valid characters: a-z, A-Z, 0-9, and dash (-). Invalid chars found: _"
                         .to_string();
-                assert!(errors
-                    .iter()
-                    .all(|e| e.error().message() == expected_error_msg));
+                assert!(
+                    errors
+                        .iter()
+                        .all(|e| e.error().message() == expected_error_msg)
+                );
             }
             Err(_) => {
                 panic!();
@@ -1000,9 +1002,11 @@ mod tests {
                 let expected_error_msg =
                     "Cannot create attribute with invalid name. Valid characters: a-z, A-Z, 0-9, and dash (-). Invalid chars found: _"
                         .to_string();
-                assert!(errors
-                    .iter()
-                    .all(|e| e.error().message() == expected_error_msg));
+                assert!(
+                    errors
+                        .iter()
+                        .all(|e| e.error().message() == expected_error_msg)
+                );
             }
             Err(_) => {
                 panic!();

@@ -9,10 +9,10 @@ use crate::{
     },
 };
 use actix_files::Files;
-use actix_http::{header, HttpServiceBuilder};
+use actix_http::{HttpServiceBuilder, header};
 use actix_server::ServerBuilder;
 use actix_service::map_config;
-use actix_web::{dev::AppConfig, guard, web, App, HttpResponse, Responder};
+use actix_web::{App, HttpResponse, Responder, dev::AppConfig, guard, web};
 use anyhow::{Context, Result};
 use hmac::Hmac;
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
@@ -136,7 +136,7 @@ fn http_config<Backend>(
     }))
     .route(
         "/health",
-        web::get().to(|| async { HttpResponse::Ok().finish() }),
+        web::get().to(async || HttpResponse::Ok().finish()),
     )
     .route("/settings", web::get().to(get_settings::<Backend>))
     .service(
@@ -180,22 +180,22 @@ pub(crate) struct AppState<Backend> {
 }
 
 impl<Backend: BackendHandler> AppState<Backend> {
-    pub fn get_readonly_handler(&self) -> &impl ReadonlyBackendHandler {
+    pub fn get_readonly_handler(&self) -> &(impl ReadonlyBackendHandler + use<Backend>) {
         self.backend_handler.unsafe_get_handler()
     }
 }
 impl<Backend: TcpBackendHandler> AppState<Backend> {
-    pub fn get_tcp_handler(&self) -> &impl TcpBackendHandler {
+    pub fn get_tcp_handler(&self) -> &(impl TcpBackendHandler + use<Backend>) {
         self.backend_handler.unsafe_get_handler()
     }
 }
 impl<Backend: OpaqueHandler> AppState<Backend> {
-    pub fn get_opaque_handler(&self) -> &impl OpaqueHandler {
+    pub fn get_opaque_handler(&self) -> &(impl OpaqueHandler + use<Backend>) {
         self.backend_handler.unsafe_get_handler()
     }
 }
 impl<Backend: LoginHandler> AppState<Backend> {
-    pub fn get_login_handler(&self) -> &impl LoginHandler {
+    pub fn get_login_handler(&self) -> &(impl LoginHandler + use<Backend>) {
         self.backend_handler.unsafe_get_handler()
     }
 }
@@ -218,7 +218,10 @@ where
     let mail_options = config.smtp_options.clone();
     let verbose = config.verbose;
     if !assets_path.join("index.html").exists() {
-        warn!("Cannot find {}, please ensure that assets_path is set correctly and that the front-end files exist.", assets_path.to_string_lossy())
+        warn!(
+            "Cannot find {}, please ensure that assets_path is set correctly and that the front-end files exist.",
+            assets_path.to_string_lossy()
+        )
     }
     info!("Starting the API/web server on port {}", config.http_port);
     server_builder

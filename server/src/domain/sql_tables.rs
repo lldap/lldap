@@ -1,8 +1,8 @@
 use crate::domain::sql_migrations::{
-    get_schema_version, migrate_from_version, upgrade_to_v1, Metadata,
+    Metadata, get_schema_version, migrate_from_version, upgrade_to_v1,
 };
 use sea_orm::{
-    sea_query::Query, ConnectionTrait, DeriveValueType, Iden, QueryResult, TryGetable, Value,
+    ConnectionTrait, DeriveValueType, Iden, QueryResult, TryGetable, Value, sea_query::Query,
 };
 use serde::{Deserialize, Serialize};
 

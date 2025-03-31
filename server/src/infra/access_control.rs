@@ -183,14 +183,14 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
     pub fn get_admin_handler(
         &self,
         validation_result: &ValidationResults,
-    ) -> Option<&impl AdminBackendHandler> {
+    ) -> Option<&(impl AdminBackendHandler + use<Handler>)> {
         validation_result.is_admin().then_some(&self.handler)
     }
 
     pub fn get_readonly_handler(
         &self,
         validation_result: &ValidationResults,
-    ) -> Option<&impl ReadonlyBackendHandler> {
+    ) -> Option<&(impl ReadonlyBackendHandler + use<Handler>)> {
         validation_result.can_read_all().then_some(&self.handler)
     }
 
@@ -198,7 +198,7 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         &self,
         validation_result: &ValidationResults,
         user_id: &UserId,
-    ) -> Option<&impl UserWriteableBackendHandler> {
+    ) -> Option<&(impl UserWriteableBackendHandler + use<Handler>)> {
         validation_result
             .can_write(user_id)
             .then_some(&self.handler)
@@ -208,7 +208,7 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         &self,
         validation_result: &ValidationResults,
         user_id: &UserId,
-    ) -> Option<&impl UserReadableBackendHandler> {
+    ) -> Option<&(impl UserReadableBackendHandler + use<Handler>)> {
         validation_result.can_read(user_id).then_some(&self.handler)
     }
 

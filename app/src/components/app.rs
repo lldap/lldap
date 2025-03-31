@@ -23,15 +23,14 @@ use crate::{
 use gloo_console::error;
 use lldap_frontend_options::Options;
 use yew::{
-    function_component,
+    Context, function_component,
     html::Scope,
-    prelude::{html, Component, Html},
-    Context,
+    prelude::{Component, Html, html},
 };
 use yew_router::{
+    BrowserRouter, Switch,
     prelude::{History, Location},
     scope_ext::RouterScopeExt,
-    BrowserRouter, Switch,
 };
 
 #[function_component(AppContainer)]

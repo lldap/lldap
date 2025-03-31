@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::common::{
     env,
-    fixture::{new_id, LLDAPFixture, User},
+    fixture::{LLDAPFixture, User, new_id},
 };
 use ldap3::{LdapConn, Scope, SearchEntry, SearchResult};
 use serial_test::file_serial;
@@ -43,19 +43,25 @@ fn basic_users_search() {
         .expect("failed to find users"),
     );
     assert!(found_users.contains_key(&user1_name));
-    assert!(found_users
-        .get(&user1_name)
-        .unwrap()
-        .contains(format!("cn={},ou=groups,{}", &group1_name, base_dn).as_str()));
+    assert!(
+        found_users
+            .get(&user1_name)
+            .unwrap()
+            .contains(format!("cn={},ou=groups,{}", &group1_name, base_dn).as_str())
+    );
     assert!(found_users.contains_key(&user2_name));
-    assert!(found_users
-        .get(&user2_name)
-        .unwrap()
-        .contains(format!("cn={},ou=groups,{}", &group1_name, base_dn).as_str()));
-    assert!(found_users
-        .get(&user2_name)
-        .unwrap()
-        .contains(format!("cn={},ou=groups,{}", &group2_name, base_dn).as_str()));
+    assert!(
+        found_users
+            .get(&user2_name)
+            .unwrap()
+            .contains(format!("cn={},ou=groups,{}", &group1_name, base_dn).as_str())
+    );
+    assert!(
+        found_users
+            .get(&user2_name)
+            .unwrap()
+            .contains(format!("cn={},ou=groups,{}", &group2_name, base_dn).as_str())
+    );
     assert!(found_users.contains_key(&user3_name));
     assert!(found_users.get(&user3_name).unwrap().is_empty());
     ldap.unbind().expect("failed to unbind ldap connection");
@@ -87,10 +93,12 @@ fn admin_search() {
     );
 
     assert!(found_users.contains_key(&admin_name));
-    assert!(found_users
-        .get(&admin_name)
-        .unwrap()
-        .contains(format!("cn={},ou=groups,{}", admin_group_name, base_dn).as_str()));
+    assert!(
+        found_users
+            .get(&admin_name)
+            .unwrap()
+            .contains(format!("cn={},ou=groups,{}", admin_group_name, base_dn).as_str())
+    );
     ldap.unbind().expect("failed to unbind ldap connection");
 }
 

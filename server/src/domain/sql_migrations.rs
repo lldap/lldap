@@ -1,13 +1,13 @@
-use crate::domain::sql_tables::{DbConnection, SchemaVersion, LAST_SCHEMA_VERSION};
+use crate::domain::sql_tables::{DbConnection, LAST_SCHEMA_VERSION, SchemaVersion};
 use itertools::Itertools;
 use lldap_domain::types::{AttributeType, GroupId, JpegPhoto, Serialized, UserId, Uuid};
 use sea_orm::{
-    sea_query::{
-        all, BinOper, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, Query,
-        SimpleExpr, Table, Value,
-    },
     ConnectionTrait, DatabaseTransaction, DbErr, DeriveIden, FromQueryResult, Iden, Order,
     Statement, TransactionTrait,
+    sea_query::{
+        BinOper, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, Query, SimpleExpr,
+        Table, Value, all,
+    },
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, instrument, warn};

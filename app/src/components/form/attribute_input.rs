@@ -4,8 +4,8 @@ use crate::{
 };
 use web_sys::Element;
 use yew::{
-    function_component, html, use_effect_with_deps, use_node_ref, virtual_dom::AttrValue,
-    Component, Context, Html, Properties,
+    Component, Context, Html, Properties, function_component, html, use_effect_with_deps,
+    use_node_ref, virtual_dom::AttrValue,
 };
 
 #[derive(Properties, PartialEq)]
@@ -24,12 +24,12 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
         AttributeType::DateTime => {
             return html! {
                 <DateTimeInput name={props.name.clone()} value={props.value.clone()} />
-            }
+            };
         }
         AttributeType::Jpeg => {
             return html! {
                 <JpegFileInput name={props.name.clone()} value={props.value.clone()} />
-            }
+            };
         }
     };
 

@@ -1,6 +1,6 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use ldap3::{ResultEntry, SearchEntry};
-use requestty::{prompt_one, Question};
+use requestty::{Question, prompt_one};
 use smallvec::SmallVec;
 
 use crate::lldap::User;

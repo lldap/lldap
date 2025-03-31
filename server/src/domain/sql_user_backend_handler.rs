@@ -9,14 +9,14 @@ use lldap_domain_handlers::handler::{
 };
 use lldap_domain_model::{
     error::{DomainError, Result},
-    model::{self, deserialize, GroupColumn, UserColumn},
+    model::{self, GroupColumn, UserColumn, deserialize},
 };
 use sea_orm::{
-    sea_query::{
-        query::OnConflict, Alias, Cond, Expr, Func, IntoColumnRef, IntoCondition, SimpleExpr,
-    },
     ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseTransaction, EntityTrait, ModelTrait,
     QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
+    sea_query::{
+        Alias, Cond, Expr, Func, IntoColumnRef, IntoCondition, SimpleExpr, query::OnConflict,
+    },
 };
 use std::collections::HashSet;
 use tracing::instrument;
@@ -800,7 +800,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_groups() {
         let fixture = TestFixture::new().await;
-        let get_group_ids = |user: &'static str| async {
+        let get_group_ids = async |user: &'static str| {
             let mut groups = fixture
                 .handler
                 .get_user_groups(&UserId::new(user))

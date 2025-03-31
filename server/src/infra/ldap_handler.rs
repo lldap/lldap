@@ -6,7 +6,7 @@ use crate::{
             group::{convert_groups_to_ldap_op, get_groups_list},
             user::{convert_users_to_ldap_op, get_user_list},
             utils::{
-                get_user_id_from_distinguished_name, is_subtree, parse_distinguished_name, LdapInfo,
+                LdapInfo, get_user_id_from_distinguished_name, is_subtree, parse_distinguished_name,
             },
         },
         opaque_handler::OpaqueHandler,
@@ -175,9 +175,11 @@ fn root_dse_response(base_dn: &str) -> LdapOp {
             },
             LdapPartialAttribute {
                 atype: "vendorVersion".to_string(),
-                vals: vec![concat!("lldap_", env!("CARGO_PKG_VERSION"))
-                    .to_string()
-                    .into_bytes()],
+                vals: vec![
+                    concat!("lldap_", env!("CARGO_PKG_VERSION"))
+                        .to_string()
+                        .into_bytes(),
+                ],
             },
             LdapPartialAttribute {
                 atype: "supportedLDAPVersion".to_string(),
@@ -229,13 +231,13 @@ impl<Backend> LdapHandler<Backend> {
 }
 
 impl<Backend: LoginHandler> LdapHandler<Backend> {
-    pub fn get_login_handler(&self) -> &impl LoginHandler {
+    pub fn get_login_handler(&self) -> &(impl LoginHandler + use<Backend>) {
         self.backend_handler.unsafe_get_handler()
     }
 }
 
 impl<Backend: OpaqueHandler> LdapHandler<Backend> {
-    pub fn get_opaque_handler(&self) -> &impl OpaqueHandler {
+    pub fn get_opaque_handler(&self) -> &(impl OpaqueHandler + use<Backend>) {
         self.backend_handler.unsafe_get_handler()
     }
 }
@@ -589,7 +591,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             x
         }
 
-        let get_user_list = cast(|filter: &LdapFilter| async {
+        let get_user_list = cast(async |filter: &LdapFilter| {
             let need_groups = request
                 .attrs
                 .iter()
@@ -927,7 +929,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infra::test_utils::{setup_default_schema, MockTestBackendHandler};
+    use crate::infra::test_utils::{MockTestBackendHandler, setup_default_schema};
     use chrono::TimeZone;
     use ldap3_proto::proto::{
         LdapDerefAliases, LdapSearchScope, LdapSubstringFilter, LdapWhoamiRequest,
@@ -2308,11 +2310,13 @@ mod tests {
                     },
                     LdapPartialAttribute {
                         atype: "createtimestamp".to_string(),
-                        vals: vec![chrono::Utc
-                            .timestamp_opt(0, 0)
-                            .unwrap()
-                            .to_rfc3339()
-                            .into_bytes()],
+                        vals: vec![
+                            chrono::Utc
+                                .timestamp_opt(0, 0)
+                                .unwrap()
+                                .to_rfc3339()
+                                .into_bytes(),
+                        ],
                     },
                     LdapPartialAttribute {
                         atype: "entryuuid".to_string(),

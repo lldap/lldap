@@ -1,4 +1,4 @@
-use anyhow::{bail, Context as AnyhowContext, Result};
+use anyhow::{Context as AnyhowContext, Result, bail};
 use lldap_domain::types::{AttributeType, AttributeValue, JpegPhoto};
 
 pub fn deserialize_attribute_value(

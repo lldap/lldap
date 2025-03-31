@@ -1,11 +1,11 @@
 use super::cookies::set_cookie;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use gloo_net::http::{Method, RequestBuilder};
 use graphql_client::GraphQLQuery;
-use lldap_auth::{login, registration, JWTClaims};
+use lldap_auth::{JWTClaims, login, registration};
 
 use lldap_frontend_options::Options;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use web_sys::RequestCredentials;
 
 #[derive(Default)]

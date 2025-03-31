@@ -2,7 +2,7 @@
 name = "lldap_migration_tool"
 version = "0.4.2"
 description = "CLI migration tool to go from OpenLDAP to LLDAP"
-edition = "2021"
+edition.workspace = true
 authors.workspace = true
 homepage.workspace = true
 license.workspace = true

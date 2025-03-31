@@ -2,7 +2,7 @@
 name = "lldap_set_password"
 version = "0.1.0"
 description = "CLI tool to set a user password in LLDAP"
-edition = "2021"
+edition.workspace = true
 authors.workspace = true
 homepage.workspace = true
 license.workspace = true

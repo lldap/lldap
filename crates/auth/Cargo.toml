@@ -2,7 +2,7 @@
 name = "lldap_auth"
 version = "0.6.0"
 description = "Authentication protocol for LLDAP"
-edition = "2021"
+edition.workspace = true
 authors.workspace = true
 homepage.workspace = true
 license.workspace = true

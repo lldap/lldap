@@ -3,7 +3,7 @@ use std::str::FromStr;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use wasm_bindgen::JsCast;
 use web_sys::HtmlInputElement;
-use yew::{function_component, html, use_state, virtual_dom::AttrValue, Event, Properties};
+use yew::{Event, Properties, function_component, html, use_state, virtual_dom::AttrValue};
 
 #[derive(Properties, PartialEq)]
 pub struct DateTimeInputProps {

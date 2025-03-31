@@ -1,5 +1,5 @@
 use crate::common::env;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use graphql_client::GraphQLQuery;
 use reqwest::blocking::Client;
 

@@ -3,24 +3,24 @@ use std::sync::Arc;
 use crate::{
     domain::{
         deserialize::deserialize_attribute_value,
-        ldap::utils::{map_user_field, UserFieldType},
+        ldap::utils::{UserFieldType, map_user_field},
         schema::PublicSchema,
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
-        graphql::api::{field_error_callback, Context},
+        graphql::api::{Context, field_error_callback},
     },
 };
 use anyhow::Context as AnyhowContext;
 use chrono::TimeZone;
-use juniper::{graphql_object, FieldResult, GraphQLInputObject};
+use juniper::{FieldResult, GraphQLInputObject, graphql_object};
 use lldap_domain::types::{
     AttributeType, Cardinality, GroupDetails, GroupId, LdapObjectClass, UserId,
 };
 use lldap_domain_handlers::handler::{BackendHandler, ReadSchemaBackendHandler};
 use lldap_domain_model::model::UserColumn;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, debug_span, Instrument, Span};
+use tracing::{Instrument, Span, debug, debug_span};
 
 type DomainRequestFilter = lldap_domain_handlers::handler::UserRequestFilter;
 type DomainUser = lldap_domain::types::User;
@@ -786,11 +786,11 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infra::test_utils::{setup_default_schema, MockTestBackendHandler};
+    use crate::infra::test_utils::{MockTestBackendHandler, setup_default_schema};
     use chrono::TimeZone;
     use juniper::{
-        execute, graphql_value, DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType,
-        RootNode, Variables,
+        DefaultScalarValue, EmptyMutation, EmptySubscription, GraphQLType, RootNode, Variables,
+        execute, graphql_value,
     };
     use lldap_auth::access_control::{Permission, ValidationResults};
     use lldap_domain::{

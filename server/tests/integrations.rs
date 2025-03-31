@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::common::{
     env,
-    fixture::{new_id, LLDAPFixture, User},
+    fixture::{LLDAPFixture, User, new_id},
 };
 use ldap3::{LdapConn, Scope, SearchEntry};
 use serial_test::file_serial;
