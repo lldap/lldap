@@ -26,7 +26,7 @@ kimai:
     role:
       baseDn: ou=groups, dc=example, dc=com
       filter: (&(objectClass=groupOfUniqueNames))
-      usernameAttribute: cn
+      usernameAttribute: uid
       nameAttribute: cn
       userDnAttribute: member
 
