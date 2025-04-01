@@ -122,7 +122,7 @@ impl Component for App {
             <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
             <div class="container py-3 bg-kug">
               <div class="row justify-content-center" style="padding-bottom: 80px;">
-                <main class="py-3" style="max-width: 1000px">
+                <main class="py-3">
                   <Switch<AppRoute>
                     render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled))}
                   />
