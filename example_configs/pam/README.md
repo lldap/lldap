@@ -104,7 +104,7 @@ ldap_user_ssh_public_key = sshPublicKey
 And the following to the bottom of your OpenSSH config file:
 
 ```bash
-/etc/ssh/sshd_config
+sudo nano /etc/ssh/sshd_config
 ```
 
 ```bash
