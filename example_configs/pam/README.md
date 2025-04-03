@@ -58,16 +58,7 @@ E.g. Using nano
 sudo nano /etc/sssd/sssd.conf
 ```
 
-Insert the contents of the provided template (sssd.conf), and you will need to change the content on the following line numbers:
-
-- Line 3
-- Line 9
-- Line 14
-- Line 18
-- Line 19
-- Line 23
-- Line 26
-- Line 37
+Insert the contents of the provided template (sssd.conf), but you will need to change some of the configuration in the file. Comments have been made to guide you. The config file is an example if your LLDAP server is hosted at `lldap.example.com` and your domain is `example.com` with your dc being `dc=example,dc=com`.
 
 SSSD will **refuse** to run if it’s config file is world-readable, so apply the following permissions to it:
 
@@ -90,14 +81,13 @@ sudo pam-auth-update --enable mkhomedir
 
 ### SSH Key Sync
 
-In order to do this, you need to setup the custom attribute `sshPublicKey` in the user schema. Then, you must modify your SSSD config file to include:
+In order to do this, you need to setup the custom attribute `sshPublicKey` in the user schema. Then, you must uncomment the following line in the SSSD config file (assuming you are using the provided template):
 
 ```bash
 sudo nano /etc/sssd/sssd.conf
 ```
 
 ```jsx
-[domain/example.com]
 ldap_user_ssh_public_key = sshPublicKey
 ```
 
