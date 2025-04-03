@@ -58,7 +58,7 @@ E.g. Using nano
 sudo nano /etc/sssd/sssd.conf
 ```
 
-Insert the contents of the provided template [sssd.conf example](https://github.com/vmd1/lldap/blob/main/example_configs/pam/sssd.conf), and you will need to change the content on the following line numbers:
+Insert the contents of the provided template (sssd.conf), and you will need to change the content on the following line numbers:
 
 - Line 3
 - Line 9
@@ -157,3 +157,6 @@ To flush SSSD’s cache
 ```jsx
 sudo sss_cache -E
 ```
+
+## Final Notes
+To see the old guide for NSLCD, go to NSLCD.md.
