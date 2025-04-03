@@ -81,6 +81,11 @@ Restart SSSD to apply any changes:
 sudo systemctl restart sssd
 ```
 
+Enable automatic creation of home directories
+```bash
+sudo pam-auth-update --enable mkhomedir
+```
+
 ## Permissions and SSH Key sync
 
 ### SSH Key Sync
