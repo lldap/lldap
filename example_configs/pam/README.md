@@ -124,7 +124,7 @@ Linux often manages permissions to tools such as Sudo and Docker based on group 
 
 Sudo
 
-![image](https://github.com/user-attachments/assets/d68daa42-e92c-4389-9cb0-440e05dd66f1)
+![image](https://github.com/user-attachments/assets/731847e6-c857-4250-a007-a3790a6a1b6d)
 
 Docker
 
@@ -132,7 +132,7 @@ Docker
 sudo groupadd docker -g 722
 ```
 
-![image](https://github.com/user-attachments/assets/b004e8b4-adb4-489c-b540-a16e438b7fb6)
+![image](https://github.com/user-attachments/assets/face88d0-5a20-4442-a5e3-9f6a1ae41b68)
 
 **Number 2**
 
