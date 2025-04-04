@@ -31,9 +31,9 @@ where
             Ok(pair)
         }
     })()
-    .map_err(|s| LdapError {
+    .map_err(|e| LdapError {
         code: LdapResultCode::InvalidDNSyntax,
-        message: s,
+        message: e,
     })
 }
 
@@ -44,38 +44,53 @@ pub fn parse_distinguished_name(dn: &str) -> LdapResult<Vec<(String, String)>> {
         .collect()
 }
 
-fn get_id_from_distinguished_name(
-    dn: &str,
-    base_tree: &[(String, String)],
-    base_dn_str: &str,
-    is_group: bool,
-) -> LdapResult<String> {
-    let parts = parse_distinguished_name(dn)?;
-    {
-        let ou = if is_group { "groups" } else { "people" };
-        if !is_subtree(&parts, base_tree) {
-            Err("Not a subtree of the base tree".to_string())
-        } else if parts.len() == base_tree.len() + 2 {
-            if parts[1].0 != "ou" || parts[1].1 != ou || (parts[0].0 != "cn" && parts[0].0 != "uid")
-            {
-                Err(format!(
-                    r#"Unexpected DN format. Got "{}", expected: "uid=id,ou={},{}""#,
-                    dn, ou, base_dn_str
-                ))
-            } else {
-                Ok(parts[0].1.to_string())
-            }
-        } else {
-            Err(format!(
-                r#"Unexpected DN format. Got "{}", expected: "uid=id,ou={},{}""#,
-                dn, ou, base_dn_str
-            ))
+pub enum UserOrGroupName {
+    User(UserId),
+    Group(GroupName),
+    BadSubStree,
+    UnexpectedFormat,
+    InvalidSyntax(LdapError),
+}
+
+impl UserOrGroupName {
+    pub fn into_ldap_error(self, input: &str, expected_format: String) -> LdapError {
+        LdapError {
+            code: LdapResultCode::InvalidDNSyntax,
+            message: match self {
+                UserOrGroupName::BadSubStree => "Not a subtree of the base tree".to_string(),
+                UserOrGroupName::InvalidSyntax(err) => return err,
+                UserOrGroupName::UnexpectedFormat
+                | UserOrGroupName::User(_)
+                | UserOrGroupName::Group(_) => format!(
+                    r#"Unexpected DN format. Got "{}", expected: {}"#,
+                    input, expected_format
+                ),
+            },
         }
     }
-    .map_err(|s| LdapError {
-        code: LdapResultCode::InvalidDNSyntax,
-        message: s,
-    })
+}
+
+pub fn get_user_or_group_id_from_distinguished_name(
+    dn: &str,
+    base_tree: &[(String, String)],
+) -> UserOrGroupName {
+    let parts = match parse_distinguished_name(dn) {
+        Ok(p) => p,
+        Err(e) => return UserOrGroupName::InvalidSyntax(e),
+    };
+    if !is_subtree(&parts, base_tree) {
+        return UserOrGroupName::BadSubStree;
+    } else if parts.len() == base_tree.len() + 2
+        && parts[1].0 == "ou"
+        && (parts[0].0 == "cn" || parts[0].0 == "uid")
+    {
+        if parts[1].1 == "groups" {
+            return UserOrGroupName::Group(GroupName::from(parts[0].1.clone()));
+        } else if parts[1].1 == "people" {
+            return UserOrGroupName::User(UserId::from(parts[0].1.clone()));
+        }
+    }
+    UserOrGroupName::UnexpectedFormat
 }
 
 pub fn get_user_id_from_distinguished_name(
@@ -83,7 +98,10 @@ pub fn get_user_id_from_distinguished_name(
     base_tree: &[(String, String)],
     base_dn_str: &str,
 ) -> LdapResult<UserId> {
-    get_id_from_distinguished_name(dn, base_tree, base_dn_str, false).map(UserId::from)
+    match get_user_or_group_id_from_distinguished_name(dn, base_tree) {
+        UserOrGroupName::User(user_id) => Ok(user_id),
+        err => Err(err.into_ldap_error(dn, format!(r#""uid=id,ou=people,{}""#, base_dn_str))),
+    }
 }
 
 pub fn get_group_id_from_distinguished_name(
@@ -91,7 +109,10 @@ pub fn get_group_id_from_distinguished_name(
     base_tree: &[(String, String)],
     base_dn_str: &str,
 ) -> LdapResult<GroupName> {
-    get_id_from_distinguished_name(dn, base_tree, base_dn_str, true).map(GroupName::from)
+    match get_user_or_group_id_from_distinguished_name(dn, base_tree) {
+        UserOrGroupName::Group(group_name) => Ok(group_name),
+        err => Err(err.into_ldap_error(dn, format!(r#""uid=id,ou=groups,{}""#, base_dn_str))),
+    }
 }
 
 fn looks_like_distinguished_name(dn: &str) -> bool {
