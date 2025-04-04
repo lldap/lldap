@@ -6,7 +6,8 @@ use crate::{
             group::{convert_groups_to_ldap_op, get_groups_list},
             user::{convert_users_to_ldap_op, get_user_list},
             utils::{
-                LdapInfo, get_user_id_from_distinguished_name, is_subtree, parse_distinguished_name,
+                LdapInfo, UserOrGroupName, get_user_id_from_distinguished_name,
+                get_user_or_group_id_from_distinguished_name, is_subtree, parse_distinguished_name,
             },
         },
         opaque_handler::OpaqueHandler,
@@ -19,16 +20,18 @@ use crate::{
 };
 use anyhow::Result;
 use ldap3_proto::proto::{
-    LdapAddRequest, LdapBindCred, LdapBindRequest, LdapBindResponse, LdapCompareRequest,
-    LdapDerefAliases, LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapModify,
-    LdapModifyRequest, LdapModifyType, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
-    LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, LdapSearchResultEntry,
-    LdapSearchScope, OID_PASSWORD_MODIFY, OID_WHOAMI,
+    LdapAddRequest, LdapAttribute, LdapBindCred, LdapBindRequest, LdapBindResponse,
+    LdapCompareRequest, LdapDerefAliases, LdapExtendedRequest, LdapExtendedResponse, LdapFilter,
+    LdapModify, LdapModifyRequest, LdapModifyType, LdapOp, LdapPartialAttribute,
+    LdapPasswordModifyRequest, LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest,
+    LdapSearchResultEntry, LdapSearchScope, OID_PASSWORD_MODIFY, OID_WHOAMI,
 };
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::{
-    requests::CreateUserRequest,
-    types::{Attribute, AttributeName, AttributeType, Email, Group, UserAndGroups, UserId},
+    requests::{CreateGroupRequest, CreateUserRequest},
+    types::{
+        Attribute, AttributeName, AttributeType, Email, Group, GroupName, UserAndGroups, UserId,
+    },
 };
 use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, ReadSchemaBackendHandler,
@@ -721,7 +724,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     #[instrument(skip_all, level = "debug")]
-    async fn do_create_user(&self, request: LdapAddRequest) -> LdapResult<Vec<LdapOp>> {
+    async fn do_create_user_or_group(&self, request: LdapAddRequest) -> LdapResult<Vec<LdapOp>> {
         let backend_handler = self
             .user_info
             .as_ref()
@@ -730,11 +733,33 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 code: LdapResultCode::InsufficentAccessRights,
                 message: "Unauthorized write".to_string(),
             })?;
-        let user_id = get_user_id_from_distinguished_name(
-            &request.dn,
-            &self.ldap_info.base_dn,
-            &self.ldap_info.base_dn_str,
-        )?;
+        let base_dn_str = &self.ldap_info.base_dn_str;
+        match get_user_or_group_id_from_distinguished_name(&request.dn, &self.ldap_info.base_dn) {
+            UserOrGroupName::User(user_id) => {
+                self.do_create_user(backend_handler, user_id, request.attributes)
+                    .await
+            }
+            UserOrGroupName::Group(group_name) => {
+                self.do_create_group(backend_handler, group_name, request.attributes)
+                    .await
+            }
+            err => Err(err.into_ldap_error(
+                &request.dn,
+                format!(
+                    r#""uid=id,ou=people,{}" or "uid=id,ou=groups,{}""#,
+                    base_dn_str, base_dn_str
+                ),
+            )),
+        }
+    }
+
+    #[instrument(skip_all, level = "debug")]
+    async fn do_create_user(
+        &self,
+        backend_handler: &impl AdminBackendHandler,
+        user_id: UserId,
+        attributes: Vec<LdapAttribute>,
+    ) -> LdapResult<Vec<LdapOp>> {
         fn parse_attribute(mut attr: LdapPartialAttribute) -> LdapResult<(String, Vec<u8>)> {
             if attr.vals.len() > 1 {
                 Err(LdapError {
@@ -752,8 +777,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 }
             }
         }
-        let attributes: HashMap<String, Vec<u8>> = request
-            .attributes
+        let attributes: HashMap<String, Vec<u8>> = attributes
             .into_iter()
             .filter(|a| !a.atype.eq_ignore_ascii_case("objectclass"))
             .map(parse_attribute)
@@ -824,6 +848,26 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             .map_err(|e| LdapError {
                 code: LdapResultCode::OperationsError,
                 message: format!("Could not create user: {:#?}", e),
+            })?;
+        Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
+    }
+
+    #[instrument(skip_all, level = "debug")]
+    async fn do_create_group(
+        &self,
+        backend_handler: &impl AdminBackendHandler,
+        group_name: GroupName,
+        _attributes: Vec<LdapAttribute>,
+    ) -> LdapResult<Vec<LdapOp>> {
+        backend_handler
+            .create_group(CreateGroupRequest {
+                display_name: group_name,
+                attributes: Vec::new(),
+            })
+            .await
+            .map_err(|e| LdapError {
+                code: LdapResultCode::OperationsError,
+                message: format!("Could not create group: {:#?}", e),
             })?;
         Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
     }
@@ -911,7 +955,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             LdapOp::ModifyRequest(request) => self.do_modify_request(&request).await,
             LdapOp::ExtendedRequest(request) => self.do_extended_request(&request).await,
             LdapOp::AddRequest(request) => self
-                .do_create_user(request)
+                .do_create_user_or_group(request)
                 .await
                 .unwrap_or_else(|e: LdapError| vec![make_add_error(e.code, e.message)]),
             LdapOp::CompareRequest(request) => self
@@ -2797,24 +2841,32 @@ mod tests {
             }],
         };
         assert_eq!(
-            ldap_handler.do_create_user(request).await,
+            ldap_handler.do_create_user_or_group(request).await,
             Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
         );
     }
 
     #[tokio::test]
-    async fn test_create_user_wrong_ou() {
-        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+    async fn test_create_group() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_create_group()
+            .with(eq(CreateGroupRequest {
+                display_name: GroupName::new("bob"),
+                ..Default::default()
+            }))
+            .times(1)
+            .return_once(|_| Ok(GroupId(5)));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = LdapAddRequest {
             dn: "uid=bob,ou=groups,dc=example,dc=com".to_owned(),
             attributes: vec![LdapPartialAttribute {
                 atype: "cn".to_owned(),
-                vals: vec![b"Bob".to_vec()],
+                vals: vec![b"Bobby".to_vec()],
             }],
         };
         assert_eq!(
-            ldap_handler.do_create_user(request).await,
-            Err(LdapError{ code: LdapResultCode::InvalidDNSyntax, message: r#"Unexpected DN format. Got "uid=bob,ou=groups,dc=example,dc=com", expected: "uid=id,ou=people,dc=example,dc=com""#.to_string() })
+            ldap_handler.do_create_user_or_group(request).await,
+            Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
         );
     }
 
@@ -2849,7 +2901,7 @@ mod tests {
             ],
         };
         assert_eq!(
-            ldap_handler.do_create_user(request).await,
+            ldap_handler.do_create_user_or_group(request).await,
             Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
         );
     }
