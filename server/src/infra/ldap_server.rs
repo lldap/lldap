@@ -3,7 +3,7 @@ use crate::{
     infra::{
         access_control::AccessControlledBackendHandler,
         configuration::{Configuration, LdapsOptions},
-        ldap_handler::LdapHandler,
+        ldap::handler::LdapHandler,
     },
 };
 use actix_rt::net::TcpStream;

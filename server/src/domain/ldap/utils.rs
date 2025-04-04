@@ -331,3 +331,41 @@ pub fn get_custom_attribute(
             }
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_subtree() {
+        let subtree1 = &[
+            ("ou".to_string(), "people".to_string()),
+            ("dc".to_string(), "example".to_string()),
+            ("dc".to_string(), "com".to_string()),
+        ];
+        let root = &[
+            ("dc".to_string(), "example".to_string()),
+            ("dc".to_string(), "com".to_string()),
+        ];
+        assert!(is_subtree(subtree1, root));
+        assert!(!is_subtree(&[], root));
+    }
+
+    #[test]
+    fn test_parse_distinguished_name() {
+        let parsed_dn = &[
+            ("ou".to_string(), "people".to_string()),
+            ("dc".to_string(), "example".to_string()),
+            ("dc".to_string(), "com".to_string()),
+        ];
+        assert_eq!(
+            parse_distinguished_name("ou=people,dc=example,dc=com").expect("parsing failed"),
+            parsed_dn
+        );
+        assert_eq!(
+            parse_distinguished_name(" ou  = people , dc = example , dc =  com ")
+                .expect("parsing failed"),
+            parsed_dn
+        );
+    }
+}
