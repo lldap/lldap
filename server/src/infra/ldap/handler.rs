@@ -15,26 +15,28 @@ use crate::{
             AccessControlledBackendHandler, AdminBackendHandler, UserReadableBackendHandler,
         },
         ldap::search::{
-            self, make_search_error, make_search_request, make_search_success, root_dse_response, is_root_dse_request
+            self, is_root_dse_request, make_search_error, make_search_request, make_search_success,
+            root_dse_response,
         },
     },
 };
 use anyhow::Result;
 use ldap3_proto::proto::{
-        LdapAddRequest, LdapAttribute, LdapBindCred, LdapBindRequest, LdapBindResponse,
-        LdapCompareRequest, LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapModify,
-        LdapModifyRequest, LdapModifyType, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
-        LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, OID_PASSWORD_MODIFY,
-        OID_WHOAMI,
-    };
+    LdapAddRequest, LdapAttribute, LdapBindRequest, LdapBindResponse, LdapCompareRequest,
+    LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapModify, LdapModifyRequest,
+    LdapModifyType, LdapOp, LdapPartialAttribute, LdapPasswordModifyRequest,
+    LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, OID_PASSWORD_MODIFY, OID_WHOAMI,
+};
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::{
     requests::{CreateGroupRequest, CreateUserRequest},
     types::{Attribute, AttributeName, AttributeType, Email, GroupName, UserId},
 };
-use lldap_domain_handlers::handler::{BackendHandler, BindRequest, LoginHandler};
+use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
 use std::collections::HashMap;
 use tracing::{debug, instrument};
+
+use super::password;
 
 fn make_add_error(code: LdapResultCode, message: String) -> LdapOp {
     LdapOp::AddResponse(LdapResultOp {
@@ -157,48 +159,29 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
-    pub async fn do_bind(&mut self, request: &LdapBindRequest) -> (LdapResultCode, String) {
-        if request.dn.is_empty() {
-            return (
-                LdapResultCode::InappropriateAuthentication,
-                "Anonymous bind not allowed".to_string(),
-            );
-        }
-        let user_id = match get_user_id_from_distinguished_name(
-            &request.dn.to_ascii_lowercase(),
-            &self.ldap_info.base_dn,
-            &self.ldap_info.base_dn_str,
-        ) {
-            Ok(s) => s,
-            Err(e) => return (LdapResultCode::NamingViolation, e.to_string()),
-        };
-        let password = if let LdapBindCred::Simple(password) = &request.cred {
-            password
-        } else {
-            return (
-                LdapResultCode::UnwillingToPerform,
-                "SASL not supported".to_string(),
-            );
-        };
-        match self
-            .get_login_handler()
-            .bind(BindRequest {
-                name: user_id.clone(),
-                password: password.clone(),
-            })
-            .await
-        {
-            Ok(()) => {
-                self.user_info = self
-                    .backend_handler
-                    .get_permissions_for_user(user_id)
-                    .await
-                    .ok();
-                debug!("Success!");
-                (LdapResultCode::Success, "".to_string())
-            }
-            Err(_) => (LdapResultCode::InvalidCredentials, "".to_string()),
-        }
+    pub async fn do_bind(&mut self, request: &LdapBindRequest) -> Vec<LdapOp> {
+        let (code, message) =
+            match password::do_bind(&self.ldap_info, request, self.get_login_handler()).await {
+                Ok(user_id) => {
+                    self.user_info = self
+                        .backend_handler
+                        .get_permissions_for_user(user_id)
+                        .await
+                        .ok();
+                    debug!("Success!");
+                    (LdapResultCode::Success, "".to_string())
+                }
+                Err(err) => (err.code, err.message),
+            };
+        vec![LdapOp::BindResponse(LdapBindResponse {
+            res: LdapResultOp {
+                code,
+                matcheddn: "".to_string(),
+                message,
+                referral: vec![],
+            },
+            saslcreds: None,
+        })]
     }
 
     async fn change_password<B: OpaqueHandler>(
@@ -633,18 +616,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     pub async fn handle_ldap_message(&mut self, ldap_op: LdapOp) -> Option<Vec<LdapOp>> {
         Some(match ldap_op {
-            LdapOp::BindRequest(request) => {
-                let (code, message) = self.do_bind(&request).await;
-                vec![LdapOp::BindResponse(LdapBindResponse {
-                    res: LdapResultOp {
-                        code,
-                        matcheddn: "".to_string(),
-                        message,
-                        referral: vec![],
-                    },
-                    saslcreds: None,
-                })]
-            }
+            LdapOp::BindRequest(request) => self.do_bind(&request).await,
             LdapOp::SearchRequest(request) => self
                 .do_search_or_dse(&request)
                 .await
@@ -682,9 +654,12 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::infra::test_utils::{MockTestBackendHandler, setup_default_schema};
+    use crate::infra::{
+        ldap::password::tests::make_bind_success,
+        test_utils::{MockTestBackendHandler, setup_default_schema},
+    };
     use chrono::TimeZone;
-    use ldap3_proto::proto::LdapWhoamiRequest;
+    use ldap3_proto::proto::{LdapBindCred, LdapWhoamiRequest};
     use lldap_domain::{types::*, uuid};
     use lldap_domain_handlers::handler::*;
     use mockall::predicate::eq;
@@ -736,10 +711,7 @@ pub mod tests {
             dn: "uid=test,ou=people,dc=example,dc=coM".to_string(),
             cred: LdapBindCred::Simple("pass".to_string()),
         };
-        assert_eq!(
-            ldap_handler.do_bind(&request).await.0,
-            LdapResultCode::Success
-        );
+        assert_eq!(ldap_handler.do_bind(&request).await, make_bind_success());
         ldap_handler
     }
 
@@ -759,120 +731,6 @@ pub mod tests {
         mock: MockTestBackendHandler,
     ) -> LdapHandler<MockTestBackendHandler> {
         setup_bound_handler_with_group(mock, "lldap_admin").await
-    }
-
-    #[tokio::test]
-    async fn test_bind() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_bind()
-            .with(eq(lldap_domain_handlers::handler::BindRequest {
-                name: UserId::new("bob"),
-                password: "pass".to_string(),
-            }))
-            .times(1)
-            .return_once(|_| Ok(()));
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("bob")))
-            .return_once(|_| Ok(HashSet::new()));
-        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=eXample,dc=com");
-
-        let request = LdapOp::BindRequest(LdapBindRequest {
-            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass".to_string()),
-        });
-        assert_eq!(
-            ldap_handler.handle_ldap_message(request).await,
-            Some(vec![LdapOp::BindResponse(LdapBindResponse {
-                res: LdapResultOp {
-                    code: LdapResultCode::Success,
-                    matcheddn: "".to_string(),
-                    message: "".to_string(),
-                    referral: vec![],
-                },
-                saslcreds: None,
-            })]),
-        );
-    }
-
-    #[tokio::test]
-    async fn test_admin_bind() {
-        let mut mock = MockTestBackendHandler::new();
-        mock.expect_bind()
-            .with(eq(lldap_domain_handlers::handler::BindRequest {
-                name: UserId::new("test"),
-                password: "pass".to_string(),
-            }))
-            .times(1)
-            .return_once(|_| Ok(()));
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("test")))
-            .return_once(|_| {
-                let mut set = HashSet::new();
-                set.insert(GroupDetails {
-                    group_id: GroupId(42),
-                    display_name: "lldap_admin".into(),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                    uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
-                    attributes: Vec::new(),
-                });
-                Ok(set)
-            });
-        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=example,dc=com");
-
-        let request = LdapBindRequest {
-            dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass".to_string()),
-        };
-        assert_eq!(
-            ldap_handler.do_bind(&request).await.0,
-            LdapResultCode::Success
-        );
-    }
-    #[tokio::test]
-    async fn test_bind_invalid_dn() {
-        let mock = MockTestBackendHandler::new();
-        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=example,dc=com");
-
-        let request = LdapBindRequest {
-            dn: "cn=bob,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass".to_string()),
-        };
-        assert_eq!(
-            ldap_handler.do_bind(&request).await.0,
-            LdapResultCode::NamingViolation,
-        );
-        let request = LdapBindRequest {
-            dn: "uid=bob,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass".to_string()),
-        };
-        assert_eq!(
-            ldap_handler.do_bind(&request).await.0,
-            LdapResultCode::NamingViolation,
-        );
-        let request = LdapBindRequest {
-            dn: "uid=bob,ou=groups,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass".to_string()),
-        };
-        assert_eq!(
-            ldap_handler.do_bind(&request).await.0,
-            LdapResultCode::NamingViolation,
-        );
-        let request = LdapBindRequest {
-            dn: "uid=bob,ou=people,dc=example,dc=fr".to_string(),
-            cred: LdapBindCred::Simple("pass".to_string()),
-        };
-        assert_eq!(
-            ldap_handler.do_bind(&request).await.0,
-            LdapResultCode::NamingViolation,
-        );
-        let request = LdapBindRequest {
-            dn: "uid=bob=test,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass".to_string()),
-        };
-        assert_eq!(
-            ldap_handler.do_bind(&request).await.0,
-            LdapResultCode::NamingViolation,
-        );
     }
 
     #[tokio::test]
