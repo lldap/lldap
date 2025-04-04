@@ -7,7 +7,7 @@ pub mod db_cleaner;
 pub mod graphql;
 pub mod healthcheck;
 pub mod jwt_sql_tables;
-pub mod ldap_handler;
+pub mod ldap;
 pub mod ldap_server;
 pub mod logging;
 pub mod mail;

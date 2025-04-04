@@ -259,7 +259,7 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
 
 pub struct UserRestrictedListerBackendHandler<'a, Handler> {
     handler: &'a Handler,
-    pub user_filter: Option<UserId>,
+    user_filter: Option<UserId>,
 }
 
 #[async_trait]
@@ -325,10 +325,14 @@ impl<Handler: GroupListerBackendHandler + Sync> GroupListerBackendHandler
 pub trait UserAndGroupListerBackendHandler:
     UserListerBackendHandler + GroupListerBackendHandler
 {
+    fn user_filter(&self) -> &Option<UserId>;
 }
 
 #[async_trait]
 impl<Handler: GroupListerBackendHandler + UserListerBackendHandler + Sync>
     UserAndGroupListerBackendHandler for UserRestrictedListerBackendHandler<'_, Handler>
 {
+    fn user_filter(&self) -> &Option<UserId> {
+        &self.user_filter
+    }
 }
