@@ -24,7 +24,7 @@ where
         );
         if let Some(e) = iter.next() {
             Err(format!(
-                r#"Too many elements in distinguished name: "{:?}", "{:?}", "{:?}""#,
+                r#"Too many elements in distinguished name: "{}", "{}", "{}""#,
                 pair.0, pair.1, e
             ))
         } else {
