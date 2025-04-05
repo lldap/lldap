@@ -2549,6 +2549,7 @@ dependencies = [
  "lldap_frontend_options",
  "lldap_ldap",
  "lldap_opaque_handler",
+ "lldap_sql_backend_handler",
  "lldap_test_utils",
  "lldap_validation",
  "log",
@@ -2776,6 +2777,39 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "lldap_sql_backend_handler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.7",
+ "bincode",
+ "chrono",
+ "itertools",
+ "ldap3_proto",
+ "lldap_access_control",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_handlers",
+ "lldap_domain_model",
+ "lldap_opaque_handler",
+ "lldap_test_utils",
+ "log",
+ "mockall",
+ "orion",
+ "pretty_assertions",
+ "rand 0.8.5",
+ "sea-orm",
+ "secstr",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid 1.11.0",
 ]
 
 [[package]]

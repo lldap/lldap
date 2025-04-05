@@ -61,7 +61,6 @@ mod tests {
     use lldap_domain_handlers::handler::{GroupRequestFilter, UserRequestFilter};
     use lldap_test_utils::MockTestBackendHandler;
     use pretty_assertions::assert_eq;
-    
 
     #[tokio::test]
     async fn test_compare_user() {

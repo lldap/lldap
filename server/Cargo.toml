@@ -105,6 +105,9 @@ path = "../crates/frontend-options"
 [dependencies.lldap_ldap]
 path = "../crates/ldap"
 
+[dependencies.lldap_sql_backend_handler]
+path = "../crates/sql-backend-handler"
+
 [dependencies.lldap_opaque_handler]
 path = "../crates/opaque-handler"
 
@@ -194,6 +197,10 @@ features = ["test"]
 
 [dev-dependencies.lldap_test_utils]
 path = "../crates/test-utils"
+
+[dev-dependencies.lldap_sql_backend_handler]
+path = "../crates/sql-backend-handler"
+features = ["test"]
 
 [dev-dependencies.reqwest]
 version = "*"

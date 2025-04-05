@@ -1,4 +1,4 @@
-use crate::domain::sql_tables::{DbConnection, LAST_SCHEMA_VERSION, SchemaVersion};
+use crate::sql_tables::{DbConnection, LAST_SCHEMA_VERSION, SchemaVersion};
 use itertools::Itertools;
 use lldap_domain::types::{AttributeType, GroupId, JpegPhoto, Serialized, UserId, Uuid};
 use sea_orm::{
@@ -30,7 +30,7 @@ pub enum Users {
 }
 
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum Groups {
+pub(crate) enum Groups {
     Table,
     GroupId,
     DisplayName,
@@ -40,7 +40,7 @@ pub enum Groups {
 }
 
 #[derive(DeriveIden, Clone, Copy)]
-pub enum Memberships {
+pub(crate) enum Memberships {
     Table,
     UserId,
     GroupId,
@@ -48,7 +48,7 @@ pub enum Memberships {
 
 #[allow(clippy::enum_variant_names)] // The table names are generated from the enum.
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum UserAttributeSchema {
+pub(crate) enum UserAttributeSchema {
     Table,
     UserAttributeSchemaName,
     UserAttributeSchemaType,
@@ -59,7 +59,7 @@ pub enum UserAttributeSchema {
 }
 
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum UserAttributes {
+pub(crate) enum UserAttributes {
     Table,
     UserAttributeUserId,
     UserAttributeName,
@@ -68,7 +68,7 @@ pub enum UserAttributes {
 
 #[allow(clippy::enum_variant_names)] // The table names are generated from the enum.
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum GroupAttributeSchema {
+pub(crate) enum GroupAttributeSchema {
     Table,
     GroupAttributeSchemaName,
     GroupAttributeSchemaType,
@@ -79,7 +79,7 @@ pub enum GroupAttributeSchema {
 }
 
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum GroupAttributes {
+pub(crate) enum GroupAttributes {
     Table,
     GroupAttributeGroupId,
     GroupAttributeName,
@@ -87,14 +87,14 @@ pub enum GroupAttributes {
 }
 
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum UserObjectClasses {
+pub(crate) enum UserObjectClasses {
     Table,
     LowerObjectClass,
     ObjectClass,
 }
 
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum GroupObjectClasses {
+pub(crate) enum GroupObjectClasses {
     Table,
     LowerObjectClass,
     ObjectClass,
@@ -102,7 +102,7 @@ pub enum GroupObjectClasses {
 
 // Metadata about the SQL DB.
 #[derive(DeriveIden)]
-pub enum Metadata {
+pub(crate) enum Metadata {
     Table,
     // Which version of the schema we're at.
     Version,
@@ -111,12 +111,12 @@ pub enum Metadata {
 }
 
 #[derive(FromQueryResult, PartialEq, Eq, Debug)]
-pub struct JustSchemaVersion {
-    pub version: SchemaVersion,
+pub(crate) struct JustSchemaVersion {
+    pub(crate) version: SchemaVersion,
 }
 
 #[instrument(skip_all, level = "debug", ret)]
-pub async fn get_schema_version(pool: &DbConnection) -> Option<SchemaVersion> {
+pub(crate) async fn get_schema_version(pool: &DbConnection) -> Option<SchemaVersion> {
     JustSchemaVersion::find_by_statement(
         pool.get_database_backend().build(
             Query::select()
@@ -131,7 +131,7 @@ pub async fn get_schema_version(pool: &DbConnection) -> Option<SchemaVersion> {
     .map(|j| j.version)
 }
 
-pub async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<(), sea_orm::DbErr> {
+pub(crate) async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<(), sea_orm::DbErr> {
     let builder = pool.get_database_backend();
     // SQLite needs this pragma to be turned on. Other DB might not understand this, so ignore the
     // error.
@@ -1121,7 +1121,7 @@ macro_rules! to_sync {
     };
 }
 
-pub async fn migrate_from_version(
+pub(crate) async fn migrate_from_version(
     pool: &DbConnection,
     version: SchemaVersion,
     last_version: SchemaVersion,

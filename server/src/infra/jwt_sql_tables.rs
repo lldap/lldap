@@ -3,7 +3,7 @@ use sea_orm::{
     sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Table},
 };
 
-pub use crate::domain::{sql_migrations::Users, sql_tables::DbConnection};
+pub use lldap_sql_backend_handler::{sql_migrations::Users, sql_tables::DbConnection};
 
 /// Contains the refresh tokens for a given user.
 #[derive(DeriveIden)]

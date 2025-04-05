@@ -1,4 +1,4 @@
-use crate::domain::sql_backend_handler::SqlBackendHandler;
+use crate::sql_backend_handler::SqlBackendHandler;
 use async_trait::async_trait;
 use lldap_access_control::UserReadableBackendHandler;
 use lldap_domain::{
@@ -334,7 +334,7 @@ impl SqlBackendHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::sql_backend_handler::tests::*;
+    use crate::sql_backend_handler::tests::*;
     use lldap_domain::{
         requests::CreateAttributeRequest,
         types::{Attribute, AttributeType, GroupName, UserId},

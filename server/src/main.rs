@@ -3,27 +3,23 @@
 // TODO: Remove next line when it stops warning about async functions.
 #![allow(clippy::blocks_in_conditions)]
 
-use std::time::Duration;
-
-use crate::{
-    domain::{
-        sql_backend_handler::SqlBackendHandler,
-        sql_opaque_handler::register_password,
-        sql_tables::{get_private_key_info, set_private_key_info},
-    },
-    infra::{
-        cli::*,
-        configuration::{Configuration, compare_private_key_hashes},
-        database_string::DatabaseUrl,
-        db_cleaner::Scheduler,
-        healthcheck, mail,
-    },
+use crate::infra::{
+    cli::*,
+    configuration::{Configuration, compare_private_key_hashes},
+    database_string::DatabaseUrl,
+    db_cleaner::Scheduler,
+    healthcheck, mail,
 };
 use actix::Actor;
 use actix_server::ServerBuilder;
 use anyhow::{Context, Result, anyhow, bail};
 use futures_util::TryFutureExt;
+use lldap_sql_backend_handler::{
+    SqlBackendHandler, register_password,
+    sql_tables::{self, get_private_key_info, set_private_key_info},
+};
 use sea_orm::{Database, DatabaseConnection};
+use std::time::Duration;
 use tracing::{Instrument, Level, debug, error, info, instrument, span, warn};
 
 use lldap_domain::requests::{CreateGroupRequest, CreateUserRequest};
@@ -32,7 +28,6 @@ use lldap_domain_handlers::handler::{
     UserListerBackendHandler, UserRequestFilter,
 };
 
-mod domain;
 mod infra;
 
 const ADMIN_PASSWORD_MISSING_ERROR: &str = "The LDAP admin password must be initialized. \
@@ -109,7 +104,7 @@ async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnecti
             .sqlx_logging_level(log::LevelFilter::Debug);
         Database::connect(sql_opt).await?
     };
-    domain::sql_tables::init_table(&sql_pool)
+    sql_tables::init_table(&sql_pool)
         .await
         .context("while creating base tables")?;
     infra::jwt_sql_tables::init_table(&sql_pool)
@@ -145,7 +140,8 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
             return Err(anyhow!("The private key encoding the passwords has changed since last successful startup. Changing the private key will invalidate all existing passwords. If you want to proceed, restart the server with the CLI arg --force-update-private-key=true or the env variable LLDAP_FORCE_UPDATE_PRIVATE_KEY=true. You probably also want --force-ldap-user-pass-reset / LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password to the value in the configuration.").context(e));
         }
     }
-    let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
+    let backend_handler =
+        SqlBackendHandler::new(config.get_server_setup().clone(), sql_pool.clone());
     ensure_group_exists(&backend_handler, "lldap_admin").await?;
     ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
     ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;

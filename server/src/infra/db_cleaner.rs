@@ -1,4 +1,4 @@
-use crate::domain::sql_tables::DbConnection;
+use crate::sql_tables::DbConnection;
 use actix::prelude::{Actor, AsyncContext, Context};
 use cron::Schedule;
 use lldap_domain_model::model::{
