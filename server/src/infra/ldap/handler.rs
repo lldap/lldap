@@ -2,31 +2,25 @@ use crate::{
     domain::{
         ldap::{
             error::{LdapError, LdapResult},
-            utils::{
-                LdapInfo, get_user_id_from_distinguished_name, parse_distinguished_name,
-            },
+            utils::{LdapInfo, parse_distinguished_name},
         },
         opaque_handler::OpaqueHandler,
     },
     infra::{
-        access_control::{
-            AccessControlledBackendHandler, UserReadableBackendHandler,
-        },
+        access_control::AccessControlledBackendHandler,
         ldap::{
+            compare, create, modify,
             password::{self, do_password_modification},
             search::{
                 self, is_root_dse_request, make_search_error, make_search_request,
                 make_search_success, root_dse_response,
             },
-            compare,
-            create,
         },
     },
 };
 use ldap3_proto::proto::{
-    LdapAddRequest, LdapBindRequest, LdapBindResponse, LdapCompareRequest,
-    LdapExtendedRequest, LdapExtendedResponse, LdapFilter, LdapModify, LdapModifyRequest,
-    LdapModifyType, LdapOp, LdapPasswordModifyRequest,
+    LdapAddRequest, LdapBindRequest, LdapBindResponse, LdapCompareRequest, LdapExtendedRequest,
+    LdapExtendedResponse, LdapFilter, LdapModifyRequest, LdapOp, LdapPasswordModifyRequest,
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, OID_PASSWORD_MODIFY, OID_WHOAMI,
 };
 use lldap_auth::access_control::ValidationResults;
@@ -90,6 +84,11 @@ impl<Backend: OpaqueHandler> LdapHandler<Backend> {
     }
 }
 
+enum Credentials<'s> {
+    Bound(&'s ValidationResults),
+    Unbound(Vec<LdapOp>),
+}
+
 impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
     pub fn new(
         backend_handler: AccessControlledBackendHandler<Backend>,
@@ -126,6 +125,16 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             vec![],
             uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
         )
+    }
+
+    fn get_credentials(&self) -> Credentials<'_> {
+        match self.user_info.as_ref() {
+            Some(user_info) => Credentials::Bound(user_info),
+            None => Credentials::Unbound(vec![make_extended_response(
+                LdapResultCode::InsufficentAccessRights,
+                "No user currently bound".to_string(),
+            )]),
+        }
     }
 
     pub async fn do_search_or_dse(
@@ -185,14 +194,9 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         match request.name.as_str() {
             OID_PASSWORD_MODIFY => match LdapPasswordModifyRequest::try_from(request) {
                 Ok(password_request) => {
-                    let credentials = match self.user_info.as_ref() {
-                        Some(user_id) => user_id,
-                        None => {
-                            return vec![make_extended_response(
-                                LdapResultCode::InsufficentAccessRights,
-                                "No user currently bound".to_string(),
-                            )];
-                        }
+                    let credentials = match self.get_credentials() {
+                        Credentials::Bound(cred) => cred,
+                        Credentials::Unbound(err) => return err,
                     };
                     do_password_modification(
                         credentials,
@@ -230,106 +234,25 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
-    async fn handle_modify_change(
-        &mut self,
-        user_id: UserId,
-        credentials: &ValidationResults,
-        user_is_admin: bool,
-        change: &LdapModify,
-    ) -> LdapResult<()> {
-        if !change
-            .modification
-            .atype
-            .eq_ignore_ascii_case("userpassword")
-            || change.operation != LdapModifyType::Replace
-        {
-            return Err(LdapError {
-                code: LdapResultCode::UnwillingToPerform,
-                message: format!(
-                    r#"Unsupported operation: `{:?}` for `{}`"#,
-                    change.operation, change.modification.atype
-                ),
-            });
-        }
-        if !credentials.can_change_password(&user_id, user_is_admin) {
-            return Err(LdapError {
-                code: LdapResultCode::InsufficentAccessRights,
-                message: format!(
-                    r#"User `{}` cannot modify the password of user `{}`"#,
-                    &credentials.user, &user_id
-                ),
-            });
-        }
-        if let [value] = &change.modification.vals.as_slice() {
-            password::change_password(self.get_opaque_handler(), user_id, value)
-                .await
-                .map_err(|e| LdapError {
-                    code: LdapResultCode::Other,
-                    message: format!("Error while changing the password: {:#?}", e),
-                })?;
-        } else {
-            return Err(LdapError {
-                code: LdapResultCode::InvalidAttributeSyntax,
-                message: format!(
-                    r#"Wrong number of values for password attribute: {}"#,
-                    change.modification.vals.len()
-                ),
-            });
-        }
-        Ok(())
-    }
-
-    async fn handle_modify_request(
-        &mut self,
-        request: &LdapModifyRequest,
-    ) -> LdapResult<Vec<LdapOp>> {
-        let credentials = self
-            .user_info
-            .as_ref()
-            .ok_or_else(|| LdapError {
-                code: LdapResultCode::InsufficentAccessRights,
-                message: "No user currently bound".to_string(),
-            })?
-            .clone();
-        match get_user_id_from_distinguished_name(
-            &request.dn,
-            &self.ldap_info.base_dn,
-            &self.ldap_info.base_dn_str,
-        ) {
-            Ok(uid) => {
-                let user_is_admin = self
-                    .backend_handler
-                    .get_readable_handler(&credentials, &uid)
-                    .expect("Unexpected permission error")
-                    .get_user_groups(&uid)
-                    .await
-                    .map_err(|e| LdapError {
-                        code: LdapResultCode::OperationsError,
-                        message: format!("Internal error while requesting user's groups: {:#?}", e),
-                    })?
-                    .iter()
-                    .any(|g| g.display_name == "lldap_admin".into());
-                for change in &request.changes {
-                    self.handle_modify_change(uid.clone(), &credentials, user_is_admin, change)
-                        .await?
-                }
-                Ok(vec![make_modify_response(
-                    LdapResultCode::Success,
-                    String::new(),
-                )])
-            }
-            Err(e) => Err(LdapError {
-                code: LdapResultCode::InvalidDNSyntax,
-                message: format!("Invalid username: {}", e),
-            }),
-        }
-    }
-
     #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
     async fn do_modify_request(&mut self, request: &LdapModifyRequest) -> Vec<LdapOp> {
-        self.handle_modify_request(request)
-            .await
-            .unwrap_or_else(|e: LdapError| vec![make_modify_response(e.code, e.message)])
+        let credentials = match self.get_credentials() {
+            Credentials::Bound(cred) => cred,
+            Credentials::Unbound(err) => return err,
+        };
+        modify::handle_modify_request(
+            self.get_opaque_handler(),
+            |credentials, user_id| {
+                self.backend_handler
+                    .get_readable_handler(credentials, &user_id)
+                    .expect("Unexpected permission error")
+            },
+            &self.ldap_info,
+            credentials,
+            request,
+        )
+        .await
+        .unwrap_or_else(|e: LdapError| vec![make_modify_response(e.code, e.message)])
     }
 
     #[instrument(skip_all, level = "debug")]
@@ -352,7 +275,11 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             LdapFilter::Equality("dn".to_string(), request.dn.to_string()),
             vec![request.atype.clone()],
         );
-        compare::compare(request, self.do_search(&req).await?, &self.ldap_info.base_dn_str)
+        compare::compare(
+            request,
+            self.do_search(&req).await?,
+            &self.ldap_info.base_dn_str,
+        )
     }
 
     pub async fn handle_ldap_message(&mut self, ldap_op: LdapOp) -> Option<Vec<LdapOp>> {
