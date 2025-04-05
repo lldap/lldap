@@ -1,13 +1,5 @@
 use async_trait::async_trait;
 use lldap_auth::access_control::{Permission, ValidationResults};
-use lldap_domain_handlers::handler::{
-    BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
-    ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler, UserListerBackendHandler,
-    UserRequestFilter,
-};
-use std::collections::HashSet;
-use tracing::info;
-
 use lldap_domain::{
     public_schema::PublicSchema,
     requests::{
@@ -20,7 +12,14 @@ use lldap_domain::{
         UserAndGroups, UserId,
     },
 };
+use lldap_domain_handlers::handler::{
+    BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+    ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler, UserListerBackendHandler,
+    UserRequestFilter,
+};
 use lldap_domain_model::error::Result;
+use std::collections::HashSet;
+use tracing::info;
 
 #[async_trait]
 pub trait UserReadableBackendHandler: ReadSchemaBackendHandler {
