@@ -6,15 +6,12 @@ use crate::{
         },
         opaque_handler::OpaqueHandler,
     },
-    infra::{
-        access_control::AccessControlledBackendHandler,
-        ldap::{
-            compare, create, delete, modify,
-            password::{self, do_password_modification},
-            search::{
-                self, is_root_dse_request, make_search_error, make_search_request,
-                make_search_success, root_dse_response,
-            },
+    infra::ldap::{
+        compare, create, delete, modify,
+        password::{self, do_password_modification},
+        search::{
+            self, is_root_dse_request, make_search_error, make_search_request, make_search_success,
+            root_dse_response,
         },
     },
 };
@@ -23,6 +20,7 @@ use ldap3_proto::proto::{
     LdapExtendedResponse, LdapFilter, LdapModifyRequest, LdapOp, LdapPasswordModifyRequest,
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, OID_PASSWORD_MODIFY, OID_WHOAMI,
 };
+use lldap_access_control::AccessControlledBackendHandler;
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::types::AttributeName;
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};

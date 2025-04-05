@@ -1,11 +1,11 @@
 use crate::{
     domain::opaque_handler::OpaqueHandler,
     infra::{
-        access_control::AccessControlledBackendHandler,
         configuration::{Configuration, LdapsOptions},
         ldap::handler::LdapHandler,
     },
 };
+use lldap_access_control::AccessControlledBackendHandler;
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{ServiceFactoryExt, fn_service};

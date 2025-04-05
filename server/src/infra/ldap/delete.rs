@@ -3,8 +3,8 @@ use crate::{
         error::{LdapError, LdapResult},
         utils::{LdapInfo, UserOrGroupName, get_user_or_group_id_from_distinguished_name},
     },
-    infra::access_control::AdminBackendHandler,
 };
+    use lldap_access_control::AdminBackendHandler;
 use ldap3_proto::proto::{LdapOp, LdapResult as LdapResultOp, LdapResultCode};
 use lldap_domain::types::{GroupName, UserId};
 use lldap_domain_handlers::handler::GroupRequestFilter;

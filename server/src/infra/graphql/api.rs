@@ -1,14 +1,9 @@
 use crate::infra::{
-    access_control::{
-        AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
-        UserReadableBackendHandler, UserWriteableBackendHandler,
-    },
     auth_service::check_if_token_is_valid,
     cli::ExportGraphQLSchemaOpts,
     graphql::{mutation::Mutation, query::Query},
     tcp_server::AppState,
 };
-
 use actix_web::FromRequest;
 use actix_web::HttpMessage;
 use actix_web::{Error, HttpRequest, HttpResponse, error::JsonPayloadError, web};
@@ -19,6 +14,10 @@ use juniper::{
         GraphQLBatchRequest, GraphQLRequest, graphiql::graphiql_source,
         playground::playground_source,
     },
+};
+use lldap_access_control::{
+    AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
+    UserReadableBackendHandler, UserWriteableBackendHandler,
 };
 use lldap_auth::{access_control::ValidationResults, types::UserId};
 use lldap_domain_handlers::handler::BackendHandler;

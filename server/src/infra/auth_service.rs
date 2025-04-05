@@ -1,3 +1,10 @@
+use crate::{
+    domain::opaque_handler::OpaqueHandler,
+    infra::{
+        tcp_backend_handler::*,
+        tcp_server::{AppState, TcpError, TcpResult, error_to_http_response},
+    },
+};
 use actix_web::{
     HttpRequest, HttpResponse,
     cookie::{Cookie, SameSite},
@@ -12,6 +19,15 @@ use futures::future::{Ready, ok};
 use futures_util::FutureExt;
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
+use lldap_access_control::{ReadonlyBackendHandler, UserReadableBackendHandler};
+use lldap_auth::{
+    JWTClaims, access_control::ValidationResults, login, password_reset, registration,
+};
+use lldap_domain::types::{GroupDetails, GroupName, UserId};
+use lldap_domain_handlers::handler::{
+    BackendHandler, BindRequest, LoginHandler, UserRequestFilter,
+};
+use lldap_domain_model::{error::DomainError, model::UserColumn};
 use sha2::Sha512;
 use std::{
     collections::HashSet,
@@ -21,24 +37,6 @@ use std::{
 };
 use time::ext::NumericalDuration;
 use tracing::{debug, info, instrument, warn};
-
-use lldap_auth::{
-    JWTClaims, access_control::ValidationResults, login, password_reset, registration,
-};
-use lldap_domain::types::{GroupDetails, GroupName, UserId};
-use lldap_domain_handlers::handler::{
-    BackendHandler, BindRequest, LoginHandler, UserRequestFilter,
-};
-use lldap_domain_model::{error::DomainError, model::UserColumn};
-
-use crate::{
-    domain::opaque_handler::OpaqueHandler,
-    infra::{
-        access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
-        tcp_backend_handler::*,
-        tcp_server::{AppState, TcpError, TcpResult, error_to_http_response},
-    },
-};
 
 type Token<S> = jwt::Token<jwt::Header, JWTClaims, S>;
 type SignedToken = Token<jwt::token::Signed>;
