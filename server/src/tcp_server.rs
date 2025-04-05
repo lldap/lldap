@@ -1,4 +1,4 @@
-use crate::infra::{
+use crate::{
     auth_service,
     configuration::{Configuration, MailOptions},
     logging::CustomRootSpanBuilder,
@@ -145,7 +145,7 @@ fn http_config<Backend>(
     .service(
         web::scope("/api")
             .wrap(auth_service::CookieToHeaderTranslatorFactory)
-            .configure(crate::infra::graphql_server::configure_endpoint::<Backend>),
+            .configure(crate::graphql_server::configure_endpoint::<Backend>),
     )
     .service(
         web::resource("/pkg/lldap_app_bg.wasm.gz")

@@ -1,4 +1,4 @@
-use crate::infra::configuration::{Configuration, LdapsOptions};
+use crate::configuration::{Configuration, LdapsOptions};
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{ServiceFactoryExt, fn_service};

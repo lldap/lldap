@@ -1,4 +1,4 @@
-use crate::infra::{configuration::LdapsOptions, ldap_server::read_certificates};
+use crate::{configuration::LdapsOptions, ldap_server::read_certificates};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use futures_util::SinkExt;
 use ldap3_proto::{

@@ -1,4 +1,4 @@
-use crate::infra::configuration::Configuration;
+use crate::configuration::Configuration;
 use actix_web::{
     Error,
     dev::{ServiceRequest, ServiceResponse},
