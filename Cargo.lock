@@ -2702,7 +2702,7 @@ dependencies = [
  "sea-orm",
  "serde",
  "serde_bytes",
- "thiserror 1.0.66",
+ "thiserror 2.0.12",
  "uuid 1.11.0",
 ]
 
