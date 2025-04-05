@@ -198,6 +198,33 @@ pub mod tests {
         make_bind_result(LdapResultCode::Success, "")
     }
 
+    pub fn expect_password_change(mock: &mut MockTestBackendHandler, user: &str) {
+        use lldap_auth::{opaque, registration};
+        let mut rng = rand::rngs::OsRng;
+        let registration_start_request =
+            opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
+                .unwrap();
+        let request = registration::ClientRegistrationStartRequest {
+            username: user.into(),
+            registration_start_request: registration_start_request.message,
+        };
+        let start_response = opaque::server::registration::start_registration(
+            &opaque::server::ServerSetup::new(&mut rng),
+            request.registration_start_request,
+            &request.username,
+        )
+        .unwrap();
+        mock.expect_registration_start().times(1).return_once(|_| {
+            Ok(registration::ServerRegistrationStartResponse {
+                server_data: "".to_string(),
+                registration_response: start_response.message,
+            })
+        });
+        mock.expect_registration_finish()
+            .times(1)
+            .return_once(|_| Ok(()));
+    }
+
     #[tokio::test]
     async fn test_bind() {
         let mut mock = MockTestBackendHandler::new();
@@ -323,30 +350,7 @@ pub mod tests {
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
             .returning(|_| Ok(HashSet::new()));
-        use lldap_auth::*;
-        let mut rng = rand::rngs::OsRng;
-        let registration_start_request =
-            opaque::client::registration::start_registration("password".as_bytes(), &mut rng)
-                .unwrap();
-        let request = registration::ClientRegistrationStartRequest {
-            username: "bob".into(),
-            registration_start_request: registration_start_request.message,
-        };
-        let start_response = opaque::server::registration::start_registration(
-            &opaque::server::ServerSetup::new(&mut rng),
-            request.registration_start_request,
-            &request.username,
-        )
-        .unwrap();
-        mock.expect_registration_start().times(1).return_once(|_| {
-            Ok(registration::ServerRegistrationStartResponse {
-                server_data: "".to_string(),
-                registration_response: start_response.message,
-            })
-        });
-        mock.expect_registration_finish()
-            .times(1)
-            .return_once(|_| Ok(()));
+        expect_password_change(&mut mock, "bob");
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {

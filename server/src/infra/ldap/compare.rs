@@ -56,8 +56,11 @@ mod tests {
         ldap::handler::tests::setup_bound_admin_handler, test_utils::MockTestBackendHandler,
     };
     use chrono::TimeZone;
-    use lldap_domain::{types::*, uuid};
-    use lldap_domain_handlers::handler::*;
+    use lldap_domain::{
+        types::{Group, GroupId, User, UserAndGroups, UserId},
+        uuid,
+    };
+    use lldap_domain_handlers::handler::{GroupRequestFilter, UserRequestFilter};
     use pretty_assertions::assert_eq;
     use tokio;
 
