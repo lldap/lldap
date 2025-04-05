@@ -1,4 +1,4 @@
-use crate::infra::{cli::SmtpEncryption, configuration::MailOptions};
+use crate::{cli::SmtpEncryption, configuration::MailOptions};
 use anyhow::{Ok, Result, anyhow};
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor, message::Mailbox,

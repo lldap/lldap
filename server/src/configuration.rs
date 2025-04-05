@@ -1,4 +1,4 @@
-use crate::infra::{
+use crate::{
     cli::{
         GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts,
         TrueFalseAlways,

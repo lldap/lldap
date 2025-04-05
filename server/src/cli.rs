@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
 use url::Url;
 
-use crate::infra::database_string::DatabaseUrl;
+use crate::database_string::DatabaseUrl;
 
 // Can be deserialized from either a boolean or a string, to facilitate migration.
 #[derive(Copy, Clone, Debug, Serialize, Default, EnumString, IntoStaticStr)]

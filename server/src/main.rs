@@ -3,12 +3,26 @@
 // TODO: Remove next line when it stops warning about async functions.
 #![allow(clippy::blocks_in_conditions)]
 
-use crate::infra::{
-    cli::*,
+mod auth_service;
+mod cli;
+mod configuration;
+mod database_string;
+mod db_cleaner;
+mod graphql_server;
+mod healthcheck;
+mod jwt_sql_tables;
+mod ldap_server;
+mod logging;
+mod mail;
+mod sql_tcp_backend_handler;
+mod tcp_backend_handler;
+mod tcp_server;
+
+use crate::{
+    cli::{Command, RunOpts, TestEmailOpts},
     configuration::{Configuration, compare_private_key_hashes},
     database_string::DatabaseUrl,
     db_cleaner::Scheduler,
-    healthcheck, mail,
 };
 use actix::Actor;
 use actix_server::ServerBuilder;
@@ -27,8 +41,6 @@ use lldap_domain_handlers::handler::{
     GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter, UserBackendHandler,
     UserListerBackendHandler, UserRequestFilter,
 };
-
-mod infra;
 
 const ADMIN_PASSWORD_MISSING_ERROR: &str = "The LDAP admin password must be initialized. \
             Either set the `ldap_user_pass` config value or the `LLDAP_LDAP_USER_PASS` environment variable. \
@@ -107,7 +119,7 @@ async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnecti
     sql_tables::init_table(&sql_pool)
         .await
         .context("while creating base tables")?;
-    infra::jwt_sql_tables::init_table(&sql_pool)
+    jwt_sql_tables::init_table(&sql_pool)
         .await
         .context("while creating jwt tables")?;
     Ok(sql_pool)
@@ -193,16 +205,15 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
             "Restart the server without --force-update-private-key or --force-ldap-user-pass-reset to continue."
         );
     }
-    let server_builder = infra::ldap_server::build_ldap_server(
+    let server_builder = ldap_server::build_ldap_server(
         &config,
         backend_handler.clone(),
         actix_server::Server::build(),
     )
     .context("while binding the LDAP server")?;
-    let server_builder =
-        infra::tcp_server::build_tcp_server(&config, backend_handler, server_builder)
-            .await
-            .context("while binding the TCP server")?;
+    let server_builder = tcp_server::build_tcp_server(&config, backend_handler, server_builder)
+        .await
+        .context("while binding the TCP server")?;
     // Run every hour.
     let scheduler = Scheduler::new("0 0 * * * * *", sql_pool);
     scheduler.start();
@@ -212,8 +223,8 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
 async fn run_server_command(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
 
-    let config = infra::configuration::init(opts)?;
-    infra::logging::init(&config)?;
+    let config = configuration::init(opts)?;
+    logging::init(&config)?;
 
     let server = set_up_server(config).await?.workers(1);
 
@@ -222,8 +233,8 @@ async fn run_server_command(opts: RunOpts) -> Result<()> {
 
 async fn send_test_email_command(opts: TestEmailOpts) -> Result<()> {
     let to = opts.to.parse()?;
-    let config = infra::configuration::init(opts)?;
-    infra::logging::init(&config)?;
+    let config = configuration::init(opts)?;
+    logging::init(&config)?;
 
     mail::send_test_email(to, &config.smtp_options)
         .await
@@ -232,8 +243,8 @@ async fn send_test_email_command(opts: TestEmailOpts) -> Result<()> {
 
 async fn run_healthcheck(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
-    let config = infra::configuration::init(opts)?;
-    infra::logging::init(&config)?;
+    let config = configuration::init(opts)?;
+    logging::init(&config)?;
 
     info!("Starting healthchecks");
 
@@ -263,8 +274,8 @@ async fn run_healthcheck(opts: RunOpts) -> Result<()> {
 
 async fn create_schema_command(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
-    let config = infra::configuration::init(opts)?;
-    infra::logging::init(&config)?;
+    let config = configuration::init(opts)?;
+    logging::init(&config)?;
     setup_sql_tables(&config.database_url).await?;
     info!("Schema created successfully.");
     Ok(())
@@ -272,7 +283,7 @@ async fn create_schema_command(opts: RunOpts) -> Result<()> {
 
 #[actix::main]
 async fn main() -> Result<()> {
-    let cli_opts = infra::cli::init();
+    let cli_opts = cli::init();
     match cli_opts.command {
         Command::ExportGraphQLSchema(opts) => {
             lldap_graphql_server::api::export_schema(opts.output_file)

@@ -1,4 +1,4 @@
-use crate::infra::tcp_backend_handler::TcpBackendHandler;
+use crate::tcp_backend_handler::TcpBackendHandler;
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use lldap_domain::types::UserId;
