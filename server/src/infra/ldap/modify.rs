@@ -6,15 +6,13 @@ use crate::{
         },
         opaque_handler::OpaqueHandler,
     },
-    infra::{
-        access_control::UserReadableBackendHandler,
-        ldap::{
-            handler::make_modify_response,
-            password::{self},
-        },
+    infra::ldap::{
+        handler::make_modify_response,
+        password::{self},
     },
 };
 use ldap3_proto::proto::{LdapModify, LdapModifyRequest, LdapModifyType, LdapOp, LdapResultCode};
+use lldap_access_control::UserReadableBackendHandler;
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::types::UserId;
 

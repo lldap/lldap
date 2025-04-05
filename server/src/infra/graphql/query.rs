@@ -5,14 +5,12 @@ use crate::{
         deserialize::deserialize_attribute_value,
         ldap::utils::{UserFieldType, map_user_field},
     },
-    infra::{
-        access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
-        graphql::api::{Context, field_error_callback},
-    },
+    infra::graphql::api::{Context, field_error_callback},
 };
 use anyhow::Context as AnyhowContext;
 use chrono::TimeZone;
 use juniper::{FieldResult, GraphQLInputObject, graphql_object};
+use lldap_access_control::{ReadonlyBackendHandler, UserReadableBackendHandler};
 use lldap_domain::{
     public_schema::PublicSchema,
     types::{AttributeType, Cardinality, GroupDetails, GroupId, LdapObjectClass, UserId},

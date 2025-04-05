@@ -2541,6 +2541,7 @@ dependencies = [
  "ldap3",
  "ldap3_proto",
  "lettre",
+ "lldap_access_control",
  "lldap_auth",
  "lldap_domain",
  "lldap_domain_handlers",
@@ -2581,6 +2582,18 @@ dependencies = [
  "urlencoding",
  "uuid 1.11.0",
  "webpki-roots 0.22.6",
+]
+
+[[package]]
+name = "lldap_access_control"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_handlers",
+ "lldap_domain_model",
+ "tracing",
 ]
 
 [[package]]

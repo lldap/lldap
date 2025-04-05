@@ -79,6 +79,9 @@ features = ["builder", "serde", "smtp-transport", "tokio1-rustls-tls"]
 default-features = false
 version = "0.10.1"
 
+[dependencies.lldap_access_control]
+path = "../crates/access-control"
+
 [dependencies.lldap_auth]
 path = "../crates/auth"
 features = ["opaque_server", "opaque_client", "sea_orm"]

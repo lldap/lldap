@@ -1,17 +1,13 @@
-use std::{collections::BTreeMap, sync::Arc};
-
 use crate::{
     domain::deserialize::deserialize_attribute_value,
-    infra::{
-        access_control::{
-            AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
-            UserWriteableBackendHandler,
-        },
-        graphql::api::{Context, field_error_callback},
-    },
+    infra::graphql::api::{Context, field_error_callback},
 };
 use anyhow::{Context as AnyhowContext, anyhow};
 use juniper::{FieldError, FieldResult, GraphQLInputObject, GraphQLObject, graphql_object};
+use lldap_access_control::{
+    AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
+    UserWriteableBackendHandler,
+};
 use lldap_domain::{
     public_schema::PublicSchema,
     requests::{
@@ -26,6 +22,7 @@ use lldap_domain::{
 };
 use lldap_domain_handlers::handler::BackendHandler;
 use lldap_validation::attributes::{ALLOWED_CHARACTERS_DESCRIPTION, validate_attribute_name};
+use std::{collections::BTreeMap, sync::Arc};
 use tracing::{Instrument, Span, debug, debug_span};
 
 #[derive(PartialEq, Eq, Debug)]

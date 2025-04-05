@@ -6,11 +6,12 @@ use crate::{
             utils::{LdapInfo, UserOrGroupName, get_user_or_group_id_from_distinguished_name},
         },
     },
-    infra::{access_control::AdminBackendHandler, ldap::handler::make_add_response},
+    infra::ldap::handler::make_add_response,
 };
 use ldap3_proto::proto::{
     LdapAddRequest, LdapAttribute, LdapOp, LdapPartialAttribute, LdapResultCode,
 };
+use lldap_access_control::AdminBackendHandler;
 use lldap_domain::{
     requests::{CreateGroupRequest, CreateUserRequest},
     types::{Attribute, AttributeName, AttributeType, Email, GroupName, UserId},

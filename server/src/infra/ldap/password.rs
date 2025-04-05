@@ -7,10 +7,10 @@ use crate::{
         opaque_handler::OpaqueHandler,
     },
     infra::{
-        access_control::{AccessControlledBackendHandler, UserReadableBackendHandler},
         ldap::handler::make_extended_response,
     },
 };
+use lldap_access_control::{AccessControlledBackendHandler, UserReadableBackendHandler};
 use anyhow::Result;
 use ldap3_proto::proto::{
     LdapBindCred, LdapBindRequest, LdapOp, LdapPasswordModifyRequest, LdapResultCode,

@@ -1,13 +1,13 @@
 use crate::{
     domain::opaque_handler::OpaqueHandler,
     infra::{
-        access_control::{AccessControlledBackendHandler, ReadonlyBackendHandler},
         auth_service,
         configuration::{Configuration, MailOptions},
         logging::CustomRootSpanBuilder,
         tcp_backend_handler::*,
     },
 };
+use lldap_access_control::{AccessControlledBackendHandler, ReadonlyBackendHandler};
 use actix_files::Files;
 use actix_http::{HttpServiceBuilder, header};
 use actix_server::ServerBuilder;

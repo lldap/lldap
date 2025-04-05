@@ -1,8 +1,6 @@
-use crate::{
-    domain::sql_backend_handler::SqlBackendHandler,
-    infra::access_control::UserReadableBackendHandler,
-};
 use async_trait::async_trait;
+use crate::domain::sql_backend_handler::SqlBackendHandler;
+use lldap_access_control::UserReadableBackendHandler;
 use lldap_domain::{
     requests::{CreateGroupRequest, UpdateGroupRequest},
     types::{AttributeName, Group, GroupDetails, GroupId, Serialized, Uuid},

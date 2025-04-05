@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use async_trait::async_trait;
 use lldap_auth::access_control::{Permission, ValidationResults};
 use lldap_domain_handlers::handler::{
@@ -7,6 +5,7 @@ use lldap_domain_handlers::handler::{
     ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler, UserListerBackendHandler,
     UserRequestFilter,
 };
+use std::collections::HashSet;
 use tracing::info;
 
 use lldap_domain::{
