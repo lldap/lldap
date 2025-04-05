@@ -4,7 +4,6 @@ use crate::{
     domain::{
         deserialize::deserialize_attribute_value,
         ldap::utils::{UserFieldType, map_user_field},
-        schema::PublicSchema,
     },
     infra::{
         access_control::{ReadonlyBackendHandler, UserReadableBackendHandler},
@@ -14,8 +13,9 @@ use crate::{
 use anyhow::Context as AnyhowContext;
 use chrono::TimeZone;
 use juniper::{FieldResult, GraphQLInputObject, graphql_object};
-use lldap_domain::types::{
-    AttributeType, Cardinality, GroupDetails, GroupId, LdapObjectClass, UserId,
+use lldap_domain::{
+    public_schema::PublicSchema,
+    types::{AttributeType, Cardinality, GroupDetails, GroupId, LdapObjectClass, UserId},
 };
 use lldap_domain_handlers::handler::{BackendHandler, ReadSchemaBackendHandler};
 use lldap_domain_model::model::UserColumn;

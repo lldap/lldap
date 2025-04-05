@@ -1,4 +1,4 @@
-use lldap_domain::{
+use crate::{
     schema::{AttributeSchema, Schema},
     types::AttributeType,
 };
