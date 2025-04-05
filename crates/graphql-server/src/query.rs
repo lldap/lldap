@@ -1,4 +1,4 @@
-use crate::infra::graphql::api::{Context, field_error_callback};
+use crate::api::{Context, field_error_callback};
 use anyhow::Context as AnyhowContext;
 use chrono::TimeZone;
 use juniper::{FieldResult, GraphQLInputObject, graphql_object};
@@ -108,6 +108,12 @@ pub struct EqualityConstraint {
 /// The top-level GraphQL query type.
 pub struct Query<Handler: BackendHandler> {
     _phantom: std::marker::PhantomData<Box<Handler>>,
+}
+
+impl<Handler: BackendHandler> Default for Query<Handler> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<Handler: BackendHandler> Query<Handler> {

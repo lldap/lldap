@@ -98,6 +98,9 @@ path = "../crates/domain-handlers"
 [dependencies.lldap_frontend_options]
 path = "../crates/frontend-options"
 
+[dependencies.lldap_graphql_server]
+path = "../crates/graphql-server"
+
 [dependencies.lldap_ldap]
 path = "../crates/ldap"
 

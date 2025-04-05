@@ -3,7 +3,7 @@ pub mod cli;
 pub mod configuration;
 pub mod database_string;
 pub mod db_cleaner;
-pub mod graphql;
+pub mod graphql_server;
 pub mod healthcheck;
 pub mod jwt_sql_tables;
 pub mod ldap_server;

@@ -1,4 +1,4 @@
-use crate::infra::graphql::api::{Context, field_error_callback};
+use crate::api::{Context, field_error_callback};
 use anyhow::{Context as AnyhowContext, anyhow};
 use juniper::{FieldError, FieldResult, GraphQLInputObject, GraphQLObject, graphql_object};
 use lldap_access_control::{
@@ -27,6 +27,12 @@ use tracing::{Instrument, Span, debug, debug_span};
 /// The top-level GraphQL mutation type.
 pub struct Mutation<Handler: BackendHandler> {
     _phantom: std::marker::PhantomData<Box<Handler>>,
+}
+
+impl<Handler: BackendHandler> Default for Mutation<Handler> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<Handler: BackendHandler> Mutation<Handler> {
@@ -778,7 +784,7 @@ fn deserialize_attribute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infra::graphql::query::Query;
+    use crate::query::Query;
     use juniper::{
         DefaultScalarValue, EmptySubscription, GraphQLType, InputValue, RootNode, Variables,
         execute, graphql_value,

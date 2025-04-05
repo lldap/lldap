@@ -2544,6 +2544,7 @@ dependencies = [
  "lldap_domain_handlers",
  "lldap_domain_model",
  "lldap_frontend_options",
+ "lldap_graphql_server",
  "lldap_ldap",
  "lldap_opaque_handler",
  "lldap_sql_backend_handler",
@@ -2710,6 +2711,32 @@ name = "lldap_frontend_options"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "lldap_graphql_server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "juniper",
+ "lldap_access_control",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_handlers",
+ "lldap_domain_model",
+ "lldap_ldap",
+ "lldap_sql_backend_handler",
+ "lldap_test_utils",
+ "lldap_validation",
+ "mockall",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "urlencoding",
+ "uuid 1.11.0",
 ]
 
 [[package]]
