@@ -1,16 +1,24 @@
-use crate::{domain::sql_tables::DbConnection, infra::configuration::Configuration};
+use crate::sql_tables::DbConnection;
 use async_trait::async_trait;
+use lldap_auth::opaque::server::ServerSetup;
 use lldap_domain_handlers::handler::BackendHandler;
 
 #[derive(Clone)]
 pub struct SqlBackendHandler {
-    pub(crate) config: Configuration,
+    pub(crate) opaque_setup: ServerSetup,
     pub(crate) sql_pool: DbConnection,
 }
 
 impl SqlBackendHandler {
-    pub fn new(config: Configuration, sql_pool: DbConnection) -> Self {
-        SqlBackendHandler { config, sql_pool }
+    pub fn new(opaque_setup: ServerSetup, sql_pool: DbConnection) -> Self {
+        SqlBackendHandler {
+            opaque_setup,
+            sql_pool,
+        }
+    }
+
+    pub fn pool(&self) -> &DbConnection {
+        &self.sql_pool
     }
 }
 
@@ -20,8 +28,11 @@ impl BackendHandler for SqlBackendHandler {}
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{domain::sql_tables::init_table, infra::configuration::ConfigurationBuilder};
-    use lldap_auth::{opaque, registration};
+    use crate::sql_tables::init_table;
+    use lldap_auth::{
+        opaque::{self, server::generate_random_private_key},
+        registration,
+    };
     use lldap_domain::{
         requests::{CreateGroupRequest, CreateUserRequest},
         types::{Attribute as DomainAttribute, GroupId, UserId},
@@ -32,12 +43,8 @@ pub mod tests {
     use pretty_assertions::assert_eq;
     use sea_orm::Database;
 
-    pub fn get_default_config() -> Configuration {
-        ConfigurationBuilder::for_tests()
-    }
-
     pub async fn get_in_memory_db() -> DbConnection {
-        crate::infra::logging::init_for_tests();
+        crate::logging::init_for_tests();
         let mut sql_opt = sea_orm::ConnectOptions::new("sqlite::memory:".to_owned());
         sql_opt
             .max_connections(1)
@@ -139,8 +146,7 @@ pub mod tests {
     impl TestFixture {
         pub async fn new() -> Self {
             let sql_pool = get_initialized_db().await;
-            let config = get_default_config();
-            let handler = SqlBackendHandler::new(config, sql_pool);
+            let handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool);
             insert_user_no_password(&handler, "bob").await;
             insert_user_no_password(&handler, "patrick").await;
             insert_user_no_password(&handler, "John").await;
@@ -160,8 +166,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_sql_injection() {
         let sql_pool = get_initialized_db().await;
-        let config = get_default_config();
-        let handler = SqlBackendHandler::new(config, sql_pool);
+        let handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool);
         let user_name = UserId::new(r#"bob"e"i'o;aü"#);
         insert_user_no_password(&handler, user_name.as_str()).await;
         {

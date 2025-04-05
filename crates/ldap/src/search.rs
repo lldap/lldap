@@ -333,7 +333,6 @@ mod tests {
     use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
-    
 
     #[tokio::test]
     async fn test_search_root_dse() {

@@ -1,6 +1,4 @@
-use crate::domain::sql_migrations::{
-    Metadata, get_schema_version, migrate_from_version, upgrade_to_v1,
-};
+use crate::sql_migrations::{Metadata, get_schema_version, migrate_from_version, upgrade_to_v1};
 use sea_orm::{
     ConnectionTrait, DeriveValueType, Iden, QueryResult, TryGetable, Value, sea_query::Query,
 };
@@ -68,7 +66,6 @@ pub enum PrivateKeyLocation {
     KeySeed(ConfigLocation),
     KeyFile(ConfigLocation, std::ffi::OsString),
     Default,
-    #[cfg(test)]
     Tests,
 }
 
@@ -123,7 +120,7 @@ pub async fn set_private_key_info(pool: &DbConnection, info: PrivateKeyInfo) -> 
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::sql_migrations;
+    use crate::sql_migrations;
     use lldap_domain::types::{GroupId, JpegPhoto, Serialized, Uuid};
     use pretty_assertions::assert_eq;
 
@@ -185,7 +182,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_already_init_table() {
-        crate::infra::logging::init_for_tests();
+        crate::logging::init_for_tests();
         let sql_pool = get_in_memory_db().await;
         init_table(&sql_pool).await.unwrap();
         init_table(&sql_pool).await.unwrap();
@@ -193,7 +190,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_migrate_tables() {
-        crate::infra::logging::init_for_tests();
+        crate::logging::init_for_tests();
         // Test that we add the column creation_date to groups and uuid to users and groups.
         let sql_pool = get_in_memory_db().await;
         sql_pool
@@ -324,7 +321,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_migration_to_v4() {
-        crate::infra::logging::init_for_tests();
+        crate::logging::init_for_tests();
         let sql_pool = get_in_memory_db().await;
         upgrade_to_v1(&sql_pool).await.unwrap();
         migrate_from_version(&sql_pool, SchemaVersion(1), SchemaVersion(3))
@@ -387,7 +384,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_migration_to_v5() {
-        crate::infra::logging::init_for_tests();
+        crate::logging::init_for_tests();
         let sql_pool = get_in_memory_db().await;
         upgrade_to_v1(&sql_pool).await.unwrap();
         migrate_from_version(&sql_pool, SchemaVersion(1), SchemaVersion(4))
@@ -473,7 +470,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_migration_to_v6() {
-        crate::infra::logging::init_for_tests();
+        crate::logging::init_for_tests();
         let sql_pool = get_in_memory_db().await;
         upgrade_to_v1(&sql_pool).await.unwrap();
         migrate_from_version(&sql_pool, SchemaVersion(1), SchemaVersion(5))

@@ -1,4 +1,4 @@
-use crate::domain::sql_backend_handler::SqlBackendHandler;
+use crate::SqlBackendHandler;
 use async_trait::async_trait;
 use base64::Engine;
 use lldap_auth::opaque;
@@ -19,7 +19,7 @@ type SqlOpaqueHandler = SqlBackendHandler;
 fn passwords_match(
     password_file_bytes: &[u8],
     clear_password: &str,
-    server_setup: &opaque::server::ServerSetup,
+    opaque_setup: &opaque::server::ServerSetup,
     username: &UserId,
 ) -> Result<()> {
     use opaque::{client, server};
@@ -30,7 +30,7 @@ fn passwords_match(
         .map_err(opaque::AuthenticationError::ProtocolError)?;
     let server_login_start_result = server::login::start_login(
         &mut rng,
-        server_setup,
+        opaque_setup,
         Some(password_file),
         client_login_start_result.message,
         username,
@@ -45,7 +45,7 @@ fn passwords_match(
 impl SqlBackendHandler {
     fn get_orion_secret_key(&self) -> Result<orion::aead::SecretKey> {
         Ok(orion::aead::SecretKey::from_slice(
-            self.config.get_server_keys().private(),
+            self.opaque_setup.keypair().private(),
         )?)
     }
 
@@ -74,7 +74,7 @@ impl LoginHandler for SqlBackendHandler {
             if passwords_match(
                 &password_hash,
                 &request.password,
-                self.config.get_server_setup(),
+                &self.opaque_setup,
                 &request.name,
             )
             .is_ok()
@@ -117,7 +117,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         // Get the CredentialResponse for the user, or a dummy one if no user/no password.
         let start_response = opaque::server::login::start_login(
             &mut rng,
-            self.config.get_server_setup(),
+            &self.opaque_setup,
             maybe_password_file,
             request.login_start_request,
             &user_id,
@@ -168,7 +168,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
     ) -> Result<registration::ServerRegistrationStartResponse> {
         // Generate the server-side key and derive the data to send back.
         let start_response = opaque::server::registration::start_registration(
-            self.config.get_server_setup(),
+            &self.opaque_setup,
             request.registration_start_request,
             &request.username,
         )?;
@@ -210,7 +210,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
 
 /// Convenience function to set a user's password.
 #[instrument(skip_all, level = "debug", err, fields(username = %username.as_str()))]
-pub(crate) async fn register_password(
+pub async fn register_password(
     opaque_handler: &SqlOpaqueHandler,
     username: UserId,
     password: &SecUtf8,
@@ -240,8 +240,12 @@ pub(crate) async fn register_password(
 
 #[cfg(test)]
 mod tests {
+    use self::opaque::server::generate_random_private_key;
+
     use super::*;
-    use crate::domain::sql_backend_handler::tests::*;
+    use crate::sql_backend_handler::tests::{
+        get_initialized_db, insert_user, insert_user_no_password,
+    };
 
     async fn attempt_login(
         opaque_handler: &SqlOpaqueHandler,
@@ -273,33 +277,30 @@ mod tests {
     #[tokio::test]
     async fn test_opaque_flow() -> Result<()> {
         let sql_pool = get_initialized_db().await;
-        crate::infra::logging::init_for_tests();
-        let config = get_default_config();
-        let backend_handler = SqlBackendHandler::new(config.clone(), sql_pool.clone());
-        let opaque_handler = SqlOpaqueHandler::new(config, sql_pool);
+        crate::logging::init_for_tests();
+        let backend_handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool);
         insert_user_no_password(&backend_handler, "bob").await;
         insert_user_no_password(&backend_handler, "john").await;
-        attempt_login(&opaque_handler, "bob", "bob00")
+        attempt_login(&backend_handler, "bob", "bob00")
             .await
             .unwrap_err();
         register_password(
-            &opaque_handler,
+            &backend_handler,
             UserId::new("bob"),
             &secstr::SecUtf8::from("bob00"),
         )
         .await?;
-        attempt_login(&opaque_handler, "bob", "wrong_password")
+        attempt_login(&backend_handler, "bob", "wrong_password")
             .await
             .unwrap_err();
-        attempt_login(&opaque_handler, "bob", "bob00").await?;
+        attempt_login(&backend_handler, "bob", "bob00").await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn test_bind_user() {
         let sql_pool = get_initialized_db().await;
-        let config = get_default_config();
-        let handler = SqlOpaqueHandler::new(config, sql_pool.clone());
+        let handler = SqlOpaqueHandler::new(generate_random_private_key(), sql_pool.clone());
         insert_user(&handler, "bob", "bob00").await;
 
         handler
@@ -328,8 +329,7 @@ mod tests {
     #[tokio::test]
     async fn test_user_no_password() {
         let sql_pool = get_initialized_db().await;
-        let config = get_default_config();
-        let handler = SqlBackendHandler::new(config, sql_pool.clone());
+        let handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool.clone());
         insert_user_no_password(&handler, "bob").await;
 
         handler

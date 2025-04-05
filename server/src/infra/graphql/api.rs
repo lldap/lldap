@@ -86,8 +86,8 @@ fn schema<Handler: BackendHandler>() -> Schema<Handler> {
 }
 
 pub fn export_schema(opts: ExportGraphQLSchemaOpts) -> anyhow::Result<()> {
-    use crate::domain::sql_backend_handler::SqlBackendHandler;
     use anyhow::Context;
+    use lldap_sql_backend_handler::SqlBackendHandler;
     let output = schema::<SqlBackendHandler>().as_schema_language();
     match opts.output_file {
         None => println!("{}", output),

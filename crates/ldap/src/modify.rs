@@ -140,7 +140,6 @@ mod tests {
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
-    
 
     fn setup_target_user_groups(
         mock: &mut MockTestBackendHandler,

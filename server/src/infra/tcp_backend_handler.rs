@@ -1,9 +1,8 @@
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
-use std::collections::HashSet;
-
 use lldap_domain::types::UserId;
 use lldap_domain_model::error::Result;
+use std::collections::HashSet;
 
 #[async_trait]
 pub trait TcpBackendHandler: Sync {

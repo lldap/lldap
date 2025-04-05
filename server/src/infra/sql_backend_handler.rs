@@ -1,5 +1,4 @@
-use super::tcp_backend_handler::TcpBackendHandler;
-use crate::domain::sql_backend_handler::SqlBackendHandler;
+use crate::infra::tcp_backend_handler::TcpBackendHandler;
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use lldap_domain::types::UserId;
@@ -7,6 +6,7 @@ use lldap_domain_model::{
     error::*,
     model::{self, JwtRefreshStorageColumn, JwtStorageColumn, PasswordResetTokensColumn},
 };
+use lldap_sql_backend_handler::SqlBackendHandler;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QuerySelect,
     sea_query::{Cond, Expr},
@@ -33,7 +33,7 @@ impl TcpBackendHandler for SqlBackendHandler {
             .column(JwtStorageColumn::JwtHash)
             .filter(JwtStorageColumn::Blacklisted.eq(true))
             .into_tuple::<(i64,)>()
-            .all(&self.sql_pool)
+            .all(self.pool())
             .await?
             .into_iter()
             .map(|m| m.0 as u64)
@@ -59,7 +59,7 @@ impl TcpBackendHandler for SqlBackendHandler {
             expiry_date: chrono::Utc::now().naive_utc() + duration,
         }
         .into_active_model();
-        new_token.insert(&self.sql_pool).await?;
+        new_token.insert(self.pool()).await?;
         Ok((refresh_token, duration))
     }
 
@@ -78,7 +78,7 @@ impl TcpBackendHandler for SqlBackendHandler {
             expiry_date,
         }
         .into_active_model();
-        new_token.insert(&self.sql_pool).await?;
+        new_token.insert(self.pool()).await?;
         Ok(())
     }
 
@@ -88,7 +88,7 @@ impl TcpBackendHandler for SqlBackendHandler {
         Ok(
             model::JwtRefreshStorage::find_by_id(refresh_token_hash as i64)
                 .filter(JwtRefreshStorageColumn::UserId.eq(user))
-                .one(&self.sql_pool)
+                .one(self.pool())
                 .await?
                 .is_some(),
         )
@@ -106,7 +106,7 @@ impl TcpBackendHandler for SqlBackendHandler {
                     .add(JwtStorageColumn::Blacklisted.eq(false)),
             )
             .into_tuple::<(i64,)>()
-            .all(&self.sql_pool)
+            .all(self.pool())
             .await?
             .into_iter()
             .map(|t| t.0 as u64)
@@ -114,7 +114,7 @@ impl TcpBackendHandler for SqlBackendHandler {
         model::JwtStorage::update_many()
             .col_expr(JwtStorageColumn::Blacklisted, Expr::value(true))
             .filter(JwtStorageColumn::UserId.eq(user))
-            .exec(&self.sql_pool)
+            .exec(self.pool())
             .await?;
         Ok(valid_tokens)
     }
@@ -122,7 +122,7 @@ impl TcpBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug")]
     async fn delete_refresh_token(&self, refresh_token_hash: u64) -> Result<()> {
         model::JwtRefreshStorage::delete_by_id(refresh_token_hash as i64)
-            .exec(&self.sql_pool)
+            .exec(self.pool())
             .await?;
         Ok(())
     }
@@ -131,7 +131,7 @@ impl TcpBackendHandler for SqlBackendHandler {
     async fn start_password_reset(&self, user: &UserId) -> Result<Option<String>> {
         debug!(?user);
         if model::User::find_by_id(user.clone())
-            .one(&self.sql_pool)
+            .one(self.pool())
             .await?
             .is_none()
         {
@@ -148,7 +148,7 @@ impl TcpBackendHandler for SqlBackendHandler {
             expiry_date: chrono::Utc::now().naive_utc() + duration,
         }
         .into_active_model();
-        new_token.insert(&self.sql_pool).await?;
+        new_token.insert(self.pool()).await?;
         Ok(Some(token))
     }
 
@@ -156,7 +156,7 @@ impl TcpBackendHandler for SqlBackendHandler {
     async fn get_user_id_for_password_reset_token(&self, token: &str) -> Result<UserId> {
         Ok(model::PasswordResetTokens::find_by_id(token.to_owned())
             .filter(PasswordResetTokensColumn::ExpiryDate.gt(chrono::Utc::now().naive_utc()))
-            .one(&self.sql_pool)
+            .one(self.pool())
             .await?
             .ok_or_else(|| DomainError::EntityNotFound("Invalid reset token".to_owned()))?
             .user_id)
@@ -165,7 +165,7 @@ impl TcpBackendHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug")]
     async fn delete_password_reset_token(&self, token: &str) -> Result<()> {
         let result = model::PasswordResetTokens::delete_by_id(token.to_owned())
-            .exec(&self.sql_pool)
+            .exec(self.pool())
             .await?;
         if result.rows_affected == 0 {
             return Err(DomainError::EntityNotFound(format!(

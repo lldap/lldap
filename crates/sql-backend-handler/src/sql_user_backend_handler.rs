@@ -1,4 +1,4 @@
-use crate::domain::sql_backend_handler::SqlBackendHandler;
+use crate::sql_backend_handler::SqlBackendHandler;
 use async_trait::async_trait;
 use lldap_domain::{
     requests::{CreateUserRequest, UpdateUserRequest},
@@ -414,7 +414,8 @@ impl UserBackendHandler for SqlBackendHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::sql_backend_handler::tests::*;
+    use crate::sql_backend_handler::tests::*;
+    use lldap_auth::opaque::server::generate_random_private_key;
     use lldap_domain::types::{Attribute, JpegPhoto};
     use lldap_domain_handlers::handler::SubStringFilter;
     use lldap_domain_model::model::UserColumn;
@@ -734,7 +735,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_details() {
-        let handler = SqlBackendHandler::new(get_default_config(), get_initialized_db().await);
+        let handler =
+            SqlBackendHandler::new(generate_random_private_key(), get_initialized_db().await);
         insert_user_no_password(&handler, "bob").await;
         {
             let user = handler.get_user_details(&UserId::new("bob")).await.unwrap();
@@ -750,7 +752,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_user_lowercase() {
-        let handler = SqlBackendHandler::new(get_default_config(), get_initialized_db().await);
+        let handler =
+            SqlBackendHandler::new(generate_random_private_key(), get_initialized_db().await);
         insert_user_no_password(&handler, "Bob").await;
         {
             let user = handler.get_user_details(&UserId::new("bOb")).await.unwrap();

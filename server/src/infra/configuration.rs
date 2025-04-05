@@ -1,14 +1,9 @@
-use std::collections::HashSet;
-
-use crate::{
-    domain::sql_tables::{ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation},
-    infra::{
-        cli::{
-            GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts,
-            TrueFalseAlways,
-        },
-        database_string::DatabaseUrl,
+use crate::infra::{
+    cli::{
+        GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts,
+        TrueFalseAlways,
     },
+    database_string::DatabaseUrl,
 };
 use anyhow::{Context, Result, bail};
 use figment::{
@@ -16,10 +11,17 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
 };
 use figment_file_provider_adapter::FileAdapter;
-use lldap_auth::opaque::{KeyPair, server::ServerSetup};
+use lldap_auth::opaque::{
+    KeyPair,
+    server::{ServerSetup, generate_random_private_key},
+};
 use lldap_domain::types::{AttributeName, UserId};
+use lldap_sql_backend_handler::sql_tables::{
+    ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation,
+};
 use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use url::Url;
 
@@ -157,18 +159,6 @@ impl ConfigurationBuilder {
         )?;
         Ok(self.server_setup(Some(server_setup)).private_build()?)
     }
-
-    #[cfg(test)]
-    pub fn for_tests() -> Configuration {
-        ConfigurationBuilder::default()
-            .verbose(true)
-            .server_setup(Some(ServerSetupConfig {
-                server_setup: generate_random_private_key(),
-                private_key_location: PrivateKeyLocation::Tests,
-            }))
-            .private_build()
-            .unwrap()
-    }
 }
 
 fn stable_hash(val: &[u8]) -> [u8; 32] {
@@ -242,6 +232,9 @@ pub fn compare_private_key_hashes(
                             );
                         }
                     }
+                    (PrivateKeyLocation::Tests, _) | (_, PrivateKeyLocation::Tests) => {
+                        panic!("Test keys unexpected")
+                    }
                     (old_location, new_location) => {
                         bail!(
                             "The private key has changed. It used to come from {old_location:?}, but now it comes from {new_location:?}."
@@ -251,11 +244,6 @@ pub fn compare_private_key_hashes(
             }
         }
     }
-}
-
-fn generate_random_private_key() -> ServerSetup {
-    let mut rng = rand::rngs::OsRng;
-    ServerSetup::new(&mut rng)
 }
 
 #[cfg(unix)]
