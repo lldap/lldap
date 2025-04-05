@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
-    domain::{deserialize::deserialize_attribute_value, schema::PublicSchema},
+    domain::deserialize::deserialize_attribute_value,
     infra::{
         access_control::{
             AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
@@ -13,6 +13,7 @@ use crate::{
 use anyhow::{Context as AnyhowContext, anyhow};
 use juniper::{FieldError, FieldResult, GraphQLInputObject, GraphQLObject, graphql_object};
 use lldap_domain::{
+    public_schema::PublicSchema,
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
         UpdateUserRequest,

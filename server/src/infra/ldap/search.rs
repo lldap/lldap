@@ -5,18 +5,18 @@ use ldap3_proto::{
         OID_PASSWORD_MODIFY, OID_WHOAMI,
     },
 };
-use lldap_domain::types::{Group, UserAndGroups};
+use lldap_domain::{
+    public_schema::PublicSchema,
+    types::{Group, UserAndGroups},
+};
 use tracing::{debug, instrument, warn};
 
 use crate::{
-    domain::{
-        ldap::{
-            error::{LdapError, LdapResult},
-            group::{convert_groups_to_ldap_op, get_groups_list},
-            user::{convert_users_to_ldap_op, get_user_list},
-            utils::{LdapInfo, is_subtree, parse_distinguished_name},
-        },
-        schema::PublicSchema,
+    domain::ldap::{
+        error::{LdapError, LdapResult},
+        group::{convert_groups_to_ldap_op, get_groups_list},
+        user::{convert_users_to_ldap_op, get_user_list},
+        utils::{LdapInfo, is_subtree, parse_distinguished_name},
     },
     infra::access_control::UserAndGroupListerBackendHandler,
 };

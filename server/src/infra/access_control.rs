@@ -9,8 +9,8 @@ use lldap_domain_handlers::handler::{
 };
 use tracing::info;
 
-use crate::domain::schema::PublicSchema;
 use lldap_domain::{
+    public_schema::PublicSchema,
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
         UpdateUserRequest,

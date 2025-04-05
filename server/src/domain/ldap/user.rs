@@ -14,10 +14,12 @@ use crate::domain::{
             get_user_id_from_distinguished_name_or_plain_name, map_user_field,
         },
     },
-    schema::PublicSchema,
 };
-use lldap_domain::types::{
-    AttributeName, AttributeType, GroupDetails, LdapObjectClass, User, UserAndGroups, UserId,
+use lldap_domain::{
+    public_schema::PublicSchema,
+    types::{
+        AttributeName, AttributeType, GroupDetails, LdapObjectClass, User, UserAndGroups, UserId,
+    },
 };
 use lldap_domain_handlers::handler::{UserListerBackendHandler, UserRequestFilter};
 use lldap_domain_model::model::UserColumn;

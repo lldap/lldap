@@ -4,12 +4,12 @@ use chrono::TimeZone;
 use ldap3_proto::LdapResultCode;
 use tracing::{debug, instrument, warn};
 
-use crate::domain::{
-    ldap::error::{LdapError, LdapResult},
-    schema::PublicSchema,
-};
-use lldap_domain::types::{
-    Attribute, AttributeName, AttributeType, AttributeValue, Cardinality, GroupName, UserId,
+use crate::domain::ldap::error::{LdapError, LdapResult};
+use lldap_domain::{
+    public_schema::PublicSchema,
+    types::{
+        Attribute, AttributeName, AttributeType, AttributeValue, Cardinality, GroupName, UserId,
+    },
 };
 use lldap_domain_model::model::UserColumn;
 
