@@ -1,10 +1,7 @@
 use crate::{
-    domain::{
-        ldap::{
-            error::{LdapError, LdapResult},
-            utils::{LdapInfo, get_user_id_from_distinguished_name},
-        },
-        opaque_handler::OpaqueHandler,
+    domain::ldap::{
+        error::{LdapError, LdapResult},
+        utils::{LdapInfo, get_user_id_from_distinguished_name},
     },
     infra::ldap::{
         handler::make_modify_response,
@@ -15,6 +12,7 @@ use ldap3_proto::proto::{LdapModify, LdapModifyRequest, LdapModifyType, LdapOp, 
 use lldap_access_control::UserReadableBackendHandler;
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::types::UserId;
+use lldap_opaque_handler::OpaqueHandler;
 
 async fn handle_modify_change(
     opaque_handler: &impl OpaqueHandler,

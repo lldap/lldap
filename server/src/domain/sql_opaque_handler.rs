@@ -1,7 +1,4 @@
-use super::{
-    opaque_handler::{OpaqueHandler, login, registration},
-    sql_backend_handler::SqlBackendHandler,
-};
+use crate::domain::sql_backend_handler::SqlBackendHandler;
 use async_trait::async_trait;
 use base64::Engine;
 use lldap_auth::opaque;
@@ -11,6 +8,7 @@ use lldap_domain_model::{
     error::{DomainError, Result},
     model::{self, UserColumn},
 };
+use lldap_opaque_handler::{OpaqueHandler, login, registration};
 use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, QuerySelect};
 use secstr::SecUtf8;
 use tracing::{debug, info, instrument, warn};

@@ -2547,6 +2547,7 @@ dependencies = [
  "lldap_domain_handlers",
  "lldap_domain_model",
  "lldap_frontend_options",
+ "lldap_opaque_handler",
  "lldap_validation",
  "log",
  "mockall",
@@ -2727,6 +2728,16 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
+]
+
+[[package]]
+name = "lldap_opaque_handler"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_model",
 ]
 
 [[package]]

@@ -1,13 +1,9 @@
-use crate::{
-    domain::opaque_handler::OpaqueHandler,
-    infra::{
-        auth_service,
-        configuration::{Configuration, MailOptions},
-        logging::CustomRootSpanBuilder,
-        tcp_backend_handler::*,
-    },
+use crate::infra::{
+    auth_service,
+    configuration::{Configuration, MailOptions},
+    logging::CustomRootSpanBuilder,
+    tcp_backend_handler::*,
 };
-use lldap_access_control::{AccessControlledBackendHandler, ReadonlyBackendHandler};
 use actix_files::Files;
 use actix_http::{HttpServiceBuilder, header};
 use actix_server::ServerBuilder;
@@ -15,8 +11,10 @@ use actix_service::map_config;
 use actix_web::{App, HttpResponse, Responder, dev::AppConfig, guard, web};
 use anyhow::{Context, Result};
 use hmac::Hmac;
+use lldap_access_control::{AccessControlledBackendHandler, ReadonlyBackendHandler};
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
 use lldap_domain_model::error::DomainError;
+use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::collections::HashSet;
 use std::path::PathBuf;

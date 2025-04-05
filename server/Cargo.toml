@@ -102,6 +102,9 @@ path = "../crates/domain-handlers"
 [dependencies.lldap_frontend_options]
 path = "../crates/frontend-options"
 
+[dependencies.lldap_opaque_handler]
+path = "../crates/opaque-handler"
+
 [dependencies.lldap_validation]
 path = "../crates/validation"
 
@@ -180,6 +183,10 @@ features = ["sync", "tls-rustls"]
 
 [dev-dependencies.lldap_auth]
 path = "../crates/auth"
+features = ["test"]
+
+[dev-dependencies.lldap_opaque_handler]
+path = "../crates/opaque-handler"
 features = ["test"]
 
 [dev-dependencies.reqwest]

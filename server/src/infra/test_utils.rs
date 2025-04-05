@@ -1,14 +1,21 @@
-use crate::domain::opaque_handler::*;
 use lldap_domain::{
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
         UpdateUserRequest,
     },
     schema::{AttributeList, AttributeSchema, Schema},
-    types::*,
+    types::{
+        AttributeName, AttributeType, Group, GroupDetails, GroupId, LdapObjectClass, User,
+        UserAndGroups, UserId,
+    },
 };
-use lldap_domain_handlers::handler::*;
+use lldap_domain_handlers::handler::{
+    BackendHandler, BindRequest, GroupBackendHandler, GroupListerBackendHandler,
+    GroupRequestFilter, LoginHandler, ReadSchemaBackendHandler, SchemaBackendHandler,
+    UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
+};
 use lldap_domain_model::error::Result;
+use lldap_opaque_handler::{OpaqueHandler, login, registration};
 
 use async_trait::async_trait;
 use std::collections::HashSet;

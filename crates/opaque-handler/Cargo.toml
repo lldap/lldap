@@ -1,0 +1,25 @@
+[package]
+name = "lldap_opaque_handler"
+version = "0.1.0"
+description = "Opaque handler trait for LLDAP"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+test = []
+
+[dependencies]
+async-trait = "0.1"
+
+[dependencies.lldap_auth]
+path = "../auth"
+features = ["opaque_server", "opaque_client", "sea_orm"]
+
+[dependencies.lldap_domain]
+path = "../domain"
+
+[dependencies.lldap_domain_model]
+path = "../domain-model"

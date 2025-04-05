@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::domain::sql_backend_handler::SqlBackendHandler;
+use async_trait::async_trait;
 use lldap_access_control::UserReadableBackendHandler;
 use lldap_domain::{
     requests::{CreateGroupRequest, UpdateGroupRequest},
