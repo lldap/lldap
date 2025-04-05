@@ -80,7 +80,7 @@ mod tests {
             }])
         });
         mock.expect_list_groups().returning(|_| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let dn = "uid=bob,ou=people,dc=example,dc=com";
         let request = LdapCompareRequest {
             dn: dn.to_string(),
@@ -128,7 +128,7 @@ mod tests {
                 attributes: Vec::new(),
             }])
         });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let dn = "uid=group,ou=groups,dc=example,dc=com";
         let request = LdapCompareRequest {
             dn: dn.to_string(),
@@ -155,7 +155,7 @@ mod tests {
             Ok(vec![])
         });
         mock.expect_list_groups().returning(|_| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let dn = "uid=bob,ou=people,dc=example,dc=com";
         let request = LdapCompareRequest {
             dn: dn.to_string(),
@@ -189,7 +189,7 @@ mod tests {
             }])
         });
         mock.expect_list_groups().returning(|_| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let dn = "uid=bob,ou=people,dc=example,dc=com";
         let request = LdapCompareRequest {
             dn: dn.to_string(),
@@ -222,7 +222,7 @@ mod tests {
                 attributes: Vec::new(),
             }])
         });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let dn = "uid=group,ou=groups,dc=example,dc=com";
         let request = LdapCompareRequest {
             dn: dn.to_string(),

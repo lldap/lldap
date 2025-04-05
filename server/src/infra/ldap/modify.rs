@@ -210,7 +210,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         setup_target_user_groups(&mut mock, "bob", Vec::new());
         expect_password_change(&mut mock, "bob");
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_password_modify_request("bob");
         assert_eq!(
             ldap_handler.do_modify_request(&request).await,
@@ -223,7 +223,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         setup_target_user_groups(&mut mock, "test", Vec::new());
         expect_password_change(&mut mock, "test");
-        let mut ldap_handler = setup_bound_handler_with_group(mock, "regular").await;
+        let ldap_handler = setup_bound_handler_with_group(mock, "regular").await;
         let request = make_password_modify_request("test");
         assert_eq!(
             ldap_handler.do_modify_request(&request).await,
@@ -236,7 +236,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         setup_target_user_groups(&mut mock, "bob", Vec::new());
         expect_password_change(&mut mock, "bob");
-        let mut ldap_handler = setup_bound_password_manager_handler(mock).await;
+        let ldap_handler = setup_bound_password_manager_handler(mock).await;
         let request = make_password_modify_request("bob");
         assert_eq!(
             ldap_handler.do_modify_request(&request).await,
@@ -248,7 +248,7 @@ mod tests {
     async fn test_modify_password_of_admin_as_password_manager() {
         let mut mock = MockTestBackendHandler::new();
         setup_target_user_groups(&mut mock, "bob", vec!["lldap_admin"]);
-        let mut ldap_handler = setup_bound_password_manager_handler(mock).await;
+        let ldap_handler = setup_bound_password_manager_handler(mock).await;
         let request = make_password_modify_request("bob");
         assert_eq!(
             ldap_handler.do_modify_request(&request).await,
@@ -261,7 +261,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_modify_password_of_other_regular_as_regular() {
-        let mut ldap_handler =
+        let ldap_handler =
             setup_bound_handler_with_group(MockTestBackendHandler::new(), "regular").await;
         let request = make_password_modify_request("bob");
         assert_eq!(
@@ -278,7 +278,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         setup_target_user_groups(&mut mock, "test", vec!["lldap_admin"]);
         expect_password_change(&mut mock, "test");
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_password_modify_request("test");
         assert_eq!(
             ldap_handler.do_modify_request(&request).await,
@@ -290,7 +290,7 @@ mod tests {
     async fn test_modify_password_invalid_number_of_values() {
         let mut mock = MockTestBackendHandler::new();
         setup_target_user_groups(&mut mock, "bob", Vec::new());
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = {
             let target_user = "bob";
             LdapModifyRequest {

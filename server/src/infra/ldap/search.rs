@@ -342,7 +342,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_root_dse() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
         let request = LdapSearchRequest {
             base: "".to_string(),
             scope: LdapSearchScope::Base,
@@ -383,7 +383,7 @@ mod tests {
                     groups: None,
                 }])
             });
-        let mut ldap_handler = setup_bound_handler_with_group(mock, "regular").await;
+        let ldap_handler = setup_bound_handler_with_group(mock, "regular").await;
 
         let request =
             make_user_search_request::<String>(LdapFilter::And(vec![]), vec!["1.1".to_string()]);
@@ -406,7 +406,7 @@ mod tests {
             .with(eq(Some(true.into())), eq(false))
             .times(1)
             .return_once(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        let ldap_handler = setup_bound_readonly_handler(mock).await;
 
         let request =
             make_user_search_request::<String>(LdapFilter::And(vec![]), vec!["1.1".to_string()]);
@@ -437,7 +437,7 @@ mod tests {
                     }]),
                 }])
             });
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        let ldap_handler = setup_bound_readonly_handler(mock).await;
 
         let request = make_user_search_request::<String>(
             LdapFilter::And(vec![]),
@@ -471,7 +471,7 @@ mod tests {
             )
             .times(1)
             .return_once(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        let ldap_handler = setup_bound_readonly_handler(mock).await;
 
         let request = LdapSearchRequest {
             base: "uid=bob,ou=people,Dc=example,dc=com".to_string(),
@@ -544,7 +544,7 @@ mod tests {
                 },
             ])
         });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::And(vec![]),
             vec![
@@ -684,7 +684,7 @@ mod tests {
                     },
                 ])
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_group_search_request(
             LdapFilter::And(vec![]),
             vec![
@@ -773,7 +773,7 @@ mod tests {
                     attributes: Vec::new(),
                 }])
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_group_search_request(
             LdapFilter::Equality("groupid".to_string(), "1".to_string()),
             vec!["dn"],
@@ -823,7 +823,7 @@ mod tests {
                     attributes: Vec::new(),
                 }])
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_group_search_request(
             LdapFilter::And(vec![
                 LdapFilter::Equality("cN".to_string(), "Group_1".to_string()),
@@ -894,7 +894,7 @@ mod tests {
                     attributes: Vec::new(),
                 }])
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_group_search_request(
             LdapFilter::Or(vec![LdapFilter::Not(Box::new(LdapFilter::Equality(
                 "displayname".to_string(),
@@ -965,7 +965,7 @@ mod tests {
                 extra_group_object_classes: Vec::new(),
             })
         });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_group_search_request(
             LdapFilter::Equality("Attr".to_string(), "TEST".to_string()),
             vec!["cn"],
@@ -995,7 +995,7 @@ mod tests {
             ]))))
             .times(1)
             .return_once(|_| Ok(vec![]));
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        let ldap_handler = setup_bound_readonly_handler(mock).await;
 
         let request = LdapSearchRequest {
             base: "uid=rockstars,ou=groups,Dc=example,dc=com".to_string(),
@@ -1015,7 +1015,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups_unsupported_substring() {
-        let mut ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new()).await;
+        let ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new()).await;
         let request = make_group_search_request(
             LdapFilter::Substring("member".to_owned(), LdapSubstringFilter::default()),
             vec!["cn"],
@@ -1040,7 +1040,7 @@ mod tests {
             .with(eq(Some(false.into())))
             .times(1)
             .return_once(|_| Ok(vec![]));
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        let ldap_handler = setup_bound_readonly_handler(mock).await;
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
             Ok(vec![make_search_success()]),
@@ -1062,7 +1062,7 @@ mod tests {
                     "Error getting groups".to_string(),
                 ))
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_group_search_request(
             LdapFilter::Or(vec![LdapFilter::Not(Box::new(LdapFilter::Equality(
                 "displayname".to_string(),
@@ -1081,7 +1081,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_groups_filter_error() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
         let request = make_group_search_request(
             LdapFilter::And(vec![LdapFilter::Approx(
                 "whatever".to_owned(),
@@ -1145,7 +1145,7 @@ mod tests {
             )
             .times(1)
             .return_once(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::And(vec![LdapFilter::Or(vec![
                 LdapFilter::Not(Box::new(LdapFilter::Equality(
@@ -1194,7 +1194,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_unsupported_substring_filter() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
         let request = make_user_search_request(
             LdapFilter::Substring(
                 "uuid".to_owned(),
@@ -1231,7 +1231,7 @@ mod tests {
             )
             .times(2)
             .returning(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality(
                 "memberOf".to_string(),
@@ -1259,7 +1259,7 @@ mod tests {
             .with(eq(Some(UserRequestFilter::from(false))), eq(false))
             .times(1)
             .returning(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality(
                 "memberOf".to_string(),
@@ -1296,7 +1296,7 @@ mod tests {
                     groups: None,
                 }])
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::And(vec![LdapFilter::Or(vec![LdapFilter::Not(Box::new(
                 LdapFilter::Equality("displayname".to_string(), "bob".to_string()),
@@ -1339,7 +1339,7 @@ mod tests {
                     groups: None,
                 }])
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality("objectClass".to_owned(), "CUSTOMuserCLASS".to_owned()),
             vec!["objectclass"],
@@ -1402,7 +1402,7 @@ mod tests {
                     attributes: Vec::new(),
                 }])
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_search_request(
             "dc=example,dc=com",
             LdapFilter::And(vec![]),
@@ -1486,7 +1486,7 @@ mod tests {
                     attributes: Vec::new(),
                 }])
             });
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
 
         // Test simple wildcard
         let request =
@@ -1643,7 +1643,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_wrong_base() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
         let request = make_search_request(
             "ou=users,dc=example,dc=com",
             LdapFilter::And(vec![]),
@@ -1657,7 +1657,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_unsupported_filters() {
-        let mut ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
         let request = make_user_search_request(
             LdapFilter::Approx("uid".to_owned(), "value".to_owned()),
             vec!["objectClass"],
@@ -1678,7 +1678,7 @@ mod tests {
             .with(eq(Some(true.into())), eq(false))
             .times(1)
             .return_once(|_, _| Ok(vec![]));
-        let mut ldap_handler = setup_bound_admin_handler(mock).await;
+        let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::Present("displayname".to_owned()),
             vec!["objectClass"],
@@ -1691,7 +1691,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_user_ou_search() {
-        let mut ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new()).await;
+        let ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new()).await;
         let request = LdapSearchRequest {
             base: "ou=people,dc=example,dc=com".to_owned(),
             scope: LdapSearchScope::Base,
@@ -1777,7 +1777,7 @@ mod tests {
                 extra_group_object_classes: vec![LdapObjectClass::from("customGroupClass")],
             })
         });
-        let mut ldap_handler = setup_bound_readonly_handler(mock).await;
+        let ldap_handler = setup_bound_readonly_handler(mock).await;
 
         let request = make_search_request(
             "dc=example,dc=com",

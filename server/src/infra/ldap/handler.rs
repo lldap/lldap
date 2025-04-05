@@ -139,10 +139,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         }
     }
 
-    pub async fn do_search_or_dse(
-        &mut self,
-        request: &LdapSearchRequest,
-    ) -> LdapResult<Vec<LdapOp>> {
+    pub async fn do_search_or_dse(&self, request: &LdapSearchRequest) -> LdapResult<Vec<LdapOp>> {
         if is_root_dse_request(request) {
             debug!("rootDSE request");
             return Ok(vec![
@@ -192,7 +189,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     #[instrument(skip_all, level = "debug")]
-    async fn do_extended_request(&mut self, request: &LdapExtendedRequest) -> Vec<LdapOp> {
+    async fn do_extended_request(&self, request: &LdapExtendedRequest) -> Vec<LdapOp> {
         match request.name.as_str() {
             OID_PASSWORD_MODIFY => match LdapPasswordModifyRequest::try_from(request) {
                 Ok(password_request) => {
@@ -237,7 +234,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
-    pub async fn do_modify_request(&mut self, request: &LdapModifyRequest) -> Vec<LdapOp> {
+    pub async fn do_modify_request(&self, request: &LdapModifyRequest) -> Vec<LdapOp> {
         let credentials = match self.get_credentials() {
             Credentials::Bound(cred) => cred,
             Credentials::Unbound(err) => return err,
@@ -283,7 +280,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     #[instrument(skip_all, level = "debug")]
-    pub async fn do_compare(&mut self, request: LdapCompareRequest) -> LdapResult<Vec<LdapOp>> {
+    pub async fn do_compare(&self, request: LdapCompareRequest) -> LdapResult<Vec<LdapOp>> {
         let req = make_search_request::<String>(
             &self.ldap_info.base_dn_str,
             LdapFilter::Equality("dn".to_string(), request.dn.to_string()),
