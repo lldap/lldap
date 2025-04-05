@@ -6,7 +6,7 @@ use crate::{
             utils::{LdapInfo, UserOrGroupName, get_user_or_group_id_from_distinguished_name},
         },
     },
-    infra::{access_control::AdminBackendHandler, ldap::handler::make_add_error},
+    infra::{access_control::AdminBackendHandler, ldap::handler::make_add_response},
 };
 use ldap3_proto::proto::{
     LdapAddRequest, LdapAttribute, LdapOp, LdapPartialAttribute, LdapResultCode,
@@ -137,7 +137,10 @@ async fn create_user(
             code: LdapResultCode::OperationsError,
             message: format!("Could not create user: {:#?}", e),
         })?;
-    Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
+    Ok(vec![make_add_response(
+        LdapResultCode::Success,
+        String::new(),
+    )])
 }
 
 #[instrument(skip_all, level = "debug")]
@@ -156,7 +159,10 @@ async fn create_group(
             code: LdapResultCode::OperationsError,
             message: format!("Could not create group: {:#?}", e),
         })?;
-    Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
+    Ok(vec![make_add_response(
+        LdapResultCode::Success,
+        String::new(),
+    )])
 }
 
 #[cfg(test)]
@@ -192,7 +198,10 @@ mod tests {
         };
         assert_eq!(
             ldap_handler.create_user_or_group(request).await,
-            Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
+            Ok(vec![make_add_response(
+                LdapResultCode::Success,
+                String::new()
+            )])
         );
     }
 
@@ -216,7 +225,10 @@ mod tests {
         };
         assert_eq!(
             ldap_handler.create_user_or_group(request).await,
-            Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
+            Ok(vec![make_add_response(
+                LdapResultCode::Success,
+                String::new()
+            )])
         );
     }
 
@@ -252,7 +264,10 @@ mod tests {
         };
         assert_eq!(
             ldap_handler.create_user_or_group(request).await,
-            Ok(vec![make_add_error(LdapResultCode::Success, String::new())])
+            Ok(vec![make_add_response(
+                LdapResultCode::Success,
+                String::new()
+            )])
         );
     }
 }

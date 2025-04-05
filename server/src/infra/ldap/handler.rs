@@ -9,7 +9,7 @@ use crate::{
     infra::{
         access_control::AccessControlledBackendHandler,
         ldap::{
-            compare, create, modify,
+            compare, create, delete, modify,
             password::{self, do_password_modification},
             search::{
                 self, is_root_dse_request, make_search_error, make_search_request,
@@ -28,7 +28,9 @@ use lldap_domain::types::AttributeName;
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
 use tracing::{debug, instrument};
 
-pub(crate) fn make_add_error(code: LdapResultCode, message: String) -> LdapOp {
+use super::delete::make_del_response;
+
+pub(crate) fn make_add_response(code: LdapResultCode, message: String) -> LdapOp {
     LdapOp::AddResponse(LdapResultOp {
         code,
         matcheddn: "".to_string(),
@@ -268,6 +270,19 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     #[instrument(skip_all, level = "debug")]
+    pub async fn delete_user_or_group(&self, request: String) -> LdapResult<Vec<LdapOp>> {
+        let backend_handler = self
+            .user_info
+            .as_ref()
+            .and_then(|u| self.backend_handler.get_admin_handler(u))
+            .ok_or_else(|| LdapError {
+                code: LdapResultCode::InsufficentAccessRights,
+                message: "Unauthorized write".to_string(),
+            })?;
+        delete::delete_user_or_group(backend_handler, &self.ldap_info, request).await
+    }
+
+    #[instrument(skip_all, level = "debug")]
     pub async fn do_compare(&mut self, request: LdapCompareRequest) -> LdapResult<Vec<LdapOp>> {
         let req = make_search_request::<String>(
             &self.ldap_info.base_dn_str,
@@ -305,7 +320,11 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             LdapOp::AddRequest(request) => self
                 .create_user_or_group(request)
                 .await
-                .unwrap_or_else(|e: LdapError| vec![make_add_error(e.code, e.message)]),
+                .unwrap_or_else(|e: LdapError| vec![make_add_response(e.code, e.message)]),
+            LdapOp::DelRequest(request) => self
+                .delete_user_or_group(request)
+                .await
+                .unwrap_or_else(|e: LdapError| vec![make_del_response(e.code, e.message)]),
             LdapOp::CompareRequest(request) => self
                 .do_compare(request)
                 .await
