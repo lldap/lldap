@@ -24,7 +24,7 @@ use ldap3_proto::proto::{
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, OID_PASSWORD_MODIFY, OID_WHOAMI,
 };
 use lldap_auth::access_control::ValidationResults;
-use lldap_domain::types::{AttributeName, UserId};
+use lldap_domain::types::AttributeName;
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
 use tracing::{debug, instrument};
 
@@ -235,7 +235,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     }
 
     #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
-    async fn do_modify_request(&mut self, request: &LdapModifyRequest) -> Vec<LdapOp> {
+    pub async fn do_modify_request(&mut self, request: &LdapModifyRequest) -> Vec<LdapOp> {
         let credentials = match self.get_credentials() {
             Credentials::Bound(cred) => cred,
             Credentials::Unbound(err) => return err,
@@ -245,7 +245,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             |credentials, user_id| {
                 self.backend_handler
                     .get_readable_handler(credentials, &user_id)
-                    .expect("Unexpected permission error")
             },
             &self.ldap_info,
             credentials,
@@ -328,7 +327,10 @@ pub mod tests {
     };
     use chrono::TimeZone;
     use ldap3_proto::proto::{LdapBindCred, LdapWhoamiRequest};
-    use lldap_domain::{types::*, uuid};
+    use lldap_domain::{
+        types::{GroupDetails, GroupId, UserId},
+        uuid,
+    };
     use lldap_domain_handlers::handler::*;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
