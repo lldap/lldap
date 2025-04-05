@@ -1,0 +1,34 @@
+[package]
+name = "lldap_test_utils"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+ldap3_proto = "0.6.0"
+mockall = "0.11.4"
+tracing = "*"
+
+[dependencies.uuid]
+version = "1"
+features = ["v1", "v3"]
+
+[dependencies.lldap_access_control]
+path = "../access-control"
+
+[dependencies.lldap_domain]
+path = "../domain"
+
+[dependencies.lldap_domain_handlers]
+path = "../domain-handlers"
+
+[dependencies.lldap_domain_model]
+path = "../domain-model"
+
+[dependencies.lldap_opaque_handler]
+path = "../opaque-handler"
+features = ["test"]

@@ -1,18 +1,16 @@
 use crate::{
-    domain::{
-        deserialize,
-        ldap::{
-            error::{LdapError, LdapResult},
-            utils::{LdapInfo, UserOrGroupName, get_user_or_group_id_from_distinguished_name},
-        },
+    core::{
+        error::{LdapError, LdapResult},
+        utils::{LdapInfo, UserOrGroupName, get_user_or_group_id_from_distinguished_name},
     },
-    infra::ldap::handler::make_add_response,
+    handler::make_add_response,
 };
 use ldap3_proto::proto::{
     LdapAddRequest, LdapAttribute, LdapOp, LdapPartialAttribute, LdapResultCode,
 };
 use lldap_access_control::AdminBackendHandler;
 use lldap_domain::{
+    deserialize,
     requests::{CreateGroupRequest, CreateUserRequest},
     types::{Attribute, AttributeName, AttributeType, Email, GroupName, UserId},
 };
@@ -169,13 +167,12 @@ async fn create_group(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infra::{
-        ldap::handler::tests::setup_bound_admin_handler, test_utils::MockTestBackendHandler,
-    };
+    use crate::handler::tests::setup_bound_admin_handler;
     use lldap_domain::types::*;
+    use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
-    use tokio;
+    
 
     #[tokio::test]
     async fn test_create_user() {

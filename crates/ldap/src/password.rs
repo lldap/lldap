@@ -1,9 +1,9 @@
 use crate::{
-    domain::ldap::{
+    core::{
         error::{LdapError, LdapResult},
         utils::{LdapInfo, get_user_id_from_distinguished_name},
     },
-    infra::ldap::handler::make_extended_response,
+    handler::make_extended_response,
 };
 use anyhow::Result;
 use ldap3_proto::proto::{
@@ -156,15 +156,12 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::infra::{
-        ldap::handler::{
-            LdapHandler, make_modify_response,
-            tests::{
-                setup_bound_admin_handler, setup_bound_password_manager_handler,
-                setup_bound_readonly_handler,
-            },
+    use crate::handler::{
+        LdapHandler, make_modify_response,
+        tests::{
+            setup_bound_admin_handler, setup_bound_password_manager_handler,
+            setup_bound_readonly_handler,
         },
-        test_utils::MockTestBackendHandler,
     };
     use chrono::TimeZone;
     use ldap3_proto::proto::{
@@ -173,6 +170,7 @@ pub mod tests {
     };
     use ldap3_proto::{LdapPartialAttribute, proto::LdapExtendedRequest};
     use lldap_domain::{types::*, uuid};
+    use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;

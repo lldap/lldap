@@ -2547,7 +2547,9 @@ dependencies = [
  "lldap_domain_handlers",
  "lldap_domain_model",
  "lldap_frontend_options",
+ "lldap_ldap",
  "lldap_opaque_handler",
+ "lldap_test_utils",
  "lldap_validation",
  "log",
  "mockall",
@@ -2714,6 +2716,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "lldap_ldap"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "ldap3_proto",
+ "lldap_access_control",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_handlers",
+ "lldap_domain_model",
+ "lldap_opaque_handler",
+ "lldap_test_utils",
+ "mockall",
+ "pretty_assertions",
+ "rand 0.8.5",
+ "tokio",
+ "tracing",
+ "uuid 1.11.0",
+]
+
+[[package]]
 name = "lldap_migration_tool"
 version = "0.4.2"
 dependencies = [
@@ -2738,6 +2762,7 @@ dependencies = [
  "lldap_auth",
  "lldap_domain",
  "lldap_domain_model",
+ "mockall",
 ]
 
 [[package]]
@@ -2751,6 +2776,22 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "lldap_test_utils"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "ldap3_proto",
+ "lldap_access_control",
+ "lldap_domain",
+ "lldap_domain_handlers",
+ "lldap_domain_model",
+ "lldap_opaque_handler",
+ "mockall",
+ "tracing",
+ "uuid 1.11.0",
 ]
 
 [[package]]

@@ -102,6 +102,9 @@ path = "../crates/domain-handlers"
 [dependencies.lldap_frontend_options]
 path = "../crates/frontend-options"
 
+[dependencies.lldap_ldap]
+path = "../crates/ldap"
+
 [dependencies.lldap_opaque_handler]
 path = "../crates/opaque-handler"
 
@@ -188,6 +191,9 @@ features = ["test"]
 [dev-dependencies.lldap_opaque_handler]
 path = "../crates/opaque-handler"
 features = ["test"]
+
+[dev-dependencies.lldap_test_utils]
+path = "../crates/test-utils"
 
 [dev-dependencies.reqwest]
 version = "*"

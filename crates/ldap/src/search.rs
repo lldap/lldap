@@ -1,4 +1,4 @@
-use crate::domain::ldap::{
+use crate::core::{
     error::{LdapError, LdapResult},
     group::{convert_groups_to_ldap_op, get_groups_list},
     user::{convert_users_to_ldap_op, get_user_list},
@@ -312,13 +312,10 @@ pub async fn do_search(
 mod tests {
     use super::*;
     use crate::{
-        domain::ldap::error::LdapError,
-        infra::{
-            ldap::handler::tests::{
-                make_group_search_request, make_user_search_request, setup_bound_admin_handler,
-                setup_bound_handler_with_group, setup_bound_readonly_handler,
-            },
-            test_utils::MockTestBackendHandler,
+        core::error::LdapError,
+        handler::tests::{
+            make_group_search_request, make_user_search_request, setup_bound_admin_handler,
+            setup_bound_handler_with_group, setup_bound_readonly_handler,
         },
     };
     use chrono::TimeZone;
@@ -333,9 +330,10 @@ mod tests {
     };
     use lldap_domain_handlers::handler::*;
     use lldap_domain_model::model::UserColumn;
+    use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
-    use tokio;
+    
 
     #[tokio::test]
     async fn test_search_root_dse() {

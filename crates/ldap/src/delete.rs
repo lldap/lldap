@@ -1,4 +1,4 @@
-use crate::domain::ldap::{
+use crate::core::{
     error::{LdapError, LdapResult},
     utils::{LdapInfo, UserOrGroupName, get_user_or_group_id_from_distinguished_name},
 };
@@ -105,18 +105,17 @@ async fn delete_group(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infra::{
-        ldap::handler::tests::setup_bound_admin_handler, test_utils::MockTestBackendHandler,
-    };
+    use crate::handler::tests::setup_bound_admin_handler;
     use chrono::TimeZone;
     use lldap_domain::{
         types::{Group, GroupId, User},
         uuid,
     };
     use lldap_domain_model::error::DomainError;
+    use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
-    use tokio;
+    
 
     #[tokio::test]
     async fn test_delete_user() {
