@@ -1,9 +1,6 @@
-use crate::{
-    domain::opaque_handler::OpaqueHandler,
-    infra::{
-        tcp_backend_handler::*,
-        tcp_server::{AppState, TcpError, TcpResult, error_to_http_response},
-    },
+use crate::infra::{
+    tcp_backend_handler::*,
+    tcp_server::{AppState, TcpError, TcpResult, error_to_http_response},
 };
 use actix_web::{
     HttpRequest, HttpResponse,
@@ -28,6 +25,7 @@ use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, UserRequestFilter,
 };
 use lldap_domain_model::{error::DomainError, model::UserColumn};
+use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::{
     collections::HashSet,

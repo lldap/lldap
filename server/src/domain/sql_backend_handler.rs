@@ -54,7 +54,7 @@ pub mod tests {
     }
 
     pub async fn insert_user(handler: &SqlBackendHandler, name: &str, pass: &str) {
-        use crate::domain::opaque_handler::OpaqueHandler;
+        use lldap_opaque_handler::OpaqueHandler;
         insert_user_no_password(handler, name).await;
         let mut rng = rand::rngs::OsRng;
         let client_registration_start =

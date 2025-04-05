@@ -1,10 +1,7 @@
 use crate::{
-    domain::{
-        ldap::{
-            error::{LdapError, LdapResult},
-            utils::{LdapInfo, parse_distinguished_name},
-        },
-        opaque_handler::OpaqueHandler,
+    domain::ldap::{
+        error::{LdapError, LdapResult},
+        utils::{LdapInfo, parse_distinguished_name},
     },
     infra::ldap::{
         compare, create, delete, modify,
@@ -24,6 +21,7 @@ use lldap_access_control::AccessControlledBackendHandler;
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::types::AttributeName;
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
+use lldap_opaque_handler::OpaqueHandler;
 use tracing::{debug, instrument};
 
 use super::delete::make_del_response;
