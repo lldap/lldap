@@ -1,7 +1,4 @@
-use crate::{
-    domain::deserialize::deserialize_attribute_value,
-    infra::graphql::api::{Context, field_error_callback},
-};
+use crate::infra::graphql::api::{Context, field_error_callback};
 use anyhow::{Context as AnyhowContext, anyhow};
 use juniper::{FieldError, FieldResult, GraphQLInputObject, GraphQLObject, graphql_object};
 use lldap_access_control::{
@@ -9,6 +6,7 @@ use lldap_access_control::{
     UserWriteableBackendHandler,
 };
 use lldap_domain::{
+    deserialize::deserialize_attribute_value,
     public_schema::PublicSchema,
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
@@ -779,15 +777,15 @@ fn deserialize_attribute(
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
-    use crate::infra::{graphql::query::Query, test_utils::MockTestBackendHandler};
+    use crate::infra::graphql::query::Query;
     use juniper::{
         DefaultScalarValue, EmptySubscription, GraphQLType, InputValue, RootNode, Variables,
         execute, graphql_value,
     };
     use lldap_auth::access_control::{Permission, ValidationResults};
     use lldap_domain::types::{AttributeName, AttributeType};
+    use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
 

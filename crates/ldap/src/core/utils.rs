@@ -1,10 +1,6 @@
-use std::collections::BTreeMap;
-
+use crate::core::error::{LdapError, LdapResult};
 use chrono::TimeZone;
 use ldap3_proto::LdapResultCode;
-use tracing::{debug, instrument, warn};
-
-use crate::domain::ldap::error::{LdapError, LdapResult};
 use lldap_domain::{
     public_schema::PublicSchema,
     types::{
@@ -12,6 +8,8 @@ use lldap_domain::{
     },
 };
 use lldap_domain_model::model::UserColumn;
+use std::collections::BTreeMap;
+use tracing::{debug, instrument, warn};
 
 fn make_dn_pair<I>(mut iter: I) -> LdapResult<(String, String)>
 where

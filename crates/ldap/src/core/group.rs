@@ -1,25 +1,22 @@
+use crate::core::{
+    error::{LdapError, LdapResult},
+    utils::{
+        ExpandedAttributes, GroupFieldType, LdapInfo, expand_attribute_wildcards,
+        get_custom_attribute, get_group_id_from_distinguished_name_or_plain_name,
+        get_user_id_from_distinguished_name_or_plain_name, map_group_field,
+    },
+};
 use chrono::TimeZone;
 use ldap3_proto::{
     LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry, proto::LdapOp,
 };
-use tracing::{debug, instrument, warn};
-
-use crate::domain::{
-    deserialize::deserialize_attribute_value,
-    ldap::{
-        error::{LdapError, LdapResult},
-        utils::{
-            ExpandedAttributes, GroupFieldType, LdapInfo, expand_attribute_wildcards,
-            get_custom_attribute, get_group_id_from_distinguished_name_or_plain_name,
-            get_user_id_from_distinguished_name_or_plain_name, map_group_field,
-        },
-    },
-};
 use lldap_domain::{
+    deserialize::deserialize_attribute_value,
     public_schema::PublicSchema,
     types::{AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid},
 };
 use lldap_domain_handlers::handler::{GroupListerBackendHandler, GroupRequestFilter};
+use tracing::{debug, instrument, warn};
 
 pub fn get_group_attribute(
     group: &Group,

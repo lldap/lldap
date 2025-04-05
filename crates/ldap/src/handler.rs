@@ -1,15 +1,14 @@
 use crate::{
-    domain::ldap::{
+    compare,
+    core::{
         error::{LdapError, LdapResult},
         utils::{LdapInfo, parse_distinguished_name},
     },
-    infra::ldap::{
-        compare, create, delete, modify,
-        password::{self, do_password_modification},
-        search::{
-            self, is_root_dse_request, make_search_error, make_search_request, make_search_success,
-            root_dse_response,
-        },
+    create, delete, modify,
+    password::{self, do_password_modification},
+    search::{
+        self, is_root_dse_request, make_search_error, make_search_request, make_search_success,
+        root_dse_response,
     },
 };
 use ldap3_proto::proto::{
@@ -333,10 +332,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::infra::{
-        ldap::password::tests::make_bind_success,
-        test_utils::{MockTestBackendHandler, setup_default_schema},
-    };
+    use crate::password::tests::make_bind_success;
     use chrono::TimeZone;
     use ldap3_proto::proto::{LdapBindCred, LdapWhoamiRequest};
     use lldap_domain::{
@@ -344,6 +340,7 @@ pub mod tests {
         uuid,
     };
     use lldap_domain_handlers::handler::*;
+    use lldap_test_utils::{MockTestBackendHandler, setup_default_schema};
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;

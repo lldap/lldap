@@ -1,4 +1,4 @@
-use crate::domain::ldap::error::{LdapError, LdapResult};
+use crate::core::error::{LdapError, LdapResult};
 use ldap3_proto::proto::{LdapCompareRequest, LdapOp, LdapResult as LdapResultOp, LdapResultCode};
 use lldap_domain::types::AttributeName;
 
@@ -52,17 +52,16 @@ pub fn compare(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infra::{
-        ldap::handler::tests::setup_bound_admin_handler, test_utils::MockTestBackendHandler,
-    };
+    use crate::handler::tests::setup_bound_admin_handler;
     use chrono::TimeZone;
     use lldap_domain::{
         types::{Group, GroupId, User, UserAndGroups, UserId},
         uuid,
     };
     use lldap_domain_handlers::handler::{GroupRequestFilter, UserRequestFilter};
+    use lldap_test_utils::MockTestBackendHandler;
     use pretty_assertions::assert_eq;
-    use tokio;
+    
 
     #[tokio::test]
     async fn test_compare_user() {

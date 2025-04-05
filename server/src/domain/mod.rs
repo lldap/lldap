@@ -1,5 +1,3 @@
-pub mod deserialize;
-pub mod ldap;
 pub mod sql_backend_handler;
 pub mod sql_group_backend_handler;
 pub mod sql_migrations;

@@ -1,12 +1,10 @@
 use crate::{
-    domain::ldap::{
+    core::{
         error::{LdapError, LdapResult},
         utils::{LdapInfo, get_user_id_from_distinguished_name},
     },
-    infra::ldap::{
-        handler::make_modify_response,
-        password::{self},
-    },
+    handler::make_modify_response,
+    password::{self},
 };
 use ldap3_proto::proto::{LdapModify, LdapModifyRequest, LdapModifyType, LdapOp, LdapResultCode};
 use lldap_access_control::UserReadableBackendHandler;
@@ -124,18 +122,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
-    use crate::infra::{
-        ldap::{
-            handler::tests::{
-                setup_bound_admin_handler, setup_bound_handler_with_group,
-                setup_bound_password_manager_handler,
-            },
-            password::tests::expect_password_change,
+    use crate::{
+        handler::tests::{
+            setup_bound_admin_handler, setup_bound_handler_with_group,
+            setup_bound_password_manager_handler,
         },
-        test_utils::MockTestBackendHandler,
+        password::tests::expect_password_change,
     };
     use chrono::TimeZone;
     use ldap3_proto::proto::LdapResult as LdapResultOp;
@@ -143,9 +136,11 @@ mod tests {
         types::{GroupDetails, GroupId, GroupName, UserId},
         uuid,
     };
+    use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
-    use tokio;
+    use std::collections::HashSet;
+    
 
     fn setup_target_user_groups(
         mock: &mut MockTestBackendHandler,

@@ -1,7 +1,4 @@
-use crate::infra::{
-    configuration::{Configuration, LdapsOptions},
-    ldap::handler::LdapHandler,
-};
+use crate::infra::configuration::{Configuration, LdapsOptions};
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{ServiceFactoryExt, fn_service};
@@ -10,6 +7,7 @@ use ldap3_proto::{LdapCodec, control::LdapControl, proto::LdapMsg, proto::LdapOp
 use lldap_access_control::AccessControlledBackendHandler;
 use lldap_domain::types::AttributeName;
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
+use lldap_ldap::LdapHandler;
 use lldap_opaque_handler::OpaqueHandler;
 use rustls::PrivateKey;
 use tokio_rustls::TlsAcceptor as RustlsTlsAcceptor;

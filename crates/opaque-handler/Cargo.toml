@@ -23,3 +23,6 @@ path = "../domain"
 
 [dependencies.lldap_domain_model]
 path = "../domain-model"
+
+[dev-dependencies]
+mockall = "0.11.4"

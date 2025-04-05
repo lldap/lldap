@@ -1,6 +1,5 @@
 use crate::{domain::sql_tables::DbConnection, infra::configuration::Configuration};
 use async_trait::async_trait;
-
 use lldap_domain_handlers::handler::BackendHandler;
 
 #[derive(Clone)]

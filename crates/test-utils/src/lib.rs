@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use lldap_domain::{
     requests::{
         CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
@@ -16,8 +17,6 @@ use lldap_domain_handlers::handler::{
 };
 use lldap_domain_model::error::Result;
 use lldap_opaque_handler::{OpaqueHandler, login, registration};
-
-use async_trait::async_trait;
 use std::collections::HashSet;
 
 mockall::mock! {

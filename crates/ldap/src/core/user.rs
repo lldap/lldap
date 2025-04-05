@@ -1,21 +1,17 @@
+use crate::core::{
+    error::{LdapError, LdapResult},
+    utils::{
+        ExpandedAttributes, LdapInfo, UserFieldType, expand_attribute_wildcards,
+        get_custom_attribute, get_group_id_from_distinguished_name_or_plain_name,
+        get_user_id_from_distinguished_name_or_plain_name, map_user_field,
+    },
+};
 use chrono::TimeZone;
 use ldap3_proto::{
     LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry, proto::LdapOp,
 };
-use tracing::{debug, instrument, warn};
-
-use crate::domain::{
-    deserialize::deserialize_attribute_value,
-    ldap::{
-        error::{LdapError, LdapResult},
-        utils::{
-            ExpandedAttributes, LdapInfo, UserFieldType, expand_attribute_wildcards,
-            get_custom_attribute, get_group_id_from_distinguished_name_or_plain_name,
-            get_user_id_from_distinguished_name_or_plain_name, map_user_field,
-        },
-    },
-};
 use lldap_domain::{
+    deserialize::deserialize_attribute_value,
     public_schema::PublicSchema,
     types::{
         AttributeName, AttributeType, GroupDetails, LdapObjectClass, User, UserAndGroups, UserId,
@@ -23,6 +19,7 @@ use lldap_domain::{
 };
 use lldap_domain_handlers::handler::{UserListerBackendHandler, UserRequestFilter};
 use lldap_domain_model::model::UserColumn;
+use tracing::{debug, instrument, warn};
 
 pub fn get_user_attribute(
     user: &User,
