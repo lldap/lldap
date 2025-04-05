@@ -1,0 +1,75 @@
+[package]
+name = "lldap_graphql_server"
+version = "0.1.0"
+description = "GraphQL server for LLDAP"
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = "*"
+juniper = "0.15"
+serde_json = "1"
+tracing = "*"
+urlencoding = "2"
+
+[dependencies.chrono]
+features = ["serde"]
+version = "*"
+
+[dependencies.lldap_access_control]
+path = "../access-control"
+
+[dependencies.lldap_auth]
+path = "../auth"
+features = ["opaque_server", "opaque_client", "sea_orm"]
+
+[dependencies.lldap_domain]
+path = "../domain"
+
+[dependencies.lldap_domain_model]
+path = "../domain-model"
+
+[dependencies.lldap_domain_handlers]
+path = "../domain-handlers"
+
+[dependencies.lldap_ldap]
+path = "../ldap"
+
+[dependencies.lldap_sql_backend_handler]
+path = "../sql-backend-handler"
+
+[dependencies.lldap_validation]
+path = "../validation"
+
+[dependencies.serde]
+workspace = true
+
+[dependencies.uuid]
+features = ["v1", "v3"]
+version = "1"
+
+[dev-dependencies]
+mockall = "0.11.4"
+pretty_assertions = "1"
+
+#[dev-dependencies.lldap_auth]
+#path = "../auth"
+#features = ["test"]
+#
+#[dev-dependencies.lldap_opaque_handler]
+#path = "../opaque-handler"
+#features = ["test"]
+
+[dev-dependencies.lldap_test_utils]
+path = "../test-utils"
+#
+#[dev-dependencies.lldap_sql_backend_handler]
+#path = "../sql-backend-handler"
+#features = ["test"]
+
+[dev-dependencies.tokio]
+features = ["full"]
+version = "1.25"

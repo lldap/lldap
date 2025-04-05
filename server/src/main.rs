@@ -274,7 +274,9 @@ async fn create_schema_command(opts: RunOpts) -> Result<()> {
 async fn main() -> Result<()> {
     let cli_opts = infra::cli::init();
     match cli_opts.command {
-        Command::ExportGraphQLSchema(opts) => infra::graphql::api::export_schema(opts),
+        Command::ExportGraphQLSchema(opts) => {
+            lldap_graphql_server::api::export_schema(opts.output_file)
+        }
         Command::Run(opts) => run_server_command(opts).await,
         Command::HealthCheck(opts) => run_healthcheck(opts).await,
         Command::SendTestEmail(opts) => send_test_email_command(opts).await,
