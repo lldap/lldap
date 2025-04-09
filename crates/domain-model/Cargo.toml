@@ -15,7 +15,7 @@ base64 = "0.21"
 bincode = "1.3"
 orion = "0.17"
 serde_bytes = "0.11"
-thiserror = "1"
+thiserror = "2"
 
 [dev-dependencies]
 pretty_assertions = "1"
@@ -38,13 +38,7 @@ path = "../domain"
 
 [dependencies.sea-orm]
 workspace = true
-features = [
-    "macros",
-    "with-chrono",
-    "with-uuid",
-    "sqlx-all",
-    "runtime-actix-rustls",
-]
+features = ["macros"]
 
 [dependencies.serde]
 workspace = true

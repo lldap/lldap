@@ -132,6 +132,12 @@ pub mod server {
     pub use super::*;
     pub type ServerRegistration = opaque_ke::ServerRegistration<DefaultSuite>;
     pub type ServerSetup = opaque_ke::ServerSetup<DefaultSuite>;
+
+    pub fn generate_random_private_key() -> ServerSetup {
+        let mut rng = rand::rngs::OsRng;
+        ServerSetup::new(&mut rng)
+    }
+
     /// Methods to register a new user, from the server side.
     pub mod registration {
         pub use super::*;

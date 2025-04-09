@@ -681,9 +681,9 @@ dependencies = [
 
 [[package]]
 name = "bstr"
-version = "1.10.0"
+version = "1.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40723b8fb387abc38f4f4a37c09073622e41dd12327033091ef8950659e6dc0c"
+checksum = "531a9155a481e2ee699d4f98f43c0ca4ff8ee1bfd55c31e9e98fb29d2b176fe0"
 dependencies = [
  "memchr",
  "regex-automata 0.4.8",
@@ -2520,7 +2520,6 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "async-trait",
- "base64 0.21.7",
  "bincode",
  "chrono",
  "clap",
@@ -2534,24 +2533,27 @@ dependencies = [
  "graphql_client 0.11.0",
  "hmac 0.12.1",
  "http 1.1.0",
- "itertools",
  "juniper",
  "jwt 0.16.0",
- "lber",
  "ldap3",
  "ldap3_proto",
  "lettre",
+ "lldap_access_control",
  "lldap_auth",
  "lldap_domain",
  "lldap_domain_handlers",
  "lldap_domain_model",
  "lldap_frontend_options",
+ "lldap_graphql_server",
+ "lldap_ldap",
+ "lldap_opaque_handler",
+ "lldap_sql_backend_handler",
+ "lldap_test_utils",
  "lldap_validation",
  "log",
  "mockall",
  "nix",
  "opaque-ke",
- "orion",
  "pretty_assertions",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -2581,6 +2583,18 @@ dependencies = [
  "urlencoding",
  "uuid 1.11.0",
  "webpki-roots 0.22.6",
+]
+
+[[package]]
+name = "lldap_access_control"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_handlers",
+ "lldap_domain_model",
+ "tracing",
 ]
 
 [[package]]
@@ -2688,7 +2702,7 @@ dependencies = [
  "sea-orm",
  "serde",
  "serde_bytes",
- "thiserror 1.0.66",
+ "thiserror 2.0.12",
  "uuid 1.11.0",
 ]
 
@@ -2697,6 +2711,54 @@ name = "lldap_frontend_options"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "lldap_graphql_server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "juniper",
+ "lldap_access_control",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_handlers",
+ "lldap_domain_model",
+ "lldap_ldap",
+ "lldap_sql_backend_handler",
+ "lldap_test_utils",
+ "lldap_validation",
+ "mockall",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "urlencoding",
+ "uuid 1.11.0",
+]
+
+[[package]]
+name = "lldap_ldap"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "ldap3_proto",
+ "lldap_access_control",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_handlers",
+ "lldap_domain_model",
+ "lldap_opaque_handler",
+ "lldap_test_utils",
+ "mockall",
+ "pretty_assertions",
+ "rand 0.8.5",
+ "tokio",
+ "tracing",
+ "uuid 1.11.0",
 ]
 
 [[package]]
@@ -2717,6 +2779,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lldap_opaque_handler"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_model",
+ "mockall",
+]
+
+[[package]]
 name = "lldap_set_password"
 version = "0.1.0"
 dependencies = [
@@ -2727,6 +2800,55 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "lldap_sql_backend_handler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.7",
+ "bincode",
+ "chrono",
+ "itertools",
+ "ldap3_proto",
+ "lldap_access_control",
+ "lldap_auth",
+ "lldap_domain",
+ "lldap_domain_handlers",
+ "lldap_domain_model",
+ "lldap_opaque_handler",
+ "lldap_test_utils",
+ "log",
+ "mockall",
+ "orion",
+ "pretty_assertions",
+ "rand 0.8.5",
+ "sea-orm",
+ "secstr",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid 1.11.0",
+]
+
+[[package]]
+name = "lldap_test_utils"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "ldap3_proto",
+ "lldap_access_control",
+ "lldap_domain",
+ "lldap_domain_handlers",
+ "lldap_domain_model",
+ "lldap_opaque_handler",
+ "mockall",
+ "tracing",
+ "uuid 1.11.0",
 ]
 
 [[package]]
