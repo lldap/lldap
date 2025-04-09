@@ -1,10 +1,12 @@
-# Configure lldap
+# Getting Started with UNIX PAM using SSSD
 
-You MUST use LDAPS. You MUST NOT use plain ldap. Even over a private network
-this costs you nearly nothing, and passwords will be sent in PLAIN TEXT without
-it.
+## Configuring LLDAP
 
-```toml
+### Configure LDAPS
+
+You **must** use LDAPS. You MUST NOT use plain LDAP. Even over a private network this costs you nearly nothing, and passwords will be sent in PLAIN TEXT without it.
+
+```jsx
 [ldaps_options]
 enabled=true
 port=6360
@@ -12,79 +14,144 @@ cert_file="cert.pem"
 key_file="key.pem"
 ```
 
-You can generate an SSL certificate for it with the following command. The
-`subjectAltName` is REQUIRED. Make sure all domains are listed there, even your
-`CN`.
+You can generate an SSL certificate for it with the following command. The `subjectAltName` is REQUIRED. Make sure all domains are listed there, even your `CN`.
 
-```sh
+```bash
 openssl req -x509 -nodes -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 36500 -nodes -subj "/CN=lldap.example.net" -addext "subjectAltName = DNS:lldap.example.net"
 ```
 
-# Install the client packages.
+### Setting up the custom attributes
 
-This guide used `libnss-ldapd` (which is different from `libnss-ldap`).
+You will need to add the following custom attributes to the **user schema**.
 
-PURGE the following ubuntu packages: `libnss-ldap`, `libpam-ldap`
+- uidNumber (integer)
+- gidNumber (integer, multiple values)
+- homeDirectory (string)
+- unixShell (string)
+- sshPublicKey (string) (only if you’re setting up SSH Public Key Sync)
 
-Install the following ubuntu packages: `libnss-ldapd`, `nslcd`, `nscd`, `libpam-ldapd`
+You will need to add the following custom attributes to the **group schema.**
 
-# Configure the client's `nslcd` settings.
+- gidNumber (integer)
 
-Edit `/etc/nslcd.conf`. Use the [provided template](./nslcd.conf).
+You will now need to populate these values for all the users you wish to be able to login.
 
-You will need to set `tls_cacertfile` to a copy of the public portion of your
-LDAPS certificate, which must be available on the client. This is used to
-verify the LDAPS server identity.
+## Client setup
 
-You will need to add the `binddn` and `bindpw` settings.
+### Install the client packages
 
-The provided implementation uses custom attributes to mark users and groups
-that should be included in the system (for instance, you don't want LDAP
-accounts of other services to have a matching unix user).
+You need to install the packages `sssd` `sssd-tools` `libnss-sss` `libpam-sss` `libsss-sudo` .
 
-For users, you need to add an (integer) `unix-uid` attribute to the schema, and
-manually set the value for the users you want to enable to login with PAM.
+E.g. on Debian/Ubuntu
 
-For groups, you need an (integer) `unix-gid` attribute, similarly set manually
-to some value.
-
-If you want to change this representation, update the `filter passwd` and
-`filter group` accordingly.
-
-You should check whether you need to edit the `pam_authz_search` setting. This
-is used after authentication, at the PAM `account` stage, to determine whether
-the user should be allowed to log in. If someone is an LDAP user, even if they
-use an SSH key to log in, they must still pass this check. The provided example
-will check for membership of a group named `YOUR_LOGIN_GROUP_FOR_THIS_MACHINE`.
-
-You should review the `map` settings. These contain custom attributes that you
-will need to add to lldap and set on your users.
-
-# Configure the client OS.
-
-Ensure the `nslcd` and `nscd` services are installed and running. `nslcd`
-provides LDAP NSS service. `nscd` provides caching for NSS databased. You want
-the caching.
-
-```
-systemctl enable --now nslcd nscd
+```bash
+sudo apt update; sudo apt install -y sssd sssd-tools libnss-sss libpam-sss libsss-sudo
 ```
 
-Configure PAM to create the home directory for LDAP users automatically at
-first login.
+### Configure the client packages
 
+Use your favourite text editor to create/open the file `/etc/sssd/sssd.conf` .
+
+E.g. Using nano
+
+```bash
+sudo nano /etc/sssd/sssd.conf
 ```
-pam-auth-update --enable mkhomedir
+
+Insert the contents of the provided template (sssd.conf), but you will need to change some of the configuration in the file. Comments have been made to guide you. The config file is an example if your LLDAP server is hosted at `lldap.example.com` and your domain is `example.com` with your dc being `dc=example,dc=com`.
+
+SSSD will **refuse** to run if it’s config file is world-readable, so apply the following permissions to it:
+
+```bash
+sudo chmod 600 /etc/sssd/sssd.conf
 ```
 
-Edit /etc/nsswitch.conf and add "ldap" to the END of the "passwd" and "group"
-lines.
+Restart SSSD to apply any changes:
 
-You're done!
+```bash
+sudo systemctl restart sssd
+```
 
-## Clearing nscd caches.
+Enable automatic creation of home directories
+```bash
+sudo pam-auth-update --enable mkhomedir
+```
 
-If you want to manually clear nscd's caches, run `nscd -i passwd; nscd -i group`.
+## Permissions and SSH Key sync
 
-[scripting]: https://github.com/lldap/lldap/blob/main/docs/scripting.md
+### SSH Key Sync
 
+In order to do this, you need to setup the custom attribute `sshPublicKey` in the user schema. Then, you must uncomment the following line in the SSSD config file (assuming you are using the provided template):
+
+```bash
+sudo nano /etc/sssd/sssd.conf
+```
+
+```jsx
+ldap_user_ssh_public_key = sshPublicKey
+```
+
+And the following to the bottom of your OpenSSH config file:
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+```bash
+AuthorizedKeysCommand /usr/bin/sss_ssh_authorizedkeys
+AuthorizedKeysCommandUser nobody
+```
+
+Now restart both SSH and SSSD:
+
+```bash
+sudo systemctl restart ssh
+sudo systemctl restart sssd
+```
+
+### Permissions Sync
+
+Linux often manages permissions to tools such as Sudo and Docker based on group membership. There are two possible ways to achieve this. 
+
+**Number 1**
+
+**If all your client systems are setup identically,** you can just check the group id of the local group, i.e. Sudo being 27 on most Debian and Ubuntu installs, and set that as the gid in LLDAP. For tools such as docker, you can create a group before install with a custom gid on the system, which must be the same on all, and use that GID on the LLDAP group
+
+Sudo
+
+![image](https://github.com/user-attachments/assets/731847e6-c857-4250-a007-a3790a6a1b6d)
+
+Docker
+
+```jsx
+sudo groupadd docker -g 722
+```
+
+![image](https://github.com/user-attachments/assets/face88d0-5a20-4442-a5e3-9f6a1ae41b68)
+
+**Number 2**
+
+Create a group in LLDAP that you would like all your users who have sudo access to be in, and add the following to the bottom of `/etc/sudoers` . 
+
+E.g. if your group is named `lldap_sudo`
+
+```bash
+%lldap_sudo ALL=(ALL:ALL) ALL
+```
+
+## Debugging
+
+To verify your config file’s validity, you can run the following command
+
+```jsx
+sudo sssctl config-check
+```
+
+To flush SSSD’s cache
+
+```jsx
+sudo sss_cache -E
+```
+
+## Final Notes
+To see the old guide for NSLCD, go to NSLCD.md.
