@@ -180,7 +180,7 @@ get_user_details() {
   local id="$1"
 
   # shellcheck disable=SC2016
-  local query='{"query":"query GetUserDetails($id: String!) {user(userId: $id) {id email displayName firstName lastName creationDate uuid groups {id displayName}}}","operationName":"GetUserDetails"}'
+  local query='{"query":"query GetUserDetails($id: String!) {user(userId: $id) {id email displayName firstName lastName creationDate uuid groups {id displayName} attributes {name value}}}","operationName":"GetUserDetails"}'
   make_query <(printf '%s' "$query") <(jo -- id="$id")
 }
 
@@ -364,6 +364,133 @@ create_user_schema_property() {
   fi
 }
 
+update_group_attributes() {
+  local group_id="$1"
+  local attributes_json="$2"
+  
+  # shellcheck disable=SC2016
+  local query
+  query=$(jq -n -c \
+    --argjson groupId "$group_id" \
+    --argjson attributes "$attributes_json" '
+    {
+      "query": "mutation UpdateGroup($group: UpdateGroupInput!) {updateGroup(group: $group) {ok}}",
+      "operationName": "UpdateGroup",
+      "variables": {
+        "group": {
+          "id": $groupId,
+          "insertAttributes": $attributes
+        }
+      }
+    }
+  ')
+  
+  local response='' error=''
+  response="$(curl --silent --request POST \
+    --url "$LLDAP_URL/api/graphql" \
+    --header "Authorization: Bearer $TOKEN" \
+    --header 'Content-Type: application/json' \
+    --data "$query")"
+  
+  error="$(printf '%s' "$response" | jq --raw-output '.errors | if . != null then .[].message else empty end')"
+  if [[ -n "$error" ]]; then
+    printf 'Error updating attributes for group ID "%s": %s\n' "$group_id" "$error"
+  else
+    printf 'Custom attributes for group ID "%s" successfully updated\n' "$group_id"
+  fi
+}
+
+update_user_attributes() {
+  local user_id="$1"
+  local attributes_json="$2"
+
+  local query
+  query=$(jq -n -c \
+    --arg userId "$user_id" \
+    --argjson attributes "$attributes_json" '
+    {
+      "query": "mutation UpdateUser($user: UpdateUserInput!) {updateUser(user: $user) {ok}}",
+      "operationName": "UpdateUser",
+      "variables":{
+        "user": {
+          "id":$userId,
+          "insertAttributes":$attributes
+        }
+      }
+    }
+  ')
+  
+  local response='' error=''
+  response="$(curl --silent --request POST \
+    --url "$LLDAP_URL/api/graphql" \
+    --header "Authorization: Bearer $TOKEN" \
+    --header 'Content-Type: application/json' \
+    --data "$query")"
+  
+  error="$(printf '%s' "$response" | jq --raw-output '.errors | if . != null then .[].message else empty end')"
+  if [[ -n "$error" ]]; then
+    printf 'Error updating attributes for user "%s": %s\n' "$user_id" "$error"
+  else
+    printf 'Custom attributes for user "%s" successfully updated\n' "$user_id"
+  fi
+}
+
+extract_custom_group_attributes() {
+  extract_custom_attributes "$1" '"name"'
+}
+
+extract_custom_user_attributes() {
+  extract_custom_attributes "$1" '"id","email","password","displayName","firstName","lastName","groups","avatar_file","avatar_url","gravatar_avatar","weserv_avatar"'
+}
+
+extract_custom_attributes() {
+  local json_config="$1"
+  local standard_fields="$2"
+
+  # Extract all keys from the user config
+  local all_keys=$(echo "$json_config" | jq 'keys | .[]')
+  
+  # Filter out standard fields
+  local custom_keys=$(echo "$all_keys" | jq -c --arg std_fields "$standard_fields" 'select(. | inside($std_fields) | not)')
+  
+  # Build attribute array for GraphQL
+  local attributes_array="["
+  local first=true
+  
+  while read -r key; do
+    if $first; then
+      first=false
+    else
+      attributes_array+=","
+    fi
+    
+    key=$(echo "$key" | tr -d '"')
+
+    # If key is empty - this condition traps configurations without custom attributes
+    if [ -z "$key" ]; then continue; fi
+
+    # Get the value
+    local value=$(echo "$json_config" | jq --arg key "$key" '.[$key]')
+
+    # If the value is null, skip it
+    if echo "$value" | jq -e 'type == "null"' > /dev/null; then
+      continue
+    # Check if value is a JSON array
+    elif echo "$value" | jq -e 'type == "array"' > /dev/null; then
+      # For array types, ensure each element is a string, use compact JSON
+      local array_values=$(echo "$value" | jq -c 'map(tostring)')
+      attributes_array+="{\"name\":\"$key\",\"value\":$array_values}"
+    else
+      # For single values, make sure it's a string
+      local string_value=$(echo "$value" | jq 'tostring')
+      attributes_array+="{\"name\":\"$key\",\"value\":[$string_value]}"
+    fi
+  done < <(echo "$custom_keys")
+  
+  attributes_array+="]"
+  echo "$attributes_array"
+}
+
 __common_user_mutation_query() {
   local \
     query="$1" \
@@ -525,6 +652,20 @@ main() {
     group_name="$(printf '%s' "$group_config" | jq --raw-output '.name')"
     create_group "$group_name"
     redundant_groups="$(printf '%s' "$redundant_groups" | jq --compact-output --arg name "$group_name" '. - [$name]')"
+    # Process custom attributes
+    printf -- '--- Processing custom attributes for group %s ---\n' "$group_name"
+    local attributes_json
+    attributes_json=$(extract_custom_group_attributes "$group_config")
+    
+    if [[ "$attributes_json" != "[]" ]]; then
+      # Get the group ID
+      local group_id
+      group_id="$(get_group_id "$group_name")"
+      
+      update_group_attributes "$group_id" "$attributes_json"
+    else
+      printf 'No custom attributes found for group "%s"\n' "$group_name"
+    fi
   done < <(jq --compact-output '.' -- "${group_config_files[@]}")
   printf -- '--- groups ---\n'
 
@@ -561,6 +702,17 @@ main() {
 
     if [[ "$password" != 'null' ]] && [[ "$password" != '""' ]]; then
       "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$password"
+    fi
+
+    # Process custom attributes
+    printf -- '--- Processing custom attributes for user %s ---\n' "$id"
+    local attributes_json
+    attributes_json=$(extract_custom_user_attributes "$user_config")
+    
+    if [[ "$attributes_json" != "[]" ]]; then
+      update_user_attributes "$id" "$attributes_json"
+    else
+      printf 'No custom attributes found for user "%s"\n' "$id"
     fi
 
     local redundant_user_groups=''
