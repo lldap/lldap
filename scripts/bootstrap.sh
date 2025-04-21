@@ -442,14 +442,20 @@ extract_custom_attributes() {
     fi
     
     key=$(echo "$key" | tr -d '"')
-    
+
+    # If key is empty - this condition traps configurations without custom attributes
+    if [ -z "$key" ]; then continue; fi
+
     # Get the value
     local value=$(echo "$json_config" | jq --arg key "$key" '.[$key]')
-    
+
+    # If the value is null, skip it
+    if echo "$value" | jq -e 'type == "null"' > /dev/null; then
+      continue
     # Check if value is a JSON array
-    if echo "$value" | jq -e 'type == "array"' > /dev/null; then
-      # For array types, ensure each element is a string
-      local array_values=$(echo "$value" | jq 'map(tostring)')
+    elif echo "$value" | jq -e 'type == "array"' > /dev/null; then
+      # For array types, ensure each element is a string, use compact JSON
+      local array_values=$(echo "$value" | jq -c 'map(tostring)')
       attributes_array+="{\"name\":\"$key\",\"value\":$array_values}"
     else
       # For single values, make sure it's a string
