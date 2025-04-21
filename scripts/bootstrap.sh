@@ -375,16 +375,28 @@ update_group_attributes() {
   local attributes_json="$2"
   
   # shellcheck disable=SC2016
-  local query='{"query":"mutation UpdateGroup($group: UpdateGroupInput!) {updateGroup(group: $group) {ok}}","operationName":"UpdateGroup"}'
-
-  local variables="{\"group\":{\"id\":$group_id,\"insertAttributes\":$attributes_json}}"
+  local query
+  query=$(jq -n -c \
+    --argjson groupId "$group_id" \
+    --argjson attributes "$attributes_json" '
+    {
+      "query": "mutation UpdateGroup($group: UpdateGroupInput!) {updateGroup(group: $group) {ok}}",
+      "operationName": "UpdateGroup",
+      "variables": {
+        "group": {
+          "id": $groupId,
+          "insertAttributes": $attributes
+        }
+      }
+    }
+  ')
   
   local response='' error=''
   response="$(curl --silent --request POST \
     --url "$LLDAP_URL/api/graphql" \
     --header "Authorization: Bearer $TOKEN" \
     --header 'Content-Type: application/json' \
-    --data "{\"query\":\"mutation UpdateGroup(\$group: UpdateGroupInput!) {updateGroup(group: \$group) {ok}}\",\"operationName\":\"UpdateGroup\",\"variables\":$variables}")"
+    --data "$query")"
   
   error="$(printf '%s' "$response" | jq --raw-output '.errors | if . != null then .[].message else empty end')"
   if [[ -n "$error" ]]; then
@@ -397,18 +409,29 @@ update_group_attributes() {
 update_user_attributes() {
   local user_id="$1"
   local attributes_json="$2"
-  
-  # shellcheck disable=SC2016
-  local query='{"query":"mutation UpdateUser($user: UpdateUserInput!) {updateUser(user: $user) {ok}}","operationName":"UpdateUser"}'
 
-  local variables="{\"user\":{\"id\":\"$user_id\",\"insertAttributes\":$attributes_json}}"
+  local query
+  query=$(jq -n -c \
+    --arg userId "$user_id" \
+    --argjson attributes "$attributes_json" '
+    {
+      "query": "mutation UpdateUser($user: UpdateUserInput!) {updateUser(user: $user) {ok}}",
+      "operationName": "UpdateUser",
+      "variables":{
+        "user": {
+          "id":$userId,
+          "insertAttributes":$attributes
+        }
+      }
+    }
+  ')
   
   local response='' error=''
   response="$(curl --silent --request POST \
     --url "$LLDAP_URL/api/graphql" \
     --header "Authorization: Bearer $TOKEN" \
     --header 'Content-Type: application/json' \
-    --data "{\"query\":\"mutation UpdateUser(\$user: UpdateUserInput!) {updateUser(user: \$user) {ok}}\",\"operationName\":\"UpdateUser\",\"variables\":$variables}")"
+    --data "$query")"
   
   error="$(printf '%s' "$response" | jq --raw-output '.errors | if . != null then .[].message else empty end')"
   if [[ -n "$error" ]]; then
