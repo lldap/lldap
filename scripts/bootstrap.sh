@@ -180,7 +180,13 @@ get_user_details() {
   local id="$1"
 
   # shellcheck disable=SC2016
-  local query='{"query":"query GetUserDetails($id: String!) {user(userId: $id) {id email displayName firstName lastName creationDate uuid groups {id displayName} attributes {name value}}}","operationName":"GetUserDetails"}'
+  local query=$(cat <<'EOF'
+{
+  "query": "query GetUserDetails($id: String!) {user(userId: $id) {id email displayName firstName lastName creationDate uuid groups {id displayName} attributes {name value}}}",
+  "operationName": "GetUserDetails"
+}
+EOF
+)
   make_query <(printf '%s' "$query") <(jo -- id="$id")
 }
 
