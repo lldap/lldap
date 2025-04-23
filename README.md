@@ -204,7 +204,7 @@ Depending on the distribution you use, it might be possible to install lldap
 from a package repository, officially supported by the distribution or
 community contributed.
 
-Each package offers a [systemd service](https://wiki.archlinux.org/title/systemd#Using_units) `lldap.service` to (auto-)start and stop lldap.<br>
+Each package offers a [systemd service](https://wiki.archlinux.org/title/systemd#Using_units) `lldap.service` or [rc.d_lldap](example_configs/freebsd/rc.d_lldap) `rc.d/lldap` to (auto-)start and stop lldap.<br>
 When using the distributed packages, the default login is `admin/password`. You can change that from the web UI after starting the service.
 
 <details>
@@ -419,14 +419,23 @@ LLDAP configuration file: /etc/lldap/lldap_config.toml<br>
 </table>
 LLDAP configuration file: /etc/lldap/lldap_config.toml<br>
 </details>
-
-### With FreeBSD
-
-You can also install it as a rc.d service in FreeBSD, see
-[FreeBSD-install.md](example_configs/freebsd/freebsd-install.md).
-
-The rc.d script file
-[rc.d_lldap](example_configs/freebsd/rc.d_lldap).
+<details>
+<summary><b>FreeBSD</b></summary>
+<br>
+  Official FreeBSD support is offered through the <a href="https://www.freshports.org/">FreeBSD Freshport Build Service</a>.<br><br>
+  Maintainer: <a href="https://github.com/aokblast">@aokblast</a><br>
+  Support: <a href="https://bugs.freebsd.org/bugzilla/">Bugzilla</a>, <a href="https://github.com/lldap/lldap/discussions">Discussions</a><br>
+  Package repository: <a href="https://www.freshports.org/net/lldap/">FreeBSD Freshport Build</a><br>
+  FreeBSD Setup and Migration Manual: <a href="https://github.com/lldap/lldap/blob/main/example_configs/freebsd/freebsd-install.md"> Using FreeBSD </a><br>
+<table>
+  <tr>
+    <td>Available packages:</td>
+    <td>lldap</td>
+    <td>Light LDAP server for authentication.</td>
+  </tr>
+</table>
+LLDAP configuration file: /usr/local/lldap_server/lldap_config.toml<br>
+</details>
 
 ### From source
 
