@@ -54,13 +54,16 @@ fn user_id_subcondition(filter: Cond) -> Cond {
 fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
     use UserRequestFilter::*;
     let group_table = Alias::new("r1");
+    fn bool_to_expr(b: bool) -> Cond {
+        SimpleExpr::Value(b.into()).into_condition()
+    }
     fn get_repeated_filter(
         fs: Vec<UserRequestFilter>,
         condition: Cond,
         default_value: bool,
     ) -> Cond {
         if fs.is_empty() {
-            SimpleExpr::Value(default_value.into()).into_condition()
+            bool_to_expr(default_value)
         } else {
             fs.into_iter()
                 .map(get_user_filter_expr)
@@ -68,6 +71,8 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
         }
     }
     match filter {
+        True => bool_to_expr(true),
+        False => bool_to_expr(false),
         And(fs) => get_repeated_filter(fs, Cond::all(), true),
         Or(fs) => get_repeated_filter(fs, Cond::any(), false),
         Not(f) => get_user_filter_expr(*f).not(),
@@ -519,13 +524,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_users_false_filter() {
         let fixture = TestFixture::new().await;
-        let users = get_user_names(
-            &fixture.handler,
-            Some(UserRequestFilter::Not(Box::new(UserRequestFilter::And(
-                vec![],
-            )))),
-        )
-        .await;
+        let users = get_user_names(&fixture.handler, Some(UserRequestFilter::False)).await;
         assert_eq!(users, Vec::<String>::new());
     }
 
@@ -633,7 +632,7 @@ mod tests {
         let users = get_user_names(
             &fixture.handler,
             Some(UserRequestFilter::Or(vec![
-                UserRequestFilter::Or(vec![]),
+                UserRequestFilter::False,
                 UserRequestFilter::Or(vec![
                     UserRequestFilter::UserId(UserId::new("bob")),
                     UserRequestFilter::UserId(UserId::new("John")),

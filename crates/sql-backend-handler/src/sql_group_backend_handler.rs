@@ -39,23 +39,27 @@ fn attribute_condition(name: AttributeName, value: Option<Serialized>) -> Cond {
 fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
     use GroupRequestFilter::*;
     let group_table = Alias::new("groups");
+    fn bool_to_expr(b: bool) -> Cond {
+        SimpleExpr::Value(b.into()).into_condition()
+    }
+    fn get_repeated_filter(
+        fs: Vec<GroupRequestFilter>,
+        condition: Cond,
+        default_value: bool,
+    ) -> Cond {
+        if fs.is_empty() {
+            bool_to_expr(default_value)
+        } else {
+            fs.into_iter()
+                .map(get_group_filter_expr)
+                .fold(condition, Cond::add)
+        }
+    }
     match filter {
-        And(fs) => {
-            if fs.is_empty() {
-                SimpleExpr::Value(true.into()).into_condition()
-            } else {
-                fs.into_iter()
-                    .fold(Cond::all(), |c, f| c.add(get_group_filter_expr(f)))
-            }
-        }
-        Or(fs) => {
-            if fs.is_empty() {
-                SimpleExpr::Value(false.into()).into_condition()
-            } else {
-                fs.into_iter()
-                    .fold(Cond::any(), |c, f| c.add(get_group_filter_expr(f)))
-            }
-        }
+        True => bool_to_expr(true),
+        False => bool_to_expr(false),
+        And(fs) => get_repeated_filter(fs, Cond::all(), true),
+        Or(fs) => get_repeated_filter(fs, Cond::any(), false),
         Not(f) => get_group_filter_expr(*f).not(),
         DisplayName(name) => GroupColumn::LowercaseDisplayName
             .eq(name.as_str().to_lowercase())

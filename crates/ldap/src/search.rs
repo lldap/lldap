@@ -362,7 +362,7 @@ mod tests {
         mock.expect_list_users()
             .with(
                 eq(Some(UserRequestFilter::And(vec![
-                    true.into(),
+                    UserRequestFilter::And(Vec::new()),
                     UserRequestFilter::UserId(UserId::new("test")),
                 ]))),
                 eq(false),
@@ -397,7 +397,7 @@ mod tests {
     async fn test_search_readonly_user() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(true.into())), eq(false))
+            .with(eq(Some(UserRequestFilter::And(Vec::new()))), eq(false))
             .times(1)
             .return_once(|_, _| Ok(vec![]));
         let ldap_handler = setup_bound_readonly_handler(mock).await;
@@ -414,7 +414,7 @@ mod tests {
     async fn test_search_member_of() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(true.into())), eq(true))
+            .with(eq(Some(UserRequestFilter::And(Vec::new()))), eq(true))
             .times(1)
             .return_once(|_, _| {
                 Ok(vec![UserAndGroups {
@@ -458,7 +458,7 @@ mod tests {
         mock.expect_list_users()
             .with(
                 eq(Some(UserRequestFilter::And(vec![
-                    true.into(),
+                    UserRequestFilter::And(Vec::new()),
                     UserRequestFilter::UserId(UserId::new("bob")),
                 ]))),
                 eq(false),
@@ -656,7 +656,7 @@ mod tests {
     async fn test_search_groups() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
-            .with(eq(Some(true.into())))
+            .with(eq(Some(GroupRequestFilter::And(Vec::new()))))
             .times(1)
             .return_once(|_| {
                 Ok(vec![
@@ -984,7 +984,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
             .with(eq(Some(GroupRequestFilter::And(vec![
-                true.into(),
+                GroupRequestFilter::And(Vec::new()),
                 GroupRequestFilter::DisplayName("rockstars".into()),
             ]))))
             .times(1)
@@ -1384,7 +1384,7 @@ mod tests {
             }])
         });
         mock.expect_list_groups()
-            .with(eq(Some(true.into())))
+            .with(eq(Some(GroupRequestFilter::And(Vec::new()))))
             .times(1)
             .return_once(|_| {
                 Ok(vec![Group {
@@ -1469,7 +1469,7 @@ mod tests {
             }])
         });
         mock.expect_list_groups()
-            .with(eq(Some(true.into())))
+            .with(eq(Some(GroupRequestFilter::And(Vec::new()))))
             .returning(|_| {
                 Ok(vec![Group {
                     id: GroupId(1),
