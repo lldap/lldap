@@ -70,6 +70,8 @@ impl From<LdapSubstringFilter> for SubStringFilter {
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum UserRequestFilter {
+    True,
+    False,
     And(Vec<UserRequestFilter>),
     Or(Vec<UserRequestFilter>),
     Not(Box<UserRequestFilter>),
@@ -87,16 +89,14 @@ pub enum UserRequestFilter {
 
 impl From<bool> for UserRequestFilter {
     fn from(val: bool) -> Self {
-        if val {
-            Self::And(vec![])
-        } else {
-            Self::Not(Box::new(Self::And(vec![])))
-        }
+        if val { Self::True } else { Self::False }
     }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum GroupRequestFilter {
+    True,
+    False,
     And(Vec<GroupRequestFilter>),
     Or(Vec<GroupRequestFilter>),
     Not(Box<GroupRequestFilter>),
@@ -112,11 +112,7 @@ pub enum GroupRequestFilter {
 
 impl From<bool> for GroupRequestFilter {
     fn from(val: bool) -> Self {
-        if val {
-            Self::And(vec![])
-        } else {
-            Self::Not(Box::new(Self::And(vec![])))
-        }
+        if val { Self::True } else { Self::False }
     }
 }
 
