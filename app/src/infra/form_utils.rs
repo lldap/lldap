@@ -16,18 +16,14 @@ pub struct GraphQlAttributeSchema {
     pub is_editable: bool,
 }
 
-fn validate_attributes(
-    all_values: &[AttributeValue],
-    email_is_required: EmailIsRequired,
-) -> Result<()> {
+fn validate_email_attributes(all_values: &[AttributeValue]) -> Result<()> {
     let maybe_email_values = all_values.iter().find(|a| a.name == "mail");
-    if email_is_required.0 || maybe_email_values.is_some() {
-        let email_values = &maybe_email_values
-            .ok_or_else(|| anyhow!("Email is required"))?
-            .values;
-        ensure!(email_values.len() == 1, "Email is required");
-        ensure!(validate_email(&email_values[0]), "Email is not valid");
-    }
+    let email_values = &maybe_email_values
+        .ok_or_else(|| anyhow!("Email is required"))?
+        .values;
+    ensure!(!email_values.is_empty(), "Email is required");
+    ensure!(email_values.len() == 1, "Multiple emails are not supported");
+    ensure!(validate_email(&email_values[0]), "Email is not valid");
     Ok(())
 }
 
@@ -65,6 +61,8 @@ pub fn read_all_form_attributes(
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    validate_attributes(&all_values, email_is_required)?;
+    if email_is_required.0 {
+        validate_email_attributes(&all_values)?;
+    }
     Ok(all_values)
 }
