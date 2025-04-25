@@ -196,15 +196,21 @@ impl App {
             AppRoute::CreateUser => html! {
                 <CreateUserForm/>
             },
-            AppRoute::Index | AppRoute::ListUsers => html! {
-                <div>
-                  <UserTable />
+            AppRoute::Index | AppRoute::ListUsers => {
+                let user_button = html! {
                   <Link classes="btn btn-primary" to={AppRoute::CreateUser}>
                     <i class="bi-person-plus me-2"></i>
                     {"Create a user"}
                   </Link>
-                </div>
-            },
+                };
+                html! {
+                  <div>
+                    { user_button.clone() }
+                    <UserTable />
+                    { user_button }
+                  </div>
+                }
+            }
             AppRoute::CreateGroup => html! {
                 <CreateGroupForm/>
             },
@@ -214,15 +220,23 @@ impl App {
             AppRoute::CreateGroupAttribute => html! {
                 <CreateGroupAttributeForm/>
             },
-            AppRoute::ListGroups => html! {
-                <div>
-                  <GroupTable />
+            AppRoute::ListGroups => {
+                let group_button = html! {
                   <Link classes="btn btn-primary" to={AppRoute::CreateGroup}>
                     <i class="bi-plus-circle me-2"></i>
                     {"Create a group"}
                   </Link>
-                </div>
-            },
+                };
+                // Note: There's a weird bug when switching from the users page to the groups page
+                // where the two groups buttons are at the bottom. I don't know why.
+                html! {
+                  <div>
+                    { group_button.clone() }
+                    <GroupTable />
+                    { group_button }
+                  </div>
+                }
+            }
             AppRoute::ListUserSchema => html! {
                 <ListUserSchema />
             },
