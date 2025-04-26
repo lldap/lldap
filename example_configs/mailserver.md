@@ -53,7 +53,7 @@ services:
       - ENABLE_OPENDKIM=0
       - ENABLE_OPENDMARC=0
       # >>> Postfix LDAP Integration
-      - ACCOUNT_PROVISIONER=FILE
+      - ACCOUNT_PROVISIONER=LDAP
       - LDAP_SERVER_HOST=ldap://lldap:3890
       - LDAP_SEARCH_BASE=ou=people,dc=example,dc=com
       - LDAP_BIND_DN=uid=admin,ou=people,dc=example,dc=com
@@ -64,6 +64,7 @@ services:
       - LDAP_QUERY_FILTER_DOMAIN=(mail=*@%s)
       # <<< Postfix LDAP Integration
       # >>> Dovecot LDAP Integration
+      - ENABLE_QUOTAS=0
       - DOVECOT_AUTH_BIND=yes
       - DOVECOT_USER_FILTER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
       - DOVECOT_USER_ATTRS==uid=5000,=gid=5000,=home=/var/mail/%Ln,=mail=maildir:~/Maildir
