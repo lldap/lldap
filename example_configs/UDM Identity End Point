@@ -1,0 +1,52 @@
+# UDM Identity End Point Configuration
+
+Below are the details I have entered into the UDM Pro's Admins and Users section, Directory Integration when enabling LDAP user sync
+
+These settings allow you to add users into groups in your UDM based on user groups in the LLDAP server
+
+These settings allow you to add users into groups in your UDM based on user groups in the LLDAP server
+
+- change 10.128.20.3 to your lldap server IP address
+- change LDAP BIND User
+- change dc=domian,dc=com to your root DN
+- change the port to be either 6360 or 3830 as required
+- LDAP Version - OpenLDAP
+- LDAP Server 10.128.20.3
+- Port 6360
+- Root DN - dc=domian,dc=com
+- Bind DN - uid=LDAP BIND User,ou=people,dc=domian,dc=com
+- Synced Scope - All
+
+After entering the LLDAP service details click the settings tab (the cog icon in the top right of the LDAP screen) in the UDMs Identity Endpoint setup screen and in the LDAP configuration settings enter
+
+## LDAP Config
+
+LDAP Version - OpenLDAP  
+Unique Identifier Attribute - entryUUID
+
+### User
+
+- User Search Base - ou=people,dc=domian,dc=com
+- User Object Class - person
+- User Object Filter - objectClass=person
+
+### Group
+
+- Group Search Base - ou=groups,dc=domian,dc=com
+- Group Object Class - groupOfUniqueNames
+- Group Object Filter - objectClass=groupOfUniqueNames
+
+## Member Attribute - member
+
+Validate Attribute  
+enter a user e-mail address who has been added in LLDAP , and click test configuration, test show be successful
+
+Advanced  
+Delegated Authentication = true  
+Suspend user Sync Feature = True
+
+Sync Scope  
+Sync Scope - all
+
+Group Mappings - Edit Rule  
+you can now select the required LLDAP group to sync with the UDM Identity group
