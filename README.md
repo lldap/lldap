@@ -646,7 +646,7 @@ folder for help with:
 - [Syncthing](example_configs/syncthing.md)
 - [TheLounge](example_configs/thelounge.md)
 - [Traccar](example_configs/traccar.xml)
-- [UNIFI OS](example_configs/udm_identity_point.md)
+- [UNIFI OS](example_configs/udm_identity_end_point.md)
 - [Vaultwarden](example_configs/vaultwarden.md)
 - [WeKan](example_configs/wekan.md)
 - [WG Portal](example_configs/wg_portal.env.example)
