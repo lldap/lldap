@@ -3,10 +3,11 @@
 Below are the required settings to allow group syncing within UnifiOS Directory Integration, when enabling LDAP user sync 
 
 - LDAP Version - OpenLDAP 
-- LDAP Server - Your LLDAP ServerIP Address 
-- Port  - Your LLDAP Server Port 
-- Root DN - Your Root DN 
-- Bind DN - Your Bind DN 
+- LDAP Server - Your LLDAP ServerIP Address - <For Example 10.128.20.3> ldap:// is not required infront if IP address 
+- Port - Your LLDAP Server Port - (either 6360 or 3890)
+- Root DN - Your Root DN - (For Example dc=domain,dc=com)
+- Bind DN - Your Bind DN - (For Example uid=ldapbinduser,ou=people,dc=domain,dc=com)
+- Password - (Your Bind Password)
 - Synced Scope - All 
 
 After entering the LLDAP service details click the settings tab (the cog icon in the top right of the LDAP screen) in the UDMs Identity Endpoint setup screen, in the LDAP configuration settings enter 
