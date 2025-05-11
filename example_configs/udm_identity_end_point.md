@@ -1,4 +1,4 @@
-# UNIFI OS Identity End Point Configuration 
+# UniFi OS Identity End Point Configuration 
 
 Below are the required settings to allow group syncing within UnifiOS Directory Integration, when enabling LDAP user sync 
 
