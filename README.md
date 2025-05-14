@@ -273,7 +273,7 @@ LLDAP configuration file: /etc/lldap.toml<br>
     <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
   </tr>
 </table>
-LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
+LLDAP configuration file: /etc/lldap/lldap_config.toml<br>
 </details>
 <details>
 <summary><b>CentOS</b></summary>
@@ -309,7 +309,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
     <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
   </tr>
 </table>
-LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
+LLDAP configuration file: /etc/lldap/lldap_config.toml<br>
 </details>
 <details>
 <summary><b>Fedora</b></summary>
@@ -345,7 +345,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
     <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
   </tr>
 </table>
-LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
+LLDAP configuration file: /etc/lldap/lldap_config.toml<br>
 </details>
 <details>
 <summary><b>OpenSUSE</b></summary>
@@ -381,7 +381,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
     <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
   </tr>
 </table>
-LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
+LLDAP configuration file: /etc/lldap/lldap_config.toml<br>
 </details>
 <details>
 <summary><b>Ubuntu</b></summary>
@@ -417,7 +417,7 @@ LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
     <td>LLDAP-CLI is an unofficial command line interface for LLDAP.</td>
   </tr>
 </table>
-LLDPA configuration file: /etc/lldap/lldap_config.toml<br>
+LLDAP configuration file: /etc/lldap/lldap_config.toml<br>
 </details>
 
 ### With FreeBSD
