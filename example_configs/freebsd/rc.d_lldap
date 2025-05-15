@@ -22,6 +22,6 @@ logfile="/var/log/${name}.log"
 
 procname=/usr/local/lldap_server/lldap
 command="/usr/sbin/daemon"
-command_args="-u www -o ${logfile} -t ${name} /usr/local/lldap_server/lldap run"
+command_args="-u ldap -o ${logfile} -t ${name} /usr/local/lldap_server/lldap run"
 
 run_rc_command "$1"
