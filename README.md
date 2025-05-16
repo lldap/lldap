@@ -639,6 +639,7 @@ folder for help with:
 - [Rancher](example_configs/rancher.md)
 - [Seafile](example_configs/seafile.md)
 - [Shaarli](example_configs/shaarli.md)
+- [Snipe-IT](example_configs/snipe-it.md)
 - [SonarQube](example_configs/sonarqube.md)
 - [Squid](example_configs/squid.md)
 - [Stalwart](example_configs/stalwart.md)
