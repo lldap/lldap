@@ -627,6 +627,7 @@ folder for help with:
 - [OCIS (OwnCloud Infinite Scale)](example_configs/ocis.md)
 - [OneDev](example_configs/onedev.md)
 - [Organizr](example_configs/Organizr.md)
+- [Peertube](example_configs/peerube.md)
 - [Penpot](example_configs/penpot.md)
 - [pgAdmin](example_configs/pgadmin.md)
 - [Portainer](example_configs/portainer.md)
