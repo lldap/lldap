@@ -106,6 +106,8 @@ pub struct Configuration {
     pub ldap_user_dn: UserId,
     #[builder(default)]
     pub ldap_user_email: String,
+    #[builder(default = r#"String::from("Administrator")"#)]
+    pub ldap_user_display_name: String,
     #[builder(default)]
     pub ldap_user_pass: Option<SecUtf8>,
     #[builder(default)]
