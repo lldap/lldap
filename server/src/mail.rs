@@ -18,7 +18,7 @@ async fn send_email(
     let from = options
         .from
         .clone()
-        .unwrap_or_else(|| "LLDAP <nobody@lldap>".parse().unwrap());
+        .unwrap_or_else(|| "[AUTH] <nobody@lldap>".parse().unwrap());
     let reply_to = options.reply_to.clone().unwrap_or_else(|| from.clone());
     debug!(
         "Sending email to '{}' as '{}' via '{}'@'{}':'{}'",
@@ -93,19 +93,21 @@ pub async fn send_password_reset_email(
         .unwrap()
         .extend(["reset-password", "step2", token]);
     let body = format!(
-        "Hello {},
-This email has been sent to you in order to validate your identity.
-If you did not initiate the process your credentials might have been
-compromised. You should reset your password and contact an administrator.
+        "Merhaba {},
+Bu e-posta, kimliğinizi doğrulamak amacıyla size gönderilmiştir.
+Eğer bu işlemi siz başlatmadıysanız, kimlik bilgileriniz ele geçirilmiş olabilir.
+Şifrenizi sıfırlamanız ve bir yönetici ile iletişime geçmeniz gerekmektedir.
 
-To reset your password please visit the following URL: {}
+Şifrenizi sıfırlamak için lütfen aşağıdaki URL’yi ziyaret edin: {}
 
-Please contact an administrator if you did not initiate the process.",
+Eğer bu işlemi siz başlatmadıysanız, lütfen bir yönetici ile iletişime geçin.
+
+",
         username, reset_url
     );
     let res = send_email(
         to,
-        "[LLDAP] Password reset requested",
+        "[AUTH] Şifre Sıfırlama Maili",
         body,
         options,
         server_url,

@@ -223,11 +223,11 @@ impl Component for UserDetails {
                         to={AppRoute::ChangePassword{user_id: u.id.clone()}}
                         classes="btn btn-secondary">
                         <i class="bi-key me-2"></i>
-                        {"Modify password"}
+                        {"Şifre Değiştir"}
                       </Link>
                     </div>
                     <div>
-                      <h5 class="row m-3 fw-bold">{"User details"}</h5>
+                      <h5 class="row m-3 fw-bold">{"Kullanıcı Detayları"}</h5>
                     </div>
                     <UserDetailsForm
                       user={u.clone()}

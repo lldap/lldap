@@ -171,7 +171,7 @@ impl Component for LoginForm {
                     class_valid="has-success"
                     form={&self.form}
                     field_name="username"
-                    placeholder="Username"
+                    placeholder="Kullanıcı Adı"
                     autocomplete="username"
                     oninput={link.callback(|_| Msg::Update)} />
                 </div>
@@ -188,11 +188,11 @@ impl Component for LoginForm {
                     form={&self.form}
                     field_name="password"
                     input_type="password"
-                    placeholder="Password"
+                    placeholder="Şifre"
                     autocomplete="current-password" />
                 </div>
                 <Submit
-                  text="Login"
+                  text="Giriş Yap"
                   disabled={self.common.is_task_running()}
                   onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
                   { if password_reset_enabled {
@@ -201,7 +201,7 @@ impl Component for LoginForm {
                         classes="btn-link btn"
                         disabled={self.common.is_task_running()}
                         to={AppRoute::StartResetPassword}>
-                        {"Forgot your password?"}
+                        {"Şifremi unuttum."}
                       </Link>
                     }
                   } else {
