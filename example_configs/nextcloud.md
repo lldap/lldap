@@ -45,7 +45,7 @@ occ ldap:set-config s01 ldapBase "dc=example,dc=com"
 occ ldap:set-config s01 ldapBaseUsers "dc=example,dc=com"
 occ ldap:set-config s01 ldapBaseGroups "dc=example,dc=com"
 occ ldap:set-config s01 ldapConfigurationActive 1
-occ ldap:set-config s01 ldapLoginFilter "(&(objectclass=person)(uid=%uid))"
+occ ldap:set-config s01 ldapLoginFilter "(&(&(objectclass=person)(memberOf=cn=nextcloud_users,ou=groups,dc=example,dc=com))(uid=%uid))"
 # EDIT: nextcloud_users group, contains the users who can login to Nextcloud
 occ ldap:set-config s01 ldapUserFilter "(&(objectclass=person)(memberOf=cn=nextcloud_users,ou=groups,dc=example,dc=com))"
 occ ldap:set-config s01 ldapUserFilterMode 0
@@ -105,7 +105,7 @@ You can check with `Verify settings and count users` that your filter is working
 ### Login attributes
 Select `Edit LDAP Query` and enter :
 ```
-(&(objectclass=person)(uid=%uid))
+(&(&(objectclass=person)(memberOf=cn=nextcloud_users,ou=groups,dc=example,dc=com))(uid=%uid))
 ```
 
 ![login attributes page](images/nextcloud_login_attributes.png)
