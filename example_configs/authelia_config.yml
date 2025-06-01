@@ -22,13 +22,14 @@ authentication_backend:
     # "bind_user" should be the username you created for authentication with the "lldap_strict_readonly" permission. It is not recommended to use an actual admin account here.
     # If you are configuring Authelia to change user passwords, then the account used here needs the "lldap_password_manager" permission instead.
     user: uid=bind_user,ou=people,dc=example,dc=com
+    additional_users_dn: ou=people
     # Password can also be set using a secret: https://www.authelia.com/configuration/methods/secrets/
-    password: 'REPLACE_ME'
-    
+    password: "REPLACE_ME"
+
     # Optional: Setup TLS if you've enabled LDAPS
     # tls:
     #  skip_verify: false
     #  minimum_version: TLS1.2
-    
+
     # Optional: To allow sign in with BOTH username and email, you can change the users_filter to this
     # users_filter: "(&(|({username_attribute}={input})({mail_attribute}={input}))(objectClass=person))"
