@@ -27,11 +27,11 @@ ou=people,dc=example,dc=com
 ### Search Filter
 If you wish the permitted users to be restricted to just the `wiki` group: 
 ```
-(&(memberof=cn=wiki,ou=groups,dc=example,dc=com)(|(uid={{username}})(mail={{username}))(objectClass=person))
+(&(memberof=cn=wiki,ou=groups,dc=example,dc=com)(|(uid={{username}})(mail={{username}}))(objectClass=person))
 ```
 If you wish any of the registered LLDAP users to be permitted to use WikiJS:
 ```
-(&(|(uid={{username}})(mail={{username}))(objectClass=person))
+(&(|(uid={{username}})(mail={{username}}))(objectClass=person))
 ```
 ### Use TLS
 Left toggled off
