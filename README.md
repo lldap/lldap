@@ -1,3 +1,6 @@
+
+
+
 <h1 align="center">lldap - Light LDAP implementation for authentication</h1>
 
 <p align="center">
@@ -435,6 +438,199 @@ LLDAP configuration file: /etc/lldap/lldap_config.toml<br>
   </tr>
 </table>
 LLDAP configuration file: /usr/local/lldap_server/lldap_config.toml<br>
+</details>
+<details>
+<summary><b>Proxmox LXC using Helper Scripts</b></summary>
+<br>  
+What you need:
+
+- A Proxmox Host
+  - This example assumes you are running Proxmox v8.3.2.
+- A Reverse Proxy
+  - This example uses an NPMplus LXC Container set up using a [Proxmox VE Helper Scipt](https://community-scripts.github.io/ProxmoxVE/scripts?id=npmplus). NPMplus manages Let's Encrypt Wildcard Certificates
+- An email account
+  - This example uses Yahoo Mail with an already configured Send-Only Email address & app password.
+
+##### 1. Deploy LLDAP:
+
+Instructions for deploying LLDAP as a Proxmox LXC can be found on the <a href="https://community-scripts.github.io/ProxmoxVE/scripts?id=lldap">Proxmox VE Helper Scripts</a> Page.<br>
+Optionally, set up an SSH key if you want to use a program like [WinSCP](https://winscp.net/eng/index.php) for editing files instead of editing them in the Proxmox Console. One way to do this is to use the [Proxmox SSH Public Key Adder](https://github.com/justmurty/proxmox-ssh_pub-add/).
+
+Configure your NPMplus (or your reverse proxy of choice) now and add a Host for your LLDAP container. In this example, NPMplus handles Certificates.
+
+##### 2. Generate Secrets (JWT and Key Seed)
+
+- **In the LLDAP container, create a JWT secret file:**
+  
+  ```shell
+  mkdir -p /etc/lldap/.secrets
+  head -c 32 /dev/urandom | base64 > /etc/lldap/.secrets/jwt_secret.txt
+  chmod 600 /etc/lldap/.secrets/jwt_secret.txt
+  ```
+  
+- **Generate a random key seed:**
+  
+  ```shell
+  tr -dc 'A-Za-z0-9!@#$%^&*()-_+=' </dev/urandom | head -c 32; echo
+  ```
+  
+  Save this value for later steps.
+  
+
+##### 3. Configure the LLDAP Service
+
+- Create & Edit `/etc/systemd/system/lldap.service` on your LLDAP container:
+  
+  ```tsconfig
+  [Unit]
+  Description=LLDAP Service
+  After=network.target
+  
+  [Service]
+  Type=simple
+  ExecStart=/usr/bin/lldap run -c /etc/lldap/lldap_config.toml
+  WorkingDirectory=/var/lib/lldap
+  Environment="LLDAP_JWT_SECRET_FILE=/etc/lldap/.secrets/jwt_secret.txt"
+  Environment="LLDAP_KEY_SEED=<your-random-key-seed-here>"
+  Environment="LLDAP_SMTP_OPTIONS__PASSWORD=<yahoo-app-password>"
+  Restart=on-failure
+  
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  
+  - Replace `<yahoo-app-password>` with a [Yahoo **app password**](https://help.yahoo.com/kb/SLN15241.html) and **NOT** your normal Yahoo account password.
+- Reload and enable the service:
+  
+  ```shell
+  systemctl daemon-reload
+  systemctl enable --now lldap
+  ```
+  
+
+##### 4. Configure the LLDAP App
+
+Edit `/etc/lldap/lldap_config.toml` as follows:
+
+```toml
+ldap_host = "your-container-ip"
+ldap_port = 3890
+http_host = "your-container-ip"
+http_port = 17170
+http_url = "https://yourdomain.com"     # Use your real domain, NPM handles HTTPS
+ldap_base_dn = "dc=yourdomain,dc=com"
+database_url = "sqlite:///var/lib/lldap/users.db?mode=rwc"
+
+[smtp_options]
+enable_password_reset = true
+server = "smtp.mail.yahoo.com"
+port = 587
+smtp_encryption = "STARTTLS"
+user = "your-yahoo-account-username@yahoo.com"
+from = "LLDAP Admin <yahoo-send-only-email-address>"
+reply_to = "Do not reply <yahoo-send-only-email-address>"
+
+[ldaps_options]
+enabled = true
+port = 6360
+cert_file = "/etc/lldap/ssl/cert.pem"
+key_file = "/etc/lldap/ssl/key.pem"
+```
+
+##### 5. Set Up LDAPS Certificates
+
+1. **On your NPMplus container:**  
+  Certificates should be at  
+  `/opt/npmplus/tls/certbot/live/npm-1/fullchain.pem`  
+  `/opt/npmplus/tls/certbot/live/npm-1/privkey.pem`
+  
+2. **Create a new user for certificate syncing:**
+  
+  ```shell
+  adduser certsync
+  passwd certsync
+  ```
+  
+3. **Give access to the certificate files:**
+  
+  ```shell
+  chown certsync /opt/npmplus/tls/certbot/archive/npm-1/*.pem
+  chmod 600 /opt/npmplus/tls/certbot/archive/npm-1/*.pem
+  chmod o+x /opt /opt/npmplus /opt/npmplus/tls /opt/npmplus/tls/certbot /opt/npmplus/tls/certbot/live /opt/npmplus/tls/certbot/archive /opt/npmplus/tls/certbot/archive/npm-1
+  ```
+  
+  (This allows the certsync user to read the files. Do not share this user with anyone else.)
+  
+4. **On the LLDAP container:**  
+  Generate an SSH key and copy it to NPMplus:
+  
+  ```shell
+  ssh-keygen -t ed25519 -C "lldap-cert-fetch"
+  ssh-copy-id certsync@npmplus-container-ip
+  ssh certsync@npmplus-container-ip   # Test login, should not ask for password
+  ```
+  
+
+##### 6. Automate Certificate Sync (NPMplus → LLDAP)
+
+1. **On the LLDAP Container, create** `/usr/local/bin/update-ldaps-certs.sh`**:**
+  
+  ```shell
+  #!/bin/bash
+  NPM_HOST="npmplus-container-ip"
+  CERTSYNC_USER="certsync"
+  CERT_SRC="/opt/npmplus/tls/certbot/live/npm-1"
+  CERT_DST="/etc/lldap/ssl"
+  
+  scp ${CERTSYNC_USER}@${NPM_HOST}:${CERT_SRC}/fullchain.pem ${CERT_DST}/cert.pem
+  scp ${CERTSYNC_USER}@${NPM_HOST}:${CERT_SRC}/privkey.pem ${CERT_DST}/key.pem
+  chown root:root ${CERT_DST}/cert.pem ${CERT_DST}/key.pem
+  chmod 600 ${CERT_DST}/cert.pem ${CERT_DST}/key.pem
+  systemctl restart lldap
+  ```
+  
+2. **Make it executable:**
+  
+  ```shell
+  chmod +x /usr/local/bin/update-ldaps-certs.sh
+  ```
+  
+3. **Add a cron job to sync nightly:**
+  
+  ```shell
+  crontab -e
+  ```
+  
+  Add this line:
+  
+  ```shell
+  30 3 * * * /usr/local/bin/update-ldaps-certs.sh
+  ```
+  
+
+##### 7. Testing & First Login
+
+1. **Web admin:**  
+  Open `https://yourdomain.com:17170` or `http://lldap-container-ip:17170`
+  
+2. **LDAPS:**  
+  From any Linux system (e.g. a different LXC Container):
+  
+  ```shell
+  openssl s_client -connect lldap-container-ip:6360 -showcerts
+  ```
+  
+  You should see "CONNECTED" and your wildcard cert.
+  
+  You may need to install `openssl` first by doing, for example:
+  
+  ```shell
+  apt update && apt install openssl -y
+  ```
+  
+3. **Password Reset:**  
+  On the login page, use "Forgot Password?"  
+  Check your email for a reset link.
 </details>
 
 ### From source
