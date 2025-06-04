@@ -639,6 +639,7 @@ folder for help with:
 - [Peertube](example_configs/peertube.md)
 - [Penpot](example_configs/penpot.md)
 - [pgAdmin](example_configs/pgadmin.md)
+- [PocketID](example_configs/pocket_id.md)
 - [Portainer](example_configs/portainer.md)
 - [PowerDNS Admin](example_configs/powerdns_admin.md)
 - [Prosody](example_configs/prosody.md)
