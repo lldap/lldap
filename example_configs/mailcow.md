@@ -26,7 +26,7 @@ Set `Base DN` in the format like `dc=example,dc=org`.
 
 Set `Username Field` as `mail` or `uid`.
 
-Set `Filter` as `(objectclass=inetOrgPerson)` or `person`.
+Set `Filter` as `(objectclass=inetOrgPerson)` or `(objectclass=person)`.
 
 Set `Attribute Field` also as `mail`.
 
