@@ -1,6 +1,7 @@
 # Mailcow LLDAP example config
 
 ## Setting location
+
 First, go to `System` > `Configuration`.
 
 And then, `Access` > `Identity Provider`.
@@ -25,9 +26,9 @@ Set `Base DN` in the format like `dc=example,dc=org`.
 
 Set `Username Field` as `mail` or `uid`.
 
-Set `Attribute Field` also as `mail`.
-
 Set `Filter` as `(objectclass=inetOrgPerson)` or `person`.
+
+Set `Attribute Field` also as `mail`.
 
 Set `Bind DN` in the format like `uid=username,ou=people,dc=example,dc=org`.
 
