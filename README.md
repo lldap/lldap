@@ -624,6 +624,7 @@ folder for help with:
 - [Kimai](example_configs/kimai.yaml)
 - [LibreNMS](example_configs/librenms.md)
 - [Maddy](example_configs/maddy.md)
+- [Mailcow](example_configs/mailcow.md)
 - [Mastodon](example_configs/mastodon.env.example)
 - [Matrix](example_configs/matrix_synapse.yml)
 - [Mealie](example_configs/mealie.md)
