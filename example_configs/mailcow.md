@@ -17,7 +17,9 @@ Set `Use SSL` (LDAPS), `Use StartTLS`, `Ignore SSL Errors` (validation bypass) t
 
 Set `Base DN` in the format like `dc=example,dc=org`.
 
-Set `Username Field`, `Attribute Field` as `mail`.
+Set `Username Field` as `mail` or `uid`.
+
+Set `Attribute Field` also as `mail`.
 
 Set `Filter` as `(objectclass=inetOrgPerson)` or `person`.
 
