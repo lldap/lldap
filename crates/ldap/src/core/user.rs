@@ -242,9 +242,9 @@ fn convert_user_filter(
                     Ok(UserRequestFilter::from(false))
                 }
                 UserFieldType::ObjectClass => Ok(UserRequestFilter::from(
-                    matches!(
-                        value_lc.as_str(),
-                        "person" | "inetorgperson" | "posixaccount" | "mailaccount"
+                    get_default_user_object_classes()
+                        .iter()
+                        .any(|class| class.as_str().eq_ignore_ascii_case(value_lc.as_str())
                     ) || schema
                         .get_schema()
                         .extra_user_object_classes
