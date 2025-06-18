@@ -17,8 +17,8 @@ ContainerName=lldap
 Image=docker.io/lldap/lldap:stable-debian
 
 # using multiple networks for traefik and db, not essential
-Network=frontend.network
-Network=backend.network
+Network=lldap-frontend.network
+Network=lldap-backend.network
 
 # environment variables
 Environment=UID=1000
