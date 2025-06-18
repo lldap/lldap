@@ -217,11 +217,12 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
                     b"( 2.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
                     b"( 2.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
                 ];
-                let num_hardcoded_attributes = hardcoded_attributes.size();
+                let num_hardcoded_attributes = hardcoded_attributes.len();
                 hardcoded_attributes.into_iter().chain(
                     ldap_schema_description
                         .formatted_attribute_list(num_hardcoded_attributes)
                 ).collect()
+            }
            },
            LdapPartialAttribute {
             atype: "objectClasses".to_string(),
