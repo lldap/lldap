@@ -388,7 +388,7 @@ impl LdapSchemaDescription {
             .user_attributes
             .attributes
             .iter()
-            .filter(|&a| REQUIRED_USER_ATTRIBUTES.contains(&a.name.as_str()))
+            .filter(|a| REQUIRED_USER_ATTRIBUTES.contains(&a.name.as_str()))
             .cloned()
             .collect();
 
@@ -401,7 +401,7 @@ impl LdapSchemaDescription {
             .user_attributes
             .attributes
             .iter()
-            .filter(|&a| !REQUIRED_USER_ATTRIBUTES.contains(&a.name.as_str()))
+            .filter(|a| !REQUIRED_USER_ATTRIBUTES.contains(&a.name.as_str()))
             .cloned()
             .collect();
 
@@ -414,7 +414,7 @@ impl LdapSchemaDescription {
             .group_attributes
             .attributes
             .iter()
-            .filter(|&a| REQUIRED_GROUP_ATTRIBUTES.contains(&a.name.as_str()))
+            .filter(|a| REQUIRED_GROUP_ATTRIBUTES.contains(&a.name.as_str()))
             .cloned()
             .collect();
 
@@ -427,7 +427,7 @@ impl LdapSchemaDescription {
             .group_attributes
             .attributes
             .iter()
-            .filter(|&a| !REQUIRED_GROUP_ATTRIBUTES.contains(&a.name.as_str()))
+            .filter(|a| !REQUIRED_GROUP_ATTRIBUTES.contains(&a.name.as_str()))
             .cloned()
             .collect();
 
