@@ -442,6 +442,97 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_subschema_response() {
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+
+        let request = LdapSearchRequest {
+            base: "cn=Subschema".to_string(),
+            scope: LdapSearchScope::Base,
+            aliases: LdapDerefAliases::Never,
+            sizelimit: 0,
+            timelimit: 0,
+            typesonly: false,
+            filter: LdapFilter::Present("objectClass".to_string()),
+            attrs: vec!["supportedExtension".to_string()],
+        };
+
+        let current_time_utc = Utc::now().format("%Y%m%d%H%M%SZ").to_string().into_bytes();
+
+        let expected_response: Vec<LdapOp> = vec![
+            LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                dn: "cn=Subschema".to_owned(),
+                attributes: vec![LdapPartialAttribute {
+                    atype: "structuralObjectClass".to_owned(),
+                    vals: vec![b"subentry".to_vec()]
+                },
+                LdapPartialAttribute {
+                    atype: "objectClass".to_owned(),
+                    vals: vec![b"top".to_vec(), b"subentry".to_vec(), b"subschema".to_vec(), b"extensibleObject".to_vec()]
+                },
+                LdapPartialAttribute {
+                    atype: "cn".to_owned(),
+                    vals: vec![b"Subschema".to_vec()]
+                },
+                LdapPartialAttribute {
+                    atype: "createTimestamp".to_owned(),
+                    vals: vec![current_time_utc.to_vec()]
+                },
+                LdapPartialAttribute {
+                    atype: "modifyTimestamp".to_owned(),
+                    vals: vec![current_time_utc.to_vec()]
+                },
+                LdapPartialAttribute {
+                    atype: "ldapSyntaxes".to_owned(),
+                    vals: vec![
+                        b"( 1.3.6.1.4.1.1466.115.121.1.15 DESC 'Directory String' )".to_vec(),
+                        b"( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' )".to_vec(),
+                        b"( 1.3.6.1.4.1.1466.115.121.1.27 DESCc 'Integer' )".to_vec(),
+                        b"( 1.3.6.1.4.1.1466.115.121.1.28 DESC 'JPEG' X-NOT-HUMAN-READABLE 'TRUE' )".to_vec()
+                    ]
+                },
+                LdapPartialAttribute {
+                    atype: "attributeTypes".to_owned(),
+                    vals: vec![
+                        b"( 2.0 NAME 'String' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
+                        b"( 2.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
+                        b"( 2.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
+                        b"( 2.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                        b"( 2.4 NAME 'avatar' DESC 'LLDAP: builtin attribute' SUP JpegPhoto )".to_vec(),
+                        b"( 2.5 NAME 'creation_date' DESC 'LLDAP: builtin attribute' SUP DateTime )".to_vec(),
+                        b"( 2.6 NAME 'display_name' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                        b"( 2.7 NAME 'first_name' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                        b"( 2.8 NAME 'last_name' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                        b"( 2.9 NAME 'mail' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                        b"( 2.10 NAME 'user_id' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                        b"( 2.11 NAME 'uuid' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                        b"( 2.12 NAME 'creation_date' DESC 'LLDAP: builtin attribute' SUP DateTime )".to_vec(),
+                        b"( 2.13 NAME 'display_name' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                        b"( 2.14 NAME 'group_id' DESC 'LLDAP: builtin attribute' SUP Integer )".to_vec(),
+                        b"( 2.15 NAME 'uuid' DESC 'LLDAP: builtin attribute' SUP String )".to_vec()
+                    ]
+                },
+                LdapPartialAttribute {
+                    atype: "objectClasses".to_owned(),
+                    vals: vec![
+                        b"( 3.0 NAME ( 'inetOrgPerson' 'posixAccount' 'mailAccount' 'person' 'customUserClass' ) DESC 'LLDAP builtin: a person' STRUCTURAL MUST ( mail $ user_id ) MAY ( avatar $ creation_date $ display_name $ first_name $ last_name $ uuid ) )".to_vec(),
+                        b"( 3.1 NAME ( 'groupOfUniqueNames' ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( display_name ) MAY ( creation_date $ group_id $ uuid ) )".to_vec(),
+                    ]
+                },
+                LdapPartialAttribute {
+                    atype: "subschemaSubentry".to_owned(),
+                    vals: vec![b"cn=Subschema".to_vec()]
+                },
+                ]
+            }),
+            make_search_success()
+        ];
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await.unwrap(),
+            expected_response
+        )
+    }
+
+    #[tokio::test]
     async fn test_search_regular_user() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
