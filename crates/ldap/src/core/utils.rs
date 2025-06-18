@@ -336,13 +336,8 @@ pub fn get_custom_attribute(
         })
 }
 
+#[derive(derive_more::From)]
 pub struct ObjectClassList(Vec<LdapObjectClass>);
-
-impl From<Vec<LdapObjectClass>> for ObjectClassList {
-    fn from(object_class: Vec<LdapObjectClass>) -> Self {
-        ObjectClassList(object_class)
-    }
-}
 
 // See RFC4512 section 4.2.1 "objectClasses"
 impl ObjectClassList {
