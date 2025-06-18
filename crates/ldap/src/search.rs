@@ -210,14 +210,17 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
            },
            LdapPartialAttribute {
             atype: "attributeTypes".to_string(),
-            vals: vec![
-                b"( 2.0 NAME 'String' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
-                b"( 2.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
-                b"( 2.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
-                b"( 2.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
-                ].into_iter().chain(
-                    // we pass the number of hardcoded attributes already included for formatting of custom attributes
-                    ldap_schema_description.formatted_attribute_list(4)
+            vals: {
+                let hardcoded_attributes = [
+                    b"( 2.0 NAME 'String' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
+                    b"( 2.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
+                    b"( 2.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
+                    b"( 2.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                ];
+                let num_hardcoded_attributes = hardcoded_attributes.size();
+                hardcoded_attributes.into_iter().chain(
+                    ldap_schema_description
+                        .formatted_attribute_list(num_hardcoded_attributes)
                 ).collect()
            },
            LdapPartialAttribute {
