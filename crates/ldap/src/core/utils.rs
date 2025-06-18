@@ -371,7 +371,7 @@ impl LdapSchemaDescription {
     }
 
     fn schema(&self) -> &Schema {
-        &self.base.get_schema()
+        self.base.get_schema()
     }
 
     pub fn user_object_classes(&self) -> &ObjectClassList {
