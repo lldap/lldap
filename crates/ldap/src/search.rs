@@ -486,7 +486,7 @@ mod tests {
                     vals: vec![
                         b"( 1.3.6.1.4.1.1466.115.121.1.15 DESC 'Directory String' )".to_vec(),
                         b"( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' )".to_vec(),
-                        b"( 1.3.6.1.4.1.1466.115.121.1.27 DESCc 'Integer' )".to_vec(),
+                        b"( 1.3.6.1.4.1.1466.115.121.1.27 DESC 'Integer' )".to_vec(),
                         b"( 1.3.6.1.4.1.1466.115.121.1.28 DESC 'JPEG' X-NOT-HUMAN-READABLE 'TRUE' )".to_vec()
                     ]
                 },
@@ -515,7 +515,7 @@ mod tests {
                     atype: "objectClasses".to_owned(),
                     vals: vec![
                         b"( 3.0 NAME ( 'inetOrgPerson' 'posixAccount' 'mailAccount' 'person' 'customUserClass' ) DESC 'LLDAP builtin: a person' STRUCTURAL MUST ( mail $ user_id ) MAY ( avatar $ creation_date $ display_name $ first_name $ last_name $ uuid ) )".to_vec(),
-                        b"( 3.1 NAME ( 'groupOfUniqueNames' ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( display_name ) MAY ( creation_date $ group_id $ uuid ) )".to_vec(),
+                        b"( 3.1 NAME ( 'groupOfUniqueNames' 'groupOfNames' ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( display_name ) MAY ( creation_date $ group_id $ uuid ) )".to_vec(),
                     ]
                 },
                 LdapPartialAttribute {
@@ -886,7 +886,10 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec![b"groupOfUniqueNames".to_vec(),]
+                            vals: vec![
+                                b"groupOfUniqueNames".to_vec(),
+                                b"groupOfNames".to_vec(),
+                            ],
                         },
                         LdapPartialAttribute {
                             atype: "uniqueMember".to_string(),
@@ -914,7 +917,10 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec![b"groupOfUniqueNames".to_vec(),]
+                            vals: vec![
+                                b"groupOfUniqueNames".to_vec(),
+                                b"groupOfNames".to_vec(),
+                            ],
                         },
                         LdapPartialAttribute {
                             atype: "uniqueMember".to_string(),
@@ -1609,7 +1615,10 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec![b"groupOfUniqueNames".to_vec(),]
+                            vals: vec![
+                                b"groupOfUniqueNames".to_vec(),
+                                b"groupOfNames".to_vec(),
+                            ],
                         },
                     ],
                 }),
@@ -1745,7 +1754,10 @@ mod tests {
                     },
                     LdapPartialAttribute {
                         atype: "objectclass".to_string(),
-                        vals: vec![b"groupOfUniqueNames".to_vec()],
+                        vals: vec![
+                            b"groupOfUniqueNames".to_vec(),
+                            b"groupOfNames".to_vec(),
+                        ],
                     },
                     // UID
                     LdapPartialAttribute {
