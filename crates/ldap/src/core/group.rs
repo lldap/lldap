@@ -20,7 +20,7 @@ use tracing::{debug, instrument, warn};
 
 pub const REQUIRED_GROUP_ATTRIBUTES: &[&str] = &["display_name"];
 
-const DEFAULT_GROUP_OBJECT_CLASSES: &[&str] = &["groupOfUniqueNames"];
+const DEFAULT_GROUP_OBJECT_CLASSES: &[&str] = &["groupOfUniqueNames", "groupOfNames"];
 
 fn get_default_group_object_classes_as_bytes() -> Vec<Vec<u8>> {
     DEFAULT_GROUP_OBJECT_CLASSES
