@@ -226,11 +226,11 @@ fn convert_group_filter(
                 GroupFieldType::ObjectClass => Ok(GroupRequestFilter::from(
                     get_default_group_object_classes()
                         .iter()
-                        .any(|class| class.as_str().eq_ignore_ascii_case(value_lc.as_str())
-                    ) || schema
-                        .get_schema()
-                        .extra_group_object_classes
-                        .contains(&LdapObjectClass::from(value_lc)),
+                        .any(|class| class.as_str().eq_ignore_ascii_case(value_lc.as_str()))
+                        || schema
+                            .get_schema()
+                            .extra_group_object_classes
+                            .contains(&LdapObjectClass::from(value_lc)),
                 )),
                 GroupFieldType::Dn | GroupFieldType::EntryDn => {
                     Ok(get_group_id_from_distinguished_name_or_plain_name(

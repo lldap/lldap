@@ -4,6 +4,7 @@ use crate::core::{
     user::{REQUIRED_USER_ATTRIBUTES, get_default_user_object_classes},
 };
 use chrono::TimeZone;
+use itertools::join;
 use ldap3_proto::LdapResultCode;
 use lldap_domain::{
     public_schema::PublicSchema,
@@ -16,7 +17,6 @@ use lldap_domain::{
 use lldap_domain_model::model::UserColumn;
 use std::collections::BTreeMap;
 use tracing::{debug, instrument, warn};
-use itertools::join;
 
 fn make_dn_pair<I>(mut iter: I) -> LdapResult<(String, String)>
 where

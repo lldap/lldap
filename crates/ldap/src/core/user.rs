@@ -244,11 +244,11 @@ fn convert_user_filter(
                 UserFieldType::ObjectClass => Ok(UserRequestFilter::from(
                     get_default_user_object_classes()
                         .iter()
-                        .any(|class| class.as_str().eq_ignore_ascii_case(value_lc.as_str())
-                    ) || schema
-                        .get_schema()
-                        .extra_user_object_classes
-                        .contains(&LdapObjectClass::from(value_lc)),
+                        .any(|class| class.as_str().eq_ignore_ascii_case(value_lc.as_str()))
+                        || schema
+                            .get_schema()
+                            .extra_user_object_classes
+                            .contains(&LdapObjectClass::from(value_lc)),
                 )),
                 UserFieldType::MemberOf => Ok(get_group_id_from_distinguished_name_or_plain_name(
                     &value_lc,
