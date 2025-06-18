@@ -463,7 +463,7 @@ impl LdapSchemaDescription {
 
     pub fn all_attributes(&self) -> AttributeList {
         let mut combined_attributes = self.schema().user_attributes.attributes.clone();
-        combined_attributes.extend(self.schema().group_attributes.attributes.clone());
+        combined_attributes.extend_from_slice(&self.schema().group_attributes.attributes);
         AttributeList {
             attributes: combined_attributes,
         }
