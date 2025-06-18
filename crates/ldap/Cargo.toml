@@ -60,3 +60,7 @@ pretty_assertions = "1"
 [dev-dependencies.tokio]
 features = ["full"]
 version = "1.25"
+
+[dev-dependencies.lldap_domain]
+path = "../domain"
+features = ["test"]
