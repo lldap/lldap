@@ -16,6 +16,7 @@ use lldap_domain::{
 use lldap_domain_model::model::UserColumn;
 use std::collections::BTreeMap;
 use tracing::{debug, instrument, warn};
+use itertools::join;
 
 fn make_dn_pair<I>(mut iter: I) -> LdapResult<(String, String)>
 where
@@ -342,11 +343,7 @@ pub struct ObjectClassList(Vec<LdapObjectClass>);
 // See RFC4512 section 4.2.1 "objectClasses"
 impl ObjectClassList {
     pub fn format_for_ldap_schema_description(&self) -> String {
-        self.0
-            .iter()
-            .map(|c| format!("'{}'", c))
-            .collect::<Vec<_>>()
-            .join(" ")
+        join(self.0.iter().map(|c| format!("'{}'", c)), " ")
     }
 }
 
