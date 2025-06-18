@@ -4,7 +4,6 @@ use crate::core::{
     user::{REQUIRED_USER_ATTRIBUTES, get_default_user_object_classes},
 };
 use chrono::TimeZone;
-use itertools::Itertools;
 use ldap3_proto::LdapResultCode;
 use lldap_domain::{
     public_schema::PublicSchema,

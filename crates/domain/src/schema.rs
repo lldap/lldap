@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::types::{AttributeName, AttributeType, LdapObjectClass};
-use itertools::Itertools;
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct Schema {
