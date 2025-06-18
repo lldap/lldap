@@ -351,7 +351,7 @@ impl ObjectClassList {
 // This struct holds all information on what attributes and objectclasses are present on the server.
 // It can be used to 'index' a server using a LDAP subschema call.
 pub struct LdapSchemaDescription {
-    base: Schema,
+    base: PublicSchema,
     user_object_classes: ObjectClassList,
     group_object_classes: ObjectClassList,
 }
@@ -364,14 +364,14 @@ impl LdapSchemaDescription {
         group_object_classes.extend(schema.get_schema().extra_group_object_classes.clone());
 
         Self {
-            base: schema.into_schema(),
+            base: schema,
             user_object_classes: ObjectClassList(user_object_classes),
             group_object_classes: ObjectClassList(group_object_classes),
         }
     }
 
     fn schema(&self) -> &Schema {
-        &self.base
+        &self.base.get_schema()
     }
 
     pub fn user_object_classes(&self) -> &ObjectClassList {
