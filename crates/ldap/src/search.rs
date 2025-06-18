@@ -886,10 +886,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec![
-                                b"groupOfUniqueNames".to_vec(),
-                                b"groupOfNames".to_vec(),
-                            ],
+                            vals: vec![b"groupOfUniqueNames".to_vec(), b"groupOfNames".to_vec(),],
                         },
                         LdapPartialAttribute {
                             atype: "uniqueMember".to_string(),
@@ -917,10 +914,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec![
-                                b"groupOfUniqueNames".to_vec(),
-                                b"groupOfNames".to_vec(),
-                            ],
+                            vals: vec![b"groupOfUniqueNames".to_vec(), b"groupOfNames".to_vec(),],
                         },
                         LdapPartialAttribute {
                             atype: "uniqueMember".to_string(),
@@ -1615,10 +1609,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
-                            vals: vec![
-                                b"groupOfUniqueNames".to_vec(),
-                                b"groupOfNames".to_vec(),
-                            ],
+                            vals: vec![b"groupOfUniqueNames".to_vec(), b"groupOfNames".to_vec(),],
                         },
                     ],
                 }),
@@ -1754,10 +1745,7 @@ mod tests {
                     },
                     LdapPartialAttribute {
                         atype: "objectclass".to_string(),
-                        vals: vec![
-                            b"groupOfUniqueNames".to_vec(),
-                            b"groupOfNames".to_vec(),
-                        ],
+                        vals: vec![b"groupOfUniqueNames".to_vec(), b"groupOfNames".to_vec()],
                     },
                     // UID
                     LdapPartialAttribute {
