@@ -545,6 +545,7 @@ pub struct User {
     pub display_name: Option<String>,
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
+    pub disabled: bool,
     pub attributes: Vec<Attribute>,
 }
 
@@ -558,6 +559,7 @@ impl Default for User {
             display_name: None,
             creation_date: epoch,
             uuid: Uuid::from_name_and_date("", &epoch),
+            disabled: false,
             attributes: Vec::new(),
         }
     }

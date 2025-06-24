@@ -330,6 +330,10 @@ impl<Handler: BackendHandler> User<Handler> {
         self.user.uuid.as_str()
     }
 
+    fn disabled(&self) -> bool {
+        self.user.disabled
+    }
+
     /// User-defined attributes.
     fn attributes(&self) -> &[AttributeValue<Handler>] {
         &self.attributes

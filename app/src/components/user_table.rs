@@ -106,6 +106,7 @@ impl UserTable {
                         <th>{"First name"}</th>
                         <th>{"Last name"}</th>
                         <th>{"Creation date"}</th>
+                        <th>{"Status"}</th>
                         <th>{"Delete"}</th>
                       </tr>
                     </thead>
@@ -124,6 +125,8 @@ impl UserTable {
 
     fn view_user(&self, ctx: &Context<Self>, user: &User) -> Html {
         let link = &ctx.link();
+        let status_class = if user.disabled { "text-danger" } else { "text-success" };
+        let status_text = if user.disabled { "Disabled" } else { "Enabled" };
         html! {
           <tr key={user.id.clone()}>
               <td><Link to={AppRoute::UserDetails{user_id: user.id.clone()}}>{&user.id}</Link></td>
@@ -132,6 +135,7 @@ impl UserTable {
               <td>{&user.first_name}</td>
               <td>{&user.last_name}</td>
               <td>{&user.creation_date.naive_local().date()}</td>
+              <td><span class={status_class}>{status_text}</span></td>
               <td>
                 <DeleteUser
                   username={user.id.clone()}

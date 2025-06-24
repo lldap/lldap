@@ -60,12 +60,35 @@ impl SqlBackendHandler {
             .await?
             .and_then(|u| u.0))
     }
+
+    #[instrument(skip(self), level = "debug", err)]
+    async fn check_user_enabled(&self, user_id: &UserId) -> Result<bool> {
+        // Check if the user is enabled (not disabled)
+        let disabled = model::User::find_by_id(user_id.clone())
+            .select_only()
+            .column(UserColumn::Disabled)
+            .into_tuple::<(bool,)>()
+            .one(&self.sql_pool)
+            .await?
+            .map(|u| u.0)
+            .unwrap_or(true); // Default to disabled if user not found
+        Ok(!disabled)
+    }
 }
 
 #[async_trait]
 impl LoginHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn bind(&self, request: BindRequest) -> Result<()> {
+        // First check if user is enabled
+        if !self.check_user_enabled(&request.name).await? {
+            warn!(r#"Login attempt for disabled user "{}""#, &request.name);
+            return Err(DomainError::AuthenticationError(format!(
+                r#"Account disabled for user "{}""#,
+                request.name
+            )));
+        }
+
         if let Some(password_hash) = self
             .get_password_file_for_user(request.name.clone())
             .await?
@@ -149,6 +172,14 @@ impl OpaqueHandler for SqlOpaqueHandler {
         // don't need.
         match opaque::server::login::finish_login(server_login, request.credential_finalization) {
             Ok(session) => {
+                // Check if user is enabled after successful authentication
+                if !self.check_user_enabled(&username).await? {
+                    warn!(r#"OPAQUE login attempt for disabled user "{}""#, &username);
+                    return Err(DomainError::AuthenticationError(format!(
+                        r#"Account disabled for user "{}""#,
+                        username
+                    )));
+                }
                 info!(r#"OPAQUE login successful for "{}""#, &username);
                 let _ = session.session_key;
             }

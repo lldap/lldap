@@ -15,6 +15,7 @@ use crate::{
 };
 use anyhow::{Ok, Result};
 use graphql_client::GraphQLQuery;
+use wasm_bindgen::JsCast;
 use yew::prelude::*;
 
 /// The GraphQL query sent to the server to update the user details.
@@ -40,6 +41,8 @@ pub struct UserDetailsForm {
 pub enum Msg {
     /// A form field changed.
     Update,
+    /// The enabled checkbox was toggled.
+    ToggleEnabled(bool),
     /// The "Submit" button was clicked.
     SubmitClicked,
     /// We got the response from the server about our update message.
@@ -63,6 +66,10 @@ impl CommonComponent<UserDetailsForm> for UserDetailsForm {
     ) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
+            Msg::ToggleEnabled(enabled) => {
+                self.user.disabled = !enabled;
+                Ok(true)
+            },
             Msg::SubmitClicked => self.submit_user_update_form(ctx),
             Msg::UserUpdated(Err(e)) => Err(e),
             Msg::UserUpdated(Result::Ok(_)) => {
@@ -115,6 +122,45 @@ impl Component for UserDetailsForm {
               <StaticValue label="User ID" id="userId">
                 <i>{&self.user.id}</i>
               </StaticValue>
+              {
+                if ctx.props().is_admin {
+                  html! {
+                    <div class="form-group row mb-3">
+                      <label for="enabled" class="form-label col-4 col-form-label">
+                        {"Account Status:"}
+                      </label>
+                      <div class="col-8">
+                        <div class="form-check form-switch">
+                          <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="enabled"
+                            name="enabled"
+                            checked={!self.user.disabled}
+                            onchange={link.callback(|e: Event| {
+                              let input: web_sys::HtmlInputElement = e.target().unwrap().dyn_into().unwrap();
+                              Msg::ToggleEnabled(input.checked())
+                            })} />
+                          <label class="form-check-label" for="enabled">
+                            {"Enabled"}
+                          </label>
+                          <small class="form-text text-muted">
+                            {"\tWhen unchecked, prevents the user from logging in"}
+                          </small>
+                        </div>
+                      </div>
+                    </div>
+                  }
+                } else {
+                  html! {
+                    <StaticValue label="Account Status" id="accountStatus">
+                      <span class={if self.user.disabled { "text-danger" } else { "text-success" }}>
+                        {if self.user.disabled { "Disabled" } else { "Enabled" }}
+                      </span>
+                    </StaticValue>
+                  }
+                }
+              }
               {
                   ctx
                       .props()
@@ -215,6 +261,18 @@ impl UserDetailsForm {
             IsAdmin(ctx.props().is_admin),
             EmailIsRequired(!ctx.props().is_edited_user_admin),
         )?;
+        
+        // Check if disabled status changed from original (for admin users only)
+        let disabled_value = if ctx.props().is_admin {
+            let original_disabled = ctx.props().user.disabled;
+            if self.user.disabled != original_disabled {
+                Some(self.user.disabled)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let base_attributes = &self.user.attributes;
         all_values.retain(|a| {
             let base_val = base_attributes
@@ -250,6 +308,7 @@ impl UserDetailsForm {
             id: self.user.id.clone(),
             email: None,
             displayName: None,
+            disabled: None,
             firstName: None,
             lastName: None,
             avatar: None,
@@ -259,6 +318,7 @@ impl UserDetailsForm {
         let default_user_input = user_input.clone();
         user_input.removeAttributes = remove_attributes;
         user_input.insertAttributes = insert_attributes;
+        user_input.disabled = disabled_value;
         // Nothing changed.
         if user_input == default_user_input {
             return Ok(false);
