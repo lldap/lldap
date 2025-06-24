@@ -1,10 +1,17 @@
-use crate::core::error::{LdapError, LdapResult};
+use crate::core::{
+    error::{LdapError, LdapResult},
+    group::{REQUIRED_GROUP_ATTRIBUTES, get_default_group_object_classes},
+    user::{REQUIRED_USER_ATTRIBUTES, get_default_user_object_classes},
+};
 use chrono::TimeZone;
+use itertools::join;
 use ldap3_proto::LdapResultCode;
 use lldap_domain::{
     public_schema::PublicSchema,
+    schema::{AttributeList, Schema},
     types::{
-        Attribute, AttributeName, AttributeType, AttributeValue, Cardinality, GroupName, UserId,
+        Attribute, AttributeName, AttributeType, AttributeValue, Cardinality, GroupName,
+        LdapObjectClass, UserId,
     },
 };
 use lldap_domain_model::model::UserColumn;
@@ -328,6 +335,139 @@ pub fn get_custom_attribute(
                 l.iter().map(convert_date).collect()
             }
         })
+}
+
+#[derive(derive_more::From)]
+pub struct ObjectClassList(Vec<LdapObjectClass>);
+
+// See RFC4512 section 4.2.1 "objectClasses"
+impl ObjectClassList {
+    pub fn format_for_ldap_schema_description(&self) -> String {
+        join(self.0.iter().map(|c| format!("'{}'", c)), " ")
+    }
+}
+
+// See RFC4512 section 4.2 "Subschema Subentries"
+// This struct holds all information on what attributes and objectclasses are present on the server.
+// It can be used to 'index' a server using a LDAP subschema call.
+pub struct LdapSchemaDescription {
+    base: PublicSchema,
+    user_object_classes: ObjectClassList,
+    group_object_classes: ObjectClassList,
+}
+
+impl LdapSchemaDescription {
+    pub fn from(schema: PublicSchema) -> Self {
+        let mut user_object_classes = get_default_user_object_classes();
+        user_object_classes.extend(schema.get_schema().extra_user_object_classes.clone());
+        let mut group_object_classes = get_default_group_object_classes();
+        group_object_classes.extend(schema.get_schema().extra_group_object_classes.clone());
+
+        Self {
+            base: schema,
+            user_object_classes: ObjectClassList(user_object_classes),
+            group_object_classes: ObjectClassList(group_object_classes),
+        }
+    }
+
+    fn schema(&self) -> &Schema {
+        self.base.get_schema()
+    }
+
+    pub fn user_object_classes(&self) -> &ObjectClassList {
+        &self.user_object_classes
+    }
+
+    pub fn group_object_classes(&self) -> &ObjectClassList {
+        &self.group_object_classes
+    }
+
+    pub fn required_user_attributes(&self) -> AttributeList {
+        let attributes = self
+            .schema()
+            .user_attributes
+            .attributes
+            .iter()
+            .filter(|a| REQUIRED_USER_ATTRIBUTES.contains(&a.name.as_str()))
+            .cloned()
+            .collect();
+
+        AttributeList { attributes }
+    }
+
+    pub fn optional_user_attributes(&self) -> AttributeList {
+        let attributes = self
+            .schema()
+            .user_attributes
+            .attributes
+            .iter()
+            .filter(|a| !REQUIRED_USER_ATTRIBUTES.contains(&a.name.as_str()))
+            .cloned()
+            .collect();
+
+        AttributeList { attributes }
+    }
+
+    pub fn required_group_attributes(&self) -> AttributeList {
+        let attributes = self
+            .schema()
+            .group_attributes
+            .attributes
+            .iter()
+            .filter(|a| REQUIRED_GROUP_ATTRIBUTES.contains(&a.name.as_str()))
+            .cloned()
+            .collect();
+
+        AttributeList { attributes }
+    }
+
+    pub fn optional_group_attributes(&self) -> AttributeList {
+        let attributes = self
+            .schema()
+            .group_attributes
+            .attributes
+            .iter()
+            .filter(|a| !REQUIRED_GROUP_ATTRIBUTES.contains(&a.name.as_str()))
+            .cloned()
+            .collect();
+
+        AttributeList { attributes }
+    }
+
+    // See RFC4512 section 4.2.2 "attributeTypes"
+    // Parameter 'index_offset' is an offset for the enumeration of this list of attributes,
+    // it has been preceeded by the list of hardcoded attributes.
+    pub fn formatted_attribute_list(&self, index_offset: usize) -> Vec<Vec<u8>> {
+        let mut formatted_list: Vec<Vec<u8>> = Vec::new();
+
+        for (index, attribute) in self.all_attributes().attributes.into_iter().enumerate() {
+            formatted_list.push(
+                format!(
+                    "( 2.{} NAME '{}' DESC 'LLDAP: {}' SUP {:?} )",
+                    (index + index_offset),
+                    attribute.name,
+                    if attribute.is_hardcoded {
+                        "builtin attribute"
+                    } else {
+                        "custom attribute"
+                    },
+                    attribute.attribute_type
+                )
+                .into_bytes()
+                .to_vec(),
+            )
+        }
+
+        formatted_list
+    }
+
+    pub fn all_attributes(&self) -> AttributeList {
+        let mut combined_attributes = self.schema().user_attributes.attributes.clone();
+        combined_attributes.extend_from_slice(&self.schema().group_attributes.attributes);
+        AttributeList {
+            attributes: combined_attributes,
+        }
+    }
 }
 
 #[cfg(test)]

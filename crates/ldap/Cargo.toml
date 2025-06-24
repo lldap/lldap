@@ -12,6 +12,12 @@ repository.workspace = true
 anyhow = "*"
 ldap3_proto = "0.6.0"
 tracing = "*"
+itertools = "0.10"
+
+[dependencies.derive_more]
+features = ["from"]
+default-features = false
+version = "1"
 
 [dependencies.chrono]
 features = ["serde"]
@@ -54,3 +60,7 @@ pretty_assertions = "1"
 [dev-dependencies.tokio]
 features = ["full"]
 version = "1.25"
+
+[dev-dependencies.lldap_domain]
+path = "../domain"
+features = ["test"]
