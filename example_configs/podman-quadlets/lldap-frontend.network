@@ -1,4 +1,2 @@
 [Network]
-Subnet=192.168.31.0/24
-Gateway=192.168.31.1
 Label=app=lldap
