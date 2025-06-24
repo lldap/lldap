@@ -125,7 +125,11 @@ impl UserTable {
 
     fn view_user(&self, ctx: &Context<Self>, user: &User) -> Html {
         let link = &ctx.link();
-        let status_class = if user.disabled { "text-danger" } else { "text-success" };
+        let status_class = if user.disabled {
+            "text-danger"
+        } else {
+            "text-success"
+        };
         let status_text = if user.disabled { "Disabled" } else { "Enabled" };
         html! {
           <tr key={user.id.clone()}>

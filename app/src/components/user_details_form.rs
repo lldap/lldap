@@ -69,7 +69,7 @@ impl CommonComponent<UserDetailsForm> for UserDetailsForm {
             Msg::ToggleEnabled(enabled) => {
                 self.user.disabled = !enabled;
                 Ok(true)
-            },
+            }
             Msg::SubmitClicked => self.submit_user_update_form(ctx),
             Msg::UserUpdated(Err(e)) => Err(e),
             Msg::UserUpdated(Result::Ok(_)) => {
@@ -261,7 +261,7 @@ impl UserDetailsForm {
             IsAdmin(ctx.props().is_admin),
             EmailIsRequired(!ctx.props().is_edited_user_admin),
         )?;
-        
+
         // Check if disabled status changed from original (for admin users only)
         let disabled_value = if ctx.props().is_admin {
             let original_disabled = ctx.props().user.disabled;
