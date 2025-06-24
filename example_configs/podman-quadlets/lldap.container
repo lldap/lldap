@@ -57,7 +57,8 @@ Secret=lldap-ldap-user-pass,type=mount,uid=1000
 # Secret=lldap-key-seed,type=env,target=LLDAP_KEY_SEED
 # Secret=lldap-ldap-user-pass,type=env,target=LLDAP_LDAP_USER_PASS
 
-# Temporary stuff for the bootstrap process
+# Bootstrapping. Uncomment the remainder of this section. Once
+# the bootstrap files are ready. re-comment once bootstrapping is done.
 # Secret=lldap-ldap-user-pass,type=env,target=LLDAP_ADMIN_PASSWORD
 # Environment=LLDAP_URL=http://localhost:17170
 # Environment=LLDAP_ADMIN_USERNAME=admin

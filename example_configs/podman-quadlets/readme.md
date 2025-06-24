@@ -2,14 +2,15 @@
 
 The following assumes you have a working podman installation.
 
-- Copy the .containers, .volume and .network files to `~/.config/containers/systemd/`
+- Copy `lldap-db.container`,`lldap.container`, `lldap-db.volume`, `lldap-frontend.network` and `lldap-backend.network` to `~/.config/containers/systemd/`
 - Create the necessary secrets: `lldap-jwt-secret`, `lldap-key-seed`and `lldap-ldap-user-pass`
     - Podman allows several different methods to create secrets; here, it will be done purely from the command line. Don't forget to replace the secret values with something actually secret.
     ```bash
-        $ echo 'your-first-secret-here' | podman secret create lldap-jwt-secret -
-        $ echo 'your-second-secret-here' | podman secret create lldap-key-seed -
+        $ LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\''()*+,-./:;<=>?@[\]^_{|}~' </dev/urandom | head -c 32 | podman secret create lldap-jwt-secret -
+        $ LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\''()*+,-./:;<=>?@[\]^_{|}~' </dev/urandom | head -c 32 | podman secret create lldap-key-seed -
         $ echo 'your-third-secret-here' | podman secret create lldap-ldap-user-pass -
     ```
+    - if later on you need to query any of those secret, you can do so with `podman secret inspect <name of the secret> --showsecret`. The value of the secret is in the output's "SecretData" field.
 - At this point you should be able to start the container.
     - Test this with:
     ```bash
@@ -17,7 +18,6 @@ The following assumes you have a working podman installation.
         $ podman --user start lldap
         $ podman --user status lldap
     ```
-    - If anything anomalous shows up in the log, I'm sorry. It's not you, it's really me.
     - Assuming it launched correctly, you should now stop it again.
     ```bash
         $ podman --user stop lldap
@@ -25,7 +25,8 @@ The following assumes you have a working podman installation.
 - Make any adjustments you feel are necessary to the networks file.
 - Now all that's left to do is the [bootstrapping process](../bootstrap/bootstrap.md#docker-compose)
     - Prepare your bootstrapping config as for the manual process in `~/containers/lldap`
-    - Uncomment the lines in lldap.container pertaining to the bootstrap process (lines 61-65)
+    - Toward the end of the container section, uncomment the lines in `ldap.container` regarding
+     the bootstrap process.
     - Start the container:
         ```bash
         $ podman --user daemon-reload
@@ -36,7 +37,7 @@ The following assumes you have a working podman installation.
         $ podman exec -ti lldap bash
         $ ./bootstrap.sh
         ```
-- Once the bootstrapping is done, you comment out the lines in lldap.container regarding bootstrapping (61-65), stop the unit, reload the daemon, and start it again.
+- Once the bootstrapping is done, remove or comment out the lines uncommented at the previous step, stop the unit, reload the daemon, and start it again.
 - LLDAP should be available to any unit that includes the lldap-frontend network.
     - If your outside-facing webserver is in a quadlet too, make sure they share a network, e.g. by adding `Network=lldap-frontend.network` in its quadlet file and making the necessary adjustments to the server configs.
     - Your webserver should then manage access to LLDAP from the outside world.
