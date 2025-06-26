@@ -1,2 +1,2 @@
 [Network]
-Label=app=lldap
+# NetworkDeleteOnStop=true
