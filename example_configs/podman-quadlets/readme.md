@@ -19,6 +19,7 @@ Starting `lldap.service` will start all the other services, but stopping it will
 
 - Copy `lldap-db.container`, `lldap.container`, `lldap-db.volume`, `lldap-frontend.network`, and `lldap-backend.network` to `~/.config/containers/systemd/`
 - Adjust the line `Environment=LLDAP_LDAP_BASE_DN=dc=example,dc=com` in `lldap.container` to match your domain name.
+    - The default value suppose your domain is "example.com"
 - Create the necessary secrets: `lldap-jwt-secret`, `lldap-key-seed`, and `lldap-ldap-user-pass`.
     - Podman allows several different methods to create secrets; here, it will be done purely from the command line. Don't forget to replace the secret values with something actually secret.
     ```bash
