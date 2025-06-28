@@ -370,10 +370,11 @@ pub(crate) async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<()
 
     pool.execute(
         builder.build(
-            Table::create()
-                .table(Metadata::Table)
-                .if_not_exists()
-                .col(ColumnDef::new(Metadata::Version).small_integer()),
+            Table::create().table(Metadata::Table).if_not_exists().col(
+                ColumnDef::new(Metadata::Version)
+                    .small_integer()
+                    .primary_key(),
+            ),
         ),
     )
     .await?;
