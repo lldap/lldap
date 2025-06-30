@@ -48,6 +48,14 @@ impl<Handler: BackendHandler> Context<Handler> {
             .get_writeable_handler(&self.validation_result, user_id)
     }
 
+    pub fn get_login_enabled_writeable_handler(
+        &self,
+        user_id: &UserId,
+    ) -> Option<&(impl UserWriteableBackendHandler + use<Handler>)> {
+        self.handler
+            .get_login_enabled_writeable_handler(&self.validation_result, user_id)
+    }
+
     pub fn get_readable_handler(
         &self,
         user_id: &UserId,

@@ -27,7 +27,7 @@ pub enum Users {
     TotpSecret,
     MfaType,
     Uuid,
-    Disabled,
+    LoginEnabled,
 }
 
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
@@ -1115,15 +1115,15 @@ async fn migrate_to_v10(transaction: DatabaseTransaction) -> Result<DatabaseTran
 
 async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
     let builder = transaction.get_database_backend();
-    // Add disabled column to users table, defaulting to false (enabled)
+    // Add login_enabled column to users table, defaulting to true (enabled)
     transaction
         .execute(
             builder.build(
                 Table::alter().table(Users::Table).add_column(
-                    ColumnDef::new(Users::Disabled)
+                    ColumnDef::new(Users::LoginEnabled)
                         .boolean()
                         .not_null()
-                        .default(false),
+                        .default(true),
                 ),
             ),
         )

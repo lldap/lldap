@@ -21,8 +21,8 @@ pub struct Model {
     pub totp_secret: Option<String>,
     pub mfa_type: Option<String>,
     pub uuid: Uuid,
-    #[sea_orm(default_value = false)]
-    pub disabled: bool,
+    #[sea_orm(default_value = true)]
+    pub login_enabled: bool,
 }
 
 impl EntityName for Entity {
@@ -42,7 +42,7 @@ pub enum Column {
     TotpSecret,
     MfaType,
     Uuid,
-    Disabled,
+    LoginEnabled,
 }
 
 impl ColumnTrait for Column {
@@ -59,7 +59,7 @@ impl ColumnTrait for Column {
             Column::TotpSecret => ColumnType::String(StringLen::N(64)),
             Column::MfaType => ColumnType::String(StringLen::N(64)),
             Column::Uuid => ColumnType::String(StringLen::N(36)),
-            Column::Disabled => ColumnType::Boolean,
+            Column::LoginEnabled => ColumnType::Boolean,
         }
         .def()
     }
@@ -124,7 +124,7 @@ impl From<Model> for lldap_domain::types::User {
             display_name: user.display_name,
             creation_date: user.creation_date,
             uuid: user.uuid,
-            disabled: user.disabled,
+            login_enabled: user.login_enabled,
             attributes: Vec::new(),
         }
     }

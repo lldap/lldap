@@ -61,6 +61,15 @@ impl From<Schema> for PublicSchema {
                 is_hardcoded: true,
                 is_readonly: false,
             },
+            AttributeSchema {
+                name: "login_enabled".into(),
+                attribute_type: AttributeType::Boolean,
+                is_list: false,
+                is_visible: true,
+                is_editable: true,
+                is_hardcoded: true,
+                is_readonly: false,
+            },
         ]);
         schema
             .user_attributes

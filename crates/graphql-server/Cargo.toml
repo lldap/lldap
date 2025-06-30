@@ -29,6 +29,10 @@ features = ["opaque_server", "opaque_client", "sea_orm"]
 [dependencies.lldap_domain]
 path = "../domain"
 
+[dev-dependencies.lldap_domain]
+path = "../domain"
+features = ["test"]
+
 [dependencies.lldap_domain_model]
 path = "../domain-model"
 
@@ -55,9 +59,9 @@ version = "1"
 mockall = "0.11.4"
 pretty_assertions = "1"
 
-#[dev-dependencies.lldap_auth]
-#path = "../auth"
-#features = ["test"]
+[dev-dependencies.lldap_auth]
+path = "../auth"
+features = ["test"]
 #
 #[dev-dependencies.lldap_opaque_handler]
 #path = "../opaque-handler"

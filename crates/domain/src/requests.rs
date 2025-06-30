@@ -17,7 +17,7 @@ pub struct UpdateUserRequest {
     pub user_id: UserId,
     pub email: Option<Email>,
     pub display_name: Option<String>,
-    pub disabled: Option<bool>,
+    pub login_enabled: Option<bool>,
     pub delete_attributes: Vec<AttributeName>,
     pub insert_attributes: Vec<Attribute>,
 }

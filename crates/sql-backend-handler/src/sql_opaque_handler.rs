@@ -63,16 +63,16 @@ impl SqlBackendHandler {
 
     #[instrument(skip(self), level = "debug", err)]
     async fn check_user_enabled(&self, user_id: &UserId) -> Result<bool> {
-        // Check if the user is enabled (not disabled)
-        let disabled = model::User::find_by_id(user_id.clone())
+        // Check if the user login is enabled
+        let login_enabled = model::User::find_by_id(user_id.clone())
             .select_only()
-            .column(UserColumn::Disabled)
+            .column(UserColumn::LoginEnabled)
             .into_tuple::<(bool,)>()
             .one(&self.sql_pool)
             .await?
             .map(|u| u.0)
-            .unwrap_or(true); // Default to disabled if user not found
-        Ok(!disabled)
+            .unwrap_or(false); // Default login_enabled to false if user not found
+        Ok(login_enabled)
     }
 }
 
@@ -82,9 +82,12 @@ impl LoginHandler for SqlBackendHandler {
     async fn bind(&self, request: BindRequest) -> Result<()> {
         // First check if user is enabled
         if !self.check_user_enabled(&request.name).await? {
-            warn!(r#"Login attempt for disabled user "{}""#, &request.name);
+            warn!(
+                r#"Login attempt for user with login blocked "{}""#,
+                &request.name
+            );
             return Err(DomainError::AuthenticationError(format!(
-                r#"Account disabled for user "{}""#,
+                r#"Login blocked for user "{}""#,
                 request.name
             )));
         }
@@ -174,9 +177,12 @@ impl OpaqueHandler for SqlOpaqueHandler {
             Ok(session) => {
                 // Check if user is enabled after successful authentication
                 if !self.check_user_enabled(&username).await? {
-                    warn!(r#"OPAQUE login attempt for disabled user "{}""#, &username);
+                    warn!(
+                        r#"OPAQUE login attempt for user with login blocked "{}""#,
+                        &username
+                    );
                     return Err(DomainError::AuthenticationError(format!(
-                        r#"Account disabled for user "{}""#,
+                        r#"Login blocked for user "{}""#,
                         username
                     )));
                 }

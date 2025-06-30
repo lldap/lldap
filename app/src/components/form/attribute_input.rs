@@ -31,6 +31,19 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
                 <JpegFileInput name={props.name.clone()} value={props.value.clone()} />
             };
         }
+        AttributeType::Boolean => {
+            let checked = props.value.as_ref().map(|v| v == "true").unwrap_or(false);
+            return html! {
+                <div class="form-check form-switch">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        name={props.name.clone()}
+                        checked={checked}
+                        value="true" />
+                </div>
+            };
+        }
     };
 
     html! {

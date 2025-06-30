@@ -533,6 +533,7 @@ mod tests {
                             .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
                             .unwrap()
                             .naive_utc(),
+                        login_enabled: true,
                     },
                     groups: None,
                 },

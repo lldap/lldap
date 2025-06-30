@@ -202,6 +202,16 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
             .then_some(&self.handler)
     }
 
+    pub fn get_login_enabled_writeable_handler(
+        &self,
+        validation_result: &ValidationResults,
+        user_id: &UserId,
+    ) -> Option<&(impl UserWriteableBackendHandler + use<Handler>)> {
+        validation_result
+            .can_write_login_enabled(user_id)
+            .then_some(&self.handler)
+    }
+
     pub fn get_readable_handler(
         &self,
         validation_result: &ValidationResults,

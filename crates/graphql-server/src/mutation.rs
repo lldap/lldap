@@ -3,8 +3,8 @@ use anyhow::{Context as AnyhowContext, anyhow};
 use juniper::{FieldError, FieldResult, GraphQLInputObject, GraphQLObject, graphql_object};
 use lldap_access_control::{
     AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
-    UserWriteableBackendHandler,
 };
+use lldap_auth::access_control::{Permission, ValidationResults};
 use lldap_domain::{
     deserialize::deserialize_attribute_value,
     public_schema::PublicSchema,
@@ -92,7 +92,8 @@ pub struct UpdateUserInput {
     id: String,
     email: Option<String>,
     display_name: Option<String>,
-    disabled: Option<bool>,
+    /// Whether the user can log in. Can be updated by admins and password managers.
+    login_enabled: Option<bool>,
     /// First name of user. Deprecated: use attribute instead.
     /// If both field and corresponding attribute is supplied, the attribute will take precedence.
     first_name: Option<String>,
@@ -164,7 +165,9 @@ fn unpack_attributes(
         .map(|attr| attr.value.into_string().unwrap());
     let attributes = attributes
         .into_iter()
-        .filter(|attr| attr.name != "mail" && attr.name != "display_name")
+        .filter(|attr| {
+            attr.name != "mail" && attr.name != "display_name" && attr.name != "login_enabled"
+        })
         .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(UnpackedAttributes {
@@ -218,6 +221,78 @@ fn consolidate_attributes(
     }
     // Return the values of the resulting map
     provided_attributes.into_values().collect()
+}
+
+async fn check_disable_protection<Handler: BackendHandler>(
+    handler: &Handler,
+    user_id: &UserId,
+    validation_result: &ValidationResults,
+    span: &Span,
+) -> FieldResult<()> {
+    let is_admin = validation_result.is_admin();
+
+    // Check if target user is an admin (for password manager restrictions)
+    let user_groups = handler.get_user_groups(user_id).await?;
+    let target_user_is_admin = user_groups
+        .iter()
+        .any(|g| g.display_name.as_str() == "lldap_admin");
+
+    // Only allow admin or password managers to disable accounts
+    // Password managers cannot disable admin users
+    if !is_admin && validation_result.permission != Permission::PasswordManager {
+        span.in_scope(|| debug!("Unauthorized attempt to disable user account"));
+        return Err(
+            "Permission denied: Only admins and password managers can disable user accounts".into(),
+        );
+    } else if validation_result.permission == Permission::PasswordManager && target_user_is_admin {
+        span.in_scope(|| debug!("Password manager cannot disable admin user"));
+        return Err("Permission denied: Password managers cannot disable admin users".into());
+    }
+
+    // Prevent disabling if this user is the only admin or password manager
+    let critical_groups = ["lldap_admin", "lldap_password_manager"];
+
+    for critical_group in critical_groups {
+        let user_is_in_group = user_groups
+            .iter()
+            .any(|g| g.display_name.as_str() == critical_group);
+
+        if user_is_in_group {
+            // Check if this user is the only enabled member of this critical group
+            let all_users = handler.list_users(None, true).await?;
+            let group_members: Vec<_> = all_users
+                .iter()
+                .filter(|u| {
+                    u.groups.as_ref().map_or(false, |groups| {
+                        groups
+                            .iter()
+                            .any(|g| g.display_name.as_str() == critical_group)
+                    })
+                })
+                .collect();
+
+            let enabled_members_count = group_members
+                .iter()
+                .filter(|u| u.user.user_id != *user_id && u.user.login_enabled)
+                .count();
+
+            if enabled_members_count == 0 {
+                span.in_scope(|| {
+                    debug!(
+                        "Cannot disable the last enabled member of critical group: {}",
+                        critical_group
+                    )
+                });
+                return Err(format!(
+                    "Cannot disable user: they are the only enabled member of the {} group",
+                    critical_group
+                )
+                .into());
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[graphql_object(context = Context<Handler>)]
@@ -301,11 +376,51 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             debug!(?user.id);
         });
         let user_id = UserId::new(&user.id);
-        let handler = context
-            .get_writeable_handler(&user_id)
-            .ok_or_else(field_error_callback(&span, "Unauthorized user update"))?;
+
+        // Check if this update includes login_enabled field
+        let is_modifying_login_enabled = user.login_enabled.is_some();
+
+        // For password managers modifying login_enabled on other users, we need special permission handling
+        let is_password_manager_special_case = context.validation_result.permission
+            == lldap_auth::access_control::Permission::PasswordManager
+            && is_modifying_login_enabled
+            && context.validation_result.user != user_id;
+
+        // Check permission for password manager special case
+        if is_password_manager_special_case {
+            // This is allowed - password managers can modify login_enabled for other users
+        } else if is_modifying_login_enabled {
+            // For login_enabled modifications, use special permission check
+            if context
+                .get_login_enabled_writeable_handler(&user_id)
+                .is_none()
+            {
+                span.in_scope(|| debug!("Unauthorized login_enabled update"));
+                return Err("Unauthorized login_enabled update".into());
+            }
+        } else {
+            // Use normal permission check for other fields
+            if context.get_writeable_handler(&user_id).is_none() {
+                span.in_scope(|| debug!("Unauthorized user update"));
+                return Err("Unauthorized user update".into());
+            }
+        }
+
+        // Check for login_enabled being disabled and apply protection logic
+        let is_disabling_login = user.login_enabled == Some(false);
+        if is_disabling_login {
+            let handler = context.handler.unsafe_get_handler();
+            check_disable_protection(&*handler, &user_id, &context.validation_result, &span)
+                .await?;
+        }
+
+        // Use the handler directly since all permission checks passed above
+        let handler = context.handler.unsafe_get_handler();
+
         let is_admin = context.validation_result.is_admin();
-        let schema = handler.get_schema().await?;
+        let raw_schema = handler.get_schema().await?;
+        let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema);
+
         // Consolidate attributes and fields into a combined attribute list
         let consolidated_attributes = consolidate_attributes(
             user.insert_attributes.unwrap_or_default(),
@@ -313,20 +428,24 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             user.last_name,
             user.avatar,
         );
+
         // Extract any empty attributes into a list of attributes for deletion
         let (delete_attrs, insert_attrs): (Vec<_>, Vec<_>) = consolidated_attributes
             .into_iter()
             .partition(|a| a.value == vec!["".to_string()]);
+
         // Combine lists of attributes for removal
         let mut delete_attributes: Vec<String> =
             delete_attrs.iter().map(|a| a.name.to_owned()).collect();
         delete_attributes.extend(user.remove_attributes.unwrap_or_default());
+
         // Unpack attributes for update
         let UnpackedAttributes {
             email,
             display_name,
             attributes: insert_attributes,
         } = unpack_attributes(insert_attrs, &schema, is_admin)?;
+
         let display_name = display_name.or_else(|| {
             // If the display name is not inserted, but removed, reset it.
             delete_attributes
@@ -334,15 +453,18 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 .find(|attr| *attr == "display_name")
                 .map(|_| String::new())
         });
+
         handler
             .update_user(UpdateUserRequest {
                 user_id,
                 email: user.email.map(Into::into).or(email),
                 display_name: user.display_name.or(display_name),
-                disabled: user.disabled,
+                login_enabled: user.login_enabled,
                 delete_attributes: delete_attributes
                     .into_iter()
-                    .filter(|attr| attr != "mail" && attr != "display_name")
+                    .filter(|attr| {
+                        attr != "mail" && attr != "display_name" && attr != "login_enabled"
+                    })
                     .map(Into::into)
                     .collect(),
                 insert_attributes,

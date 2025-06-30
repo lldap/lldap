@@ -78,8 +78,8 @@ pub fn get_user_attribute(
                 .to_rfc3339()
                 .into_bytes(),
         ],
-        UserFieldType::PrimaryField(UserColumn::Disabled) => {
-            vec![user.disabled.to_string().into_bytes()]
+        UserFieldType::PrimaryField(UserColumn::LoginEnabled) => {
+            vec![user.login_enabled.to_string().into_bytes()]
         }
         UserFieldType::Attribute(attr, _, _) => get_custom_attribute(&user.attributes, &attr)?,
         UserFieldType::NoMatch => match attribute.as_str() {

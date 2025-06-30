@@ -195,7 +195,10 @@ impl SqlBackendHandler {
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
             lowercase_email: lower_email.map(ActiveValue::Set).unwrap_or_default(),
             display_name: to_value(&request.display_name),
-            disabled: request.disabled.map(ActiveValue::Set).unwrap_or_default(),
+            login_enabled: request
+                .login_enabled
+                .map(ActiveValue::Set)
+                .unwrap_or_default(),
             ..Default::default()
         };
         let mut update_user_attributes = Vec::new();
@@ -833,7 +836,7 @@ mod tests {
                 user_id: UserId::new("bob"),
                 email: Some("email".into()),
                 display_name: Some("display_name".to_string()),
-                disabled: None,
+                login_enabled: None,
                 delete_attributes: Vec::new(),
                 insert_attributes: vec![
                     Attribute {
@@ -1197,51 +1200,51 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_user_disabled() {
+    async fn test_update_user_login_enabled() {
         let fixture = TestFixture::new().await;
 
-        // Disable a user
+        // Disable login for a user via core field
         fixture
             .handler
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
                 email: None,
                 display_name: None,
-                disabled: Some(true),
+                login_enabled: Some(false),
                 delete_attributes: Vec::new(),
                 insert_attributes: Vec::new(),
             })
             .await
             .unwrap();
 
-        // Verify the user is disabled
+        // Verify the user login is blocked
         let user = fixture
             .handler
             .get_user_details(&UserId::new("bob"))
             .await
             .unwrap();
-        assert_eq!(user.disabled, true);
+        assert_eq!(user.login_enabled, false);
 
-        // Re-enable the user
+        // Re-enable login for the user via core field
         fixture
             .handler
             .update_user(UpdateUserRequest {
                 user_id: UserId::new("bob"),
                 email: None,
                 display_name: None,
-                disabled: Some(false),
+                login_enabled: Some(true),
                 delete_attributes: Vec::new(),
                 insert_attributes: Vec::new(),
             })
             .await
             .unwrap();
 
-        // Verify the user is enabled
+        // Verify the user login is enabled
         let user = fixture
             .handler
             .get_user_details(&UserId::new("bob"))
             .await
             .unwrap();
-        assert_eq!(user.disabled, false);
+        assert_eq!(user.login_enabled, true);
     }
 }

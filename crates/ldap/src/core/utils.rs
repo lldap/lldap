@@ -327,6 +327,29 @@ pub fn get_custom_attribute(
             AttributeValue::DateTime(Cardinality::Unbounded(l)) => {
                 l.iter().map(convert_date).collect()
             }
+            AttributeValue::Boolean(Cardinality::Singleton(b)) => {
+                // LDAP booleans are encoded as strings: "TRUE" or "FALSE"
+                vec![
+                    if *b {
+                        "TRUE".to_string()
+                    } else {
+                        "FALSE".to_string()
+                    }
+                    .into_bytes(),
+                ]
+            }
+            AttributeValue::Boolean(Cardinality::Unbounded(l)) => l
+                .iter()
+                // LDAP booleans are encoded as strings: "TRUE" or "FALSE"
+                .map(|b| {
+                    if *b {
+                        "TRUE".to_string()
+                    } else {
+                        "FALSE".to_string()
+                    }
+                    .into_bytes()
+                })
+                .collect(),
         })
 }
 

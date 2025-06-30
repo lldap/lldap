@@ -55,4 +55,11 @@ impl ValidationResults {
     pub fn can_write(&self, user: &UserId) -> bool {
         self.permission == Permission::Admin || &self.user == user
     }
+
+    #[must_use]
+    pub fn can_write_login_enabled(&self, user: &UserId) -> bool {
+        self.permission == Permission::Admin
+            || self.permission == Permission::PasswordManager
+            || &self.user == user
+    }
 }

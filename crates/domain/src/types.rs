@@ -147,6 +147,8 @@ impl From<AttributeValue> for Serialized {
             AttributeValue::JpegPhoto(Cardinality::Unbounded(l)) => Serialized::from(l),
             AttributeValue::DateTime(Cardinality::Singleton(dt)) => Serialized::from(dt),
             AttributeValue::DateTime(Cardinality::Unbounded(l)) => Serialized::from(l),
+            AttributeValue::Boolean(Cardinality::Singleton(b)) => Serialized::from(b),
+            AttributeValue::Boolean(Cardinality::Unbounded(l)) => Serialized::from(l),
         }
     }
 }
@@ -377,7 +379,7 @@ impl std::fmt::Debug for JpegPhoto {
             encoded.push_str(" ...");
         };
         f.debug_tuple("JpegPhoto")
-            .field(&format!("b64[{}]", encoded))
+            .field(&format!("b64[{encoded}]"))
             .finish()
     }
 }
@@ -454,6 +456,7 @@ pub enum AttributeValue {
     Integer(Cardinality<i64>),
     JpegPhoto(Cardinality<JpegPhoto>),
     DateTime(Cardinality<NaiveDateTime>),
+    Boolean(Cardinality<bool>),
 }
 
 impl AttributeValue {
@@ -463,6 +466,7 @@ impl AttributeValue {
             Self::Integer(_) => AttributeType::Integer,
             Self::JpegPhoto(_) => AttributeType::JpegPhoto,
             Self::DateTime(_) => AttributeType::DateTime,
+            Self::Boolean(_) => AttributeType::Boolean,
         }
     }
     pub fn as_str(&self) -> Option<&str> {
@@ -482,6 +486,13 @@ impl AttributeValue {
     pub fn as_jpeg_photo(&self) -> Option<&JpegPhoto> {
         if let AttributeValue::JpegPhoto(Cardinality::Singleton(p)) = self {
             Some(p)
+        } else {
+            None
+        }
+    }
+    pub fn as_bool(&self) -> Option<bool> {
+        if let AttributeValue::Boolean(Cardinality::Singleton(b)) = self {
+            Some(*b)
         } else {
             None
         }
@@ -532,6 +543,17 @@ impl From<Vec<NaiveDateTime>> for AttributeValue {
     }
 }
 
+impl From<bool> for AttributeValue {
+    fn from(b: bool) -> Self {
+        AttributeValue::Boolean(Cardinality::Singleton(b))
+    }
+}
+impl From<Vec<bool>> for AttributeValue {
+    fn from(l: Vec<bool>) -> Self {
+        AttributeValue::Boolean(Cardinality::Unbounded(l))
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct Attribute {
     pub name: AttributeName,
@@ -545,7 +567,7 @@ pub struct User {
     pub display_name: Option<String>,
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
-    pub disabled: bool,
+    pub login_enabled: bool,
     pub attributes: Vec<Attribute>,
 }
 
@@ -559,7 +581,7 @@ impl Default for User {
             display_name: None,
             creation_date: epoch,
             uuid: Uuid::from_name_and_date("", &epoch),
-            disabled: false,
+            login_enabled: true,
             attributes: Vec::new(),
         }
     }
@@ -611,6 +633,7 @@ pub enum AttributeType {
     Integer,
     JpegPhoto,
     DateTime,
+    Boolean,
 }
 
 impl From<AttributeType> for Value {

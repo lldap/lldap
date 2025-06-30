@@ -6,7 +6,7 @@ query GetUserDetails($id: String!) {
     displayName
     creationDate
     uuid
-    disabled
+    loginEnabled
     groups {
       id
       displayName
