@@ -195,6 +195,7 @@ impl SqlBackendHandler {
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
             lowercase_email: lower_email.map(ActiveValue::Set).unwrap_or_default(),
             display_name: to_value(&request.display_name),
+            disabled: request.disabled.map(ActiveValue::Set).unwrap_or_default(),
             ..Default::default()
         };
         let mut update_user_attributes = Vec::new();
@@ -832,6 +833,7 @@ mod tests {
                 user_id: UserId::new("bob"),
                 email: Some("email".into()),
                 display_name: Some("display_name".to_string()),
+                disabled: None,
                 delete_attributes: Vec::new(),
                 insert_attributes: vec![
                     Attribute {
@@ -1192,5 +1194,54 @@ mod tests {
             })
             .await
             .unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn test_update_user_disabled() {
+        let fixture = TestFixture::new().await;
+
+        // Disable a user
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                email: None,
+                display_name: None,
+                disabled: Some(true),
+                delete_attributes: Vec::new(),
+                insert_attributes: Vec::new(),
+            })
+            .await
+            .unwrap();
+
+        // Verify the user is disabled
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("bob"))
+            .await
+            .unwrap();
+        assert_eq!(user.disabled, true);
+
+        // Re-enable the user
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                email: None,
+                display_name: None,
+                disabled: Some(false),
+                delete_attributes: Vec::new(),
+                insert_attributes: Vec::new(),
+            })
+            .await
+            .unwrap();
+
+        // Verify the user is enabled
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("bob"))
+            .await
+            .unwrap();
+        assert_eq!(user.disabled, false);
     }
 }

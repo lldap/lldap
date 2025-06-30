@@ -6,6 +6,7 @@ query ListUsersQuery($filters: RequestFilter) {
     firstName
     lastName
     creationDate
+    disabled
   }
 }
 query ListUserNames($filters: RequestFilter) {

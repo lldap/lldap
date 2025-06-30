@@ -92,6 +92,7 @@ pub struct UpdateUserInput {
     id: String,
     email: Option<String>,
     display_name: Option<String>,
+    disabled: Option<bool>,
     /// First name of user. Deprecated: use attribute instead.
     /// If both field and corresponding attribute is supplied, the attribute will take precedence.
     first_name: Option<String>,
@@ -338,6 +339,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 user_id,
                 email: user.email.map(Into::into).or(email),
                 display_name: user.display_name.or(display_name),
+                disabled: user.disabled,
                 delete_attributes: delete_attributes
                     .into_iter()
                     .filter(|attr| attr != "mail" && attr != "display_name")

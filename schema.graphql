@@ -95,6 +95,7 @@ input UpdateUserInput {
   id: String!
   email: String
   displayName: String
+  disabled: Boolean
   """
     First name of user. Deprecated: use attribute instead.
     If both field and corresponding attribute is supplied, the attribute will take precedence.
@@ -170,6 +171,7 @@ type User {
   avatar: String
   creationDate: DateTimeUtc!
   uuid: String!
+  disabled: Boolean!
   "User-defined attributes."
   attributes: [AttributeValue!]!
   "The groups to which this user belongs."
