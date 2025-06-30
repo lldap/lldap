@@ -19,13 +19,13 @@ Starting `lldap.service` will start all the other services, but stopping it will
 
 - Copy `lldap-db.container`, `lldap.container`, `lldap-db.volume`, `lldap-frontend.network`, and `lldap-backend.network` to `~/.config/containers/systemd/`
 - Adjust the line `Environment=LLDAP_LDAP_BASE_DN=dc=example,dc=com` in `lldap.container` to match your domain name.
-    - The default value suppose your domain is "example.com"
+    - The default value assumes your domain is "example.com"
 - Create the necessary secrets: `lldap-jwt-secret`, `lldap-key-seed`, and `lldap-ldap-user-pass`.
     - Podman allows several different methods to create secrets; here, it will be done purely from the command line. Don't forget to replace the secret values with something actually secret.
     ```bash
         $ LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\''()*+,-./:;<=>?@[\\]^_{|}~' </dev/urandom | head -c 32 | podman secret create lldap-jwt-secret -
         $ LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\''()*+,-./:;<=>?@[\\]^_{|}~' </dev/urandom | head -c 32 | podman secret create lldap-key-seed -
-        $ echo 'your-third-secret-here' | podman secret create lldap-ldap-user-pass -
+        $ echo 'your-admin-password' | podman secret create lldap-ldap-user-pass -
     ```
     - If later on you need to query any of those secrets, you can do so with `podman secret inspect <name of the secret> --showsecret`. The value of the secret is in the output's "SecretData" field.
 - At this point, you should be able to start the container.
