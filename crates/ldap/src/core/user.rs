@@ -123,6 +123,7 @@ const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
     "jpegPhoto",
     "createtimestamp",
     "entryuuid",
+    "login_enabled",
 ];
 
 fn make_ldap_search_user_result_entry(

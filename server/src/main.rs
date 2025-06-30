@@ -14,6 +14,7 @@ mod jwt_sql_tables;
 mod ldap_server;
 mod logging;
 mod mail;
+mod session_aware_backend_handler;
 mod sql_tcp_backend_handler;
 mod tcp_backend_handler;
 mod tcp_server;
@@ -23,6 +24,8 @@ use crate::{
     configuration::{Configuration, compare_private_key_hashes},
     database_string::DatabaseUrl,
     db_cleaner::Scheduler,
+    session_aware_backend_handler::SessionAwareBackendHandler,
+    tcp_backend_handler::TcpBackendHandler,
 };
 use actix::Actor;
 use actix_server::ServerBuilder;
@@ -46,7 +49,11 @@ const ADMIN_PASSWORD_MISSING_ERROR: &str = "The LDAP admin password must be init
             Either set the `ldap_user_pass` config value or the `LLDAP_LDAP_USER_PASS` environment variable. \
             A minimum of 8 characters is recommended.";
 
-async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) -> Result<()> {
+async fn create_admin_user<T: UserBackendHandler + GroupListerBackendHandler>(
+    handler: &T,
+    sql_handler: &SqlBackendHandler,
+    config: &Configuration,
+) -> Result<()> {
     let pass_length = config
         .ldap_user_pass
         .as_ref()
@@ -67,7 +74,7 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
         })
         .and_then(|_| {
             register_password(
-                handler,
+                sql_handler,
                 config.ldap_user_dn.clone(),
                 config.ldap_user_pass.as_ref().unwrap(),
             )
@@ -84,7 +91,10 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
         .context("Error adding admin user to group")
 }
 
-async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> Result<()> {
+async fn ensure_group_exists<T: GroupListerBackendHandler + GroupBackendHandler>(
+    handler: &T,
+    group_name: &str,
+) -> Result<()> {
     if handler
         .list_groups(Some(GroupRequestFilter::DisplayName(group_name.into())))
         .await?
@@ -152,8 +162,19 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
             return Err(anyhow!("The private key encoding the passwords has changed since last successful startup. Changing the private key will invalidate all existing passwords. If you want to proceed, restart the server with the CLI arg --force-update-private-key=true or the env variable LLDAP_FORCE_UPDATE_PRIVATE_KEY=true. You probably also want --force-ldap-user-pass-reset / LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password to the value in the configuration.").context(e));
         }
     }
-    let backend_handler =
+    let sql_backend_handler =
         SqlBackendHandler::new(config.get_server_setup().clone(), sql_pool.clone());
+
+    // Get initial JWT blacklist from database
+    let jwt_blacklist = sql_backend_handler
+        .get_jwt_blacklist()
+        .await
+        .context("while getting the jwt blacklist")?;
+    let jwt_blacklist = std::sync::Arc::new(std::sync::RwLock::new(jwt_blacklist));
+
+    // Create session-aware backend handler that will invalidate sessions when users are disabled
+    let backend_handler =
+        SessionAwareBackendHandler::new(sql_backend_handler.clone(), jwt_blacklist.clone());
     ensure_group_exists(&backend_handler, "lldap_admin").await?;
     ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
     ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;
@@ -172,7 +193,7 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
         warn!(
             "Could not find an admin user, trying to create the user \"admin\" with the config-provided password"
         );
-        create_admin_user(&backend_handler, &config)
+        create_admin_user(&backend_handler, &sql_backend_handler, &config)
             .await
             .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))
             .context("while creating the admin user")?;
@@ -186,7 +207,7 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
             span!(Level::INFO, "Resetting admin password")
         };
         register_password(
-            &backend_handler,
+            &sql_backend_handler,
             config.ldap_user_dn.clone(),
             config
                 .ldap_user_pass
@@ -211,9 +232,10 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
         actix_server::Server::build(),
     )
     .context("while binding the LDAP server")?;
-    let server_builder = tcp_server::build_tcp_server(&config, backend_handler, server_builder)
-        .await
-        .context("while binding the TCP server")?;
+    let server_builder =
+        tcp_server::build_tcp_server(&config, backend_handler, server_builder, jwt_blacklist)
+            .await
+            .context("while binding the TCP server")?;
     // Run every hour.
     let scheduler = Scheduler::new("0 0 * * * * *", sql_pool);
     scheduler.start();

@@ -471,6 +471,9 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             })
             .instrument(span)
             .await?;
+
+        // Session invalidation is handled automatically by the SessionAwareBackendHandler
+
         Ok(Success::new())
     }
 

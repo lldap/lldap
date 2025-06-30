@@ -6,11 +6,14 @@ use lldap_access_control::{
 };
 use lldap_auth::{access_control::ValidationResults, types::UserId};
 use lldap_domain_handlers::handler::BackendHandler;
+use std::collections::HashSet;
+use std::sync::{Arc, RwLock};
 use tracing::debug;
 
 pub struct Context<Handler: BackendHandler> {
     pub handler: AccessControlledBackendHandler<Handler>,
     pub validation_result: ValidationResults,
+    pub jwt_blacklist: Option<Arc<RwLock<HashSet<u64>>>>,
 }
 
 pub fn field_error_callback<'a>(
@@ -29,6 +32,7 @@ impl<Handler: BackendHandler> Context<Handler> {
         Self {
             handler: AccessControlledBackendHandler::new(handler),
             validation_result,
+            jwt_blacklist: None,
         }
     }
 

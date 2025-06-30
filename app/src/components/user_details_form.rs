@@ -218,17 +218,21 @@ impl UserDetailsForm {
 
         // Extract login_enabled from form and check if it changed
         // Let the backend handle authorization - both admins and password managers can modify login_enabled
-        let form_login_enabled = if let Some(attr) = all_values.iter().find(|a| a.name == "login_enabled") {
-            // Checkbox is checked - it sent "true"
-            attr.values.first().and_then(|v| v.parse::<bool>().ok()).unwrap_or(false)
-        } else {
-            // Checkbox is unchecked - no value was sent, so it's false
-            false
-        };
-        
+        let form_login_enabled =
+            if let Some(attr) = all_values.iter().find(|a| a.name == "login_enabled") {
+                // Checkbox is checked - it sent "true"
+                attr.values
+                    .first()
+                    .and_then(|v| v.parse::<bool>().ok())
+                    .unwrap_or(false)
+            } else {
+                // Checkbox is unchecked - no value was sent, so it's false
+                false
+            };
+
         // Filter out login_enabled from attribute processing since we handle it separately
         all_values.retain(|a| a.name != "login_enabled");
-        
+
         // Check if it changed from original
         let login_enabled_value = if form_login_enabled != self.user.login_enabled {
             Some(form_login_enabled)
