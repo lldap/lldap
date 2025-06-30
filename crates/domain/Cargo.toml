@@ -17,6 +17,7 @@ test = []
 anyhow = "*"
 base64 = "0.21"
 bincode = "1.3"
+itertools = "0.10"
 juniper = "0.15"
 serde_bytes = "0.11"
 
