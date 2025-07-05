@@ -393,7 +393,6 @@ impl JpegPhoto {
         Self(vec![])
     }
 
-
     pub fn into_bytes(self) -> Vec<u8> {
         self.0
     }

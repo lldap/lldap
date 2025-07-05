@@ -169,11 +169,13 @@ pub(crate) fn root_dse_response(base_dn: &str) -> LdapOp {
 }
 
 pub(crate) fn is_root_dse_request(request: &LdapSearchRequest) -> bool {
-    if request.base.is_empty() && request.scope == LdapSearchScope::Base
+    if request.base.is_empty()
+        && request.scope == LdapSearchScope::Base
         && let LdapFilter::Present(attribute) = &request.filter
-            && attribute.eq_ignore_ascii_case("objectclass") {
-                return true;
-            }
+        && attribute.eq_ignore_ascii_case("objectclass")
+    {
+        return true;
+    }
     false
 }
 

@@ -178,17 +178,11 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         Self { handler }
     }
 
-    pub fn get_admin_handler(
-        &self,
-        validation_result: &ValidationResults,
-    ) -> Option<&Handler> {
+    pub fn get_admin_handler(&self, validation_result: &ValidationResults) -> Option<&Handler> {
         validation_result.is_admin().then_some(&self.handler)
     }
 
-    pub fn get_readonly_handler(
-        &self,
-        validation_result: &ValidationResults,
-    ) -> Option<&Handler> {
+    pub fn get_readonly_handler(&self, validation_result: &ValidationResults) -> Option<&Handler> {
         validation_result.can_read_all().then_some(&self.handler)
     }
 

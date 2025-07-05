@@ -58,8 +58,7 @@ impl ValidationResults {
 
     #[must_use]
     pub fn can_write_login_enabled(&self, user: &UserId) -> bool {
-        (self.permission == Permission::Admin
-            || self.permission == Permission::PasswordManager)
+        (self.permission == Permission::Admin || self.permission == Permission::PasswordManager)
             && &self.user != user
     }
 }

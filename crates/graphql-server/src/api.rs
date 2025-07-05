@@ -1,8 +1,6 @@
 use crate::{mutation::Mutation, query::Query};
 use juniper::{EmptySubscription, FieldError, RootNode};
-use lldap_access_control::{
-    AccessControlledBackendHandler,
-};
+use lldap_access_control::AccessControlledBackendHandler;
 use lldap_auth::{access_control::ValidationResults, types::UserId};
 use lldap_domain_handlers::handler::BackendHandler;
 use std::collections::HashSet;
@@ -43,26 +41,17 @@ impl<Handler: BackendHandler> Context<Handler> {
         self.handler.get_readonly_handler(&self.validation_result)
     }
 
-    pub fn get_writeable_handler(
-        &self,
-        user_id: &UserId,
-    ) -> Option<&Handler> {
+    pub fn get_writeable_handler(&self, user_id: &UserId) -> Option<&Handler> {
         self.handler
             .get_writeable_handler(&self.validation_result, user_id)
     }
 
-    pub fn get_login_enabled_writeable_handler(
-        &self,
-        user_id: &UserId,
-    ) -> Option<&Handler> {
+    pub fn get_login_enabled_writeable_handler(&self, user_id: &UserId) -> Option<&Handler> {
         self.handler
             .get_login_enabled_writeable_handler(&self.validation_result, user_id)
     }
 
-    pub fn get_readable_handler(
-        &self,
-        user_id: &UserId,
-    ) -> Option<&Handler> {
+    pub fn get_readable_handler(&self, user_id: &UserId) -> Option<&Handler> {
         self.handler
             .get_readable_handler(&self.validation_result, user_id)
     }

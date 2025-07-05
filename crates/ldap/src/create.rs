@@ -33,9 +33,7 @@ pub(crate) async fn create_user_or_group(
         }
         err => Err(err.into_ldap_error(
             &request.dn,
-            format!(
-                r#""uid=id,ou=people,{base_dn_str}" or "uid=id,ou=groups,{base_dn_str}""#
-            ),
+            format!(r#""uid=id,ou=people,{base_dn_str}" or "uid=id,ou=groups,{base_dn_str}""#),
         )),
     }
 }
@@ -72,9 +70,7 @@ async fn create_user(
         std::str::from_utf8(val)
             .map_err(|e| LdapError {
                 code: LdapResultCode::ConstraintViolation,
-                message: format!(
-                    "Attribute value is invalid UTF-8: {e:#?} (value {val:?})"
-                ),
+                message: format!("Attribute value is invalid UTF-8: {e:#?} (value {val:?})"),
             })
             .map(str::to_owned)
     }

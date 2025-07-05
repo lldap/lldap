@@ -40,7 +40,8 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
                         type="checkbox"
                         name={props.name.clone()}
                         checked={checked}
-                        value="true" />
+                        value="true"
+                        onchange={|_| {}} />
                 </div>
             };
         }

@@ -286,9 +286,7 @@ fn convert_user_filter(
                 | UserFieldType::PrimaryField(UserColumn::CreationDate)
                 | UserFieldType::PrimaryField(UserColumn::Uuid) => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
-                    message: format!(
-                        "Unsupported user attribute for substring filter: {field:?}"
-                    ),
+                    message: format!("Unsupported user attribute for substring filter: {field:?}"),
                 }),
                 UserFieldType::NoMatch => Ok(UserRequestFilter::from(false)),
                 UserFieldType::PrimaryField(UserColumn::Email) => Ok(UserRequestFilter::SubString(

@@ -100,9 +100,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             backend_handler,
             ldap_info: LdapInfo {
                 base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
-                    panic!(
-                        "Invalid value for ldap_base_dn in configuration: {ldap_base_dn}"
-                    )
+                    panic!("Invalid value for ldap_base_dn in configuration: {ldap_base_dn}")
                 }),
                 base_dn_str: ldap_base_dn,
                 ignored_user_attributes,

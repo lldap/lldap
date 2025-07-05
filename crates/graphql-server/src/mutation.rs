@@ -337,10 +337,10 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         // only be modified by admins/password managers AND cannot be self-modified. This
         // branching approach is cleaner than trying to handle all cases in a single
         // permission check, and follows the principle of least privilege.
-        
+
         // Check permissions based on what fields are being modified
         let is_modifying_login_enabled = user.login_enabled.is_some();
-        
+
         if is_modifying_login_enabled {
             // For login_enabled modifications, use special permission check
             if context
@@ -361,16 +361,30 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         // Check for login_enabled being set to false and apply protection logic
         let is_disabling_login = user.login_enabled == Some(false);
         if is_disabling_login {
+            // We need the raw handler here for the protection check since it needs get_user_groups()
             let handler = context.handler.unsafe_get_handler();
             check_login_disable_protection(handler, &user_id, &context.validation_result, &span)
                 .await?;
         }
 
-        // Use the handler directly since all permission checks passed above
-        let handler = context.handler.unsafe_get_handler();
+        // Get the appropriate permission-checked handler for the actual operations
+        let handler = if is_modifying_login_enabled {
+            context
+                .get_login_enabled_writeable_handler(&user_id)
+                .expect("Permission already validated above")
+        } else {
+            context
+                .get_writeable_handler(&user_id)
+                .expect("Permission already validated above")
+        };
 
         let is_admin = context.validation_result.is_admin();
-        let raw_schema = handler.get_schema().await?;
+        // Get schema using a properly permission-checked handler
+        let schema_handler = context
+            .get_readonly_handler()
+            .or_else(|| context.get_readable_handler(&user_id))
+            .expect("User should have read permissions if they can write");
+        let raw_schema = schema_handler.get_schema().await?;
         let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
 
         // Consolidate attributes and fields into a combined attribute list
@@ -672,7 +686,8 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         let raw_schema = handler.get_schema().await?;
         let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
         let attribute_schema = schema
-            .get_schema().user_attributes
+            .get_schema()
+            .user_attributes
             .get_attribute_schema(&name)
             .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", &name))?;
         if attribute_schema.is_hardcoded {
@@ -703,7 +718,8 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         let raw_schema = handler.get_schema().await?;
         let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
         let attribute_schema = schema
-            .get_schema().group_attributes
+            .get_schema()
+            .group_attributes
             .get_attribute_schema(&name)
             .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", &name))?;
         if attribute_schema.is_hardcoded {

@@ -30,9 +30,7 @@ pub(crate) async fn delete_user_or_group(
         UserOrGroupName::Group(group_name) => delete_group(backend_handler, group_name).await,
         err => Err(err.into_ldap_error(
             &request,
-            format!(
-                r#""uid=id,ou=people,{base_dn_str}" or "uid=id,ou=groups,{base_dn_str}""#
-            ),
+            format!(r#""uid=id,ou=people,{base_dn_str}" or "uid=id,ou=groups,{base_dn_str}""#),
         )),
     }
 }

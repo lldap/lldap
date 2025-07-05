@@ -132,9 +132,7 @@ fn read_private_key(key_file: &str) -> Result<PrivateKey> {
                 .and_then(|keys| keys.into_iter().next().ok_or_else(|| anyhow!("No EC key")))
         })
         .with_context(|| {
-            format!(
-                "Cannot read either PKCS1, PKCS8 or EC private key from {key_file}"
-            )
+            format!("Cannot read either PKCS1, PKCS8 or EC private key from {key_file}")
         })
         .map(rustls::PrivateKey)
 }

@@ -59,9 +59,9 @@ impl UserOrGroupName {
                 UserOrGroupName::InvalidSyntax(err) => return err,
                 UserOrGroupName::UnexpectedFormat
                 | UserOrGroupName::User(_)
-                | UserOrGroupName::Group(_) => format!(
-                    r#"Unexpected DN format. Got "{input}", expected: {expected_format}"#
-                ),
+                | UserOrGroupName::Group(_) => {
+                    format!(r#"Unexpected DN format. Got "{input}", expected: {expected_format}"#)
+                }
             },
         }
     }

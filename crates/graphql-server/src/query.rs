@@ -911,7 +911,7 @@ mod tests {
                             value: "Bobberson".to_string().into(),
                         },
                     ],
-                    login_enabled: true,
+                    ..Default::default()
                 })
             });
         let mut groups = HashSet::new();
@@ -919,8 +919,7 @@ mod tests {
             group_id: GroupId(3),
             display_name: "Bobbersons".into(),
             creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
-            uuid: lldap_domain::types::Uuid::try_from("a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8")
-                .unwrap(),
+            uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: vec![DomainAttribute {
                 name: "club_name".into(),
                 value: "Gang of Four".to_string().into(),
@@ -930,8 +929,7 @@ mod tests {
             group_id: GroupId(7),
             display_name: "Jefferees".into(),
             creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
-            uuid: lldap_domain::types::Uuid::try_from("b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8")
-                .unwrap(),
+            uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: Vec::new(),
         });
         mock.expect_get_user_groups()

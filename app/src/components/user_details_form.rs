@@ -216,7 +216,6 @@ impl UserDetailsForm {
             EmailIsRequired(!ctx.props().is_edited_user_admin),
         )?;
 
-
         let base_attributes = &self.user.attributes;
         all_values.retain(|a| {
             let base_val = base_attributes
@@ -252,7 +251,7 @@ impl UserDetailsForm {
             id: self.user.id.clone(),
             email: None,
             displayName: None,
-            loginEnabled: login_enabled_value,
+            loginEnabled: None,
             firstName: None,
             lastName: None,
             avatar: None,
