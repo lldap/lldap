@@ -252,7 +252,7 @@ impl UserDetailsForm {
             id: self.user.id.clone(),
             email: None,
             displayName: None,
-            loginEnabled: None,
+            loginEnabled: login_enabled_value,
             firstName: None,
             lastName: None,
             avatar: None,
