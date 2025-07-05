@@ -215,6 +215,7 @@ impl UserDetailsForm {
             IsAdmin(ctx.props().is_admin),
             EmailIsRequired(!ctx.props().is_edited_user_admin),
         )?;
+
         let base_attributes = &self.user.attributes;
         all_values.retain(|a| {
             let base_val = base_attributes

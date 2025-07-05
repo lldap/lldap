@@ -195,6 +195,10 @@ impl SqlBackendHandler {
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
             lowercase_email: lower_email.map(ActiveValue::Set).unwrap_or_default(),
             display_name: to_value(&request.display_name),
+            login_enabled: request
+                .login_enabled
+                .map(ActiveValue::Set)
+                .unwrap_or_default(),
             ..Default::default()
         };
         let mut update_user_attributes = Vec::new();
@@ -240,8 +244,7 @@ impl SqlBackendHandler {
                 remove_user_attributes.push(attribute);
             } else {
                 return Err(DomainError::InternalError(format!(
-                    "User attribute name {} doesn't exist in the schema, yet was attempted to be removed from the database",
-                    attribute
+                    "User attribute name {attribute} doesn't exist in the schema, yet was attempted to be removed from the database"
                 )));
             }
         }
@@ -384,8 +387,7 @@ impl UserBackendHandler for SqlBackendHandler {
             .await?;
         if res.rows_affected == 0 {
             return Err(DomainError::EntityNotFound(format!(
-                "No such user: '{}'",
-                user_id
+                "No such user: '{user_id}'"
             )));
         }
         Ok(())
@@ -408,8 +410,7 @@ impl UserBackendHandler for SqlBackendHandler {
             .await?;
         if res.rows_affected == 0 {
             return Err(DomainError::EntityNotFound(format!(
-                "No such membership: '{}' -> {:?}",
-                user_id, group_id
+                "No such membership: '{user_id}' -> {group_id:?}"
             )));
         }
         Ok(())
@@ -832,6 +833,7 @@ mod tests {
                 user_id: UserId::new("bob"),
                 email: Some("email".into()),
                 display_name: Some("display_name".to_string()),
+                login_enabled: None,
                 delete_attributes: Vec::new(),
                 insert_attributes: vec![
                     Attribute {
@@ -1192,5 +1194,54 @@ mod tests {
             })
             .await
             .unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn test_update_user_login_enabled() {
+        let fixture = TestFixture::new().await;
+
+        // Disable login for a user via core field
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                email: None,
+                display_name: None,
+                login_enabled: Some(false),
+                delete_attributes: Vec::new(),
+                insert_attributes: Vec::new(),
+            })
+            .await
+            .unwrap();
+
+        // Verify the user login is blocked
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("bob"))
+            .await
+            .unwrap();
+        assert_eq!(user.login_enabled, false);
+
+        // Re-enable login for the user via core field
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                email: None,
+                display_name: None,
+                login_enabled: Some(true),
+                delete_attributes: Vec::new(),
+                insert_attributes: Vec::new(),
+            })
+            .await
+            .unwrap();
+
+        // Verify the user login is enabled
+        let user = fixture
+            .handler
+            .get_user_details(&UserId::new("bob"))
+            .await
+            .unwrap();
+        assert_eq!(user.login_enabled, true);
     }
 }

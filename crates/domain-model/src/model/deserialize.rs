@@ -36,6 +36,12 @@ pub fn deserialize_attribute_value(
         (AttributeType::JpegPhoto, true) => {
             AttributeValue::JpegPhoto(Cardinality::Unbounded(value.unwrap()))
         }
+        (AttributeType::Boolean, false) => {
+            AttributeValue::Boolean(Cardinality::Singleton(value.unwrap::<bool>()))
+        }
+        (AttributeType::Boolean, true) => {
+            AttributeValue::Boolean(Cardinality::Unbounded(value.unwrap()))
+        }
     }
 }
 

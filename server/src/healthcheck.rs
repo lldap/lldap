@@ -71,7 +71,7 @@ where
 
 #[instrument(level = "info", err)]
 pub async fn check_ldap(port: u16) -> Result<()> {
-    check_ldap_endpoint(TcpStream::connect(format!("localhost:{}", port)).await?).await
+    check_ldap_endpoint(TcpStream::connect(format!("localhost:{port}")).await?).await
 }
 
 fn get_root_certificates() -> rustls::RootCertStore {
@@ -152,7 +152,7 @@ pub async fn check_ldaps(ldaps_options: &LdapsOptions) -> Result<()> {
 
 #[instrument(level = "info", err)]
 pub async fn check_api(port: u16) -> Result<()> {
-    reqwest::get(format!("http://localhost:{}/health", port))
+    reqwest::get(format!("http://localhost:{port}/health"))
         .await?
         .error_for_status()?;
     info!("Success");

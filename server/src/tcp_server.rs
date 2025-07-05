@@ -18,7 +18,7 @@ use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use tracing::{info, warn};
 
 async fn index<Backend>(data: web::Data<AppState<Backend>>) -> actix_web::Result<impl Responder> {
@@ -116,7 +116,7 @@ fn http_config<Backend>(
     cfg: &mut web::ServiceConfig,
     backend_handler: Backend,
     jwt_secret: secstr::SecUtf8,
-    jwt_blacklist: HashSet<u64>,
+    jwt_blacklist: Arc<RwLock<HashSet<u64>>>,
     server_url: url::Url,
     assets_path: PathBuf,
     mail_options: MailOptions,
@@ -127,7 +127,7 @@ fn http_config<Backend>(
     cfg.app_data(web::Data::new(AppState::<Backend> {
         backend_handler: AccessControlledBackendHandler::new(backend_handler),
         jwt_key: hmac::Mac::new_from_slice(jwt_secret.unsecure().as_bytes()).unwrap(),
-        jwt_blacklist: RwLock::new(jwt_blacklist),
+        jwt_blacklist,
         server_url,
         assets_path: assets_path.clone(),
         mail_options,
@@ -171,7 +171,7 @@ fn http_config<Backend>(
 pub(crate) struct AppState<Backend> {
     pub backend_handler: AccessControlledBackendHandler<Backend>,
     pub jwt_key: Hmac<Sha512>,
-    pub jwt_blacklist: RwLock<HashSet<u64>>,
+    pub jwt_blacklist: Arc<RwLock<HashSet<u64>>>,
     pub server_url: url::Url,
     pub assets_path: PathBuf,
     pub mail_options: MailOptions,
@@ -202,15 +202,12 @@ pub async fn build_tcp_server<Backend>(
     config: &Configuration,
     backend_handler: Backend,
     server_builder: ServerBuilder,
+    jwt_blacklist: Arc<RwLock<HashSet<u64>>>,
 ) -> Result<ServerBuilder>
 where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
     let jwt_secret = config.jwt_secret.clone().unwrap();
-    let jwt_blacklist = backend_handler
-        .get_jwt_blacklist()
-        .await
-        .context("while getting the jwt blacklist")?;
     let server_url = config.http_url.0.clone();
     let assets_path = config.assets_path.clone();
     let mail_options = config.smtp_options.clone();

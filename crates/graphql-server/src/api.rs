@@ -1,16 +1,16 @@
 use crate::{mutation::Mutation, query::Query};
 use juniper::{EmptySubscription, FieldError, RootNode};
-use lldap_access_control::{
-    AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
-    UserReadableBackendHandler, UserWriteableBackendHandler,
-};
+use lldap_access_control::AccessControlledBackendHandler;
 use lldap_auth::{access_control::ValidationResults, types::UserId};
 use lldap_domain_handlers::handler::BackendHandler;
+use std::collections::HashSet;
+use std::sync::{Arc, RwLock};
 use tracing::debug;
 
 pub struct Context<Handler: BackendHandler> {
     pub handler: AccessControlledBackendHandler<Handler>,
     pub validation_result: ValidationResults,
+    pub jwt_blacklist: Option<Arc<RwLock<HashSet<u64>>>>,
 }
 
 pub fn field_error_callback<'a>(
@@ -29,29 +29,29 @@ impl<Handler: BackendHandler> Context<Handler> {
         Self {
             handler: AccessControlledBackendHandler::new(handler),
             validation_result,
+            jwt_blacklist: None,
         }
     }
 
-    pub fn get_admin_handler(&self) -> Option<&(impl AdminBackendHandler + use<Handler>)> {
+    pub fn get_admin_handler(&self) -> Option<&Handler> {
         self.handler.get_admin_handler(&self.validation_result)
     }
 
-    pub fn get_readonly_handler(&self) -> Option<&(impl ReadonlyBackendHandler + use<Handler>)> {
+    pub fn get_readonly_handler(&self) -> Option<&Handler> {
         self.handler.get_readonly_handler(&self.validation_result)
     }
 
-    pub fn get_writeable_handler(
-        &self,
-        user_id: &UserId,
-    ) -> Option<&(impl UserWriteableBackendHandler + use<Handler>)> {
+    pub fn get_writeable_handler(&self, user_id: &UserId) -> Option<&Handler> {
         self.handler
             .get_writeable_handler(&self.validation_result, user_id)
     }
 
-    pub fn get_readable_handler(
-        &self,
-        user_id: &UserId,
-    ) -> Option<&(impl UserReadableBackendHandler + use<Handler>)> {
+    pub fn get_login_enabled_writeable_handler(&self, user_id: &UserId) -> Option<&Handler> {
+        self.handler
+            .get_login_enabled_writeable_handler(&self.validation_result, user_id)
+    }
+
+    pub fn get_readable_handler(&self, user_id: &UserId) -> Option<&Handler> {
         self.handler
             .get_readable_handler(&self.validation_result, user_id)
     }
@@ -75,7 +75,7 @@ pub fn export_schema(output_file: Option<String>) -> anyhow::Result<()> {
     use lldap_sql_backend_handler::SqlBackendHandler;
     let output = schema::<SqlBackendHandler>().as_schema_language();
     match output_file {
-        None => println!("{}", output),
+        None => println!("{output}"),
         Some(path) => {
             use std::fs::File;
             use std::io::prelude::*;

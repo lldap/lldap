@@ -78,6 +78,9 @@ pub fn get_user_attribute(
                 .to_rfc3339()
                 .into_bytes(),
         ],
+        UserFieldType::PrimaryField(UserColumn::LoginEnabled) => {
+            vec![user.login_enabled.to_string().into_bytes()]
+        }
         UserFieldType::Attribute(attr, _, _) => get_custom_attribute(&user.attributes, &attr)?,
         UserFieldType::NoMatch => match attribute.as_str() {
             "1.1" => return None,
@@ -85,8 +88,7 @@ pub fn get_user_attribute(
             "+" => return None,
             "*" => {
                 panic!(
-                    "Matched {}, * should have been expanded into attribute list and * removed",
-                    attribute
+                    "Matched {attribute}, * should have been expanded into attribute list and * removed"
                 )
             }
             _ => {
@@ -120,6 +122,7 @@ const ALL_USER_ATTRIBUTE_KEYS: &[&str] = &[
     "jpegPhoto",
     "createtimestamp",
     "entryuuid",
+    "login_enabled",
 ];
 
 fn make_ldap_search_user_result_entry(
@@ -283,10 +286,7 @@ fn convert_user_filter(
                 | UserFieldType::PrimaryField(UserColumn::CreationDate)
                 | UserFieldType::PrimaryField(UserColumn::Uuid) => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
-                    message: format!(
-                        "Unsupported user attribute for substring filter: {:?}",
-                        field
-                    ),
+                    message: format!("Unsupported user attribute for substring filter: {field:?}"),
                 }),
                 UserFieldType::NoMatch => Ok(UserRequestFilter::from(false)),
                 UserFieldType::PrimaryField(UserColumn::Email) => Ok(UserRequestFilter::SubString(
@@ -301,7 +301,7 @@ fn convert_user_filter(
         }
         _ => Err(LdapError {
             code: LdapResultCode::UnwillingToPerform,
-            message: format!("Unsupported user filter: {:?}", filter),
+            message: format!("Unsupported user filter: {filter:?}"),
         }),
     }
 }
@@ -326,7 +326,7 @@ pub async fn get_user_list<Backend: UserListerBackendHandler>(
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::Other,
-            message: format!(r#"Error while searching user "{}": {:#}"#, base, e),
+            message: format!(r#"Error while searching user "{base}": {e:#}"#),
         })
 }
 

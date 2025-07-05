@@ -178,17 +178,11 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         Self { handler }
     }
 
-    pub fn get_admin_handler(
-        &self,
-        validation_result: &ValidationResults,
-    ) -> Option<&(impl AdminBackendHandler + use<Handler>)> {
+    pub fn get_admin_handler(&self, validation_result: &ValidationResults) -> Option<&Handler> {
         validation_result.is_admin().then_some(&self.handler)
     }
 
-    pub fn get_readonly_handler(
-        &self,
-        validation_result: &ValidationResults,
-    ) -> Option<&(impl ReadonlyBackendHandler + use<Handler>)> {
+    pub fn get_readonly_handler(&self, validation_result: &ValidationResults) -> Option<&Handler> {
         validation_result.can_read_all().then_some(&self.handler)
     }
 
@@ -196,9 +190,19 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         &self,
         validation_result: &ValidationResults,
         user_id: &UserId,
-    ) -> Option<&(impl UserWriteableBackendHandler + use<Handler>)> {
+    ) -> Option<&Handler> {
         validation_result
             .can_write(user_id)
+            .then_some(&self.handler)
+    }
+
+    pub fn get_login_enabled_writeable_handler(
+        &self,
+        validation_result: &ValidationResults,
+        user_id: &UserId,
+    ) -> Option<&Handler> {
+        validation_result
+            .can_write_login_enabled(user_id)
             .then_some(&self.handler)
     }
 
@@ -206,7 +210,7 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         &self,
         validation_result: &ValidationResults,
         user_id: &UserId,
-    ) -> Option<&(impl UserReadableBackendHandler + use<Handler>)> {
+    ) -> Option<&Handler> {
         validation_result.can_read(user_id).then_some(&self.handler)
     }
 

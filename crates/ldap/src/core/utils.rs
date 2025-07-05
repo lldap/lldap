@@ -59,10 +59,9 @@ impl UserOrGroupName {
                 UserOrGroupName::InvalidSyntax(err) => return err,
                 UserOrGroupName::UnexpectedFormat
                 | UserOrGroupName::User(_)
-                | UserOrGroupName::Group(_) => format!(
-                    r#"Unexpected DN format. Got "{}", expected: {}"#,
-                    input, expected_format
-                ),
+                | UserOrGroupName::Group(_) => {
+                    format!(r#"Unexpected DN format. Got "{input}", expected: {expected_format}"#)
+                }
             },
         }
     }
@@ -98,7 +97,7 @@ pub fn get_user_id_from_distinguished_name(
 ) -> LdapResult<UserId> {
     match get_user_or_group_id_from_distinguished_name(dn, base_tree) {
         UserOrGroupName::User(user_id) => Ok(user_id),
-        err => Err(err.into_ldap_error(dn, format!(r#""uid=id,ou=people,{}""#, base_dn_str))),
+        err => Err(err.into_ldap_error(dn, format!(r#""uid=id,ou=people,{base_dn_str}""#))),
     }
 }
 
@@ -109,7 +108,7 @@ pub fn get_group_id_from_distinguished_name(
 ) -> LdapResult<GroupName> {
     match get_user_or_group_id_from_distinguished_name(dn, base_tree) {
         UserOrGroupName::Group(group_name) => Ok(group_name),
-        err => Err(err.into_ldap_error(dn, format!(r#""uid=id,ou=groups,{}""#, base_dn_str))),
+        err => Err(err.into_ldap_error(dn, format!(r#""uid=id,ou=groups,{base_dn_str}""#))),
     }
 }
 
@@ -237,6 +236,9 @@ pub fn map_user_field(field: &AttributeName, schema: &PublicSchema) -> UserField
             UserFieldType::PrimaryField(UserColumn::CreationDate)
         }
         "entryuuid" | "uuid" => UserFieldType::PrimaryField(UserColumn::Uuid),
+        "loginenabled"=> {
+            UserFieldType::PrimaryField(UserColumn::LoginEnabled)
+        }
         _ => schema
             .get_schema()
             .user_attributes
@@ -327,6 +329,29 @@ pub fn get_custom_attribute(
             AttributeValue::DateTime(Cardinality::Unbounded(l)) => {
                 l.iter().map(convert_date).collect()
             }
+            AttributeValue::Boolean(Cardinality::Singleton(b)) => {
+                // LDAP booleans are encoded as strings: "TRUE" or "FALSE"
+                vec![
+                    if *b {
+                        "TRUE".to_string()
+                    } else {
+                        "FALSE".to_string()
+                    }
+                    .into_bytes(),
+                ]
+            }
+            AttributeValue::Boolean(Cardinality::Unbounded(l)) => l
+                .iter()
+                // LDAP booleans are encoded as strings: "TRUE" or "FALSE"
+                .map(|b| {
+                    if *b {
+                        "TRUE".to_string()
+                    } else {
+                        "FALSE".to_string()
+                    }
+                    .into_bytes()
+                })
+                .collect(),
         })
 }
 
