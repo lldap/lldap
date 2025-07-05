@@ -62,7 +62,7 @@ impl UserBackendHandler for SessionAwareBackendHandler {
                         }
                         debug!("Successfully invalidated sessions for user: {}", user_id);
                     } else {
-                        debug!("Failed to acquire write lock on JWT blacklist");
+                        warn!("Failed to acquire write lock on JWT blacklist for user {}. This may indicate lock poisoning.", user_id);
                     }
                 }
                 Err(e) => {
