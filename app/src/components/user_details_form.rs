@@ -251,7 +251,6 @@ impl UserDetailsForm {
             id: self.user.id.clone(),
             email: None,
             displayName: None,
-            loginEnabled: None,
             firstName: None,
             lastName: None,
             avatar: None,

@@ -22,6 +22,7 @@ type Mutation {
   addGroupObjectClass(name: String!): Success!
   deleteUserObjectClass(name: String!): Success!
   deleteGroupObjectClass(name: String!): Success!
+  setUserLoginEnabled(userId: String!, loginEnabled: Boolean!): Success!
 }
 
 type Group {
@@ -95,7 +96,6 @@ input UpdateUserInput {
   id: String!
   email: String
   displayName: String
-  "Whether the user can log in. Can be updated by admins and password managers." loginEnabled: Boolean
   """
     First name of user. Deprecated: use attribute instead.
     If both field and corresponding attribute is supplied, the attribute will take precedence.

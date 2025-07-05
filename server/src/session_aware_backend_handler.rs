@@ -29,10 +29,6 @@ impl SessionAwareBackendHandler {
             jwt_blacklist,
         }
     }
-
-    pub fn inner(&self) -> &SqlBackendHandler {
-        &self.inner
-    }
 }
 
 #[async_trait]
@@ -325,13 +321,10 @@ mod tests {
         let sql_backend = create_test_backend().await;
         let jwt_blacklist = Arc::new(RwLock::new(HashSet::new()));
 
-        let handler = SessionAwareBackendHandler::new(sql_backend, jwt_blacklist.clone());
+        let _handler = SessionAwareBackendHandler::new(sql_backend, jwt_blacklist.clone());
 
         // Verify handler was created successfully
         assert!(jwt_blacklist.read().unwrap().is_empty());
-
-        // Verify we can access the inner handler
-        let _inner = handler.inner();
     }
 
     #[tokio::test]

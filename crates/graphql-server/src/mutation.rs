@@ -1,7 +1,6 @@
 use crate::api::{Context, field_error_callback};
 use anyhow::{Context as AnyhowContext, anyhow};
 use juniper::{FieldError, FieldResult, GraphQLInputObject, GraphQLObject, graphql_object};
-use lldap_auth::access_control::{Permission, ValidationResults};
 use lldap_domain::{
     deserialize::deserialize_attribute_value,
     public_schema::PublicSchema,
@@ -89,8 +88,6 @@ pub struct UpdateUserInput {
     id: String,
     email: Option<String>,
     display_name: Option<String>,
-    /// Whether the user can log in. Can be updated by admins and password managers.
-    login_enabled: Option<bool>,
     /// First name of user. Deprecated: use attribute instead.
     /// If both field and corresponding attribute is supplied, the attribute will take precedence.
     first_name: Option<String>,
@@ -220,35 +217,6 @@ fn consolidate_attributes(
     provided_attributes.into_values().collect()
 }
 
-async fn check_login_disable_protection<Handler: BackendHandler>(
-    handler: &Handler,
-    user_id: &UserId,
-    validation_result: &ValidationResults,
-    span: &Span,
-) -> FieldResult<()> {
-    let is_admin = validation_result.is_admin();
-
-    // Check if target user is an admin (for password manager restrictions)
-    let user_groups = handler.get_user_groups(user_id).await?;
-    let target_user_is_admin = user_groups
-        .iter()
-        .any(|g| g.display_name.as_str() == "lldap_admin");
-
-    // Only allow admin or password managers to disable login
-    // Password managers cannot disable login for admin users
-    if !is_admin && validation_result.permission != Permission::PasswordManager {
-        span.in_scope(|| debug!("Unauthorized attempt to disable user login"));
-        return Err(
-            "Permission denied: Only admins and password managers can disable user login".into(),
-        );
-    } else if validation_result.permission == Permission::PasswordManager && target_user_is_admin {
-        span.in_scope(|| debug!("Password manager cannot disable admin user login"));
-        return Err("Permission denied: Password managers cannot disable admin user login".into());
-    }
-
-    Ok(())
-}
-
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> Mutation<Handler> {
     async fn create_user(
@@ -332,51 +300,10 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         });
         let user_id = UserId::new(&user.id);
 
-        // The login_enabled field has different security requirements than other
-        // user fields. Regular users can modify their own profiles, but login_enabled can
-        // only be modified by admins/password managers AND cannot be self-modified. This
-        // branching approach is cleaner than trying to handle all cases in a single
-        // permission check, and follows the principle of least privilege.
-
-        // Check permissions based on what fields are being modified
-        let is_modifying_login_enabled = user.login_enabled.is_some();
-
-        if is_modifying_login_enabled {
-            // For login_enabled modifications, use special permission check
-            if context
-                .get_login_enabled_writeable_handler(&user_id)
-                .is_none()
-            {
-                span.in_scope(|| debug!("Unauthorized login_enabled update"));
-                return Err("Unauthorized login_enabled update".into());
-            }
-        } else {
-            // Use normal permission check for other fields
-            if context.get_writeable_handler(&user_id).is_none() {
-                span.in_scope(|| debug!("Unauthorized user update"));
-                return Err("Unauthorized user update".into());
-            }
-        }
-
-        // Check for login_enabled being set to false and apply protection logic
-        let is_disabling_login = user.login_enabled == Some(false);
-        if is_disabling_login {
-            // We need the raw handler here for the protection check since it needs get_user_groups()
-            let handler = context.handler.unsafe_get_handler();
-            check_login_disable_protection(handler, &user_id, &context.validation_result, &span)
-                .await?;
-        }
-
-        // Get the appropriate permission-checked handler for the actual operations
-        let handler = if is_modifying_login_enabled {
-            context
-                .get_login_enabled_writeable_handler(&user_id)
-                .expect("Permission already validated above")
-        } else {
-            context
-                .get_writeable_handler(&user_id)
-                .expect("Permission already validated above")
-        };
+        // Check permission for user update (login_enabled is now handled by separate mutation)
+        let handler = context
+            .get_writeable_handler(&user_id)
+            .ok_or_else(field_error_callback(&span, "Unauthorized user update"))?;
 
         let is_admin = context.validation_result.is_admin();
         // Get schema using a properly permission-checked handler
@@ -425,11 +352,11 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 user_id,
                 email: user.email.map(Into::into).or(email),
                 display_name: user.display_name.or(display_name),
-                login_enabled: user.login_enabled,
+                login_enabled: None,
                 delete_attributes: delete_attributes
                     .into_iter()
                     .filter(|attr| {
-                        attr != "mail" && attr != "display_name" && attr != "login_enabled"
+                        attr != "mail" && attr != "display_name"
                     })
                     .map(Into::into)
                     .collect(),
@@ -437,8 +364,6 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             })
             .instrument(span)
             .await?;
-
-        // Session invalidation is handled automatically by the SessionAwareBackendHandler
 
         Ok(Success::new())
     }
@@ -813,6 +738,42 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .delete_group_object_class(&LdapObjectClass::from(name))
             .instrument(span)
             .await?;
+        Ok(Success::new())
+    }
+
+    async fn set_user_login_enabled(
+        context: &Context<Handler>,
+        user_id: String,
+        login_enabled: bool,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] set_user_login_enabled");
+        span.in_scope(|| {
+            debug!(?user_id, ?login_enabled);
+        });
+        let user_id = UserId::new(&user_id);
+        
+        // Check if user is trying to disable their own login
+        if !login_enabled && context.validation_result.user == user_id {
+            return Err("Cannot disable your own login".into());
+        }
+        
+        // Get the appropriate handler based on permission requirements
+        let handler = context
+            .get_login_enabled_writeable_handler(&user_id)
+            .ok_or_else(field_error_callback(&span, "Unauthorized login status change"))?;
+        
+        handler
+            .update_user(UpdateUserRequest {
+                user_id,
+                email: None,
+                display_name: None,
+                login_enabled: Some(login_enabled),
+                delete_attributes: vec![],
+                insert_attributes: vec![],
+            })
+            .instrument(span)
+            .await?;
+        
         Ok(Success::new())
     }
 }
