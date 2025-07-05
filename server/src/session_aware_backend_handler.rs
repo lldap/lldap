@@ -385,7 +385,7 @@ mod tests {
         let initial_blacklist_size = jwt_blacklist.read().unwrap().len();
 
         // This will fail due to user not existing, but that's expected
-        let _result = handler.update_user(request).await;
+        assert!(handler.update_user(request).await.is_err());
 
         // Verify no session invalidation was triggered
         assert_eq!(jwt_blacklist.read().unwrap().len(), initial_blacklist_size);
