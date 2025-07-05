@@ -9,6 +9,8 @@ use yew::{Event, Properties, function_component, html, use_state, virtual_dom::A
 pub struct DateTimeInputProps {
     pub name: AttrValue,
     pub value: Option<String>,
+    #[prop_or(None)]
+    pub onchange: Option<yew::Callback<String>>,
 }
 
 #[function_component(DateTimeInput)]
@@ -19,6 +21,8 @@ pub fn date_time_input(props: &DateTimeInputProps) -> Html {
             .as_ref()
             .and_then(|x| DateTime::<Utc>::from_str(x).ok())
     });
+
+    let onchange_callback = props.onchange.clone();
 
     html! {
         <div class="input-group">
@@ -37,11 +41,18 @@ pub fn date_time_input(props: &DateTimeInputProps) -> Html {
                          .expect("Event should have target")
                          .unchecked_into::<HtmlInputElement>()
                          .value();
-                    value.set(
-                        NaiveDateTime::from_str(&string_val)
-                            .ok()
-                            .map(|x| DateTime::from_naive_utc_and_offset(x, Utc))
-                    )
+                    let new_value = NaiveDateTime::from_str(&string_val)
+                        .ok()
+                        .map(|x| DateTime::from_naive_utc_and_offset(x, Utc));
+                    value.set(new_value.clone());
+
+                    if let Some(callback) = &onchange_callback {
+                        if let Some(dt) = new_value {
+                            callback.emit(dt.to_rfc3339());
+                        } else {
+                            callback.emit(String::new());
+                        }
+                    }
                 }} />
             <span class="input-group-text">{"UTC"}</span>
         </div>

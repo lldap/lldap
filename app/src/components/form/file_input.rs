@@ -80,10 +80,12 @@ pub enum Msg {
     FileLoaded(String, Result<Vec<u8>>),
 }
 
-#[derive(Properties, Clone, PartialEq, Eq)]
+#[derive(Properties, Clone, PartialEq)]
 pub struct Props {
     pub name: AttrValue,
     pub value: Option<String>,
+    #[prop_or(None)]
+    pub onchange: Option<yew::Callback<String>>,
 }
 
 impl Component for JpegFileInput {
@@ -144,6 +146,9 @@ impl Component for JpegFileInput {
             }
             Msg::ClearClicked => {
                 self.avatar = Some(JsFile::default());
+                if let Some(callback) = &ctx.props().onchange {
+                    callback.emit(String::new());
+                }
                 true
             }
             Msg::FileLoaded(file_name, data) => {
@@ -157,6 +162,13 @@ impl Component for JpegFileInput {
                                     // TODO: bail!("Chosen image is not a valid JPEG");
                                 } else {
                                     avatar.contents = Some(data);
+                                    if let Some(callback) = &ctx.props().onchange {
+                                        if let std::result::Result::Ok(base64_str) =
+                                            to_base64(avatar)
+                                        {
+                                            callback.emit(base64_str);
+                                        }
+                                    }
                                     return true;
                                 }
                             }

@@ -236,9 +236,7 @@ pub fn map_user_field(field: &AttributeName, schema: &PublicSchema) -> UserField
             UserFieldType::PrimaryField(UserColumn::CreationDate)
         }
         "entryuuid" | "uuid" => UserFieldType::PrimaryField(UserColumn::Uuid),
-        "loginenabled"=> {
-            UserFieldType::PrimaryField(UserColumn::LoginEnabled)
-        }
+        "loginenabled" => UserFieldType::PrimaryField(UserColumn::LoginEnabled),
         _ => schema
             .get_schema()
             .user_attributes

@@ -52,16 +52,37 @@ impl UserBackendHandler for SessionAwareBackendHandler {
             match self.inner.blacklist_jwts(&user_id).await {
                 Ok(blacklisted_tokens) => {
                     // Update the in-memory blacklist cache
-                    if let Ok(mut blacklist_guard) = self.jwt_blacklist.write() {
-                        for token_hash in blacklisted_tokens {
-                            blacklist_guard.insert(token_hash);
+                    // Note: We use std::sync::RwLock here for compatibility with the rest of the system.
+                    // The lock is held only briefly to insert values, minimizing blocking risk.
+                    // Consider using try_write() first to avoid blocking if contended.
+                    match self.jwt_blacklist.try_write() {
+                        Ok(mut blacklist_guard) => {
+                            for token_hash in blacklisted_tokens {
+                                blacklist_guard.insert(token_hash);
+                            }
+                            debug!("Successfully invalidated sessions for user: {}", user_id);
                         }
-                        debug!("Successfully invalidated sessions for user: {}", user_id);
-                    } else {
-                        warn!(
-                            "Failed to acquire write lock on JWT blacklist for user {}. This may indicate lock poisoning.",
-                            user_id
-                        );
+                        Err(_) => {
+                            // If try_write fails, fall back to blocking write as this is critical for security
+                            warn!(
+                                "JWT blacklist lock is contended, falling back to blocking write for user {}",
+                                user_id
+                            );
+                            if let Ok(mut blacklist_guard) = self.jwt_blacklist.write() {
+                                for token_hash in blacklisted_tokens {
+                                    blacklist_guard.insert(token_hash);
+                                }
+                                debug!(
+                                    "Successfully invalidated sessions for user: {} (after blocking)",
+                                    user_id
+                                );
+                            } else {
+                                warn!(
+                                    "Failed to acquire write lock on JWT blacklist for user {}. This may indicate lock poisoning.",
+                                    user_id
+                                );
+                            }
+                        }
                     }
                 }
                 Err(e) => {

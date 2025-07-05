@@ -4,8 +4,8 @@ use crate::{
 };
 use web_sys::Element;
 use yew::{
-    Component, Context, Html, Properties, function_component, html, use_effect_with_deps,
-    use_node_ref, virtual_dom::AttrValue,
+    Component, Context, Html, Properties, TargetCast, function_component, html,
+    use_effect_with_deps, use_node_ref, virtual_dom::AttrValue,
 };
 
 #[derive(Properties, PartialEq)]
@@ -14,6 +14,8 @@ struct AttributeInputProps {
     attribute_type: AttributeType,
     #[prop_or(None)]
     value: Option<String>,
+    #[prop_or(None)]
+    onchange: Option<yew::Callback<String>>,
 }
 
 #[function_component(AttributeInput)]
@@ -23,16 +25,17 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
         AttributeType::Integer => "number",
         AttributeType::DateTime => {
             return html! {
-                <DateTimeInput name={props.name.clone()} value={props.value.clone()} />
+                <DateTimeInput name={props.name.clone()} value={props.value.clone()} onchange={props.onchange.clone()} />
             };
         }
         AttributeType::Jpeg => {
             return html! {
-                <JpegFileInput name={props.name.clone()} value={props.value.clone()} />
+                <JpegFileInput name={props.name.clone()} value={props.value.clone()} onchange={props.onchange.clone()} />
             };
         }
         AttributeType::Boolean => {
             let checked = props.value.as_ref().map(|v| v == "true").unwrap_or(false);
+            let onchange = props.onchange.clone();
             return html! {
                 <div class="form-check form-switch">
                     <input
@@ -41,18 +44,31 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
                         name={props.name.clone()}
                         checked={checked}
                         value="true"
-                        onchange={|_| {}} />
+                        onchange={move |e: yew::Event| {
+                            if let Some(callback) = &onchange {
+                                let input = e.target_unchecked_into::<web_sys::HtmlInputElement>();
+                                let value = if input.checked() { "true" } else { "false" };
+                                callback.emit(value.to_string());
+                            }
+                        }} />
                 </div>
             };
         }
     };
 
+    let onchange_callback = props.onchange.clone();
     html! {
         <input
             type={input_type}
             name={props.name.clone()}
             class="form-control"
-            value={props.value.clone()} />
+            value={props.value.clone()}
+            oninput={move |e: yew::InputEvent| {
+                if let Some(callback) = &onchange_callback {
+                    let input = e.target_unchecked_into::<web_sys::HtmlInputElement>();
+                    callback.emit(input.value());
+                }
+            }} />
     }
 }
 
@@ -99,6 +115,8 @@ pub struct SingleAttributeInputProps {
     pub attribute_type: AttributeType,
     #[prop_or(None)]
     pub value: Option<String>,
+    #[prop_or(None)]
+    pub onchange: Option<yew::Callback<String>>,
 }
 
 #[function_component(SingleAttributeInput)]
@@ -110,7 +128,8 @@ pub fn single_attribute_input(props: &SingleAttributeInputProps) -> Html {
             <AttributeInput
                 attribute_type={props.attribute_type.clone()}
                 name={props.name.clone()}
-                value={props.value.clone()} />
+                value={props.value.clone()}
+                onchange={props.onchange.clone()} />
             </div>
         </div>
     }
@@ -181,7 +200,8 @@ impl Component for ListAttributeInput {
                     <AttributeInput
                         attribute_type={props.attribute_type.clone()}
                         name={props.name.clone()}
-                        value={props.values.get(i).cloned().unwrap_or_default()} />
+                        value={props.values.get(i).cloned().unwrap_or_default()}
+                        onchange={None} />
                     <button
                         class="btn btn-danger"
                         type="button"

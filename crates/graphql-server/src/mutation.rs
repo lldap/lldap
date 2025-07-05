@@ -355,9 +355,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 login_enabled: None,
                 delete_attributes: delete_attributes
                     .into_iter()
-                    .filter(|attr| {
-                        attr != "mail" && attr != "display_name"
-                    })
+                    .filter(|attr| attr != "mail" && attr != "display_name")
                     .map(Into::into)
                     .collect(),
                 insert_attributes,
@@ -751,17 +749,20 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             debug!(?user_id, ?login_enabled);
         });
         let user_id = UserId::new(&user_id);
-        
+
         // Check if user is trying to disable their own login
         if !login_enabled && context.validation_result.user == user_id {
             return Err("Cannot disable your own login".into());
         }
-        
+
         // Get the appropriate handler based on permission requirements
         let handler = context
             .get_login_enabled_writeable_handler(&user_id)
-            .ok_or_else(field_error_callback(&span, "Unauthorized login status change"))?;
-        
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized login status change",
+            ))?;
+
         handler
             .update_user(UpdateUserRequest {
                 user_id,
@@ -773,7 +774,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             })
             .instrument(span)
             .await?;
-        
+
         Ok(Success::new())
     }
 }
@@ -1170,6 +1171,186 @@ mod tests {
                     value: vec!["expected-last".to_string()],
                 },
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_set_user_login_enabled_admin_success() {
+        const QUERY: &str = r#"
+            mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+                setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+                    ok
+                }
+            }
+        "#;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_update_user()
+            .with(eq(UpdateUserRequest {
+                user_id: UserId::new("test_user"),
+                email: None,
+                display_name: None,
+                login_enabled: Some(false),
+                delete_attributes: vec![],
+                insert_attributes: vec![],
+            }))
+            .return_once(|_| Ok(()));
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("admin"),
+                permission: Permission::Admin,
+            },
+        );
+        let vars = Variables::from([
+            ("userId".to_string(), InputValue::scalar("test_user")),
+            ("loginEnabled".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        assert_eq!(
+            execute(QUERY, None, &schema, &vars, &context).await,
+            Ok((
+                graphql_value!({
+                    "setUserLoginEnabled": {
+                        "ok": true
+                    }
+                }),
+                vec![]
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_set_user_login_enabled_cannot_disable_self() {
+        const QUERY: &str = r#"
+            mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+                setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+                    ok
+                }
+            }
+        "#;
+        let mock = MockTestBackendHandler::new();
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("admin"),
+                permission: Permission::Admin,
+            },
+        );
+        let vars = Variables::from([
+            ("userId".to_string(), InputValue::scalar("admin")),
+            ("loginEnabled".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        let result = execute(QUERY, None, &schema, &vars, &context).await;
+        match result {
+            Ok(res) => {
+                let (response, errors) = res;
+                assert!(response.is_null());
+                assert!(errors.iter().any(|e| {
+                    e.error()
+                        .message()
+                        .contains("Cannot disable your own login")
+                }));
+            }
+            Err(_) => {
+                panic!("Expected GraphQL execution to succeed with errors");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_set_user_login_enabled_non_admin_fails() {
+        const QUERY: &str = r#"
+            mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+                setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+                    ok
+                }
+            }
+        "#;
+        let mock = MockTestBackendHandler::new();
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("regular_user"),
+                permission: Permission::Regular,
+            },
+        );
+        let vars = Variables::from([
+            ("userId".to_string(), InputValue::scalar("test_user")),
+            ("loginEnabled".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        let result = execute(QUERY, None, &schema, &vars, &context).await;
+        match result {
+            Ok(res) => {
+                let (response, errors) = res;
+                assert!(response.is_null());
+                assert!(errors.iter().any(|e| {
+                    e.error()
+                        .message()
+                        .contains("Unauthorized login status change")
+                }));
+            }
+            Err(_) => {
+                panic!("Expected GraphQL execution to succeed with errors");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_set_user_login_enabled_enable_success() {
+        const QUERY: &str = r#"
+            mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+                setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+                    ok
+                }
+            }
+        "#;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_update_user()
+            .with(eq(UpdateUserRequest {
+                user_id: UserId::new("test_user"),
+                email: None,
+                display_name: None,
+                login_enabled: Some(true),
+                delete_attributes: vec![],
+                insert_attributes: vec![],
+            }))
+            .return_once(|_| Ok(()));
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("admin"),
+                permission: Permission::Admin,
+            },
+        );
+        let vars = Variables::from([
+            ("userId".to_string(), InputValue::scalar("test_user")),
+            ("loginEnabled".to_string(), InputValue::scalar(true)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        assert_eq!(
+            execute(QUERY, None, &schema, &vars, &context).await,
+            Ok((
+                graphql_value!({
+                    "setUserLoginEnabled": {
+                        "ok": true
+                    }
+                }),
+                vec![]
+            ))
         );
     }
 }

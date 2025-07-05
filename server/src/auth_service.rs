@@ -607,7 +607,20 @@ pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
         )));
     }
     let jwt_hash = default_hash(token_str);
-    if state.jwt_blacklist.read().unwrap().contains(&jwt_hash) {
+    // Try non-blocking read first to avoid blocking the executor
+    let is_blacklisted = state
+        .jwt_blacklist
+        .try_read()
+        .map(|blacklist| blacklist.contains(&jwt_hash))
+        .unwrap_or_else(|_| {
+            // Fall back to blocking read if try_read fails
+            state
+                .jwt_blacklist
+                .read()
+                .map(|blacklist| blacklist.contains(&jwt_hash))
+                .unwrap_or(false)
+        });
+    if is_blacklisted {
         return Err(ErrorUnauthorized("JWT was logged out"));
     }
     Ok(state.backend_handler.get_permissions_from_groups(
