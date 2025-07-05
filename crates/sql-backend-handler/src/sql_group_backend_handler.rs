@@ -164,7 +164,7 @@ impl GroupBackendHandler for SqlBackendHandler {
             .one(&self.sql_pool)
             .await?
             .map(Into::<GroupDetails>::into)
-            .ok_or_else(|| DomainError::EntityNotFound(format!("{:?}", group_id)))?;
+            .ok_or_else(|| DomainError::EntityNotFound(format!("{group_id:?}")))?;
         let attributes = model::GroupAttributes::find()
             .filter(model::GroupAttributesColumn::GroupId.eq(group_details.group_id))
             .order_by_asc(model::GroupAttributesColumn::AttributeName)
@@ -252,8 +252,7 @@ impl GroupBackendHandler for SqlBackendHandler {
             .await?;
         if res.rows_affected == 0 {
             return Err(DomainError::EntityNotFound(format!(
-                "No such group: '{:?}'",
-                group_id
+                "No such group: '{group_id:?}'"
             )));
         }
         Ok(())
@@ -306,8 +305,7 @@ impl SqlBackendHandler {
                 remove_group_attributes.push(attribute);
             } else {
                 return Err(DomainError::InternalError(format!(
-                    "Group attribute name {} doesn't exist in the schema, yet was attempted to be removed from the database",
-                    attribute
+                    "Group attribute name {attribute} doesn't exist in the schema, yet was attempted to be removed from the database"
                 )));
             }
         }

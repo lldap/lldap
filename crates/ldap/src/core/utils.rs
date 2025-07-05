@@ -60,8 +60,7 @@ impl UserOrGroupName {
                 UserOrGroupName::UnexpectedFormat
                 | UserOrGroupName::User(_)
                 | UserOrGroupName::Group(_) => format!(
-                    r#"Unexpected DN format. Got "{}", expected: {}"#,
-                    input, expected_format
+                    r#"Unexpected DN format. Got "{input}", expected: {expected_format}"#
                 ),
             },
         }
@@ -98,7 +97,7 @@ pub fn get_user_id_from_distinguished_name(
 ) -> LdapResult<UserId> {
     match get_user_or_group_id_from_distinguished_name(dn, base_tree) {
         UserOrGroupName::User(user_id) => Ok(user_id),
-        err => Err(err.into_ldap_error(dn, format!(r#""uid=id,ou=people,{}""#, base_dn_str))),
+        err => Err(err.into_ldap_error(dn, format!(r#""uid=id,ou=people,{base_dn_str}""#))),
     }
 }
 
@@ -109,7 +108,7 @@ pub fn get_group_id_from_distinguished_name(
 ) -> LdapResult<GroupName> {
     match get_user_or_group_id_from_distinguished_name(dn, base_tree) {
         UserOrGroupName::Group(group_name) => Ok(group_name),
-        err => Err(err.into_ldap_error(dn, format!(r#""uid=id,ou=groups,{}""#, base_dn_str))),
+        err => Err(err.into_ldap_error(dn, format!(r#""uid=id,ou=groups,{base_dn_str}""#))),
     }
 }
 

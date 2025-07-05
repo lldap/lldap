@@ -34,8 +34,7 @@ pub(crate) async fn create_user_or_group(
         err => Err(err.into_ldap_error(
             &request.dn,
             format!(
-                r#""uid=id,ou=people,{}" or "uid=id,ou=groups,{}""#,
-                base_dn_str, base_dn_str
+                r#""uid=id,ou=people,{base_dn_str}" or "uid=id,ou=groups,{base_dn_str}""#
             ),
         )),
     }
@@ -74,8 +73,7 @@ async fn create_user(
             .map_err(|e| LdapError {
                 code: LdapResultCode::ConstraintViolation,
                 message: format!(
-                    "Attribute value is invalid UTF-8: {:#?} (value {:?})",
-                    e, val
+                    "Attribute value is invalid UTF-8: {e:#?} (value {val:?})"
                 ),
             })
             .map(str::to_owned)
@@ -92,7 +90,7 @@ async fn create_user(
             value: deserialize::deserialize_attribute_value(&[value], typ, false).map_err(|e| {
                 LdapError {
                     code: LdapResultCode::ConstraintViolation,
-                    message: format!("Invalid attribute value: {}", e),
+                    message: format!("Invalid attribute value: {e}"),
                 }
             })?,
         })
@@ -134,7 +132,7 @@ async fn create_user(
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::OperationsError,
-            message: format!("Could not create user: {:#?}", e),
+            message: format!("Could not create user: {e:#?}"),
         })?;
     Ok(vec![make_add_response(
         LdapResultCode::Success,
@@ -156,7 +154,7 @@ async fn create_group(
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::OperationsError,
-            message: format!("Could not create group: {:#?}", e),
+            message: format!("Could not create group: {e:#?}"),
         })?;
     Ok(vec![make_add_response(
         LdapResultCode::Success,

@@ -1,8 +1,7 @@
 use crate::{mutation::Mutation, query::Query};
 use juniper::{EmptySubscription, FieldError, RootNode};
 use lldap_access_control::{
-    AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
-    UserReadableBackendHandler, UserWriteableBackendHandler,
+    AccessControlledBackendHandler,
 };
 use lldap_auth::{access_control::ValidationResults, types::UserId};
 use lldap_domain_handlers::handler::BackendHandler;
@@ -36,18 +35,18 @@ impl<Handler: BackendHandler> Context<Handler> {
         }
     }
 
-    pub fn get_admin_handler(&self) -> Option<&(impl AdminBackendHandler + use<Handler>)> {
+    pub fn get_admin_handler(&self) -> Option<&Handler> {
         self.handler.get_admin_handler(&self.validation_result)
     }
 
-    pub fn get_readonly_handler(&self) -> Option<&(impl ReadonlyBackendHandler + use<Handler>)> {
+    pub fn get_readonly_handler(&self) -> Option<&Handler> {
         self.handler.get_readonly_handler(&self.validation_result)
     }
 
     pub fn get_writeable_handler(
         &self,
         user_id: &UserId,
-    ) -> Option<&(impl UserWriteableBackendHandler + use<Handler>)> {
+    ) -> Option<&Handler> {
         self.handler
             .get_writeable_handler(&self.validation_result, user_id)
     }
@@ -55,7 +54,7 @@ impl<Handler: BackendHandler> Context<Handler> {
     pub fn get_login_enabled_writeable_handler(
         &self,
         user_id: &UserId,
-    ) -> Option<&(impl UserWriteableBackendHandler + use<Handler>)> {
+    ) -> Option<&Handler> {
         self.handler
             .get_login_enabled_writeable_handler(&self.validation_result, user_id)
     }
@@ -63,7 +62,7 @@ impl<Handler: BackendHandler> Context<Handler> {
     pub fn get_readable_handler(
         &self,
         user_id: &UserId,
-    ) -> Option<&(impl UserReadableBackendHandler + use<Handler>)> {
+    ) -> Option<&Handler> {
         self.handler
             .get_readable_handler(&self.validation_result, user_id)
     }
@@ -87,7 +86,7 @@ pub fn export_schema(output_file: Option<String>) -> anyhow::Result<()> {
     use lldap_sql_backend_handler::SqlBackendHandler;
     let output = schema::<SqlBackendHandler>().as_schema_language();
     match output_file {
-        None => println!("{}", output),
+        None => println!("{output}"),
         Some(path) => {
             use std::fs::File;
             use std::io::prelude::*;

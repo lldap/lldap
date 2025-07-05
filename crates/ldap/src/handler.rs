@@ -101,8 +101,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             ldap_info: LdapInfo {
                 base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
                     panic!(
-                        "Invalid value for ldap_base_dn in configuration: {}",
-                        ldap_base_dn
+                        "Invalid value for ldap_base_dn in configuration: {ldap_base_dn}"
                     )
                 }),
                 base_dn_str: ldap_base_dn,
@@ -204,7 +203,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 }
                 Err(e) => vec![make_extended_response(
                     LdapResultCode::ProtocolError,
-                    format!("Error while parsing password modify request: {:#?}", e),
+                    format!("Error while parsing password modify request: {e:#?}"),
                 )],
             },
             OID_WHOAMI => {
@@ -323,7 +322,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 .unwrap_or_else(|e: LdapError| vec![make_search_error(e.code, e.message)]),
             op => vec![make_extended_response(
                 LdapResultCode::UnwillingToPerform,
-                format!("Unsupported operation: {:#?}", op),
+                format!("Unsupported operation: {op:#?}"),
             )],
         })
     }

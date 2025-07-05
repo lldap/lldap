@@ -93,15 +93,14 @@ pub async fn send_password_reset_email(
         .unwrap()
         .extend(["reset-password", "step2", token]);
     let body = format!(
-        "Hello {},
+        "Hello {username},
 This email has been sent to you in order to validate your identity.
 If you did not initiate the process your credentials might have been
 compromised. You should reset your password and contact an administrator.
 
-To reset your password please visit the following URL: {}
+To reset your password please visit the following URL: {reset_url}
 
-Please contact an administrator if you did not initiate the process.",
-        username, reset_url
+Please contact an administrator if you did not initiate the process."
     );
     let res = send_email(
         to,

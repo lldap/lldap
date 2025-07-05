@@ -15,7 +15,7 @@ use tracing::{debug, instrument};
 use crate::tcp_backend_handler::TcpBackendHandler;
 
 /// A wrapper around SqlBackendHandler that automatically invalidates user sessions
-/// when users are disabled.
+/// when login is disabled for users.
 #[derive(Clone)]
 pub struct SessionAwareBackendHandler {
     inner: SqlBackendHandler,
@@ -48,9 +48,9 @@ impl UserBackendHandler for SessionAwareBackendHandler {
         // Call the inner handler to perform the actual update
         self.inner.update_user(request).await?;
 
-        // If user was disabled, invalidate their sessions
+        // If login was disabled for the user, invalidate their sessions
         if is_disabling_login {
-            debug!("User {} was disabled, invalidating sessions", user_id);
+            debug!("Login disabled for user {}, invalidating sessions", user_id);
 
             // Call blacklist_jwts to update the database
             match self.inner.blacklist_jwts(&user_id).await {
@@ -426,11 +426,11 @@ mod tests {
         let user_id = UserId::new("test_user");
         let request = UpdateUserRequest {
             user_id: user_id.clone(),
-            login_enabled: Some(false), // Disabling login
+            login_enabled: Some(false), // Setting login_enabled to false
             ..Default::default()
         };
 
-        // This test verifies that disabling login triggers session invalidation logic
+        // This test verifies that setting login_enabled to false triggers session invalidation logic
         // Even though the database operations will fail (user doesn't exist),
         // we can verify that the session invalidation code path is executed
         let _result = handler.update_user(request).await;

@@ -9,7 +9,7 @@ use anyhow::Result;
 use ldap3_proto::proto::{
     LdapBindCred, LdapBindRequest, LdapOp, LdapPasswordModifyRequest, LdapResultCode,
 };
-use lldap_access_control::{AccessControlledBackendHandler, UserReadableBackendHandler};
+use lldap_access_control::AccessControlledBackendHandler;
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::types::UserId;
 use lldap_domain_handlers::handler::{BackendHandler, BindRequest, LoginHandler};
@@ -112,8 +112,7 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
                         .map_err(|e| LdapError {
                             code: LdapResultCode::OperationsError,
                             message: format!(
-                                "Internal error while requesting user's groups: {:#?}",
-                                e
+                                "Internal error while requesting user's groups: {e:#?}"
                             ),
                         })?
                         .iter()
@@ -131,7 +130,7 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
                     {
                         Err(LdapError {
                             code: LdapResultCode::Other,
-                            message: format!("Error while changing the password: {:#?}", e),
+                            message: format!("Error while changing the password: {e:#?}"),
                         })
                     } else {
                         Ok(vec![make_extended_response(
@@ -142,7 +141,7 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
                 }
                 Err(e) => Err(LdapError {
                     code: LdapResultCode::InvalidDNSyntax,
-                    message: format!("Invalid username: {}", e),
+                    message: format!("Invalid username: {e}"),
                 }),
             }
         }

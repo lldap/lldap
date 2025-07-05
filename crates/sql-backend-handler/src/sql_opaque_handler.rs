@@ -182,8 +182,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
                         &username
                     );
                     return Err(DomainError::AuthenticationError(format!(
-                        r#"Login blocked for user "{}""#,
-                        username
+                        r#"Login blocked for user "{username}""#
                     )));
                 }
                 info!(r#"OPAQUE login successful for "{}""#, &username);

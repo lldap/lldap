@@ -106,7 +106,7 @@ impl UserTable {
                         <th>{"First name"}</th>
                         <th>{"Last name"}</th>
                         <th>{"Creation date"}</th>
-                        <th>{"Status"}</th>
+                        <th>{"Login Enabled"}</th>
                         <th>{"Delete"}</th>
                       </tr>
                     </thead>

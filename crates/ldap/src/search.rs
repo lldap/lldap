@@ -169,13 +169,11 @@ pub(crate) fn root_dse_response(base_dn: &str) -> LdapOp {
 }
 
 pub(crate) fn is_root_dse_request(request: &LdapSearchRequest) -> bool {
-    if request.base.is_empty() && request.scope == LdapSearchScope::Base {
-        if let LdapFilter::Present(attribute) = &request.filter {
-            if attribute.eq_ignore_ascii_case("objectclass") {
+    if request.base.is_empty() && request.scope == LdapSearchScope::Base
+        && let LdapFilter::Present(attribute) = &request.filter
+            && attribute.eq_ignore_ascii_case("objectclass") {
                 return true;
             }
-        }
-    }
     false
 }
 
@@ -284,7 +282,7 @@ pub async fn do_search(
 ) -> LdapResult<Vec<LdapOp>> {
     let schema = PublicSchema::from(backend_handler.get_schema().await.map_err(|e| LdapError {
         code: LdapResultCode::OperationsError,
-        message: format!("Unable to get schema: {:#}", e),
+        message: format!("Unable to get schema: {e:#}"),
     })?);
     let search_results = do_search_internal(ldap_info, backend_handler, request, &schema).await?;
     let mut results = match search_results {
@@ -326,13 +324,20 @@ mod tests {
             Attribute, AttributeName, AttributeType, GroupDetails, GroupId, JpegPhoto,
             LdapObjectClass, User, UserId,
         },
-        uuid,
     };
     use lldap_domain_handlers::handler::*;
     use lldap_domain_model::model::UserColumn;
     use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
+
+    // The uuid! macro is defined in lldap_domain with #[macro_export] and
+    // #[cfg(feature = "test")], making it available only during testing. This import
+    // pattern is necessary because macros exported with #[macro_export] are available
+    // at the crate root, not in the module where they're defined. The alternative would
+    // be to use uuid::Uuid::parse_str() everywhere, but the macro provides better
+    // compile-time validation and cleaner test code.
+    use lldap_domain::uuid;
 
     #[tokio::test]
     async fn test_search_root_dse() {
@@ -1523,6 +1528,14 @@ mod tests {
                     LdapPartialAttribute {
                         atype: "last_name".to_string(),
                         vals: vec!["Böbberson".to_string().into_bytes()],
+                    },
+                    // This test expects wildcard (*) searches to return all user attributes,
+                    // including login_enabled which is now a hardcoded attribute. The default value
+                    // is "true" from User::default(), so we expect this in the LDAP response.
+                    // This maintains test compatibility after adding login_enabled to ALL_USER_ATTRIBUTE_KEYS.
+                    LdapPartialAttribute {
+                        atype: "login_enabled".to_string(),
+                        vals: vec![b"true".to_vec()],
                     },
                     LdapPartialAttribute {
                         atype: "mail".to_string(),

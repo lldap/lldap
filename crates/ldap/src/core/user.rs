@@ -88,8 +88,7 @@ pub fn get_user_attribute(
             "+" => return None,
             "*" => {
                 panic!(
-                    "Matched {}, * should have been expanded into attribute list and * removed",
-                    attribute
+                    "Matched {attribute}, * should have been expanded into attribute list and * removed"
                 )
             }
             _ => {
@@ -288,8 +287,7 @@ fn convert_user_filter(
                 | UserFieldType::PrimaryField(UserColumn::Uuid) => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
                     message: format!(
-                        "Unsupported user attribute for substring filter: {:?}",
-                        field
+                        "Unsupported user attribute for substring filter: {field:?}"
                     ),
                 }),
                 UserFieldType::NoMatch => Ok(UserRequestFilter::from(false)),
@@ -305,7 +303,7 @@ fn convert_user_filter(
         }
         _ => Err(LdapError {
             code: LdapResultCode::UnwillingToPerform,
-            message: format!("Unsupported user filter: {:?}", filter),
+            message: format!("Unsupported user filter: {filter:?}"),
         }),
     }
 }
@@ -330,7 +328,7 @@ pub async fn get_user_list<Backend: UserListerBackendHandler>(
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::Other,
-            message: format!(r#"Error while searching user "{}": {:#}"#, base, e),
+            message: format!(r#"Error while searching user "{base}": {e:#}"#),
         })
 }
 

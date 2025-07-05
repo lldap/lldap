@@ -1,9 +1,6 @@
 use crate::api::{Context, field_error_callback};
 use anyhow::{Context as AnyhowContext, anyhow};
 use juniper::{FieldError, FieldResult, GraphQLInputObject, GraphQLObject, graphql_object};
-use lldap_access_control::{
-    AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
-};
 use lldap_auth::access_control::{Permission, ValidationResults};
 use lldap_domain::{
     deserialize::deserialize_attribute_value,
@@ -223,7 +220,7 @@ fn consolidate_attributes(
     provided_attributes.into_values().collect()
 }
 
-async fn check_disable_protection<Handler: BackendHandler>(
+async fn check_login_disable_protection<Handler: BackendHandler>(
     handler: &Handler,
     user_id: &UserId,
     validation_result: &ValidationResults,
@@ -237,59 +234,16 @@ async fn check_disable_protection<Handler: BackendHandler>(
         .iter()
         .any(|g| g.display_name.as_str() == "lldap_admin");
 
-    // Only allow admin or password managers to disable accounts
-    // Password managers cannot disable admin users
+    // Only allow admin or password managers to disable login
+    // Password managers cannot disable login for admin users
     if !is_admin && validation_result.permission != Permission::PasswordManager {
-        span.in_scope(|| debug!("Unauthorized attempt to disable user account"));
+        span.in_scope(|| debug!("Unauthorized attempt to disable user login"));
         return Err(
-            "Permission denied: Only admins and password managers can disable user accounts".into(),
+            "Permission denied: Only admins and password managers can disable user login".into(),
         );
     } else if validation_result.permission == Permission::PasswordManager && target_user_is_admin {
-        span.in_scope(|| debug!("Password manager cannot disable admin user"));
-        return Err("Permission denied: Password managers cannot disable admin users".into());
-    }
-
-    // Prevent disabling if this user is the only admin or password manager
-    let critical_groups = ["lldap_admin", "lldap_password_manager"];
-
-    for critical_group in critical_groups {
-        let user_is_in_group = user_groups
-            .iter()
-            .any(|g| g.display_name.as_str() == critical_group);
-
-        if user_is_in_group {
-            // Check if this user is the only enabled member of this critical group
-            let all_users = handler.list_users(None, true).await?;
-            let group_members: Vec<_> = all_users
-                .iter()
-                .filter(|u| {
-                    u.groups.as_ref().map_or(false, |groups| {
-                        groups
-                            .iter()
-                            .any(|g| g.display_name.as_str() == critical_group)
-                    })
-                })
-                .collect();
-
-            let enabled_members_count = group_members
-                .iter()
-                .filter(|u| u.user.user_id != *user_id && u.user.login_enabled)
-                .count();
-
-            if enabled_members_count == 0 {
-                span.in_scope(|| {
-                    debug!(
-                        "Cannot disable the last enabled member of critical group: {}",
-                        critical_group
-                    )
-                });
-                return Err(format!(
-                    "Cannot disable user: they are the only enabled member of the {} group",
-                    critical_group
-                )
-                .into());
-            }
-        }
+        span.in_scope(|| debug!("Password manager cannot disable admin user login"));
+        return Err("Permission denied: Password managers cannot disable admin user login".into());
     }
 
     Ok(())
@@ -309,7 +263,8 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized user creation"))?;
         let user_id = UserId::new(&user.id);
-        let schema = handler.get_schema().await?;
+        let raw_schema = handler.get_schema().await?;
+        let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
         let consolidated_attributes = consolidate_attributes(
             user.attributes.unwrap_or_default(),
             user.first_name,
@@ -377,19 +332,16 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         });
         let user_id = UserId::new(&user.id);
 
-        // Check if this update includes login_enabled field
+        // The login_enabled field has different security requirements than other
+        // user fields. Regular users can modify their own profiles, but login_enabled can
+        // only be modified by admins/password managers AND cannot be self-modified. This
+        // branching approach is cleaner than trying to handle all cases in a single
+        // permission check, and follows the principle of least privilege.
+        
+        // Check permissions based on what fields are being modified
         let is_modifying_login_enabled = user.login_enabled.is_some();
-
-        // For password managers modifying login_enabled on other users, we need special permission handling
-        let is_password_manager_special_case = context.validation_result.permission
-            == lldap_auth::access_control::Permission::PasswordManager
-            && is_modifying_login_enabled
-            && context.validation_result.user != user_id;
-
-        // Check permission for password manager special case
-        if is_password_manager_special_case {
-            // This is allowed - password managers can modify login_enabled for other users
-        } else if is_modifying_login_enabled {
+        
+        if is_modifying_login_enabled {
             // For login_enabled modifications, use special permission check
             if context
                 .get_login_enabled_writeable_handler(&user_id)
@@ -406,11 +358,11 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             }
         }
 
-        // Check for login_enabled being disabled and apply protection logic
+        // Check for login_enabled being set to false and apply protection logic
         let is_disabling_login = user.login_enabled == Some(false);
         if is_disabling_login {
             let handler = context.handler.unsafe_get_handler();
-            check_disable_protection(&*handler, &user_id, &context.validation_result, &span)
+            check_login_disable_protection(handler, &user_id, &context.validation_result, &span)
                 .await?;
         }
 
@@ -419,7 +371,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
 
         let is_admin = context.validation_result.is_admin();
         let raw_schema = handler.get_schema().await?;
-        let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema);
+        let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
 
         // Consolidate attributes and fields into a combined attribute list
         let consolidated_attributes = consolidate_attributes(
@@ -499,13 +451,13 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             span.in_scope(|| debug!("Cannot change lldap_admin group name"));
             return Err("Cannot change lldap_admin group name".into());
         }
-        let schema = handler.get_schema().await?;
+        let raw_schema = handler.get_schema().await?;
         let insert_attributes = group
             .insert_attributes
             .unwrap_or_default()
             .into_iter()
             .filter(|attr| attr.name != "display_name")
-            .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr, true))
+            .map(|attr| deserialize_attribute(&raw_schema.group_attributes, attr, true))
             .collect::<Result<Vec<_>, _>>()?;
         handler
             .update_group(UpdateGroupRequest {
@@ -717,10 +669,10 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 &span,
                 "Unauthorized attribute deletion",
             ))?;
-        let schema = handler.get_schema().await?;
+        let raw_schema = handler.get_schema().await?;
+        let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
         let attribute_schema = schema
-            .get_schema()
-            .user_attributes
+            .get_schema().user_attributes
             .get_attribute_schema(&name)
             .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", &name))?;
         if attribute_schema.is_hardcoded {
@@ -748,10 +700,10 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 &span,
                 "Unauthorized attribute deletion",
             ))?;
-        let schema = handler.get_schema().await?;
+        let raw_schema = handler.get_schema().await?;
+        let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
         let attribute_schema = schema
-            .get_schema()
-            .group_attributes
+            .get_schema().group_attributes
             .get_attribute_schema(&name)
             .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", &name))?;
         if attribute_schema.is_hardcoded {
@@ -857,12 +809,13 @@ async fn create_group_with_details<Handler: BackendHandler>(
     let handler = context
         .get_admin_handler()
         .ok_or_else(field_error_callback(&span, "Unauthorized group creation"))?;
-    let schema = handler.get_schema().await?;
+    let raw_schema = handler.get_schema().await?;
+    let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
     let attributes = request
         .attributes
         .unwrap_or_default()
         .into_iter()
-        .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr, true))
+        .map(|attr| deserialize_attribute(&raw_schema.group_attributes, attr, true))
         .collect::<Result<Vec<_>, _>>()?;
     let request = CreateGroupRequest {
         display_name: request.display_name.into(),

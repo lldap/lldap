@@ -62,8 +62,7 @@ async fn create_admin_user<T: UserBackendHandler + GroupListerBackendHandler>(
         .len();
     assert!(
         pass_length >= 8,
-        "Minimum password length is 8 characters, got {} characters",
-        pass_length
+        "Minimum password length is 8 characters, got {pass_length} characters"
     );
     handler
         .create_user(CreateUserRequest {
@@ -107,7 +106,7 @@ async fn ensure_group_exists<T: GroupListerBackendHandler + GroupBackendHandler>
                 ..Default::default()
             })
             .await
-            .context(format!("while creating {} group", group_name))?;
+            .context(format!("while creating {group_name} group"))?;
     }
     Ok(())
 }

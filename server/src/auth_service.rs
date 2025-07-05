@@ -199,8 +199,7 @@ where
         warn!("Error sending email: {:#?}", e);
         info!("Reset token: {}", token);
         return Err(TcpError::InternalServerError(format!(
-            "Could not send email: {}",
-            e
+            "Could not send email: {e}"
         )));
     }
     Ok(())
@@ -254,7 +253,7 @@ where
             Cookie::build("token", token.as_str())
                 .max_age(5.minutes())
                 // Cookie is only valid to reset the password.
-                .path(format!("{}auth", path))
+                .path(format!("{path}auth"))
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -310,7 +309,7 @@ where
         .cookie(
             Cookie::build("refresh_token", "")
                 .max_age(0.days())
-                .path(format!("{}auth", path))
+                .path(format!("{path}auth"))
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -381,7 +380,7 @@ where
         .cookie(
             Cookie::build("refresh_token", refresh_token_plus_name.clone())
                 .max_age(max_age.num_days().days())
-                .path(format!("{}auth", path))
+                .path(format!("{path}auth"))
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -475,7 +474,7 @@ where
             inner_payload,
         )
         .await
-        .map_err(|e| TcpError::BadRequest(format!("{:#?}", e)))?
+        .map_err(|e| TcpError::BadRequest(format!("{e:#?}")))?
         .into_inner();
     let user_id = &registration_start_request.username;
     let user_is_admin = data
