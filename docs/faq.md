@@ -4,6 +4,7 @@
 - [Discord Integration](#discord-integration)
 - [Migrating from SQLite](#migrating-from-sqlite)
 - How does LLDAP compare [with OpenLDAP](#how-does-lldap-compare-with-openldap)? [With FreeIPA](#how-does-lldap-compare-with-freeipa)? [With Kanidm](#how-does-lldap-compare-with-kanidm)?
+- [Does LLDAP support vhosts?](#does-lldap-support-vhosts)
 
 ## I can't log in!
 
@@ -81,3 +82,12 @@ read-only, and by having more moving parts it is inherently more complex. If
 you don't need to modify the users through LDAP and you're planning on
 installing something like [KeyCloak](https://www.keycloak.org) to provide
 modern identity protocols, check out Kanidm.
+
+## Does LLDAP support vhosts?
+
+LLDAP does not natively support virtualhosts, sometimes known as multi-tenancy:
+
+- users are all part of the same base DN (`ou=people,dc=example,dc=com`)
+- you may support multiple domains by using fully-qualified email addresses as usernames (eg. `user@example.com` and `user@example.org`); however, you can't have more fine-grained permissions than what is provided by default (which applies across all users)
+
+LLDAP is very lightweight (~15MiB RAM on startup) and it's therefore possible to run one instance per virtualhost if you need to properly support multiple domains.
