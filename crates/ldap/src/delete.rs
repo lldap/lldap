@@ -30,10 +30,7 @@ pub(crate) async fn delete_user_or_group(
         UserOrGroupName::Group(group_name) => delete_group(backend_handler, group_name).await,
         err => Err(err.into_ldap_error(
             &request,
-            format!(
-                r#""uid=id,ou=people,{}" or "uid=id,ou=groups,{}""#,
-                base_dn_str, base_dn_str
-            ),
+            format!(r#""uid=id,ou=people,{base_dn_str}" or "uid=id,ou=groups,{base_dn_str}""#),
         )),
     }
 }
@@ -53,7 +50,7 @@ async fn delete_user(
             },
             e => LdapError {
                 code: LdapResultCode::OperationsError,
-                message: format!("Error while finding user: {:?}", e),
+                message: format!("Error while finding user: {e:?}"),
             },
         })?;
     backend_handler
@@ -61,7 +58,7 @@ async fn delete_user(
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::OperationsError,
-            message: format!("Error while deleting user: {:?}", e),
+            message: format!("Error while deleting user: {e:?}"),
         })?;
     Ok(vec![make_del_response(
         LdapResultCode::Success,
@@ -79,7 +76,7 @@ async fn delete_group(
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::OperationsError,
-            message: format!("Error while finding group: {:?}", e),
+            message: format!("Error while finding group: {e:?}"),
         })?;
     let group_id = groups
         .iter()
@@ -94,7 +91,7 @@ async fn delete_group(
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::OperationsError,
-            message: format!("Error while deleting group: {:?}", e),
+            message: format!("Error while deleting group: {e:?}"),
         })?;
     Ok(vec![make_del_response(
         LdapResultCode::Success,

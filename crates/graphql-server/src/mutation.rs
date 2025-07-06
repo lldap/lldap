@@ -1,10 +1,6 @@
 use crate::api::{Context, field_error_callback};
 use anyhow::{Context as AnyhowContext, anyhow};
 use juniper::{FieldError, FieldResult, GraphQLInputObject, GraphQLObject, graphql_object};
-use lldap_access_control::{
-    AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
-    UserWriteableBackendHandler,
-};
 use lldap_domain::{
     deserialize::deserialize_attribute_value,
     public_schema::PublicSchema,
@@ -163,7 +159,9 @@ fn unpack_attributes(
         .map(|attr| attr.value.into_string().unwrap());
     let attributes = attributes
         .into_iter()
-        .filter(|attr| attr.name != "mail" && attr.name != "display_name")
+        .filter(|attr| {
+            attr.name != "mail" && attr.name != "display_name" && attr.name != "login_enabled"
+        })
         .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(UnpackedAttributes {
@@ -233,7 +231,8 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized user creation"))?;
         let user_id = UserId::new(&user.id);
-        let schema = handler.get_schema().await?;
+        let raw_schema = handler.get_schema().await?;
+        let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
         let consolidated_attributes = consolidate_attributes(
             user.attributes.unwrap_or_default(),
             user.first_name,
@@ -300,11 +299,21 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             debug!(?user.id);
         });
         let user_id = UserId::new(&user.id);
+
+        // Check permission for user update (login_enabled is now handled by separate mutation)
         let handler = context
             .get_writeable_handler(&user_id)
             .ok_or_else(field_error_callback(&span, "Unauthorized user update"))?;
+
         let is_admin = context.validation_result.is_admin();
-        let schema = handler.get_schema().await?;
+        // Get schema using a properly permission-checked handler
+        let schema_handler = context
+            .get_readonly_handler()
+            .or_else(|| context.get_readable_handler(&user_id))
+            .expect("User should have read permissions if they can write");
+        let raw_schema = schema_handler.get_schema().await?;
+        let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
+
         // Consolidate attributes and fields into a combined attribute list
         let consolidated_attributes = consolidate_attributes(
             user.insert_attributes.unwrap_or_default(),
@@ -312,20 +321,24 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             user.last_name,
             user.avatar,
         );
+
         // Extract any empty attributes into a list of attributes for deletion
         let (delete_attrs, insert_attrs): (Vec<_>, Vec<_>) = consolidated_attributes
             .into_iter()
             .partition(|a| a.value == vec!["".to_string()]);
+
         // Combine lists of attributes for removal
         let mut delete_attributes: Vec<String> =
             delete_attrs.iter().map(|a| a.name.to_owned()).collect();
         delete_attributes.extend(user.remove_attributes.unwrap_or_default());
+
         // Unpack attributes for update
         let UnpackedAttributes {
             email,
             display_name,
             attributes: insert_attributes,
         } = unpack_attributes(insert_attrs, &schema, is_admin)?;
+
         let display_name = display_name.or_else(|| {
             // If the display name is not inserted, but removed, reset it.
             delete_attributes
@@ -333,11 +346,13 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 .find(|attr| *attr == "display_name")
                 .map(|_| String::new())
         });
+
         handler
             .update_user(UpdateUserRequest {
                 user_id,
                 email: user.email.map(Into::into).or(email),
                 display_name: user.display_name.or(display_name),
+                login_enabled: None,
                 delete_attributes: delete_attributes
                     .into_iter()
                     .filter(|attr| attr != "mail" && attr != "display_name")
@@ -347,6 +362,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             })
             .instrument(span)
             .await?;
+
         Ok(Success::new())
     }
 
@@ -372,13 +388,13 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             span.in_scope(|| debug!("Cannot change lldap_admin group name"));
             return Err("Cannot change lldap_admin group name".into());
         }
-        let schema = handler.get_schema().await?;
+        let raw_schema = handler.get_schema().await?;
         let insert_attributes = group
             .insert_attributes
             .unwrap_or_default()
             .into_iter()
             .filter(|attr| attr.name != "display_name")
-            .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr, true))
+            .map(|attr| deserialize_attribute(&raw_schema.group_attributes, attr, true))
             .collect::<Result<Vec<_>, _>>()?;
         handler
             .update_group(UpdateGroupRequest {
@@ -590,7 +606,8 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 &span,
                 "Unauthorized attribute deletion",
             ))?;
-        let schema = handler.get_schema().await?;
+        let raw_schema = handler.get_schema().await?;
+        let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
         let attribute_schema = schema
             .get_schema()
             .user_attributes
@@ -621,7 +638,8 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 &span,
                 "Unauthorized attribute deletion",
             ))?;
-        let schema = handler.get_schema().await?;
+        let raw_schema = handler.get_schema().await?;
+        let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
         let attribute_schema = schema
             .get_schema()
             .group_attributes
@@ -720,6 +738,45 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .await?;
         Ok(Success::new())
     }
+
+    async fn set_user_login_enabled(
+        context: &Context<Handler>,
+        user_id: String,
+        login_enabled: bool,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] set_user_login_enabled");
+        span.in_scope(|| {
+            debug!(?user_id, ?login_enabled);
+        });
+        let user_id = UserId::new(&user_id);
+
+        // Check if user is trying to disable their own login
+        if !login_enabled && context.validation_result.user == user_id {
+            return Err("Cannot disable your own login".into());
+        }
+
+        // Get the appropriate handler based on permission requirements
+        let handler = context
+            .get_login_enabled_writeable_handler(&user_id)
+            .ok_or_else(field_error_callback(
+                &span,
+                "Unauthorized login status change",
+            ))?;
+
+        handler
+            .update_user(UpdateUserRequest {
+                user_id,
+                email: None,
+                display_name: None,
+                login_enabled: Some(login_enabled),
+                delete_attributes: vec![],
+                insert_attributes: vec![],
+            })
+            .instrument(span)
+            .await?;
+
+        Ok(Success::new())
+    }
 }
 
 async fn create_group_with_details<Handler: BackendHandler>(
@@ -730,12 +787,13 @@ async fn create_group_with_details<Handler: BackendHandler>(
     let handler = context
         .get_admin_handler()
         .ok_or_else(field_error_callback(&span, "Unauthorized group creation"))?;
-    let schema = handler.get_schema().await?;
+    let raw_schema = handler.get_schema().await?;
+    let schema = lldap_domain::public_schema::PublicSchema::from(raw_schema.clone());
     let attributes = request
         .attributes
         .unwrap_or_default()
         .into_iter()
-        .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr, true))
+        .map(|attr| deserialize_attribute(&raw_schema.group_attributes, attr, true))
         .collect::<Result<Vec<_>, _>>()?;
     let request = CreateGroupRequest {
         display_name: request.display_name.into(),
@@ -1113,6 +1171,186 @@ mod tests {
                     value: vec!["expected-last".to_string()],
                 },
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_set_user_login_enabled_admin_success() {
+        const QUERY: &str = r#"
+            mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+                setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+                    ok
+                }
+            }
+        "#;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_update_user()
+            .with(eq(UpdateUserRequest {
+                user_id: UserId::new("test_user"),
+                email: None,
+                display_name: None,
+                login_enabled: Some(false),
+                delete_attributes: vec![],
+                insert_attributes: vec![],
+            }))
+            .return_once(|_| Ok(()));
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("admin"),
+                permission: Permission::Admin,
+            },
+        );
+        let vars = Variables::from([
+            ("userId".to_string(), InputValue::scalar("test_user")),
+            ("loginEnabled".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        assert_eq!(
+            execute(QUERY, None, &schema, &vars, &context).await,
+            Ok((
+                graphql_value!({
+                    "setUserLoginEnabled": {
+                        "ok": true
+                    }
+                }),
+                vec![]
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_set_user_login_enabled_cannot_disable_self() {
+        const QUERY: &str = r#"
+            mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+                setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+                    ok
+                }
+            }
+        "#;
+        let mock = MockTestBackendHandler::new();
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("admin"),
+                permission: Permission::Admin,
+            },
+        );
+        let vars = Variables::from([
+            ("userId".to_string(), InputValue::scalar("admin")),
+            ("loginEnabled".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        let result = execute(QUERY, None, &schema, &vars, &context).await;
+        match result {
+            Ok(res) => {
+                let (response, errors) = res;
+                assert!(response.is_null());
+                assert!(errors.iter().any(|e| {
+                    e.error()
+                        .message()
+                        .contains("Cannot disable your own login")
+                }));
+            }
+            Err(_) => {
+                panic!("Expected GraphQL execution to succeed with errors");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_set_user_login_enabled_non_admin_fails() {
+        const QUERY: &str = r#"
+            mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+                setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+                    ok
+                }
+            }
+        "#;
+        let mock = MockTestBackendHandler::new();
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("regular_user"),
+                permission: Permission::Regular,
+            },
+        );
+        let vars = Variables::from([
+            ("userId".to_string(), InputValue::scalar("test_user")),
+            ("loginEnabled".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        let result = execute(QUERY, None, &schema, &vars, &context).await;
+        match result {
+            Ok(res) => {
+                let (response, errors) = res;
+                assert!(response.is_null());
+                assert!(errors.iter().any(|e| {
+                    e.error()
+                        .message()
+                        .contains("Unauthorized login status change")
+                }));
+            }
+            Err(_) => {
+                panic!("Expected GraphQL execution to succeed with errors");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_set_user_login_enabled_enable_success() {
+        const QUERY: &str = r#"
+            mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+                setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+                    ok
+                }
+            }
+        "#;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_update_user()
+            .with(eq(UpdateUserRequest {
+                user_id: UserId::new("test_user"),
+                email: None,
+                display_name: None,
+                login_enabled: Some(true),
+                delete_attributes: vec![],
+                insert_attributes: vec![],
+            }))
+            .return_once(|_| Ok(()));
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("admin"),
+                permission: Permission::Admin,
+            },
+        );
+        let vars = Variables::from([
+            ("userId".to_string(), InputValue::scalar("test_user")),
+            ("loginEnabled".to_string(), InputValue::scalar(true)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        assert_eq!(
+            execute(QUERY, None, &schema, &vars, &context).await,
+            Ok((
+                graphql_value!({
+                    "setUserLoginEnabled": {
+                        "ok": true
+                    }
+                }),
+                vec![]
+            ))
         );
     }
 }

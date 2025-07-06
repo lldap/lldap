@@ -8,6 +8,7 @@ pub enum AttributeType {
     Integer,
     DateTime,
     Jpeg,
+    Boolean,
 }
 
 impl Display for AttributeType {
@@ -24,6 +25,7 @@ impl FromStr for AttributeType {
             "Integer" => Ok(AttributeType::Integer),
             "DateTime" => Ok(AttributeType::DateTime),
             "Jpeg" => Ok(AttributeType::Jpeg),
+            "Boolean" => Ok(AttributeType::Boolean),
             _ => Err(()),
         }
     }
@@ -41,6 +43,7 @@ macro_rules! convert_attribute_type {
                     <$source_type>::INTEGER => $crate::infra::schema::AttributeType::Integer,
                     <$source_type>::DATE_TIME => $crate::infra::schema::AttributeType::DateTime,
                     <$source_type>::JPEG_PHOTO => $crate::infra::schema::AttributeType::Jpeg,
+                    <$source_type>::BOOLEAN => $crate::infra::schema::AttributeType::Boolean,
                     _ => panic!("Unknown attribute type"),
                 }
             }
@@ -53,6 +56,7 @@ macro_rules! convert_attribute_type {
                     $crate::infra::schema::AttributeType::Integer => <$source_type>::INTEGER,
                     $crate::infra::schema::AttributeType::DateTime => <$source_type>::DATE_TIME,
                     $crate::infra::schema::AttributeType::Jpeg => <$source_type>::JPEG_PHOTO,
+                    $crate::infra::schema::AttributeType::Boolean => <$source_type>::BOOLEAN,
                 }
             }
         }
