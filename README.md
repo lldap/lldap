@@ -201,6 +201,7 @@ service that seems definitely incompatible with LLDAP.
 - [Discord Integration](docs/faq.md#discord-integration)
 - [Migrating from SQLite](docs/faq.md#migrating-from-sqlite)
 - How does lldap compare [with OpenLDAP](docs/faq.md#how-does-lldap-compare-with-openldap)? [With FreeIPA](docs/faq.md#how-does-lldap-compare-with-freeipa)? [With Kanidm]?(docs/faq.md#how-does-lldap-compare-with-kanidm)
+- [Does lldap support vhosts?](docs/faq.md#does-lldap-support-vhosts)
 
 ## Contributions
 
