@@ -5,6 +5,9 @@
 - [Migrating from SQLite](#migrating-from-sqlite)
 - How does LLDAP compare [with OpenLDAP](#how-does-lldap-compare-with-openldap)? [With FreeIPA](#how-does-lldap-compare-with-freeipa)? [With Kanidm](#how-does-lldap-compare-with-kanidm)?
 - [Does LLDAP support vhosts?](#does-lldap-support-vhosts)
+- [Does LLDAP provide commercial support contracts?](#does-lldap-provide-commercial-support-contracts)
+- [Can I make a donation to fund development?](#can-i-make-a-donation-to-fund-development)
+- [Is LLDAP sustainable? Can we depend on it for our infrastructure?](#is-lldap-sustainable-can-we-depend-on-it-for-our-infrastructure)
 
 ## I can't log in!
 
@@ -91,3 +94,23 @@ LLDAP does not natively support virtualhosts, sometimes known as multi-tenancy:
 - you may support multiple domains by using fully-qualified email addresses as usernames (eg. `user@example.com` and `user@example.org`); however, you can't have more fine-grained permissions than what is provided by default (which applies across all users)
 
 LLDAP is very lightweight (~15MiB RAM on startup) and it's therefore possible to run one instance per virtualhost if you need to properly support multiple domains.
+
+## Does LLDAP provide commercial support contracts?
+
+LLDAP does not provide commercial support. It's provided as volunteer-developed free-software on a best-effort basis. If that's not ideal for you, you should probably consider using a professional all-in-one solution such as OpenLDAP, FreeIPA, or Kanidm.
+
+LLDAP is free-software (under a copyleft GPL 3.0 license) and anyone can provide consultancy and support contracts for the software. However, the LLDAP project currently does not endorse any 3rd party to provide such services in an official manner. This may be revised in the future if developers from the community step up and provide amazing services.
+
+## Can I make a donation to fund development?
+
+You can make a donation on [buymeacoffee.com/nitnelave](https://buymeacoffee.com/nitnelave) to personally support @nitnelave, the maintainer and main developer of the project.
+
+It's not a goal for them to raise enough money to be employed to work on LLDAP. As of July 2025, the donations (<100€/month) are not sufficient anyway to employ people to work on LLDAP, even part-time.
+
+## Is LLDAP sustainable? Can we depend on it for our infrastructure?
+
+LLDAP is hobbyist software developed in good will by volunteers. LLDAP is not sustainable, as only @nitnelave knows the entire codebase (bus factor = 1).
+
+The project is not too complex and is even kept minimalist on purpose. However, unless you'd like to audit and maintain the codebase in the foreseeable future, it's not recommended to adopt LLDAP for the infrastructure of your big organization.
+
+You are free to use LLDAP for any purpose, as long as you respect the copyleft. However, please do not complain if feature X is not implemented, or if the volunteers are not fixing problems fast enough for your taste. LLDAP is a project born of love and adventure, not a commercial endeavour.

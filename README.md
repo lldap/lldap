@@ -202,6 +202,9 @@ service that seems definitely incompatible with LLDAP.
 - [Migrating from SQLite](docs/faq.md#migrating-from-sqlite)
 - How does lldap compare [with OpenLDAP](docs/faq.md#how-does-lldap-compare-with-openldap)? [With FreeIPA](docs/faq.md#how-does-lldap-compare-with-freeipa)? [With Kanidm]?(docs/faq.md#how-does-lldap-compare-with-kanidm)
 - [Does lldap support vhosts?](docs/faq.md#does-lldap-support-vhosts)
+- [Does lldap provide commercial support contracts?](docs/faq.md#does-lldap-provide-commercial-support-contracts)
+- [Can I make a donation to fund development?](docs/faq.md#can-i-make-a-donation-to-fund-development)
+- [Is lldap sustainable? Can we depend on it for our infrastructure?](docs/faq.md#is-lldap-sustainable-can-we-depend-on-it-for-our-infrastructure)
 
 ## Contributions
 
