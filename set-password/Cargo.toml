@@ -26,7 +26,7 @@ features = ["opaque_client"]
 [dependencies.reqwest]
 version = "*"
 default-features = false
-features = ["json", "blocking", "rustls-tls"]
+features = ["json", "blocking", "rustls-tls", "rustls-tls-native-roots"]
 
 [dependencies.serde]
 workspace = true
