@@ -26,6 +26,10 @@ authentication_backend:
     user: 'UID=bind_user,OU=people,DC=example,DC=com'
     # Password can also be set using a secret: https://www.authelia.com/configuration/methods/secrets/.
     password: 'REPLACE_ME'
+    # Optional: Setup TLS if you've enabled LDAPS
+    # tls:
+    #  skip_verify: false
+    #  minimum_version: TLS1.2
 
   # Disable the authelia password change and reset functionality if the "bind_user" does not have the "lldap_password_manager" permission.
   password_reset:
