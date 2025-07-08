@@ -56,7 +56,7 @@ FILTER = memberOf=cn=seafile_user,ou=groups,dc=example,dc=com
 
 ## Configuring Seafile to use LLDAP with Authelia as an intermediary
 Authelia is an open-source authentication and authorization server that can use LLDAP as a backend and act as an OpenID Connect Provider. We're going to assume that you have already set up Authelia and configured it with LLDAP.
-If not, you can find an example configuration [here](authelia_config.yml).
+If not, you can find an example configuration [here](authelia.md).
 
 1. Add the following to Authelia's `configuration.yml`:
 ```
@@ -117,4 +117,4 @@ OAUTH_ATTRIBUTE_MAP = {
 }
 ```
 
-Restart both your Authelia and Seafile server. You should see a "Single Sign-On" button on Seafile's login page. Clicking it should redirect you to Authelia. If you use the [example config for Authelia](authelia_config.yml), you should be able to log in using your LLDAP User ID.
+Restart both your Authelia and Seafile server. You should see a "Single Sign-On" button on Seafile's login page. Clicking it should redirect you to Authelia. If you use the [example config for Authelia](authelia.md), you should be able to log in using your LLDAP User ID.
