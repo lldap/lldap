@@ -200,7 +200,7 @@ service that seems definitely incompatible with LLDAP.
 - [I can't login](docs/faq.md#i-cant-log-in)
 - [Discord Integration](docs/faq.md#discord-integration)
 - [Migrating from SQLite](docs/faq.md#migrating-from-sqlite)
-- How does lldap compare [with OpenLDAP](docs/faq.md#how-does-lldap-compare-with-openldap)? [With FreeIPA](docs/faq.md#how-does-lldap-compare-with-freeipa)? [With Kanidm]?(docs/faq.md#how-does-lldap-compare-with-kanidm)
+- How does lldap compare [with OpenLDAP](docs/faq.md#how-does-lldap-compare-with-openldap)? [With FreeIPA](docs/faq.md#how-does-lldap-compare-with-freeipa)? [With Kanidm](docs/faq.md#how-does-lldap-compare-with-kanidm)?
 - [Does lldap support vhosts?](docs/faq.md#does-lldap-support-vhosts)
 - [Does lldap provide commercial support contracts?](docs/faq.md#does-lldap-provide-commercial-support-contracts)
 - [Can I make a donation to fund development?](docs/faq.md#can-i-make-a-donation-to-fund-development)
