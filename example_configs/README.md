@@ -6,7 +6,7 @@ configuration files:
 - [Airsonic Advanced](airsonic-advanced.md)
 - [Apache Guacamole](apacheguacamole.md)
 - [Apereo CAS Server](apereo_cas_server.md)
-- [Authelia](authelia_config.yml)
+- [Authelia](authelia.md)
 - [Authentik](authentik.md)
 - [Bookstack](bookstack.env.example)
 - [Calibre-Web](calibre_web.md)
