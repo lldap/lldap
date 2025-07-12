@@ -443,7 +443,7 @@ impl LdapSchemaDescription {
         for (index, attribute) in self.all_attributes().attributes.into_iter().enumerate() {
             formatted_list.push(
                 format!(
-                    "( 2.{} NAME '{}' DESC 'LLDAP: {}' SUP {:?} )",
+                    "( 10.{} NAME '{}' DESC 'LLDAP: {}' SUP {:?} )",
                     (index + index_offset),
                     attribute.name,
                     if attribute.is_hardcoded {
