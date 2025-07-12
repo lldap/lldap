@@ -235,17 +235,16 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
             atype: "attributeTypes".to_string(),
             vals: {
                 let hardcoded_attributes = [
-                    b"( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' ) DESC 'RFC4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} )".to_vec(),
+                    b"( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' ) DESC 'RFC4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} SINGLE-VALUE NO-USER-MODIFICATION )".to_vec(),
                     b"( 1.3.6.1.1.16.4 NAME 'entryUUID' DESC 'UUID of the entry' EQUALITY UUIDMatch ORDERING UUIDOrderingMatch SYNTAX 1.3.6.1.1.16.1 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.101.120.16 NAME 'ldapSyntaxes' DESC 'RFC4512: LDAP syntaxes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.54 USAGE directoryOperation )".to_vec(),
                     b"( 2.5.4.0 NAME 'objectClass' DESC 'RFC4512: object classes of the entity' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
-                    b"( 2.5.4.3 NAME ( 'cn' 'commonName' ) DESC 'RFC4519: common name(s) for which the entity is known by' SUP name )".to_vec(),
-                    b"( 2.5.4.4 NAME ( 'sn' 'surname' ) DESC 'RFC2256: last (family) name(s) for which the entity is known by' SUP name )".to_vec(),
+                    b"( 2.5.4.3 NAME ( 'cn' 'commonName' ) DESC 'RFC4519: common name(s) for which the entity is known by' SUP name SINGLE-VALUE )".to_vec(),
+                    b"( 2.5.4.4 NAME ( 'sn' 'surname' ) DESC 'RFC2256: last (family) name(s) for which the entity is known by' SUP name SINGLE-VALUE )".to_vec(),
                     b"( 2.5.4.11 NAME ( 'ou' 'organizationalUnitName' ) DESC 'RFC2256: organizational unit this object belongs to' SUP name )".to_vec(),
-                    b"( 2.5.4.31 NAME 'member' DESC 'RFC2256: member of a group' SUP distinguishedName )".to_vec(),
                     b"( 2.5.4.41 NAME 'name' DESC 'RFC4519: common supertype of name attributes' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )".to_vec(),
                     b"( 2.5.4.49 NAME 'distinguishedName' DESC 'RFC4519: common supertype of DN attributes' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 )".to_vec(),
-                    b"( 2.5.4.50 NAME 'uniqueMember' DESC 'RFC2256: unique member of a group' EQUALITY uniqueMemberMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.34 )".to_vec(),
+                    b"( 2.5.4.50 NAME ( 'uniqueMember' 'member' ) DESC 'RFC2256: unique member of a group' EQUALITY uniqueMemberMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.34 )".to_vec(),
                     b"( 2.5.18.1 NAME 'createTimestamp' DESC 'RFC4512: time which object was created' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
                     b"( 2.5.18.2 NAME 'modifyTimestamp' DESC 'RFC4512: time which object was last modified' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
                     b"( 2.5.21.5 NAME 'attributeTypes' DESC 'RFC4512: attribute types' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.3 USAGE directoryOperation )".to_vec(),
@@ -610,17 +609,16 @@ mod tests {
             LdapPartialAttribute {
                 atype: "attributeTypes".to_owned(),
                 vals: vec![
-                    b"( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' ) DESC 'RFC4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} )".to_vec(),
+                    b"( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' ) DESC 'RFC4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} SINGLE-VALUE NO-USER-MODIFICATION )".to_vec(),
                     b"( 1.3.6.1.1.16.4 NAME 'entryUUID' DESC 'UUID of the entry' EQUALITY UUIDMatch ORDERING UUIDOrderingMatch SYNTAX 1.3.6.1.1.16.1 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.101.120.16 NAME 'ldapSyntaxes' DESC 'RFC4512: LDAP syntaxes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.54 USAGE directoryOperation )".to_vec(),
                     b"( 2.5.4.0 NAME 'objectClass' DESC 'RFC4512: object classes of the entity' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
-                    b"( 2.5.4.3 NAME ( 'cn' 'commonName' ) DESC 'RFC4519: common name(s) for which the entity is known by' SUP name )".to_vec(),
-                    b"( 2.5.4.4 NAME ( 'sn' 'surname' ) DESC 'RFC2256: last (family) name(s) for which the entity is known by' SUP name )".to_vec(),
+                    b"( 2.5.4.3 NAME ( 'cn' 'commonName' ) DESC 'RFC4519: common name(s) for which the entity is known by' SUP name SINGLE-VALUE )".to_vec(),
+                    b"( 2.5.4.4 NAME ( 'sn' 'surname' ) DESC 'RFC2256: last (family) name(s) for which the entity is known by' SUP name SINGLE-VALUE )".to_vec(),
                     b"( 2.5.4.11 NAME ( 'ou' 'organizationalUnitName' ) DESC 'RFC2256: organizational unit this object belongs to' SUP name )".to_vec(),
-                    b"( 2.5.4.31 NAME 'member' DESC 'RFC2256: member of a group' SUP distinguishedName )".to_vec(),
                     b"( 2.5.4.41 NAME 'name' DESC 'RFC4519: common supertype of name attributes' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )".to_vec(),
                     b"( 2.5.4.49 NAME 'distinguishedName' DESC 'RFC4519: common supertype of DN attributes' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 )".to_vec(),
-                    b"( 2.5.4.50 NAME 'uniqueMember' DESC 'RFC2256: unique member of a group' EQUALITY uniqueMemberMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.34 )".to_vec(),
+                    b"( 2.5.4.50 NAME ( 'uniqueMember' 'member' ) DESC 'RFC2256: unique member of a group' EQUALITY uniqueMemberMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.34 )".to_vec(),
                     b"( 2.5.18.1 NAME 'createTimestamp' DESC 'RFC4512: time which object was created' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
                     b"( 2.5.18.2 NAME 'modifyTimestamp' DESC 'RFC4512: time which object was last modified' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
                     b"( 2.5.21.5 NAME 'attributeTypes' DESC 'RFC4512: attribute types' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.3 USAGE directoryOperation )".to_vec(),
@@ -630,24 +628,24 @@ mod tests {
                     b"( 10.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
                     b"( 10.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
                     b"( 10.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
-                    b"( 10.20 NAME 'avatar' DESC 'LLDAP: builtin attribute' SUP JpegPhoto )".to_vec(),
-                    b"( 10.21 NAME 'creation_date' DESC 'LLDAP: builtin attribute' SUP DateTime )"
+                    b"( 10.19 NAME 'avatar' DESC 'LLDAP: builtin attribute' SUP JpegPhoto )".to_vec(),
+                    b"( 10.20 NAME 'creation_date' DESC 'LLDAP: builtin attribute' SUP DateTime )"
                         .to_vec(),
-                    b"( 10.22 NAME 'display_name' DESC 'LLDAP: builtin attribute' SUP String )"
+                    b"( 10.21 NAME 'display_name' DESC 'LLDAP: builtin attribute' SUP String )"
                         .to_vec(),
-                    b"( 10.23 NAME 'first_name' DESC 'LLDAP: builtin attribute' SUP String )"
+                    b"( 10.22 NAME 'first_name' DESC 'LLDAP: builtin attribute' SUP String )"
                         .to_vec(),
-                    b"( 10.24 NAME 'last_name' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
-                    b"( 10.25 NAME 'mail' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
-                    b"( 10.26 NAME 'user_id' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
-                    b"( 10.27 NAME 'uuid' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
-                    b"( 10.28 NAME 'creation_date' DESC 'LLDAP: builtin attribute' SUP DateTime )"
+                    b"( 10.23 NAME 'last_name' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                    b"( 10.24 NAME 'mail' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                    b"( 10.25 NAME 'user_id' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                    b"( 10.26 NAME 'uuid' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                    b"( 10.27 NAME 'creation_date' DESC 'LLDAP: builtin attribute' SUP DateTime )"
                         .to_vec(),
-                    b"( 10.29 NAME 'display_name' DESC 'LLDAP: builtin attribute' SUP String )"
+                    b"( 10.28 NAME 'display_name' DESC 'LLDAP: builtin attribute' SUP String )"
                         .to_vec(),
-                    b"( 10.30 NAME 'group_id' DESC 'LLDAP: builtin attribute' SUP Integer )"
+                    b"( 10.29 NAME 'group_id' DESC 'LLDAP: builtin attribute' SUP Integer )"
                         .to_vec(),
-                    b"( 10.31 NAME 'uuid' DESC 'LLDAP: builtin attribute' SUP String )".to_vec()
+                    b"( 10.30 NAME 'uuid' DESC 'LLDAP: builtin attribute' SUP String )".to_vec()
                 ]
             }
         );
