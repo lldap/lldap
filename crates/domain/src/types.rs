@@ -377,7 +377,7 @@ impl std::fmt::Debug for JpegPhoto {
             encoded.push_str(" ...");
         };
         f.debug_tuple("JpegPhoto")
-            .field(&format!("b64[{}]", encoded))
+            .field(&format!("b64[{encoded}]"))
             .finish()
     }
 }

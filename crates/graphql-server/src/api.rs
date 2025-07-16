@@ -75,7 +75,7 @@ pub fn export_schema(output_file: Option<String>) -> anyhow::Result<()> {
     use lldap_sql_backend_handler::SqlBackendHandler;
     let output = schema::<SqlBackendHandler>().as_schema_language();
     match output_file {
-        None => println!("{}", output),
+        None => println!("{output}"),
         Some(path) => {
             use std::fs::File;
             use std::io::prelude::*;

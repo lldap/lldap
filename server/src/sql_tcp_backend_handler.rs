@@ -169,8 +169,7 @@ impl TcpBackendHandler for SqlBackendHandler {
             .await?;
         if result.rows_affected == 0 {
             return Err(DomainError::EntityNotFound(format!(
-                "No such password reset token: '{}'",
-                token
+                "No such password reset token: '{token}'"
             )));
         }
         Ok(())

@@ -31,13 +31,13 @@ fn gitea() {
     ldap.simple_bind(bind_dn.as_str(), env::admin_password().as_str())
         .expect("failed to bind to ldap");
 
-    let user_base = format!("ou=people,{}", base_dn);
+    let user_base = format!("ou=people,{base_dn}");
     let attrs = vec!["uid", "givenName", "sn", "mail", "jpegPhoto"];
     let results = ldap
         .search(
             user_base.as_str(),
             Scope::Subtree,
-            format!("(memberof=cn={},ou=groups,{})", gitea_user_group, base_dn).as_str(),
+            format!("(memberof=cn={gitea_user_group},ou=groups,{base_dn})").as_str(),
             attrs,
         )
         .expect("failed to find gitea users")

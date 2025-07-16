@@ -91,7 +91,7 @@ pub mod tests {
         handler
             .create_user(CreateUserRequest {
                 user_id: UserId::new(name),
-                email: format!("{}@bob.bob", name).into(),
+                email: format!("{name}@bob.bob").into(),
                 display_name: Some("display ".to_string() + name),
                 attributes: vec![
                     DomainAttribute {

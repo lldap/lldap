@@ -240,8 +240,7 @@ impl SqlBackendHandler {
                 remove_user_attributes.push(attribute);
             } else {
                 return Err(DomainError::InternalError(format!(
-                    "User attribute name {} doesn't exist in the schema, yet was attempted to be removed from the database",
-                    attribute
+                    "User attribute name {attribute} doesn't exist in the schema, yet was attempted to be removed from the database"
                 )));
             }
         }
@@ -384,8 +383,7 @@ impl UserBackendHandler for SqlBackendHandler {
             .await?;
         if res.rows_affected == 0 {
             return Err(DomainError::EntityNotFound(format!(
-                "No such user: '{}'",
-                user_id
+                "No such user: '{user_id}'"
             )));
         }
         Ok(())
@@ -408,8 +406,7 @@ impl UserBackendHandler for SqlBackendHandler {
             .await?;
         if res.rows_affected == 0 {
             return Err(DomainError::EntityNotFound(format!(
-                "No such membership: '{}' -> {:?}",
-                user_id, group_id
+                "No such membership: '{user_id}' -> {group_id:?}"
             )));
         }
         Ok(())

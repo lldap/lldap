@@ -12,11 +12,11 @@ pub fn deserialize_attribute_value(
     let parse_int = |value: &String| -> Result<i64> {
         value
             .parse::<i64>()
-            .with_context(|| format!("Invalid integer value {}", value))
+            .with_context(|| format!("Invalid integer value {value}"))
     };
     let parse_date = |value: &String| -> Result<chrono::NaiveDateTime> {
         Ok(chrono::DateTime::parse_from_rfc3339(value)
-            .with_context(|| format!("Invalid date value {}", value))?
+            .with_context(|| format!("Invalid date value {value}"))?
             .naive_utc())
     };
     let parse_photo = |value: &String| -> Result<JpegPhoto> {

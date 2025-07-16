@@ -76,7 +76,7 @@ pub fn get_group_attribute(
             .users
             .iter()
             .filter(|u| user_filter.as_ref().map(|f| *u == f).unwrap_or(true))
-            .map(|u| format!("uid={},ou=people,{}", u, base_dn_str).into_bytes())
+            .map(|u| format!("uid={u},ou=people,{base_dn_str}").into_bytes())
             .collect(),
         GroupFieldType::Uuid => vec![group.uuid.to_string().into_bytes()],
         GroupFieldType::Attribute(attr, _, _) => get_custom_attribute(&group.attributes, &attr)?,
@@ -86,8 +86,7 @@ pub fn get_group_attribute(
             "+" => return None,
             "*" => {
                 panic!(
-                    "Matched {}, * should have been expanded into attribute list and * removed",
-                    attribute
+                    "Matched {attribute}, * should have been expanded into attribute list and * removed"
                 )
             }
             _ => {
@@ -211,7 +210,7 @@ fn convert_group_filter(
                     .map(GroupRequestFilter::Uuid)
                     .map_err(|e| LdapError {
                         code: LdapResultCode::Other,
-                        message: format!("Invalid UUID: {:#}", e),
+                        message: format!("Invalid UUID: {e:#}"),
                     }),
                 GroupFieldType::Member => Ok(get_user_id_from_distinguished_name_or_plain_name(
                     &value_lc,
@@ -290,15 +289,14 @@ fn convert_group_filter(
                 _ => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
                     message: format!(
-                        "Unsupported group attribute for substring filter: \"{}\"",
-                        field
+                        "Unsupported group attribute for substring filter: \"{field}\""
                     ),
                 }),
             }
         }
         _ => Err(LdapError {
             code: LdapResultCode::UnwillingToPerform,
-            message: format!("Unsupported group filter: {:?}", filter),
+            message: format!("Unsupported group filter: {filter:?}"),
         }),
     }
 }
@@ -318,7 +316,7 @@ pub async fn get_groups_list<Backend: GroupListerBackendHandler>(
         .await
         .map_err(|e| LdapError {
             code: LdapResultCode::Other,
-            message: format!(r#"Error while listing groups "{}": {:#}"#, base, e),
+            message: format!(r#"Error while listing groups "{base}": {e:#}"#),
         })
 }
 
