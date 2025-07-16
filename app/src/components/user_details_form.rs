@@ -104,7 +104,7 @@ impl Component for UserDetailsForm {
             if can_edit(a) {
                 get_custom_attribute_input(a, &self.user.attributes)
             } else {
-                get_custom_attribute_static(a, &self.user.attributes)
+                get_custom_attribute_static(a, &self.user)
             }
         };
         html! {
@@ -185,17 +185,28 @@ fn get_custom_attribute_input(
 
 fn get_custom_attribute_static(
     attribute_schema: &AttributeSchema,
-    user_attributes: &[Attribute],
+    // TODO: accessing only untyped attributes doesn't let us have a NaiveDate
+    user: &User,
 ) -> Html {
-    let values = user_attributes
+    let values = &user
+        .attributes
         .iter()
         .find(|a| a.name == attribute_schema.name)
         .map(|attribute| attribute.value.clone())
         .unwrap_or_default();
-    html! {
-        <StaticValue label={attribute_schema.name.clone()} id={attribute_schema.name.clone()}>
-            {values.into_iter().map(|x| html!{<div>{x}</div>}).collect::<Vec<_>>()}
-        </StaticValue>
+    if attribute_schema.name == "creation_date" {
+        let date = user.creation_date;
+        html! {
+            <StaticValue label="Creation date" id={attribute_schema.name.clone()}>
+                <div>{date.naive_local().date()}</div>
+            </StaticValue>
+        }
+    } else {
+        html! {
+            <StaticValue label={attribute_schema.name.clone()} id={attribute_schema.name.clone()}>
+                {values.into_iter().map(|x| html!{<div>{x}</div>}).collect::<Vec<_>>()}
+            </StaticValue>
+        }
     }
 }
 
