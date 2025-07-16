@@ -299,14 +299,14 @@ impl PrivateKeyLocationOrFigment {
                         source: Some(figment::Source::Code(_)),
                         ..
                     }) => PrivateKeyLocation::Default,
-                    other => panic!("Unexpected config location: {:?}", other),
+                    other => panic!("Unexpected config location: {other:?}"),
                 }
             }
             PrivateKeyLocationOrFigment::PrivateKeyLocation(PrivateKeyLocation::KeyFile(
                 config_location,
                 _,
             )) => {
-                panic!("Unexpected location: {:?}", config_location)
+                panic!("Unexpected location: {config_location:?}")
             }
             PrivateKeyLocationOrFigment::PrivateKeyLocation(location) => location.clone(),
         }
@@ -334,11 +334,11 @@ impl PrivateKeyLocationOrFigment {
                         source: Some(figment::Source::Code(_)),
                         ..
                     }) => PrivateKeyLocation::Default,
-                    other => panic!("Unexpected config location: {:?}", other),
+                    other => panic!("Unexpected config location: {other:?}"),
                 }
             }
             PrivateKeyLocationOrFigment::PrivateKeyLocation(PrivateKeyLocation::KeySeed(file)) => {
-                panic!("Unexpected location: {:?}", file)
+                panic!("Unexpected location: {file:?}")
             }
             PrivateKeyLocationOrFigment::PrivateKeyLocation(location) => location.clone(),
         }
@@ -373,19 +373,17 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
             private_key_location: private_key_location.for_key_seed(),
         })
     } else if path.exists() {
-        let bytes = read(file_path).context(format!("Could not read key file `{}`", file_path))?;
+        let bytes = read(file_path).context(format!("Could not read key file `{file_path}`"))?;
         Ok(ServerSetupConfig {
             server_setup: ServerSetup::deserialize(&bytes).context(format!(
-                "while parsing the contents of the `{}` file",
-                file_path
+                "while parsing the contents of the `{file_path}` file"
             ))?,
             private_key_location: private_key_location.for_key_file(file_path),
         })
     } else {
         let server_setup = generate_random_private_key();
         write_to_readonly_file(path, &server_setup.serialize()).context(format!(
-            "Could not write the generated server setup to file `{}`",
-            file_path,
+            "Could not write the generated server setup to file `{file_path}`",
         ))?;
         Ok(ServerSetupConfig {
             server_setup,
@@ -596,7 +594,7 @@ where
             .iter()
             .filter(|k| !expected_keys.contains(k.as_str()))
             .for_each(|k| {
-                eprintln!("WARNING: Unknown environment variable: LLDAP_{}", k);
+                eprintln!("WARNING: Unknown environment variable: LLDAP_{k}");
             });
     }
     config.server_setup = Some(get_server_setup(

@@ -29,7 +29,7 @@ impl std::fmt::Debug for DatabaseUrl {
             let mut url = self.0.clone();
             // It can fail for URLs that cannot have a password, like "mailto:bob@example".
             let _ = url.set_password(Some("***PASSWORD***"));
-            f.write_fmt(format_args!(r#""{}""#, url))
+            f.write_fmt(format_args!(r#""{url}""#))
         } else {
             f.write_fmt(format_args!(r#""{}""#, self.0))
         }
@@ -44,7 +44,7 @@ mod tests {
     fn test_database_url_debug() {
         let url = DatabaseUrl::from("postgres://user:pass@localhost:5432/dbname");
         assert_eq!(
-            format!("{:?}", url),
+            format!("{url:?}"),
             r#""postgres://user:***PASSWORD***@localhost:5432/dbname""#
         );
         assert_eq!(

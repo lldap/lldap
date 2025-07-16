@@ -112,8 +112,7 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
                         .map_err(|e| LdapError {
                             code: LdapResultCode::OperationsError,
                             message: format!(
-                                "Internal error while requesting user's groups: {:#?}",
-                                e
+                                "Internal error while requesting user's groups: {e:#?}"
                             ),
                         })?
                         .iter()
@@ -131,7 +130,7 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
                     {
                         Err(LdapError {
                             code: LdapResultCode::Other,
-                            message: format!("Error while changing the password: {:#?}", e),
+                            message: format!("Error while changing the password: {e:#?}"),
                         })
                     } else {
                         Ok(vec![make_extended_response(
@@ -142,7 +141,7 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
                 }
                 Err(e) => Err(LdapError {
                     code: LdapResultCode::InvalidDNSyntax,
-                    message: format!("Invalid username: {}", e),
+                    message: format!("Invalid username: {e}"),
                 }),
             }
         }

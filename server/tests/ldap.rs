@@ -86,7 +86,7 @@ fn admin_search() {
         ldap.search(
             env::base_dn().as_str(),
             Scope::Subtree,
-            format!("(&(objectclass=person)(uid={}))", admin_name).as_str(),
+            format!("(&(objectclass=person)(uid={admin_name}))").as_str(),
             attrs,
         )
         .expect("failed to find admin"),
@@ -97,7 +97,7 @@ fn admin_search() {
         found_users
             .get(&admin_name)
             .unwrap()
-            .contains(format!("cn={},ou=groups,{}", admin_group_name, base_dn).as_str())
+            .contains(format!("cn={admin_group_name},ou=groups,{base_dn}").as_str())
     );
     ldap.unbind().expect("failed to unbind ldap connection");
 }

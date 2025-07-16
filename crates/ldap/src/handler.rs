@@ -100,10 +100,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             backend_handler,
             ldap_info: LdapInfo {
                 base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
-                    panic!(
-                        "Invalid value for ldap_base_dn in configuration: {}",
-                        ldap_base_dn
-                    )
+                    panic!("Invalid value for ldap_base_dn in configuration: {ldap_base_dn}")
                 }),
                 base_dn_str: ldap_base_dn,
                 ignored_user_attributes,
@@ -155,7 +152,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
             let schema = backend_handler.get_schema().await.map_err(|e| LdapError {
                 code: LdapResultCode::OperationsError,
-                message: format!("Unable to get schema: {:#}", e),
+                message: format!("Unable to get schema: {e:#}"),
             })?;
             return Ok(vec![
                 make_ldap_subschema_entry(PublicSchema::from(schema)),
@@ -224,7 +221,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 }
                 Err(e) => vec![make_extended_response(
                     LdapResultCode::ProtocolError,
-                    format!("Error while parsing password modify request: {:#?}", e),
+                    format!("Error while parsing password modify request: {e:#?}"),
                 )],
             },
             OID_WHOAMI => {
@@ -343,7 +340,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 .unwrap_or_else(|e: LdapError| vec![make_search_error(e.code, e.message)]),
             op => vec![make_extended_response(
                 LdapResultCode::UnwillingToPerform,
-                format!("Unsupported operation: {:#?}", op),
+                format!("Unsupported operation: {op:#?}"),
             )],
         })
     }
