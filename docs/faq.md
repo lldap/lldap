@@ -8,6 +8,9 @@
 - [Does LLDAP provide commercial support contracts?](#does-lldap-provide-commercial-support-contracts)
 - [Can I make a donation to fund development?](#can-i-make-a-donation-to-fund-development)
 - [Is LLDAP sustainable? Can we depend on it for our infrastructure?](#is-lldap-sustainable-can-we-depend-on-it-for-our-infrastructure)
+- [Does LLDAP need Internet access?](#does-lldap-need-internet-access)
+- [Why does my browser make requests to external HTTP services?](#why-does-my-browser-make-requests-to-external-http-services)
+- [What is LLDAP's privacy policy?](#what-is-lldaps-privacy-policy)
 
 ## I can't log in!
 
@@ -114,3 +117,30 @@ LLDAP is hobbyist software developed in good will by volunteers. LLDAP is not su
 The project is not too complex and is even kept minimalist on purpose. However, unless you'd like to audit and maintain the codebase in the foreseeable future, it's not recommended to adopt LLDAP for the infrastructure of your big organization.
 
 You are free to use LLDAP for any purpose, as long as you respect the copyleft. However, please do not complain if feature X is not implemented, or if the volunteers are not fixing problems fast enough for your taste. LLDAP is a project born of love and adventure, not a commercial endeavour.
+
+## Does LLDAP need Internet access?
+
+By default, LLDAP uses CSS, fonts and JS served from third-party [Content Delivery Networks](https://en.wikipedia.org/wiki/Content_delivery_network). This has upsides and downsides, which are being evaluted in issue [#1219](https://github.com/lldap/lldap/issues/1219).
+
+It is possible to run LLDAP without Internet access, in a LAN setup, which is the default configuration for our provided Docker images. You need to make sure the `index.html` file served by `lldap` from the configured `assets_path` is actually the `app/index_local.html` file. Then, download the external resources to the same folder. Assuming you use the default `assets_path = "./app/"`:
+
+```sh
+for file in $(cat app/static/libraries.txt); do wget -P app/static "$file"; done
+for file in $(cat app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done
+```
+
+LLDAP should now be working on your LAN without requiring Internet access on the server or client side.
+
+## Why does my browser make requests to external HTTP services?
+
+By default, LLDAP uses CSS, fonts and JS served from third-party [Content Delivery Networks](https://en.wikipedia.org/wiki/Content_delivery_network). This has upsides and downsides, which are being evaluted in issue [#1219](https://github.com/lldap/lldap/issues/1219).
+
+If you are worried about the privacy and security of your setup, it is also possible to serve all static assets locally without 3rd parties. See the question [Does LLDAP need Internet access?](#does-lldap-need-internet-access) of this FAQ.
+
+## What is LLDAP's privacy policy?
+
+LLDAP is copyleft software for you to self-host. The LLDAP developers do not collect any information from the deployed instances or their respective users, and do not provide hosting services of any kind. What you do with this software developed in good faith is entirely your responsibility, and we encourage you to adopt a privacy-friendly and transparent privacy policy.
+
+Under certain circumstances, users browsing an LLDAP service may perform automated HTTP requests to third-party [Content Delivery Networks](https://en.wikipedia.org/wiki/Content_delivery_network). That is however, dependent on the instance's specific LLDAP configuration and is entirely their responsibility. Any data collected in this manner is not communicated to the LLDAP project.
+
+If you are curious about your LLDAP provider's privacy policy, feel free to contact your admin directly.
