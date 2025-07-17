@@ -8,6 +8,8 @@
 - [Does LLDAP provide commercial support contracts?](#does-lldap-provide-commercial-support-contracts)
 - [Can I make a donation to fund development?](#can-i-make-a-donation-to-fund-development)
 - [Is LLDAP sustainable? Can we depend on it for our infrastructure?](#is-lldap-sustainable-can-we-depend-on-it-for-our-infrastructure)
+- [What is `Specified path is not a directory` error in my logs?](#what-is-specified-path-is-not-a-directory-error-in-my-logs)
+- [What hardware architectures are supported by LLDAP?](#what-hardware-architectures-are-supported-by-lldap)
 
 ## I can't log in!
 
@@ -114,3 +116,25 @@ LLDAP is hobbyist software developed in good will by volunteers. LLDAP is not su
 The project is not too complex and is even kept minimalist on purpose. However, unless you'd like to audit and maintain the codebase in the foreseeable future, it's not recommended to adopt LLDAP for the infrastructure of your big organization.
 
 You are free to use LLDAP for any purpose, as long as you respect the copyleft. However, please do not complain if feature X is not implemented, or if the volunteers are not fixing problems fast enough for your taste. LLDAP is a project born of love and adventure, not a commercial endeavour.
+
+## What is `Specified path is not a directory` error in my logs?
+
+If trying to access the webapp results in `No such file or directory (os error 2)`, and you see in your logs something like this:
+
+```
+2025-07-17T15:12:15.514248067+00:00  ERROR    🚨 [error]: Specified path is not a directory: "./app/pkg" | log.target: "actix_files::files" | log.module_path: "actix_files::files" | log.file: "/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/actix-files-0.6.6/src/files.rs" | log.line: 103
+2025-07-17T15:12:15.514261840+00:00  ERROR    🚨 [error]: Specified path is not a directory: "./app/static" | log.target: "actix_files::files" | log.module_path: "actix_files::files" | log.file: "/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/actix-files-0.6.6/src/files.rs" | log.line: 103
+2025-07-17T15:12:15.514266989+00:00  ERROR    🚨 [error]: Specified path is not a directory: "./app/static/fonts" | log.target: "actix_files::files" | log.module_path: "actix_files::files" | log.file: "/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/actix-files-0.6.6/src/files.rs" | log.line: 103
+```
+
+It means the backend `lldap` server did not find the frontend files to serve. By default, it will look for them in the `app` folder in the current working directory.
+
+If you are running LLDAP from source, you may have executed `cargo run` from a subfolder (such as the `src` directory) instead of the project root, or forgotten to build the frontend first. Follow our [Development documentation](./development.md) to understand how to run LLDAP from source.
+
+If you have installed LLDAP from a release tarball or using a package manager, `lldap` may be trying to look for the assets in the wrong directory. For example, if you installed the `lldap` server to `/usr/local/bin/lldap`, and renamed the `app` directory to `/usr/local/share/lldap`, you need to set `assets_path = "/usr/local/share/lldap"` in your configuration file `lldap_config.toml`.`
+
+## What hardware architectures are supported by LLDAP?
+
+We currently support AMD64, ARM64, and ARM/V7 architectures. We provide official docker images for those architectures.
+
+In theory, LLDAP can be compiled to any hardware architecture supported by its dependencies. You may attempt cross-compilation to more architectures and report on your success. See our [Cross-compilation](./development.md#cross-compilation) docs for more information on this process.
