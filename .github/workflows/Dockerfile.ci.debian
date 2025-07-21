@@ -4,9 +4,12 @@ ENV GOSU_VERSION=1.17
 RUN set -eux; \
 # save list of currently installed packages for later so we can clean up
 	savedAptMark="$(apt-mark showmanual)"; \
-	apt-get update; \
-	apt-get install -y --no-install-recommends ca-certificates gnupg wget; \
-	rm -rf /var/lib/apt/lists/*; \
+	for i in 1 2 3; do \
+		apt-get update && \
+		apt-get install -y --no-install-recommends wget ca-certificates gnupg && \
+		apt-get clean && \
+		rm -rf /var/lib/apt/lists/* && break || sleep 5; \
+	done; \
 	\
 	dpkgArch="$(dpkg --print-architecture | awk -F- '{ print $NF }')"; \
 	wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$dpkgArch"; \
@@ -14,7 +17,18 @@ RUN set -eux; \
 	\
 # verify the signature
 	export GNUPGHOME="$(mktemp -d)"; \
-	gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4; \
+	for server in \
+		hkps://keys.openpgp.org \
+		ha.pool.sks-keyservers.net \
+		hkp://p80.pool.sks-keyservers.net:80 \
+		keyserver.ubuntu.com \
+		hkp://keyserver.ubuntu.com:80 \
+		pgp.mit.edu \
+	; do \
+		if gpg --batch --keyserver "$server" --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4; then \
+			break; \
+		fi; \
+	done; \
 	gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu; \
 	gpgconf --kill all; \
 	rm -rf "$GNUPGHOME" /usr/local/bin/gosu.asc; \
