@@ -5,10 +5,10 @@ use crate::{
         router::{AppRoute, Link},
         user_details_form::UserDetailsForm,
     },
-    convert_attribute_type,
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
         form_utils::GraphQlAttributeSchema,
+        schema::AttributeType,
     },
 };
 use anyhow::{Error, Result, bail};
@@ -20,7 +20,8 @@ use yew::prelude::*;
     schema_path = "../schema.graphql",
     query_path = "queries/get_user_details.graphql",
     response_derives = "Debug, Hash, PartialEq, Eq, Clone",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::infra::graphql",
+    extern_enums("AttributeType")
 )]
 pub struct GetUserDetails;
 
@@ -28,9 +29,6 @@ pub type User = get_user_details::GetUserDetailsUser;
 pub type Group = get_user_details::GetUserDetailsUserGroups;
 pub type Attribute = get_user_details::GetUserDetailsUserAttributes;
 pub type AttributeSchema = get_user_details::GetUserDetailsSchemaUserSchemaAttributes;
-pub type AttributeType = get_user_details::AttributeType;
-
-convert_attribute_type!(AttributeType);
 
 impl From<&AttributeSchema> for GraphQlAttributeSchema {
     fn from(attr: &AttributeSchema) -> Self {

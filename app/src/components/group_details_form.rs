@@ -10,7 +10,6 @@ use crate::{
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
         form_utils::{AttributeValue, EmailIsRequired, IsAdmin, read_all_form_attributes},
-        schema::AttributeType,
     },
 };
 use anyhow::{Ok, Result};
@@ -174,7 +173,7 @@ fn get_custom_attribute_input(
         html! {
             <ListAttributeInput
                name={attribute_schema.name.clone()}
-               attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())}
+               attribute_type={attribute_schema.attribute_type}
                values={values}
             />
         }
@@ -182,7 +181,7 @@ fn get_custom_attribute_input(
         html! {
             <SingleAttributeInput
                 name={attribute_schema.name.clone()}
-                attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())}
+                attribute_type={attribute_schema.attribute_type}
                 value={values.first().cloned().unwrap_or_default()}
             />
         }

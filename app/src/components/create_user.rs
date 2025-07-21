@@ -7,7 +7,6 @@ use crate::{
         },
         router::AppRoute,
     },
-    convert_attribute_type,
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
@@ -32,15 +31,14 @@ use yew_router::{prelude::History, scope_ext::RouterScopeExt};
     schema_path = "../schema.graphql",
     query_path = "queries/get_user_attributes_schema.graphql",
     response_derives = "Debug,Clone,PartialEq,Eq",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::infra::graphql",
+    extern_enums("AttributeType")
 )]
 pub struct GetUserAttributesSchema;
 
 use get_user_attributes_schema::ResponseData;
 
 pub type Attribute = get_user_attributes_schema::GetUserAttributesSchemaSchemaUserSchemaAttributes;
-
-convert_attribute_type!(get_user_attributes_schema::AttributeType);
 
 impl From<&Attribute> for GraphQlAttributeSchema {
     fn from(attr: &Attribute) -> Self {
@@ -310,14 +308,14 @@ fn get_custom_attribute_input(attribute_schema: &Attribute) -> Html {
         html! {
             <ListAttributeInput
                 name={attribute_schema.name.clone()}
-                attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())}
+                attribute_type={attribute_schema.attribute_type}
             />
         }
     } else {
         html! {
             <SingleAttributeInput
                 name={attribute_schema.name.clone()}
-                attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())}
+                attribute_type={attribute_schema.attribute_type}
             />
         }
     }
