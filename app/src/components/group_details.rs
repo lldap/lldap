@@ -5,10 +5,10 @@ use crate::{
         remove_user_from_group::RemoveUserFromGroupComponent,
         router::{AppRoute, Link},
     },
-    convert_attribute_type,
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
         form_utils::GraphQlAttributeSchema,
+        schema::AttributeType,
     },
 };
 use anyhow::{Error, Result, bail};
@@ -20,7 +20,8 @@ use yew::prelude::*;
     schema_path = "../schema.graphql",
     query_path = "queries/get_group_details.graphql",
     response_derives = "Debug, Hash, PartialEq, Eq, Clone",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::infra::graphql",
+    extern_enums("AttributeType")
 )]
 pub struct GetGroupDetails;
 
@@ -29,9 +30,6 @@ pub type User = get_group_details::GetGroupDetailsGroupUsers;
 pub type AddGroupMemberUser = add_group_member::User;
 pub type Attribute = get_group_details::GetGroupDetailsGroupAttributes;
 pub type AttributeSchema = get_group_details::GetGroupDetailsSchemaGroupSchemaAttributes;
-pub type AttributeType = get_group_details::AttributeType;
-
-convert_attribute_type!(AttributeType);
 
 impl From<&AttributeSchema> for GraphQlAttributeSchema {
     fn from(attr: &AttributeSchema) -> Self {

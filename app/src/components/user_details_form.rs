@@ -14,6 +14,7 @@ use crate::{
     },
 };
 use anyhow::{Ok, Result};
+use gloo_console::console;
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
 
@@ -168,7 +169,7 @@ fn get_custom_attribute_input(
         html! {
             <ListAttributeInput
                name={attribute_schema.name.clone()}
-               attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())}
+               attribute_type={attribute_schema.attribute_type}
                values={values}
             />
         }
@@ -176,7 +177,7 @@ fn get_custom_attribute_input(
         html! {
             <SingleAttributeInput
                 name={attribute_schema.name.clone()}
-                attribute_type={Into::<AttributeType>::into(attribute_schema.attribute_type.clone())}
+                attribute_type={attribute_schema.attribute_type}
                 value={values.first().cloned().unwrap_or_default()}
             />
         }
@@ -192,9 +193,19 @@ fn get_custom_attribute_static(
         .find(|a| a.name == attribute_schema.name)
         .map(|attribute| attribute.value.clone())
         .unwrap_or_default();
+    let value_to_str = match attribute_schema.attribute_type {
+        AttributeType::String | AttributeType::Integer => |v: String| v,
+        AttributeType::DateTime => |v: String| {
+            console!(format!("Parsing date: {}", &v));
+            chrono::DateTime::parse_from_rfc3339(&v)
+                .map(|dt| dt.naive_utc().to_string())
+                .unwrap_or_else(|_| "Invalid date".to_string())
+        },
+        AttributeType::JpegPhoto => |_: String| "Unimplemented JPEG display".to_string(),
+    };
     html! {
         <StaticValue label={attribute_schema.name.clone()} id={attribute_schema.name.clone()}>
-            {values.into_iter().map(|x| html!{<div>{x}</div>}).collect::<Vec<_>>()}
+            {values.into_iter().map(|x| html!{<div>{value_to_str(x)}</div>}).collect::<Vec<_>>()}
         </StaticValue>
     }
 }
