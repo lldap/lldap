@@ -1,6 +1,6 @@
 [package]
 name = "lldap"
-version = "0.6.2-alpha"
+version = "0.6.2"
 description = "Super-simple and lightweight LDAP server"
 categories = ["authentication", "command-line-utilities"]
 edition.workspace = true
