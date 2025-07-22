@@ -34,7 +34,11 @@ impl<Handler: BackendHandler> Context<Handler> {
     }
 
     pub fn get_admin_handler(&self) -> Option<&Handler> {
-        self.handler.get_admin_handler(&self.validation_result)
+        if self.validation_result.is_admin() {
+            Some(self.handler.unsafe_get_handler())
+        } else {
+            None
+        }
     }
 
     pub fn get_readonly_handler(&self) -> Option<&Handler> {
