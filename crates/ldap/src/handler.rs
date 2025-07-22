@@ -7,8 +7,8 @@ use crate::{
     create, delete, modify,
     password::{self, do_password_modification},
     search::{
-        self, is_root_dse_request, make_search_error, make_search_request, make_search_success,
-        root_dse_response,
+        self, is_root_dse_request, is_subschema_entry_request, make_ldap_subschema_entry,
+        make_search_error, make_search_request, make_search_success, root_dse_response,
     },
 };
 use ldap3_proto::proto::{
@@ -18,8 +18,8 @@ use ldap3_proto::proto::{
 };
 use lldap_access_control::AccessControlledBackendHandler;
 use lldap_auth::access_control::ValidationResults;
-use lldap_domain::types::AttributeName;
-use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
+use lldap_domain::{public_schema::PublicSchema, types::AttributeName};
+use lldap_domain_handlers::handler::{BackendHandler, LoginHandler, ReadSchemaBackendHandler};
 use lldap_opaque_handler::OpaqueHandler;
 use tracing::{debug, instrument};
 
@@ -136,6 +136,26 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
             debug!("rootDSE request");
             return Ok(vec![
                 root_dse_response(&self.ldap_info.base_dn_str),
+                make_search_success(),
+            ]);
+        } else if is_subschema_entry_request(request) {
+            // See RFC4512 section 4.4 "Subschema discovery"
+            debug!("Schema request");
+            let backend_handler = self
+                .user_info
+                .as_ref()
+                .and_then(|u| self.backend_handler.get_schema_only_handler(u))
+                .ok_or_else(|| LdapError {
+                    code: LdapResultCode::InsufficentAccessRights,
+                    message: "No user currently bound".to_string(),
+                })?;
+
+            let schema = backend_handler.get_schema().await.map_err(|e| LdapError {
+                code: LdapResultCode::OperationsError,
+                message: format!("Unable to get schema: {e:#}"),
+            })?;
+            return Ok(vec![
+                make_ldap_subschema_entry(PublicSchema::from(schema)),
                 make_search_success(),
             ]);
         }

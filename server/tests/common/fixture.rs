@@ -102,7 +102,7 @@ impl LLDAPFixture {
             create_user::Variables {
                 user: create_user::CreateUserInput {
                     id: user.clone(),
-                    email: Some(format!("{}@lldap.test", user)),
+                    email: Some(format!("{user}@lldap.test")),
                     avatar: None,
                     display_name: None,
                     first_name: None,
@@ -198,11 +198,11 @@ impl Drop for LLDAPFixture {
             Signal::SIGTERM,
         );
         if let Err(err) = result {
-            println!("Failed to send kill signal: {:?}", err);
+            println!("Failed to send kill signal: {err:?}");
             let _ = self
                 .child
                 .kill()
-                .map_err(|err| println!("Failed to kill LLDAP: {:?}", err));
+                .map_err(|err| println!("Failed to kill LLDAP: {err:?}"));
             return;
         }
 
@@ -210,10 +210,7 @@ impl Drop for LLDAPFixture {
             let status = self.child.try_wait();
             match status {
                 Err(e) => {
-                    println!(
-                        "Failed to get status while waiting for graceful exit: {}",
-                        e
-                    );
+                    println!("Failed to get status while waiting for graceful exit: {e}");
                     break;
                 }
                 Ok(None) => {
@@ -221,7 +218,7 @@ impl Drop for LLDAPFixture {
                 }
                 Ok(Some(status)) => {
                     if !status.success() {
-                        println!("LLDAP exited with status {}", status)
+                        println!("LLDAP exited with status {status}")
                     }
                     return;
                 }
@@ -232,7 +229,7 @@ impl Drop for LLDAPFixture {
         let _ = self
             .child
             .kill()
-            .map_err(|err| println!("Failed to kill LLDAP: {:?}", err));
+            .map_err(|err| println!("Failed to kill LLDAP: {err:?}"));
     }
 }
 
@@ -240,7 +237,7 @@ pub fn new_id(prefix: Option<&str>) -> String {
     let id = Uuid::new_v4();
     let id = format!("{}-lldap-test", id.simple());
     match prefix {
-        Some(prefix) => format!("{}{}", prefix, id),
+        Some(prefix) => format!("{prefix}{id}"),
         None => id,
     }
 }

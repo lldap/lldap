@@ -28,7 +28,7 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
                 <DateTimeInput name={props.name.clone()} value={props.value.clone()} onchange={props.onchange.clone()} />
             };
         }
-        AttributeType::Jpeg => {
+        AttributeType::JpegPhoto => {
             return html! {
                 <JpegFileInput name={props.name.clone()} value={props.value.clone()} onchange={props.onchange.clone()} />
             };
@@ -112,7 +112,7 @@ fn attribute_label(props: &AttributeLabelProps) -> Html {
 #[derive(Properties, PartialEq)]
 pub struct SingleAttributeInputProps {
     pub name: String,
-    pub attribute_type: AttributeType,
+    pub(crate) attribute_type: AttributeType,
     #[prop_or(None)]
     pub value: Option<String>,
     #[prop_or(None)]
@@ -126,7 +126,7 @@ pub fn single_attribute_input(props: &SingleAttributeInputProps) -> Html {
             <AttributeLabel name={props.name.clone()} />
             <div class="col-8">
             <AttributeInput
-                attribute_type={props.attribute_type.clone()}
+                attribute_type={props.attribute_type}
                 name={props.name.clone()}
                 value={props.value.clone()}
                 onchange={props.onchange.clone()} />
@@ -138,7 +138,7 @@ pub fn single_attribute_input(props: &SingleAttributeInputProps) -> Html {
 #[derive(Properties, PartialEq)]
 pub struct ListAttributeInputProps {
     pub name: String,
-    pub attribute_type: AttributeType,
+    pub(crate) attribute_type: AttributeType,
     #[prop_or(vec!())]
     pub values: Vec<String>,
 }
@@ -198,7 +198,7 @@ impl Component for ListAttributeInput {
                 {self.indices.iter().map(|&i| html! {
                     <div class="input-group mb-2" key={i}>
                     <AttributeInput
-                        attribute_type={props.attribute_type.clone()}
+                        attribute_type={props.attribute_type}
                         name={props.name.clone()}
                         value={props.values.get(i).cloned().unwrap_or_default()}
                         onchange={None} />

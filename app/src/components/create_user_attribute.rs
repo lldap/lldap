@@ -3,7 +3,6 @@ use crate::{
         form::{checkbox::CheckBox, field::Field, select::Select, submit::Submit},
         router::AppRoute,
     },
-    convert_attribute_type,
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
         schema::{AttributeType, validate_attribute_type},
@@ -23,11 +22,10 @@ use yew_router::{prelude::History, scope_ext::RouterScopeExt};
     schema_path = "../schema.graphql",
     query_path = "queries/create_user_attribute.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::infra::graphql",
+    extern_enums("AttributeType")
 )]
 pub struct CreateUserAttribute;
-
-convert_attribute_type!(create_user_attribute::AttributeType);
 
 pub struct CreateUserAttributeForm {
     common: CommonComponentParts<Self>,
@@ -74,10 +72,11 @@ impl CommonComponent<CreateUserAttributeForm> for CreateUserAttributeForm {
                         invalid
                     );
                 })?;
-                let attribute_type = model.attribute_type.parse::<AttributeType>().unwrap();
+                let attribute_type =
+                    serde_json::from_str::<AttributeType>(&model.attribute_type).unwrap();
                 let req = create_user_attribute::Variables {
                     name: model.attribute_name,
-                    attribute_type: create_user_attribute::AttributeType::from(attribute_type),
+                    attribute_type,
                     is_editable: model.is_editable,
                     is_list: model.is_list,
                     is_visible: model.is_visible,

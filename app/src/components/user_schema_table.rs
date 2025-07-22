@@ -4,7 +4,6 @@ use crate::{
         fragments::attribute_schema::render_attribute_name,
         router::{AppRoute, Link},
     },
-    convert_attribute_type,
     infra::{
         attributes::user,
         common_component::{CommonComponent, CommonComponentParts},
@@ -21,15 +20,14 @@ use yew::prelude::*;
     schema_path = "../schema.graphql",
     query_path = "queries/get_user_attributes_schema.graphql",
     response_derives = "Debug,Clone,PartialEq,Eq",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::infra::graphql",
+    extern_enums("AttributeType")
 )]
 pub struct GetUserAttributesSchema;
 
 use get_user_attributes_schema::ResponseData;
 
 pub type Attribute = get_user_attributes_schema::GetUserAttributesSchemaSchemaUserSchemaAttributes;
-
-convert_attribute_type!(get_user_attributes_schema::AttributeType);
 
 #[derive(yew::Properties, Clone, PartialEq, Eq)]
 pub struct Props {
@@ -146,7 +144,7 @@ impl UserSchemaTable {
 
     fn view_attribute(&self, ctx: &Context<Self>, attribute: &Attribute) -> Html {
         let link = ctx.link();
-        let attribute_type = AttributeType::from(attribute.attribute_type.clone());
+        let attribute_type = attribute.attribute_type;
         let checkmark = html! {
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16">
           <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z"></path>

@@ -44,7 +44,7 @@ mod tests {
     fn test_database_url_debug() {
         let url = DatabaseUrl::from("postgres://user:pass@localhost:5432/dbname");
         assert_eq!(
-            format!("{:?}", url),
+            format!("{url:?}"),
             r#""postgres://user:***PASSWORD***@localhost:5432/dbname""#
         );
         assert_eq!(

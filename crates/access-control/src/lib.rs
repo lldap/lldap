@@ -178,7 +178,17 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         Self { handler }
     }
 
-    pub fn get_admin_handler(&self, validation_result: &ValidationResults) -> Option<&Handler> {
+    pub fn get_schema_only_handler(
+        &self,
+        _validation_result: &ValidationResults,
+    ) -> Option<&impl ReadSchemaBackendHandler> {
+        Some(&self.handler)
+    }
+
+    pub fn get_admin_handler(
+        &self,
+        validation_result: &ValidationResults,
+    ) -> Option<&(impl AdminBackendHandler + use<Handler>)> {
         validation_result.is_admin().then_some(&self.handler)
     }
 

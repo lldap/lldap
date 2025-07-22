@@ -596,12 +596,18 @@ main() {
   check_install_dependencies
   check_required_env_vars
 
-  local user_config_files=("${USER_CONFIGS_DIR}"/*.json)
-  local group_config_files=("${GROUP_CONFIGS_DIR}"/*.json)
+  local user_config_files=()
+  local group_config_files=()
   local user_schema_files=()
   local group_schema_files=()
 
   local file=''
+  [[ -d "$USER_CONFIGS_DIR" ]] && for file in "${USER_CONFIGS_DIR}"/*.json; do
+    user_config_files+=("$file")
+  done
+  [[ -d "$GROUP_CONFIGS_DIR" ]] && for file in "${GROUP_CONFIGS_DIR}"/*.json; do
+    group_config_files+=("$file")
+  done
   [[ -d "$USER_SCHEMAS_DIR" ]] && for file in "${USER_SCHEMAS_DIR}"/*.json; do
     user_schema_files+=("$file")
   done
@@ -647,7 +653,7 @@ main() {
 
   printf -- '\n--- groups ---\n'
   local group_config=''
-  while read -r group_config; do
+  [[ ${#group_config_files[@]} -gt 0 ]] && while read -r group_config; do
     local group_name=''
     group_name="$(printf '%s' "$group_config" | jq --raw-output '.name')"
     create_group "$group_name"
@@ -690,9 +696,9 @@ main() {
   TMP_AVATAR_DIR="$(mktemp -d)"
 
   local user_config=''
-  while read -r user_config; do
-    local field='' id='' email='' displayName='' firstName='' lastName='' avatar_file='' avatar_url='' gravatar_avatar='' weserv_avatar='' password=''
-    for field in 'id' 'email' 'displayName' 'firstName' 'lastName' 'avatar_file' 'avatar_url' 'gravatar_avatar' 'weserv_avatar' 'password'; do
+  [[ ${#user_config_files[@]} -gt 0 ]] && while read -r user_config; do
+    local field='' id='' email='' displayName='' firstName='' lastName='' avatar_file='' avatar_url='' gravatar_avatar='' weserv_avatar='' password='' password_file=''
+    for field in 'id' 'email' 'displayName' 'firstName' 'lastName' 'avatar_file' 'avatar_url' 'gravatar_avatar' 'weserv_avatar' 'password' 'password_file'; do
       declare "$field"="$(printf '%s' "$user_config" | jq --raw-output --arg field "$field" '.[$field]')"
     done
     printf -- '\n--- %s ---\n' "$id"
@@ -700,7 +706,9 @@ main() {
     create_update_user "$id" "$email" "$displayName" "$firstName" "$lastName" "$avatar_file" "$avatar_url" "$gravatar_avatar" "$weserv_avatar"
     redundant_users="$(printf '%s' "$redundant_users" | jq --compact-output --arg id "$id" '. - [$id]')"
 
-    if [[ "$password" != 'null' ]] && [[ "$password" != '""' ]]; then
+    if [[ "$password_file" != 'null' ]] && [[ "$password_file" != '""' ]]; then
+      "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$(cat $password_file)"
+    elif [[ "$password" != 'null' ]] && [[ "$password" != '""' ]]; then
       "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$password"
     fi
 

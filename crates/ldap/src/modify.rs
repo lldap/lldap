@@ -47,7 +47,7 @@ async fn handle_modify_change(
             .await
             .map_err(|e| LdapError {
                 code: LdapResultCode::Other,
-                message: format!("Error while changing the password: {e}"),
+                message: format!("Error while changing the password: {e:#?}"),
             })?;
     } else {
         return Err(LdapError {
@@ -94,7 +94,7 @@ where
                 .await
                 .map_err(|e| LdapError {
                     code: LdapResultCode::OperationsError,
-                    message: format!("Internal error while requesting user's groups: {e}"),
+                    message: format!("Internal error while requesting user's groups: {e:#?}"),
                 })?
                 .iter()
                 .any(|g| g.display_name == "lldap_admin".into());
@@ -166,7 +166,7 @@ mod tests {
 
     fn make_password_modify_request(target_user: &str) -> LdapModifyRequest {
         LdapModifyRequest {
-            dn: format!("uid={},ou=people,dc=example,dc=com", target_user),
+            dn: format!("uid={target_user},ou=people,dc=example,dc=com"),
             changes: vec![LdapModify {
                 operation: LdapModifyType::Replace,
                 modification: ldap3_proto::LdapPartialAttribute {
@@ -284,7 +284,7 @@ mod tests {
         let request = {
             let target_user = "bob";
             LdapModifyRequest {
-                dn: format!("uid={},ou=people,dc=example,dc=com", target_user),
+                dn: format!("uid={target_user},ou=people,dc=example,dc=com"),
                 changes: vec![LdapModify {
                     operation: LdapModifyType::Replace,
                     modification: ldap3_proto::LdapPartialAttribute {

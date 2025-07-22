@@ -119,7 +119,7 @@ where
         })
     };
     let url = env::http_url() + "/api/graphql";
-    let auth_header = format!("Bearer {}", token);
+    let auth_header = format!("Bearer {token}");
     client
         .post(url)
         .header(reqwest::header::AUTHORIZATION, auth_header)
