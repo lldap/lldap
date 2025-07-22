@@ -108,3 +108,24 @@ jobs:
           fail_ci_if_error: true
           codecov_yml_path: .github/codecov.yml
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  msrv:
+    name: cargo msrv verify
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4.2.2
+
+      - name: Download cargo-msrv
+        run: curl -L -o msrv.tgz https://github.com/foresterre/cargo-msrv/releases/download/v0.18.4/cargo-msrv-x86_64-unknown-linux-gnu-v0.18.4.tgz
+
+      - name: Extract cargo-msrv
+        run: tar xvf msrv.tgz --strip-components 1 --wildcards '*/cargo-msrv'
+
+      - name: Run cargo msrv on frontend
+        run: ./cargo-msrv verify --path app
+
+      - name: Run cargo msrv on backend
+        run: ./cargo-msrv verify --path server
