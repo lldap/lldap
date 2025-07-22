@@ -45,6 +45,8 @@ advanced guides (scripting, migrations, ...) you can contribute to.
 
 ### Code
 
+**NOTE:** To setup your development environment for building from source, see [docs/development.md](docs/development.md).
+
 If you don't know what to start with, check out the 
 [good first issues](https://github.com/lldap/lldap/labels/good%20first%20issue). 
 
