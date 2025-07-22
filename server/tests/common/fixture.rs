@@ -2,8 +2,8 @@ use crate::common::{
     auth::get_token,
     env,
     graphql::{
-        AddUserToGroup, CreateGroup, CreateUser, DeleteGroupQuery, DeleteUserQuery,
-        add_user_to_group, create_group, create_user, delete_group_query, delete_user_query, post,
+        AddUserToGroup, CreateGroup, CreateUser, DeleteGroupQuery, DeleteUserQuery, ListGroups,
+        add_user_to_group, create_group, create_user, delete_group_query, delete_user_query, list_groups, post,
     },
 };
 use assert_cmd::prelude::*;
@@ -116,6 +116,23 @@ impl LLDAPFixture {
     }
 
     fn add_group(&mut self, group: &str) {
+        // Skip creating special system groups that already exist
+        if group == "lldap_admin" || group == "lldap_password_manager" || group == "lldap_strict_readonly" {
+            // Get the existing group ID
+            let groups = post::<ListGroups>(
+                &self.client,
+                &self.token,
+                list_groups::Variables {},
+            )
+            .expect("failed to list groups")
+            .groups;
+            
+            if let Some(existing_group) = groups.iter().find(|g| g.display_name == group) {
+                self.groups.insert(group.to_owned(), existing_group.id);
+                return;
+            }
+        }
+        
         let id = post::<CreateGroup>(
             &self.client,
             &self.token,

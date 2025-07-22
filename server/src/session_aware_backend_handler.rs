@@ -68,19 +68,31 @@ impl UserBackendHandler for SessionAwareBackendHandler {
                                 "JWT blacklist lock is contended, falling back to blocking write for user {}",
                                 user_id
                             );
-                            if let Ok(mut blacklist_guard) = self.jwt_blacklist.write() {
-                                for token_hash in blacklisted_tokens {
-                                    blacklist_guard.insert(token_hash);
+                            match self.jwt_blacklist.write() {
+                                Ok(mut blacklist_guard) => {
+                                    for token_hash in blacklisted_tokens {
+                                        blacklist_guard.insert(token_hash);
+                                    }
+                                    debug!(
+                                        "Successfully invalidated sessions for user: {} (after blocking)",
+                                        user_id
+                                    );
                                 }
-                                debug!(
-                                    "Successfully invalidated sessions for user: {} (after blocking)",
-                                    user_id
-                                );
-                            } else {
-                                warn!(
-                                    "Failed to acquire write lock on JWT blacklist for user {}. This may indicate lock poisoning.",
-                                    user_id
-                                );
+                                Err(poisoned) => {
+                                    warn!(
+                                        "JWT blacklist lock was poisoned for user {}. Recovering and continuing.",
+                                        user_id
+                                    );
+                                    // Recover from poison error and continue
+                                    let mut blacklist_guard = poisoned.into_inner();
+                                    for token_hash in blacklisted_tokens {
+                                        blacklist_guard.insert(token_hash);
+                                    }
+                                    debug!(
+                                        "Successfully recovered and invalidated sessions for user: {}",
+                                        user_id
+                                    );
+                                }
                             }
                         }
                     }
@@ -473,7 +485,6 @@ mod tests {
         let _result3 = handler.update_user(request_none).await;
 
         // The test passes if no panics occur and the conditional logic works correctly
-        assert!(true); // All scenarios executed without panic
     }
 
     #[tokio::test]
@@ -529,6 +540,5 @@ mod tests {
         let _schema_result = handler.get_schema().await;
 
         // All trait methods are accessible, confirming proper delegation
-        assert!(true);
     }
 }

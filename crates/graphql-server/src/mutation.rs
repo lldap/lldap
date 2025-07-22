@@ -1353,4 +1353,96 @@ mod tests {
             ))
         );
     }
+
+    #[tokio::test]
+    async fn test_set_user_login_enabled_password_manager_success() {
+        const QUERY: &str = r#"
+            mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+                setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+                    ok
+                }
+            }
+        "#;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_update_user()
+            .with(eq(UpdateUserRequest {
+                user_id: UserId::new("regular_user"),
+                email: None,
+                display_name: None,
+                login_enabled: Some(false),
+                delete_attributes: vec![],
+                insert_attributes: vec![],
+            }))
+            .return_once(|_| Ok(()));
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("pwd_manager"),
+                permission: Permission::PasswordManager,
+            },
+        );
+        let vars = Variables::from([
+            ("userId".to_string(), InputValue::scalar("regular_user")),
+            ("loginEnabled".to_string(), InputValue::scalar(false)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        assert_eq!(
+            execute(QUERY, None, &schema, &vars, &context).await,
+            Ok((
+                graphql_value!({
+                    "setUserLoginEnabled": {
+                        "ok": true
+                    }
+                }),
+                vec![]
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_set_user_login_enabled_cannot_modify_self() {
+        const QUERY: &str = r#"
+            mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+                setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+                    ok
+                }
+            }
+        "#;
+        let mock = MockTestBackendHandler::new();
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("regular_user"),
+                permission: Permission::Regular,
+            },
+        );
+        
+        // Test that regular users cannot enable their own login
+        let vars = Variables::from([
+            ("userId".to_string(), InputValue::scalar("regular_user")),
+            ("loginEnabled".to_string(), InputValue::scalar(true)),
+        ]);
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        let result = execute(QUERY, None, &schema, &vars, &context).await;
+        match result {
+            Ok(res) => {
+                let (response, errors) = res;
+                assert!(response.is_null());
+                assert!(errors.iter().any(|e| {
+                    e.error()
+                        .message()
+                        .contains("Unauthorized login status change")
+                }));
+            }
+            Err(_) => {
+                panic!("Expected GraphQL execution to succeed with errors");
+            }
+        }
+    }
 }

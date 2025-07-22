@@ -897,10 +897,7 @@ mod tests {
                     email: "bob@bobbers.on".into(),
                     display_name: Some("Bob Bobberson".to_string()),
                     creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
-                    uuid: lldap_domain::types::Uuid::try_from(
-                        "b1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8",
-                    )
-                    .unwrap(),
+                    uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     attributes: vec![
                         DomainAttribute {
                             name: "first_name".into(),
@@ -954,10 +951,6 @@ mod tests {
                         "attributes": [{
                             "name": "creation_date",
                             "value": ["1970-01-01T00:00:00.042+00:00"],
-                          },
-                          {
-                            "name": "display_name",
-                            "value": ["Bob Bobberson"],
                           },
                           {
                             "name": "login_enabled",
@@ -1089,10 +1082,7 @@ mod tests {
                             email: "bob@bobbers.on".into(),
                             display_name: None,
                             creation_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
-                            uuid: lldap_domain::types::Uuid::try_from(
-                                "00000000-0000-0000-0000-000000000000",
-                            )
-                            .unwrap(),
+                            uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                             login_enabled: true,
                             attributes: Vec::new(),
                         },
@@ -1104,10 +1094,7 @@ mod tests {
                             email: "robert@bobbers.on".into(),
                             display_name: None,
                             creation_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
-                            uuid: lldap_domain::types::Uuid::try_from(
-                                "00000000-0000-0000-0000-000000000001",
-                            )
-                            .unwrap(),
+                            uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                             login_enabled: true,
                             attributes: Vec::new(),
                         },

@@ -1115,6 +1115,30 @@ async fn migrate_to_v10(transaction: DatabaseTransaction) -> Result<DatabaseTran
 
 async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
     let builder = transaction.get_database_backend();
+    
+    // Check if there's a custom attribute named "login_enabled"
+    let existing_attribute = transaction
+        .query_one(
+            builder.build(
+                Query::select()
+                    .column(UserAttributeSchema::UserAttributeSchemaName)
+                    .from(UserAttributeSchema::Table)
+                    .and_where(
+                        Expr::col(UserAttributeSchema::UserAttributeSchemaName)
+                            .eq("login_enabled"),
+                    ),
+            ),
+        )
+        .await?;
+    
+    if existing_attribute.is_some() {
+        return Err(DbErr::Migration(
+            "Cannot add login_enabled column: a custom attribute with the name 'login_enabled' already exists. \
+             Please rename or remove the custom attribute before upgrading."
+                .to_string(),
+        ));
+    }
+    
     // Add login_enabled column to users table, defaulting to true (enabled)
     transaction
         .execute(
