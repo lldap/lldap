@@ -174,6 +174,9 @@ fn test_cannot_disable_own_login() {
 #[test]
 #[file_serial]
 fn test_password_manager_can_disable_regular_user() {
+    // NOTE: This test uses an admin token due to test infrastructure limitations.
+    // It therefore tests admin permissions, not password manager permissions.
+    // To properly test password manager permissions, implement authentication for password manager users.
     let mut fixture = LLDAPFixture::new();
     let prefix = "graphql-pwd_mgr_disable-";
     let pwd_manager_name = new_id(Some(prefix));
@@ -263,47 +266,4 @@ fn test_admin_can_disable_and_enable_any_user() {
     )
     .expect("admin should be able to disable password manager");
     assert!(result.set_user_login_enabled.ok);
-}
-
-#[test]
-#[file_serial]
-fn test_non_admin_cannot_modify_login_status() {
-    // This test verifies that non-admin/non-password-manager users cannot modify login status
-    let mut _fixture = LLDAPFixture::new();
-    let regular_user_name = new_id(Some("graphql-regular_user-"));
-    _fixture.load_state(&vec![User::new(&regular_user_name, vec![])]);
-    
-    let client = ClientBuilder::new()
-        .connect_timeout(std::time::Duration::from_secs(2))
-        .timeout(std::time::Duration::from_secs(5))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("failed to make http client");
-    
-    // Use admin token but test permissions for non-admin operations
-    let token = get_token(&client);
-    let admin_name = env::admin_dn();
-    
-    // Create another regular user to test with
-    let other_user_name = new_id(Some("graphql-other_user-"));
-    _fixture.load_state(&vec![User::new(&other_user_name, vec![])]);
-    
-    // Remove admin and password manager from the groups to simulate a regular user
-    // Since we can't easily create a token for a user without password,
-    // we'll test that the mutation properly checks permissions
-    
-    // This would fail in a real scenario where validation_result doesn't have
-    // admin or password manager permissions
-    // For now, we test that the self-disable protection works
-    let result = post::<SetUserLoginEnabled>(
-        &client,
-        &token,
-        set_user_login_enabled::Variables {
-            user_id: admin_name.clone(),
-            login_enabled: false,
-        },
-    );
-    
-    // Admin cannot disable their own login - this is correctly prevented by the mutation
-    assert!(result.is_err(), "Admin should not be able to disable their own login");
 }
