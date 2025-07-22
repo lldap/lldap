@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] 2025-07-21
+
+Small release, focused on LDAP improvements and ongoing maintenance.
+
+### Added
+
+ - LDAP
+    - Support for searching groups by their `groupid`
+    - Support for `whoamiOID`
+    - Support for creating groups
+    - Support for subschema entry
+ - Custom assets path.
+ - New endpoint for requesting client settings
+
+### Changed
+
+ - A missing JWT secret now prevents startup.
+ - Attributes with invalid characters (such as underscores) cannot be created anymore.
+ - Searching custom (string) attributes is now case insensitive.
+ - Using the top-level `firstName`, `lastName` and `avatar` GraphQL fields for users is now deprecated. Use the `attributes` field instead.
+
+### Fixed
+
+ - `lldap_set_password` now uses the system's SSL certificates.
+
+### Cleanups
+
+ - Split the main `lldap` crate into many sub-crates
+ - Various dependency version bumps
+ - Upgraded to 2024 Rust edition
+ - Docs/FAQ improvements
+
+### Bootstrap script
+
+ - Custom attributes support
+ - Read the paswsord from a file
+ - Resilient to no user or group files
+
+### New services
+
+ - Discord integration (Discord role to LLDAP user)
+ - HashiCorp
+ - Jellyfin 2FA with Duo
+ - Kimai
+ - Mailcow
+ - Peertube
+ - Penpot
+ - PgAdmin
+ - Project Quay
+ - Quadlet
+ - Snipe-IT
+ - SSSD
+ - Stalwart
+ - UnifiOS
+
 ## [0.6.1] 2024-11-22
 
 Small release, mainly to fix a migration issue with Sqlite and Postgresql.
