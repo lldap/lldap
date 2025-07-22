@@ -9,6 +9,7 @@ authors.workspace = true
 homepage.workspace = true
 license.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 actix = "0.13"
