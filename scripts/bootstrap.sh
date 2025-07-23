@@ -440,7 +440,7 @@ extract_custom_group_attributes() {
 }
 
 extract_custom_user_attributes() {
-  extract_custom_attributes "$1" '"id","email","password","displayName","firstName","lastName","groups","avatar_file","avatar_url","gravatar_avatar","weserv_avatar"'
+  extract_custom_attributes "$1" '"id","email","password","password_file","displayName","firstName","lastName","groups","avatar_file","avatar_url","gravatar_avatar","weserv_avatar"'
 }
 
 extract_custom_attributes() {
