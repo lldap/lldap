@@ -22,6 +22,7 @@ type Mutation {
   addGroupObjectClass(name: String!): Success!
   deleteUserObjectClass(name: String!): Success!
   deleteGroupObjectClass(name: String!): Success!
+  setUserLoginEnabled(userId: String!, loginEnabled: Boolean!): Success!
 }
 
 type Group {
@@ -175,6 +176,7 @@ type User {
   avatar: String
   creationDate: DateTimeUtc!
   uuid: String!
+  loginEnabled: Boolean!
   "User-defined attributes."
   attributes: [AttributeValue!]!
   "The groups to which this user belongs."
@@ -186,6 +188,7 @@ enum AttributeType {
   INTEGER
   JPEG_PHOTO
   DATE_TIME
+  BOOLEAN
 }
 
 type AttributeList {

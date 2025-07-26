@@ -18,6 +18,16 @@ use lldap_domain_model::model::UserColumn;
 use std::collections::BTreeMap;
 use tracing::{debug, instrument, warn};
 
+/// Convert a boolean to LDAP string representation.
+/// LDAP booleans are encoded as strings: "TRUE" or "FALSE"
+fn convert_bool(b: bool) -> Vec<u8> {
+    if b {
+        b"TRUE".to_vec()
+    } else {
+        b"FALSE".to_vec()
+    }
+}
+
 fn make_dn_pair<I>(mut iter: I) -> LdapResult<(String, String)>
 where
     I: Iterator<Item = String>,
@@ -243,6 +253,7 @@ pub fn map_user_field(field: &AttributeName, schema: &PublicSchema) -> UserField
             UserFieldType::PrimaryField(UserColumn::CreationDate)
         }
         "entryuuid" | "uuid" => UserFieldType::PrimaryField(UserColumn::Uuid),
+        "loginenabled" => UserFieldType::PrimaryField(UserColumn::LoginEnabled),
         _ => schema
             .get_schema()
             .user_attributes
@@ -333,6 +344,13 @@ pub fn get_custom_attribute(
             AttributeValue::DateTime(Cardinality::Unbounded(l)) => {
                 l.iter().map(convert_date).collect()
             }
+            AttributeValue::Boolean(Cardinality::Singleton(b)) => {
+                vec![convert_bool(*b)]
+            }
+            AttributeValue::Boolean(Cardinality::Unbounded(l)) => l
+                .iter()
+                .map(|b| convert_bool(*b))
+                .collect(),
         })
 }
 

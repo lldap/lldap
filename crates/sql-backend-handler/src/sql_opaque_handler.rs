@@ -51,14 +51,40 @@ impl SqlBackendHandler {
 
     #[instrument(skip(self), level = "debug", err)]
     async fn get_password_file_for_user(&self, user_id: UserId) -> Result<Option<Vec<u8>>> {
-        // Fetch the previously registered password file from the DB.
-        Ok(model::User::find_by_id(user_id)
+        // Fetch the previously registered password file and login_enabled status from the DB.
+        let user_data = model::User::find_by_id(user_id.clone())
             .select_only()
-            .column(UserColumn::PasswordHash)
-            .into_tuple::<(Option<Vec<u8>>,)>()
+            .columns([UserColumn::PasswordHash, UserColumn::LoginEnabled])
+            .into_tuple::<(Option<Vec<u8>>, bool)>()
+            .one(&self.sql_pool)
+            .await?;
+        
+        match user_data {
+            Some((password_hash, login_enabled)) => {
+                if !login_enabled {
+                    warn!(r#"Login attempt for user with login blocked "{}""#, user_id);
+                    return Err(DomainError::AuthenticationError(format!(
+                        r#"Login blocked for user "{user_id}""#
+                    )));
+                }
+                Ok(password_hash)
+            }
+            None => Ok(None),
+        }
+    }
+
+    #[instrument(skip(self), level = "debug", err)]
+    async fn check_user_enabled(&self, user_id: &UserId) -> Result<bool> {
+        // Check if the user login is enabled
+        let login_enabled = model::User::find_by_id(user_id.clone())
+            .select_only()
+            .column(UserColumn::LoginEnabled)
+            .into_tuple::<(bool,)>()
             .one(&self.sql_pool)
             .await?
-            .and_then(|u| u.0))
+            .map(|u| u.0)
+            .unwrap_or(false); // Default login_enabled to false if user not found
+        Ok(login_enabled)
     }
 }
 
@@ -66,6 +92,7 @@ impl SqlBackendHandler {
 impl LoginHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn bind(&self, request: BindRequest) -> Result<()> {
+        // get_password_file_for_user now checks if user is enabled
         if let Some(password_hash) = self
             .get_password_file_for_user(request.name.clone())
             .await?
@@ -88,8 +115,8 @@ impl LoginHandler for SqlBackendHandler {
             );
         }
         Err(DomainError::AuthenticationError(format!(
-            r#"for user "{}""#,
-            request.name
+            r#"for user "{name}""#,
+            name = request.name
         )))
     }
 }
@@ -108,7 +135,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
             .await?
             .map(|bytes| {
                 opaque::server::ServerRegistration::deserialize(&bytes).map_err(|_| {
-                    DomainError::InternalError(format!("Corrupted password file for {}", &user_id))
+                    DomainError::InternalError(format!("Corrupted password file for {user_id}"))
                 })
             })
             .transpose()?;
@@ -149,6 +176,16 @@ impl OpaqueHandler for SqlOpaqueHandler {
         // don't need.
         match opaque::server::login::finish_login(server_login, request.credential_finalization) {
             Ok(session) => {
+                // Check if user is enabled after successful authentication
+                if !self.check_user_enabled(&username).await? {
+                    warn!(
+                        r#"OPAQUE login attempt for user with login blocked "{}""#,
+                        &username
+                    );
+                    return Err(DomainError::AuthenticationError(format!(
+                        r#"Login blocked for user "{username}""#
+                    )));
+                }
                 info!(r#"OPAQUE login successful for "{}""#, &username);
                 let _ = session.session_key;
             }

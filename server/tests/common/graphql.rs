@@ -35,6 +35,7 @@ pub struct CreateUser;
 )]
 pub struct CreateGroup;
 
+#[allow(dead_code)]
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
@@ -44,6 +45,7 @@ pub struct CreateGroup;
 )]
 pub struct ListUsers;
 
+#[allow(dead_code)]
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
@@ -54,6 +56,7 @@ pub struct ListUsers;
 )]
 pub struct GetUserDetails;
 
+#[allow(dead_code)]
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
@@ -68,6 +71,7 @@ pub struct ListGroups;
     schema_path = "../schema.graphql",
     query_path = "tests/queries/delete_group.graphql",
     response_derives = "Debug",
+    variables_derives = "Debug,Clone",
     custom_scalars_module = "crate::common::graphql"
 )]
 pub struct DeleteGroupQuery;
@@ -77,9 +81,21 @@ pub struct DeleteGroupQuery;
     schema_path = "../schema.graphql",
     query_path = "tests/queries/delete_user.graphql",
     response_derives = "Debug",
+    variables_derives = "Debug,Clone",
     custom_scalars_module = "crate::common::graphql"
 )]
 pub struct DeleteUserQuery;
+
+#[allow(dead_code)]
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
+    query_path = "tests/queries/set_user_login_enabled.graphql",
+    response_derives = "Debug",
+    variables_derives = "Debug,Clone",
+    custom_scalars_module = "crate::common::graphql"
+)]
+pub struct SetUserLoginEnabled;
 
 pub fn post<QueryType>(
     client: &Client,

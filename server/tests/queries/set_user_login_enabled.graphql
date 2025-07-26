@@ -1,0 +1,5 @@
+mutation SetUserLoginEnabled($userId: String!, $loginEnabled: Boolean!) {
+  setUserLoginEnabled(userId: $userId, loginEnabled: $loginEnabled) {
+    ok
+  }
+}

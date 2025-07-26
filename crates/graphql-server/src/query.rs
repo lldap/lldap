@@ -2,7 +2,6 @@ use crate::api::{Context, field_error_callback};
 use anyhow::Context as AnyhowContext;
 use chrono::TimeZone;
 use juniper::{FieldResult, GraphQLInputObject, graphql_object};
-use lldap_access_control::{ReadonlyBackendHandler, UserReadableBackendHandler};
 use lldap_domain::{
     deserialize::deserialize_attribute_value,
     public_schema::PublicSchema,
@@ -331,6 +330,10 @@ impl<Handler: BackendHandler> User<Handler> {
 
     fn uuid(&self) -> &str {
         self.user.uuid.as_str()
+    }
+
+    fn login_enabled(&self) -> bool {
+        self.user.login_enabled
     }
 
     /// User-defined attributes.
@@ -691,6 +694,10 @@ pub fn serialize_attribute_to_graphql(attribute_value: &DomainAttributeValue) ->
         DomainAttributeValue::JpegPhoto(Cardinality::Unbounded(l)) => {
             l.iter().map(String::from).collect()
         }
+        DomainAttributeValue::Boolean(Cardinality::Singleton(b)) => vec![b.to_string()],
+        DomainAttributeValue::Boolean(Cardinality::Unbounded(l)) => {
+            l.iter().map(|b| b.to_string()).collect()
+        }
     }
 }
 
@@ -719,6 +726,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                     "mail" => Some(user.email.clone().into_string().into()),
                     "uuid" => Some(user.uuid.clone().into_string().into()),
                     "display_name" => user.display_name.as_ref().map(|d| d.clone().into()),
+                    "login_enabled" => Some(user.login_enabled.into()),
                     "avatar" | "first_name" | "last_name" => None,
                     _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
                 };
@@ -933,6 +941,7 @@ mod tests {
                 Ok(DomainUser {
                     user_id: UserId::new("bob"),
                     email: "bob@bobbers.on".into(),
+                    display_name: Some("Bob Bobberson".to_string()),
                     creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
                     uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                     attributes: vec![
@@ -963,7 +972,7 @@ mod tests {
             group_id: GroupId(7),
             display_name: "Jefferees".into(),
             creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
-            uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+            uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: Vec::new(),
         });
         mock.expect_get_user_groups()
@@ -988,6 +997,10 @@ mod tests {
                         "attributes": [{
                             "name": "creation_date",
                             "value": ["1970-01-01T00:00:00.042+00:00"],
+                          },
+                          {
+                            "name": "login_enabled",
+                            "value": ["true"],
                           },
                           {
                             "name": "mail",
@@ -1113,7 +1126,11 @@ mod tests {
                         user: DomainUser {
                             user_id: UserId::new("bob"),
                             email: "bob@bobbers.on".into(),
-                            ..Default::default()
+                            display_name: None,
+                            creation_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+                            uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                            login_enabled: true,
+                            attributes: Vec::new(),
                         },
                         groups: None,
                     },
@@ -1121,7 +1138,11 @@ mod tests {
                         user: DomainUser {
                             user_id: UserId::new("robert"),
                             email: "robert@bobbers.on".into(),
-                            ..Default::default()
+                            display_name: None,
+                            creation_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+                            uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                            login_enabled: true,
+                            attributes: Vec::new(),
                         },
                         groups: None,
                     },
@@ -1233,6 +1254,14 @@ mod tests {
                                 {
                                     "name": "last_name",
                                     "attributeType": "STRING",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": true,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "login_enabled",
+                                    "attributeType": "BOOLEAN",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": true,
@@ -1364,6 +1393,7 @@ mod tests {
                             "attributes": [
                                 {"name": "creation_date"},
                                 {"name": "display_name"},
+                                {"name": "login_enabled"},
                                 {"name": "mail"},
                                 {"name": "user_id"},
                                 {"name": "uuid"},

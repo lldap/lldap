@@ -8,6 +8,7 @@ pub(crate) enum AttributeType {
     String,
     Integer,
     DateTime,
+    Boolean,
     JpegPhoto,
 }
 

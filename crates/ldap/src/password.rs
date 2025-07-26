@@ -9,7 +9,7 @@ use anyhow::Result;
 use ldap3_proto::proto::{
     LdapBindCred, LdapBindRequest, LdapOp, LdapPasswordModifyRequest, LdapResultCode,
 };
-use lldap_access_control::{AccessControlledBackendHandler, UserReadableBackendHandler};
+use lldap_access_control::AccessControlledBackendHandler;
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::types::UserId;
 use lldap_domain_handlers::handler::{BackendHandler, BindRequest, LoginHandler};
