@@ -69,7 +69,7 @@ impl CommonComponent<CreateGroupAttributeForm> for CreateGroupAttributeForm {
                     );
                 })?;
                 let attribute_type =
-                    serde_json::from_str::<AttributeType>(&model.attribute_type).unwrap();
+                    AttributeType::try_from(model.attribute_type.as_str()).unwrap();
                 let req = create_group_attribute::Variables {
                     name: model.attribute_name,
                     attribute_type,
@@ -144,7 +144,7 @@ impl Component for CreateGroupAttributeForm {
                 oninput={link.callback(|_| Msg::Update)}>
                 <option selected=true value="String">{"String"}</option>
                 <option value="Integer">{"Integer"}</option>
-                <option value="Jpeg">{"Jpeg"}</option>
+                <option value="JpegPhoto">{"Jpeg"}</option>
                 <option value="DateTime">{"DateTime"}</option>
               </Select<CreateGroupAttributeModel>>
               <CheckBox<CreateGroupAttributeModel>
