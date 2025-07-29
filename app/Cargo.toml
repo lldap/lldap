@@ -55,6 +55,11 @@ features = [
   "wasmbind"
 ]
 
+[dependencies.derive_more]
+features = ["debug", "display", "from", "from_str"]
+default-features = false
+version = "1"
+
 [dependencies.lldap_auth]
 path = "../crates/auth"
 features = [ "opaque_client" ]
@@ -72,6 +77,10 @@ version = "0.24"
 
 [dependencies.serde]
 workspace = true
+
+[dependencies.strum]
+features = ["derive"]
+version = "0.25"
 
 [dependencies.yew_form]
 git = "https://github.com/jfbilodeau/yew_form"
