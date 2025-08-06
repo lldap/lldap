@@ -34,7 +34,11 @@ Data storage:
 * `auth/`: Contains the shared structures needed for authentication, the
   interface between front and back-end. In particular, it contains the OPAQUE
   structures and the JWT format.
-* `app/`: The frontend.
+* `app/`: The frontend compiled to WASM
+  * `*.html` files and the `static/` folder: the static files served to web
+    clients
+  * `queries/`: [GraphQL](https://en.wikipedia.org/wiki/GraphQL) queries to
+    communicate with the backend
   * `src/components`: The elements containing the business and display logic of
     the various pages and their components.
   * `src/infra`: Various tools and utilities.
