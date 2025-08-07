@@ -1134,15 +1134,14 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
     .one(&transaction)
     .await?;
     
-    if let Some(check) = existing_attribute {
-        if check.count > 0 {
+    if let Some(check) = existing_attribute
+        && check.count > 0 {
             warn!(
                 r#"Found existing custom user attribute "login_enabled". 
                 This will not conflict with the new system field, but you may want to 
                 migrate your data and remove the custom attribute to avoid confusion."#
             );
         }
-    }
     
     transaction
         .execute(
