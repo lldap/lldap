@@ -27,6 +27,7 @@ pub enum Users {
     TotpSecret,
     MfaType,
     Uuid,
+    LoginEnabled,
 }
 
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
@@ -166,7 +167,13 @@ pub(crate) async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<()
                 .col(ColumnDef::new(Users::PasswordHash).blob())
                 .col(ColumnDef::new(Users::TotpSecret).string_len(64))
                 .col(ColumnDef::new(Users::MfaType).string_len(64))
-                .col(ColumnDef::new(Users::Uuid).string_len(36).not_null()),
+                .col(ColumnDef::new(Users::Uuid).string_len(36).not_null())
+                .col(
+                    ColumnDef::new(Users::LoginEnabled)
+                        .boolean()
+                        .not_null()
+                        .default(true),
+                ),
         ),
     )
     .await?;
@@ -1112,6 +1119,55 @@ async fn migrate_to_v10(transaction: DatabaseTransaction) -> Result<DatabaseTran
     Ok(transaction)
 }
 
+async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
+
+    // Check if there's a custom attribute named "login_enabled"
+    #[derive(FromQueryResult)]
+    struct AttributeCheck {
+        count: i64,
+    }
+
+    let existing_attribute = AttributeCheck::find_by_statement(
+        builder.build(
+            Query::select()
+                .expr(Func::count(Expr::col(
+                    UserAttributeSchema::UserAttributeSchemaName,
+                )))
+                .from(UserAttributeSchema::Table)
+                .and_where(
+                    Expr::col(UserAttributeSchema::UserAttributeSchemaName).eq("login_enabled"),
+                ),
+        ),
+    )
+    .one(&transaction)
+    .await?;
+
+    if let Some(check) = existing_attribute
+        && check.count > 0
+    {
+        warn!(
+            r#"Found existing custom user attribute "login_enabled". 
+                This will not conflict with the new system field, but you may want to 
+                migrate your data and remove the custom attribute to avoid confusion."#
+        );
+    }
+
+    transaction
+        .execute(
+            builder.build(
+                Table::alter().table(Users::Table).add_column(
+                    ColumnDef::new(Users::LoginEnabled)
+                        .boolean()
+                        .not_null()
+                        .default(true),
+                ),
+            ),
+        )
+        .await?;
+    Ok(transaction)
+}
+
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -1142,6 +1198,7 @@ pub(crate) async fn migrate_from_version(
         to_sync!(migrate_to_v8),
         to_sync!(migrate_to_v9),
         to_sync!(migrate_to_v10),
+        to_sync!(migrate_to_v11),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {
