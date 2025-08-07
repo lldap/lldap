@@ -17,7 +17,7 @@ pub trait TcpBackendHandler: Sync {
     async fn check_token(&self, refresh_token_hash: u64, user: &UserId) -> Result<bool>;
     async fn blacklist_jwts(&self, user: &UserId) -> Result<HashSet<u64>>;
     async fn delete_refresh_token(&self, refresh_token_hash: u64) -> Result<()>;
-    
+
     /// Check if a user's login is enabled
     async fn is_user_login_enabled(&self, user: &UserId) -> Result<bool>;
 
