@@ -21,6 +21,7 @@ pub struct Model {
     pub totp_secret: Option<String>,
     pub mfa_type: Option<String>,
     pub uuid: Uuid,
+    pub login_enabled: bool,
 }
 
 impl EntityName for Entity {
@@ -40,6 +41,7 @@ pub enum Column {
     TotpSecret,
     MfaType,
     Uuid,
+    LoginEnabled,
 }
 
 impl ColumnTrait for Column {
@@ -56,6 +58,7 @@ impl ColumnTrait for Column {
             Column::TotpSecret => ColumnType::String(StringLen::N(64)),
             Column::MfaType => ColumnType::String(StringLen::N(64)),
             Column::Uuid => ColumnType::String(StringLen::N(36)),
+            Column::LoginEnabled => ColumnType::Boolean,
         }
         .def()
     }

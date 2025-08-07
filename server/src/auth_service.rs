@@ -457,17 +457,24 @@ async fn opaque_register_start<Backend>(
     data: web::Data<AppState<Backend>>,
 ) -> TcpResult<registration::ServerRegistrationStartResponse>
 where
-    Backend: BackendHandler + OpaqueHandler + 'static,
+    Backend: BackendHandler + OpaqueHandler + TcpBackendHandler + 'static,
 {
     use actix_web::FromRequest;
     let inner_payload = &mut payload.into_inner();
-    let validation_result = BearerAuth::from_request(&request, inner_payload)
-        .await
-        .ok()
-        .and_then(|bearer| check_if_token_is_valid(&data, bearer.token()).ok())
-        .ok_or_else(|| {
-            TcpError::UnauthorizedError("Not authorized to change the user's password".to_string())
-        })?;
+    let validation_result = match BearerAuth::from_request(&request, inner_payload).await {
+        Ok(bearer) => check_if_token_is_valid(&data, bearer.token())
+            .await
+            .map_err(|_| {
+                TcpError::UnauthorizedError(
+                    "Not authorized to change the user's password".to_string(),
+                )
+            })?,
+        Err(_) => {
+            return Err(TcpError::UnauthorizedError(
+                "Not authorized to change the user's password".to_string(),
+            ));
+        }
+    };
     let registration_start_request =
         web::Json::<registration::ClientRegistrationStartRequest>::from_request(
             &request,
@@ -500,7 +507,7 @@ async fn opaque_register_start_handler<Backend>(
     data: web::Data<AppState<Backend>>,
 ) -> ApiResult<registration::ServerRegistrationStartResponse>
 where
-    Backend: BackendHandler + OpaqueHandler + 'static,
+    Backend: BackendHandler + OpaqueHandler + TcpBackendHandler + 'static,
 {
     opaque_register_start(request, payload, data)
         .await
@@ -591,7 +598,7 @@ where
 }
 
 #[instrument(skip_all, level = "debug", err, ret)]
-pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
+pub(crate) async fn check_if_token_is_valid<Backend: BackendHandler + TcpBackendHandler>(
     state: &AppState<Backend>,
     token_str: &str,
 ) -> Result<ValidationResults, actix_web::Error> {
@@ -606,12 +613,20 @@ pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
             token.header().algorithm
         )));
     }
-    let jwt_hash = default_hash(token_str);
-    if state.jwt_blacklist.read().unwrap().contains(&jwt_hash) {
-        return Err(ErrorUnauthorized("JWT was logged out"));
+
+    // Check if user is enabled
+    let user_id = UserId::new(&token.claims().user);
+    if !state
+        .get_tcp_handler()
+        .is_user_login_enabled(&user_id)
+        .await
+        .map_err(|_| ErrorUnauthorized("Could not verify user status"))?
+    {
+        return Err(ErrorUnauthorized("User account is disabled"));
     }
+
     Ok(state.backend_handler.get_permissions_from_groups(
-        UserId::new(&token.claims().user),
+        user_id,
         token
             .claims()
             .groups
