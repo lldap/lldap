@@ -6,7 +6,7 @@ OpenBao LDAP authentication configuration documentation is located [here](https:
 
 1. Navigate to `Access -> Authentication Methods`
 2. Click `Enable new method +` in the top right and choose `LDAP` under `Infra`
-3. Name the mounth path and click `Enable method` at the bottom
+3. Name the mount path and click `Enable method` at the bottom
 
 * URL: `ldap://lldap.example.com:3890` or `ldaps://lldap.example.com:6360`
 * LDAP Options
