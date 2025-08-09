@@ -55,8 +55,8 @@ Then you'll receive a JSON response with:
 
 ```
 {
-  "token": "eYbat...",
-  "refreshToken": "3bCka...",
+  "token": "Yh6RJV...",
+  "refreshToken": "dww5jwU...",
 }
 ```
 
