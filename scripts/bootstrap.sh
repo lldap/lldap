@@ -11,6 +11,7 @@ GROUP_SCHEMAS_DIR="${GROUP_SCHEMAS_DIR:-/bootstrap/group-schemas}"
 USER_CONFIGS_DIR="${USER_CONFIGS_DIR:-/bootstrap/user-configs}"
 GROUP_CONFIGS_DIR="${GROUP_CONFIGS_DIR:-/bootstrap/group-configs}"
 LLDAP_SET_PASSWORD_PATH="${LLDAP_SET_PASSWORD_PATH:-/app/lldap_set_password}"
+LLDAP_FORCE_SET_PASSWORD="${LLDAP_FORCE_SET_PASSWORD:-false}"
 DO_CLEANUP="${DO_CLEANUP:-false}"
 
 # Fallback to support legacy defaults
@@ -708,8 +709,8 @@ main() {
 
     if [[ "$password_file" != 'null' ]] && [[ "$password_file" != '""' ]]; then
       LLDAP_USER_PASSWORD="$(cat $password_file)" "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id"
-    elif [[ "$password" != 'null' ]] && [[ "$password" != '""' ]]; then
-      LLDAP_USER_PASSWORD="$password" "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id"
+    elif [[ "$password" != 'null' ]] && [[ "$password" != '""' ]] && [[ "$(user_exists "$id")" == 0 || "$LLDAP_FORCE_SET_PASSWORD" == 'true' ]]; then
+      "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$password"
     fi
 
     # Process custom attributes
