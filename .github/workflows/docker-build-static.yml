@@ -87,7 +87,7 @@ jobs:
       image: lldap/rust-dev:latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v5.0.0
       - uses: actions/cache@v4
         with:
           path: |
@@ -132,7 +132,7 @@ jobs:
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v5.0.0
       - uses: actions/cache@v4
         with:
           path: |
@@ -300,7 +300,7 @@ jobs:
 
     steps:
        - name: Checkout scripts
-         uses: actions/checkout@v4.2.2
+         uses: actions/checkout@v5.0.0
          with:
            sparse-checkout: 'scripts'
 
@@ -496,7 +496,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v5.0.0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
