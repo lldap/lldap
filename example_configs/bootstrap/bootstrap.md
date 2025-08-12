@@ -253,7 +253,7 @@ spec:
 
           env:
             - name: LLDAP_URL
-              value: "http://lldap:8080"
+              value: "http://lldap:17170"
 
             - name: LLDAP_ADMIN_USERNAME
               valueFrom: { secretKeyRef: { name: lldap-admin-user, key: username } }
@@ -263,6 +263,9 @@ spec:
 
             - name: DO_CLEANUP
               value: "true"
+
+            - name: LLDAP_FORCE_SET_PASSWORD
+              value: "false"
 
           volumeMounts:
             - name: bootstrap
@@ -291,16 +294,6 @@ spec:
           projected:
             sources:
               - secret:
-                  name: lldap-admin-user
-                  items:
-                    - key: user-config.json
-                      path: admin-config.json
-              - secret:
-                  name: lldap-password-manager-user
-                  items:
-                    - key: user-config.json
-                      path: password-manager-config.json
-              - secret:
                   name: lldap-bootstrap-configs
                   items:
                     - key: user-configs.json
@@ -314,4 +307,15 @@ spec:
                   items:
                     - key: group-configs.json
                       path: group-configs.json
+```
+### Kubernetes config map for bootstrap.sh script
+
+```yaml
+apiVersion: v1
+data:
+  bootstrap.sh: |
+    PASTE CONTENT OF bootstrap.sh HERE
+kind: ConfigMap
+metadata:
+  name: bootstrap
 ```
