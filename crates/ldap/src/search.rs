@@ -202,25 +202,66 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
            LdapPartialAttribute {
             atype: "ldapSyntaxes".to_string(),
             vals: vec![
+                b"( 1.3.6.1.1.16.1 DESC 'UUID' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.3 DESC 'Attribute Type Description' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.12 DESC 'Distinguished Name' )".to_vec(),
                 b"( 1.3.6.1.4.1.1466.115.121.1.15 DESC 'Directory String' )".to_vec(),
                 b"( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' )".to_vec(),
                 b"( 1.3.6.1.4.1.1466.115.121.1.27 DESC 'Integer' )".to_vec(),
                 b"( 1.3.6.1.4.1.1466.115.121.1.28 DESC 'JPEG' X-NOT-HUMAN-READABLE 'TRUE' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.34 DESC 'Name And Optional UID' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.37 DESC 'Object Class Description' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.38 DESC 'OID' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.54 DESC 'LDAP Syntax Description' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.58 DESC 'Substring Assertion' )".to_vec(),
+                ],
+           },
+           LdapPartialAttribute {
+            atype: "matchingRules".to_string(),
+            vals: vec![
+                b"( 1.3.6.1.1.16.2 NAME 'UUIDMatch' SYNTAX 1.3.6.1.1.16.1 )".to_vec(),
+                b"( 1.3.6.1.1.16.3 NAME 'UUIDOrderingMatch' SYNTAX 1.3.6.1.1.16.1 )".to_vec(),
+                b"( 2.5.13.0 NAME 'objectIdentifierMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
+                b"( 2.5.13.1 NAME 'distinguishedNameMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 )".to_vec(),
+                b"( 2.5.13.2 NAME 'caseIgnoreMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
+                b"( 2.5.13.4 NAME 'caseIgnoreSubstringsMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.58 )".to_vec(),
+                b"( 2.5.13.23 NAME 'uniqueMemberMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.34 )".to_vec(),
+                b"( 2.5.13.27 NAME 'generalizedTimeMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                b"( 2.5.13.28 NAME 'generalizedTimeOrderingMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                b"( 2.5.13.30 NAME 'objectIdentifierFirstComponentMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
                 ],
            },
            LdapPartialAttribute {
             atype: "attributeTypes".to_string(),
             vals: {
                 let hardcoded_attributes = [
-                    b"( 2.0 NAME 'String' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
-                    b"( 2.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
-                    b"( 2.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
-                    b"( 2.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                    b"( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' 'user_id' ) DESC 'RFC4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} SINGLE-VALUE NO-USER-MODIFICATION )".to_vec(),
+                    b"( 1.3.6.1.1.16.4 NAME ( 'entryUUID' 'uuid' ) DESC 'UUID of the entry' EQUALITY UUIDMatch ORDERING UUIDOrderingMatch SYNTAX 1.3.6.1.1.16.1 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
+                    b"( 1.3.6.1.4.1.1466.101.120.16 NAME 'ldapSyntaxes' DESC 'RFC4512: LDAP syntaxes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.54 USAGE directoryOperation )".to_vec(),
+                    b"( 2.5.4.0 NAME 'objectClass' DESC 'RFC4512: object classes of the entity' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
+                    b"( 2.5.4.3 NAME ( 'cn' 'commonName' 'display_name' ) DESC 'RFC4519: common name(s) for which the entity is known by' SUP name SINGLE-VALUE )".to_vec(),
+                    b"( 2.5.4.4 NAME ( 'sn' 'surname' 'last_name' ) DESC 'RFC2256: last (family) name(s) for which the entity is known by' SUP name SINGLE-VALUE )".to_vec(),
+                    b"( 2.5.4.11 NAME ( 'ou' 'organizationalUnitName' ) DESC 'RFC2256: organizational unit this object belongs to' SUP name )".to_vec(),
+                    b"( 2.5.4.41 NAME 'name' DESC 'RFC4519: common supertype of name attributes' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )".to_vec(),
+                    b"( 2.5.4.49 NAME 'distinguishedName' DESC 'RFC4519: common supertype of DN attributes' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 )".to_vec(),
+                    b"( 2.5.4.50 NAME ( 'uniqueMember' 'member' ) DESC 'RFC2256: unique member of a group' EQUALITY uniqueMemberMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.34 )".to_vec(),
+                    b"( 2.5.18.1 NAME ( 'createTimestamp' 'creation_date' ) DESC 'RFC4512: time which object was created' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
+                    b"( 2.5.18.2 NAME 'modifyTimestamp' DESC 'RFC4512: time which object was last modified' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
+                    b"( 2.5.21.5 NAME 'attributeTypes' DESC 'RFC4512: attribute types' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.3 USAGE directoryOperation )".to_vec(),
+                    b"( 2.5.21.6 NAME 'objectClasses' DESC 'RFC4512: object classes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.37 USAGE directoryOperation )".to_vec(),
+                    b"( 2.5.21.9 NAME 'structuralObjectClass' DESC 'RFC4512: structural object class of entry' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
+                    b"( 10.0 NAME 'String' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
+                    b"( 10.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
+                    b"( 10.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
+                    b"( 10.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
                 ];
                 let num_hardcoded_attributes = hardcoded_attributes.len();
                 hardcoded_attributes.into_iter().chain(
                     ldap_schema_description
-                        .formatted_attribute_list(num_hardcoded_attributes)
+                        .formatted_attribute_list(
+                            num_hardcoded_attributes,
+                            vec!["creation_date", "display_name", "last_name", "user_id", "uuid"]
+                        )
                 ).collect()
             }
            },
@@ -485,7 +526,7 @@ mod tests {
         };
 
         let attrs = &search_result_entry.attributes;
-        assert_eq!(attrs.len(), 9);
+        assert_eq!(attrs.len(), 10);
         assert_eq!(search_result_entry.dn, "cn=Subschema".to_owned());
 
         assert_eq!(
@@ -530,11 +571,19 @@ mod tests {
             LdapPartialAttribute {
                 atype: "ldapSyntaxes".to_owned(),
                 vals: vec![
+                    b"( 1.3.6.1.1.16.1 DESC 'UUID' )".to_vec(),
+                    b"( 1.3.6.1.4.1.1466.115.121.1.3 DESC 'Attribute Type Description' )".to_vec(),
+                    b"( 1.3.6.1.4.1.1466.115.121.1.12 DESC 'Distinguished Name' )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.115.121.1.15 DESC 'Directory String' )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.115.121.1.27 DESC 'Integer' )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.115.121.1.28 DESC 'JPEG' X-NOT-HUMAN-READABLE 'TRUE' )"
-                        .to_vec()
+                        .to_vec(),
+                    b"( 1.3.6.1.4.1.1466.115.121.1.34 DESC 'Name And Optional UID' )".to_vec(),
+                    b"( 1.3.6.1.4.1.1466.115.121.1.37 DESC 'Object Class Description' )".to_vec(),
+                    b"( 1.3.6.1.4.1.1466.115.121.1.38 DESC 'OID' )".to_vec(),
+                    b"( 1.3.6.1.4.1.1466.115.121.1.54 DESC 'LDAP Syntax Description' )".to_vec(),
+                    b"( 1.3.6.1.4.1.1466.115.121.1.58 DESC 'Substring Assertion' )".to_vec(),
                 ]
             }
         );
@@ -542,35 +591,57 @@ mod tests {
         assert_eq!(
             attrs[6],
             LdapPartialAttribute {
+                atype: "matchingRules".to_string(),
+                vals: vec![
+                    b"( 1.3.6.1.1.16.2 NAME 'UUIDMatch' SYNTAX 1.3.6.1.1.16.1 )".to_vec(),
+                    b"( 1.3.6.1.1.16.3 NAME 'UUIDOrderingMatch' SYNTAX 1.3.6.1.1.16.1 )".to_vec(),
+                    b"( 2.5.13.0 NAME 'objectIdentifierMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
+                    b"( 2.5.13.1 NAME 'distinguishedNameMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 )".to_vec(),
+                    b"( 2.5.13.2 NAME 'caseIgnoreMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
+                    b"( 2.5.13.4 NAME 'caseIgnoreSubstringsMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.58 )".to_vec(),
+                    b"( 2.5.13.23 NAME 'uniqueMemberMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.34 )".to_vec(),
+                    b"( 2.5.13.27 NAME 'generalizedTimeMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                    b"( 2.5.13.28 NAME 'generalizedTimeOrderingMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                    b"( 2.5.13.30 NAME 'objectIdentifierFirstComponentMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
+                ]
+           }
+        );
+
+        assert_eq!(
+            attrs[7],
+            LdapPartialAttribute {
                 atype: "attributeTypes".to_owned(),
                 vals: vec![
-                    b"( 2.0 NAME 'String' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
-                    b"( 2.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
-                    b"( 2.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
-                    b"( 2.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
-                    b"( 2.4 NAME 'avatar' DESC 'LLDAP: builtin attribute' SUP JpegPhoto )".to_vec(),
-                    b"( 2.5 NAME 'creation_date' DESC 'LLDAP: builtin attribute' SUP DateTime )"
+                    b"( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' 'user_id' ) DESC 'RFC4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} SINGLE-VALUE NO-USER-MODIFICATION )".to_vec(),
+                    b"( 1.3.6.1.1.16.4 NAME ( 'entryUUID' 'uuid' ) DESC 'UUID of the entry' EQUALITY UUIDMatch ORDERING UUIDOrderingMatch SYNTAX 1.3.6.1.1.16.1 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
+                    b"( 1.3.6.1.4.1.1466.101.120.16 NAME 'ldapSyntaxes' DESC 'RFC4512: LDAP syntaxes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.54 USAGE directoryOperation )".to_vec(),
+                    b"( 2.5.4.0 NAME 'objectClass' DESC 'RFC4512: object classes of the entity' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
+                    b"( 2.5.4.3 NAME ( 'cn' 'commonName' 'display_name' ) DESC 'RFC4519: common name(s) for which the entity is known by' SUP name SINGLE-VALUE )".to_vec(),
+                    b"( 2.5.4.4 NAME ( 'sn' 'surname' 'last_name' ) DESC 'RFC2256: last (family) name(s) for which the entity is known by' SUP name SINGLE-VALUE )".to_vec(),
+                    b"( 2.5.4.11 NAME ( 'ou' 'organizationalUnitName' ) DESC 'RFC2256: organizational unit this object belongs to' SUP name )".to_vec(),
+                    b"( 2.5.4.41 NAME 'name' DESC 'RFC4519: common supertype of name attributes' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )".to_vec(),
+                    b"( 2.5.4.49 NAME 'distinguishedName' DESC 'RFC4519: common supertype of DN attributes' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 )".to_vec(),
+                    b"( 2.5.4.50 NAME ( 'uniqueMember' 'member' ) DESC 'RFC2256: unique member of a group' EQUALITY uniqueMemberMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.34 )".to_vec(),
+                    b"( 2.5.18.1 NAME ( 'createTimestamp' 'creation_date' ) DESC 'RFC4512: time which object was created' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
+                    b"( 2.5.18.2 NAME 'modifyTimestamp' DESC 'RFC4512: time which object was last modified' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
+                    b"( 2.5.21.5 NAME 'attributeTypes' DESC 'RFC4512: attribute types' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.3 USAGE directoryOperation )".to_vec(),
+                    b"( 2.5.21.6 NAME 'objectClasses' DESC 'RFC4512: object classes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.37 USAGE directoryOperation )".to_vec(),
+                    b"( 2.5.21.9 NAME 'structuralObjectClass' DESC 'RFC4512: structural object class of entry' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
+                    b"( 10.0 NAME 'String' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
+                    b"( 10.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
+                    b"( 10.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
+                    b"( 10.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
+                    b"( 10.19 NAME 'avatar' DESC 'LLDAP: builtin attribute' SUP JpegPhoto )".to_vec(),
+                    b"( 10.20 NAME 'first_name' DESC 'LLDAP: builtin attribute' SUP String )"
                         .to_vec(),
-                    b"( 2.6 NAME 'display_name' DESC 'LLDAP: builtin attribute' SUP String )"
+                    b"( 10.21 NAME 'mail' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                    b"( 10.22 NAME 'group_id' DESC 'LLDAP: builtin attribute' SUP Integer )"
                         .to_vec(),
-                    b"( 2.7 NAME 'first_name' DESC 'LLDAP: builtin attribute' SUP String )"
-                        .to_vec(),
-                    b"( 2.8 NAME 'last_name' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
-                    b"( 2.9 NAME 'mail' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
-                    b"( 2.10 NAME 'user_id' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
-                    b"( 2.11 NAME 'uuid' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
-                    b"( 2.12 NAME 'creation_date' DESC 'LLDAP: builtin attribute' SUP DateTime )"
-                        .to_vec(),
-                    b"( 2.13 NAME 'display_name' DESC 'LLDAP: builtin attribute' SUP String )"
-                        .to_vec(),
-                    b"( 2.14 NAME 'group_id' DESC 'LLDAP: builtin attribute' SUP Integer )"
-                        .to_vec(),
-                    b"( 2.15 NAME 'uuid' DESC 'LLDAP: builtin attribute' SUP String )".to_vec()
                 ]
             }
         );
 
-        assert_eq!(attrs[7],
+        assert_eq!(attrs[8],
             LdapPartialAttribute {
                 atype: "objectClasses".to_owned(),
                 vals: vec![
@@ -581,7 +652,7 @@ mod tests {
         );
 
         assert_eq!(
-            attrs[8],
+            attrs[9],
             LdapPartialAttribute {
                 atype: "subschemaSubentry".to_owned(),
                 vals: vec![b"cn=Subschema".to_vec()]
