@@ -436,13 +436,23 @@ impl LdapSchemaDescription {
     // See RFC4512 section 4.2.2 "attributeTypes"
     // Parameter 'index_offset' is an offset for the enumeration of this list of attributes,
     // it has been preceeded by the list of hardcoded attributes.
-    pub fn formatted_attribute_list(&self, index_offset: usize) -> Vec<Vec<u8>> {
+    pub fn formatted_attribute_list(
+        &self,
+        index_offset: usize,
+        exclude_attributes: Vec<&str>,
+    ) -> Vec<Vec<u8>> {
         let mut formatted_list: Vec<Vec<u8>> = Vec::new();
 
-        for (index, attribute) in self.all_attributes().attributes.into_iter().enumerate() {
+        for (index, attribute) in self
+            .all_attributes()
+            .attributes
+            .into_iter()
+            .filter(|attr| !exclude_attributes.contains(&attr.name.as_str()))
+            .enumerate()
+        {
             formatted_list.push(
                 format!(
-                    "( 2.{} NAME '{}' DESC 'LLDAP: {}' SUP {:?} )",
+                    "( 10.{} NAME '{}' DESC 'LLDAP: {}' SUP {:?} )",
                     (index + index_offset),
                     attribute.name,
                     if attribute.is_hardcoded {
