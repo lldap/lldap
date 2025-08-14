@@ -707,8 +707,10 @@ main() {
     done
     printf -- '\n--- %s ---\n' "$id"
 
-    # Save this value before user creation. Will be used to check if password needs to be set/overwritten
-    user_already_exists=$(user_exists "$id")
+    local user_already_exists=0
+    if user_exists "$id"; then
+      user_already_exists=1
+    fi
 
     create_update_user "$id" "$email" "$displayName" "$firstName" "$lastName" "$avatar_file" "$avatar_url" "$gravatar_avatar" "$weserv_avatar"
     redundant_users="$(printf '%s' "$redundant_users" | jq --compact-output --arg id "$id" '. - [$id]')"
