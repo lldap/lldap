@@ -81,7 +81,8 @@ pub fn get_user_attribute(
             UserColumn::LowercaseEmail
             | UserColumn::PasswordHash
             | UserColumn::TotpSecret
-            | UserColumn::MfaType,
+            | UserColumn::MfaType
+            | UserColumn::LoginEnabled,
         ) => panic!("Should not get here"),
         UserFieldType::PrimaryField(UserColumn::Uuid) => vec![user.uuid.to_string().into_bytes()],
         UserFieldType::PrimaryField(UserColumn::DisplayName) => {

@@ -9,7 +9,7 @@ pub type DbConnection = sea_orm::DatabaseConnection;
 #[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord, DeriveValueType)]
 pub struct SchemaVersion(pub i16);
 
-pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(10);
+pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(11);
 
 #[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord)]
 pub struct PrivateKeyHash(pub [u8; 32]);
