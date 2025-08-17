@@ -134,6 +134,8 @@ pub struct Configuration {
     pub ldaps_options: LdapsOptions,
     #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
     pub http_url: HttpUrl,
+    #[builder(default = r#"String::from("LLDAP")"#)]
+    pub site_header_label: String,
     #[debug(skip)]
     #[serde(skip)]
     #[builder(field(private), default = "None")]
@@ -434,6 +436,10 @@ impl ConfigOverrider for RunOpts {
 
         if let Some(url) = self.http_url.as_ref() {
             config.http_url = HttpUrl(url.clone());
+        }
+
+        if let Some(site_header_label) = self.site_header_label.as_ref() {
+            config.site_header_label = site_header_label.clone();
         }
 
         if let Some(database_url) = self.database_url.as_ref() {

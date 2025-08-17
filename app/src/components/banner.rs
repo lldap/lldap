@@ -9,6 +9,7 @@ use yew::{Callback, Properties, function_component, html};
 #[derive(Properties, PartialEq)]
 pub struct Props {
     pub is_admin: bool,
+    pub site_header_label: String,
     pub username: Option<String>,
     pub on_logged_out: Callback<()>,
 }
@@ -20,7 +21,7 @@ pub fn banner(props: &Props) -> Html {
         <div class="container">
           <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
             <a href={yew_router::utils::base_url().unwrap_or("/".to_string())} class="d-flex align-items-center mt-2 mb-lg-0 me-md-5 text-decoration-none">
-              <h2>{"LLDAP"}</h2>
+              <h2>{props.site_header_label.clone()}</h2>
             </a>
 
             <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0">

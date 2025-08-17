@@ -44,6 +44,7 @@ pub fn app_container() -> Html {
 
 pub struct App {
     user_info: Option<(String, bool)>,
+    site_header_label: String,
     redirect_to: Option<AppRoute>,
     password_reset_enabled: Option<bool>,
 }
@@ -73,6 +74,7 @@ impl Component for App {
                             None
                         })
                 }),
+            site_header_label: "LLDAP".into(),
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
         };
@@ -104,6 +106,11 @@ impl Component for App {
             }
             Msg::SettingsReceived(Ok(settings)) => {
                 self.password_reset_enabled = Some(settings.password_reset_enabled);
+                self.site_header_label = settings.site_header_label;
+                let window = web_sys::window().expect("no global `window` exists");
+                let document = window.document().expect("no document exists");
+                let full_title = self.site_header_label.clone() + " Administration";
+                document.set_title(&full_title);
             }
             Msg::SettingsReceived(Err(err)) => {
                 error!(err.to_string());
@@ -119,7 +126,7 @@ impl Component for App {
         let password_reset_enabled = self.password_reset_enabled;
         html! {
           <div>
-            <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
+            <Banner is_admin={is_admin} site_header_label={self.site_header_label.clone()} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
             <div class="container py-3 bg-kug">
               <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <main class="py-3">

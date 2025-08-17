@@ -33,6 +33,9 @@
 ## The public URL of the server, for password reset links.
 #http_url = "http://localhost"
 
+## The name of the service as displayed in the web interface
+#site_header_label = "LLDAP"
+
 ## The path to the front-end assets (relative to the working directory).
 #assets_path = "./app"
 

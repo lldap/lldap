@@ -109,6 +109,7 @@ async fn wasm_handler_compressed<Backend>(
 async fn get_settings<Backend>(data: web::Data<AppState<Backend>>) -> HttpResponse {
     HttpResponse::Ok().json(lldap_frontend_options::Options {
         password_reset_enabled: data.mail_options.enable_password_reset,
+        site_header_label: data.site_header_label.clone(),
     })
 }
 
@@ -120,6 +121,7 @@ fn http_config<Backend>(
     server_url: url::Url,
     assets_path: PathBuf,
     mail_options: MailOptions,
+    site_header_label: String,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
@@ -131,6 +133,7 @@ fn http_config<Backend>(
         server_url,
         assets_path: assets_path.clone(),
         mail_options,
+        site_header_label,
     }))
     .route(
         "/health",
@@ -174,6 +177,7 @@ pub(crate) struct AppState<Backend> {
     pub jwt_blacklist: RwLock<HashSet<u64>>,
     pub server_url: url::Url,
     pub assets_path: PathBuf,
+    pub site_header_label: String,
     pub mail_options: MailOptions,
 }
 
@@ -212,6 +216,7 @@ where
         .await
         .context("while getting the jwt blacklist")?;
     let server_url = config.http_url.0.clone();
+    let site_header_label = config.site_header_label.clone();
     let assets_path = config.assets_path.clone();
     let mail_options = config.smtp_options.clone();
     let verbose = config.verbose;
@@ -231,6 +236,7 @@ where
                 let jwt_secret = jwt_secret.clone();
                 let jwt_blacklist = jwt_blacklist.clone();
                 let server_url = server_url.clone();
+                let site_header_label = site_header_label.clone();
                 let assets_path = assets_path.clone();
                 let mail_options = mail_options.clone();
                 HttpServiceBuilder::default()
@@ -249,6 +255,7 @@ where
                                     server_url,
                                     assets_path,
                                     mail_options,
+                                    site_header_label,
                                 )
                             }),
                         |_| AppConfig::default(),
