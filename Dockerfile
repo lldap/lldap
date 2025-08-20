@@ -1,5 +1,5 @@
 # Build image
-FROM rust:alpine3.21 AS chef
+FROM rust:1.85.0-alpine3.21 AS chef
 
 RUN set -x \
     # Add user

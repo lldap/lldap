@@ -16,6 +16,7 @@ edition = "2024"
 homepage = "https://github.com/lldap/lldap"
 license = "GPL-3.0-only"
 repository = "https://github.com/lldap/lldap"
+rust-version = "1.85.0"
 
 [profile.release]
 lto = true
