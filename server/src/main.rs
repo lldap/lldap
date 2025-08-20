@@ -20,8 +20,7 @@ mod tcp_server;
 
 use crate::{
     cli::{Command, RunOpts, TestEmailOpts},
-    configuration::{Configuration, compare_private_key_hashes},
-    database_string::DatabaseUrl,
+    configuration::{Configuration, DbOptions, compare_private_key_hashes},
     db_cleaner::Scheduler,
 };
 use actix::Actor;
@@ -32,8 +31,9 @@ use lldap_sql_backend_handler::{
     SqlBackendHandler, register_password,
     sql_tables::{self, get_private_key_info, set_private_key_info},
 };
-use sea_orm::{Database, DatabaseConnection};
+use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::time::Duration;
+use log::LevelFilter;
 use tracing::{Instrument, Level, debug, error, info, instrument, span, warn};
 
 use lldap_domain::requests::{CreateGroupRequest, CreateUserRequest};
@@ -101,26 +101,39 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
     Ok(())
 }
 
-async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnection> {
-    let sql_pool = {
-        let num_connections = if database_url.db_type() == "sqlite" {
-            1
-        } else {
-            5
-        };
-        let mut sql_opt = sea_orm::ConnectOptions::new(database_url.to_string());
-        sql_opt
-            .max_connections(num_connections)
-            .sqlx_logging(true)
-            .sqlx_logging_level(log::LevelFilter::Debug);
-        Database::connect(sql_opt).await?
-    };
-    sql_tables::init_table(&sql_pool)
+fn sql_connection_pool_limits(options: &DbOptions) -> (u32, u32) {
+    match options.url.db_type() {
+        "sqlite" => (
+            options.min_connections.unwrap_or(1).into(),
+            options.max_connections.unwrap_or(5).into(),
+        ),
+        _ => (
+            options.min_connections.unwrap_or(5).into(),
+            options.max_connections.unwrap_or(10).into(),
+        ),
+    }
+}
+
+async fn setup_sql_tables(options: &DbOptions, verbose: bool) -> Result<DatabaseConnection> {
+    let (min_connections, max_connections) = sql_connection_pool_limits(options);
+
+    let mut connect_opts = ConnectOptions::new(options.url.to_string());
+    connect_opts
+        .min_connections(min_connections)
+        .max_connections(max_connections)
+        .connect_timeout(Duration::from_secs(options.connect_timeout as u64))
+        .idle_timeout(Duration::from_secs(options.idle_timeout as u64))
+        .max_lifetime(Duration::from_secs(options.max_lifetime as u64))
+        .sqlx_logging(true)
+        .sqlx_logging_level( if verbose { LevelFilter::Debug } else { LevelFilter::Info } );
+        
+    let sql_pool = Database::connect(connect_opts)
         .await
-        .context("while creating base tables")?;
-    jwt_sql_tables::init_table(&sql_pool)
-        .await
-        .context("while creating jwt tables")?;
+        .context(format!("while connecting to {}", options.url))?;
+
+    sql_tables::init_table(&sql_pool).await.context("while creating base tables")?;
+    jwt_sql_tables::init_table(&sql_pool).await.context("while creating JWT tables")?;
+
     Ok(sql_pool)
 }
 
@@ -128,7 +141,8 @@ async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnecti
 async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
     info!("Starting LLDAP version {}", env!("CARGO_PKG_VERSION"));
 
-    let sql_pool = setup_sql_tables(&config.database_url).await?;
+    let sql_pool = setup_sql_tables(&config.db_options, config.verbose).await?;
+
     let private_key_info = config.get_private_key_info();
     let force_update_private_key = config.force_update_private_key;
     match (
@@ -275,7 +289,7 @@ async fn create_schema_command(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
     let config = configuration::init(opts)?;
     logging::init(&config)?;
-    setup_sql_tables(&config.database_url).await?;
+    setup_sql_tables(&config.db_options, config.verbose).await?;
     info!("Schema created successfully.");
     Ok(())
 }
