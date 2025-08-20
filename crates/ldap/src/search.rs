@@ -236,6 +236,7 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
             vals: {
                 let hardcoded_attributes = [
                     b"( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' 'user_id' ) DESC 'RFC4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} SINGLE-VALUE NO-USER-MODIFICATION )".to_vec(),
+                    b"( 1.2.840.113556.1.2.102 NAME 'memberOf' DESC 'Group that the entry belongs to' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 NO-USER-MODIFICATION USAGE dSAOperation X-ORIGIN 'iPlanet Delegated Administrator' )".to_vec(),
                     b"( 1.3.6.1.1.16.4 NAME ( 'entryUUID' 'uuid' ) DESC 'UUID of the entry' EQUALITY UUIDMatch ORDERING UUIDOrderingMatch SYNTAX 1.3.6.1.1.16.1 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.101.120.16 NAME 'ldapSyntaxes' DESC 'RFC4512: LDAP syntaxes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.54 USAGE directoryOperation )".to_vec(),
                     b"( 2.5.4.0 NAME 'objectClass' DESC 'RFC4512: object classes of the entity' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
@@ -255,11 +256,10 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
                     b"( 10.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
                     b"( 10.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
                 ];
-                let num_hardcoded_attributes = hardcoded_attributes.len();
                 hardcoded_attributes.into_iter().chain(
                     ldap_schema_description
                         .formatted_attribute_list(
-                            num_hardcoded_attributes,
+                            4, // The number of hardcoded attributes starting with "10." (LLDAP custom range)
                             vec!["creation_date", "display_name", "last_name", "user_id", "uuid"]
                         )
                 ).collect()
@@ -613,6 +613,7 @@ mod tests {
                 atype: "attributeTypes".to_owned(),
                 vals: vec![
                     b"( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' 'user_id' ) DESC 'RFC4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} SINGLE-VALUE NO-USER-MODIFICATION )".to_vec(),
+                    b"( 1.2.840.113556.1.2.102 NAME 'memberOf' DESC 'Group that the entry belongs to' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 NO-USER-MODIFICATION USAGE dSAOperation X-ORIGIN 'iPlanet Delegated Administrator' )".to_vec(),
                     b"( 1.3.6.1.1.16.4 NAME ( 'entryUUID' 'uuid' ) DESC 'UUID of the entry' EQUALITY UUIDMatch ORDERING UUIDOrderingMatch SYNTAX 1.3.6.1.1.16.1 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.101.120.16 NAME 'ldapSyntaxes' DESC 'RFC4512: LDAP syntaxes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.54 USAGE directoryOperation )".to_vec(),
                     b"( 2.5.4.0 NAME 'objectClass' DESC 'RFC4512: object classes of the entity' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
@@ -631,11 +632,11 @@ mod tests {
                     b"( 10.1 NAME 'Integer' SYNTAX 1.3.6.1.4.1.1466.115.121.1.27 )".to_vec(),
                     b"( 10.2 NAME 'JpegPhoto' SYNTAX 1.3.6.1.4.1.1466.115.121.1.28 )".to_vec(),
                     b"( 10.3 NAME 'DateTime' SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 )".to_vec(),
-                    b"( 10.19 NAME 'avatar' DESC 'LLDAP: builtin attribute' SUP JpegPhoto )".to_vec(),
-                    b"( 10.20 NAME 'first_name' DESC 'LLDAP: builtin attribute' SUP String )"
+                    b"( 10.4 NAME 'avatar' DESC 'LLDAP: builtin attribute' SUP JpegPhoto )".to_vec(),
+                    b"( 10.5 NAME 'first_name' DESC 'LLDAP: builtin attribute' SUP String )"
                         .to_vec(),
-                    b"( 10.21 NAME 'mail' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
-                    b"( 10.22 NAME 'group_id' DESC 'LLDAP: builtin attribute' SUP Integer )"
+                    b"( 10.6 NAME 'mail' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
+                    b"( 10.7 NAME 'group_id' DESC 'LLDAP: builtin attribute' SUP Integer )"
                         .to_vec(),
                 ]
             }
