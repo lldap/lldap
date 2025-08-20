@@ -1,6 +1,6 @@
 use crate::{
     cli::{
-        GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts,
+        DbOpts, GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts,
         TrueFalseAlways,
     },
     database_string::DatabaseUrl,
@@ -83,6 +83,29 @@ impl std::default::Default for LdapsOptions {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[builder(pattern = "owned")]
+pub struct DbOptions {
+    #[builder(default = r#"DatabaseUrl::from("sqlite://users.db?mode=rwc")"#)]
+    pub url: DatabaseUrl,
+    #[builder(default)]
+    pub min_connections: Option<u16>,
+    #[builder(default)]
+    pub max_connections: Option<u16>,
+    #[builder(default = "3")]
+    pub connect_timeout: u32,
+    #[builder(default = "600")]
+    pub idle_timeout: u32,
+    #[builder(default = "3600")]
+    pub max_lifetime: u32,
+}
+
+impl std::default::Default for DbOptions {
+    fn default() -> Self {
+        DbOptionsBuilder::default().build().unwrap()
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize, derive_more::Debug)]
 #[debug(r#""{_0}""#)]
 pub struct HttpUrl(pub Url);
@@ -112,8 +135,11 @@ pub struct Configuration {
     pub force_ldap_user_pass_reset: TrueFalseAlways,
     #[builder(default = "false")]
     pub force_update_private_key: bool,
-    #[builder(default = r#"DatabaseUrl::from("sqlite://users.db?mode=rwc")"#)]
-    pub database_url: DatabaseUrl,
+    #[builder(default)]
+    pub db_options: DbOptions,
+    /// Deprecated: Use `db_options` instead.
+    #[builder(default)]
+    pub database_url: Option<DatabaseUrl>,
     #[builder(default)]
     pub ignored_user_attributes: Vec<AttributeName>,
     #[builder(default)]
@@ -437,7 +463,8 @@ impl ConfigOverrider for RunOpts {
         }
 
         if let Some(database_url) = self.database_url.as_ref() {
-            config.database_url = database_url.clone();
+            config.database_url = Some(database_url.clone());
+            // TODO: also use this as default for self.db_opts.url if not set
         }
 
         if let Some(force_ldap_user_pass_reset) = self.force_ldap_user_pass_reset {
@@ -449,6 +476,7 @@ impl ConfigOverrider for RunOpts {
         }
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);
+        self.db_opts.override_config(config);
     }
 }
 
@@ -472,6 +500,29 @@ impl ConfigOverrider for LdapsOpts {
         }
         if let Some(path) = self.ldaps_key_file.as_ref() {
             config.ldaps_options.key_file.clone_from(path);
+        }
+    }
+}
+
+impl ConfigOverrider for DbOpts {
+    fn override_config(&self, config: &mut Configuration) {
+        if let Some(db_url) = self.url.as_ref() {
+            config.db_options.url = db_url.clone();
+        }
+        if let Some(min_connections) = self.min_connections {
+            config.db_options.min_connections = Some(min_connections);
+        }
+        if let Some(max_connections) = self.max_connections {
+            config.db_options.max_connections = Some(max_connections);
+        }
+        if let Some(connect_timeout) = self.connect_timeout {
+            config.db_options.connect_timeout = connect_timeout;
+        }
+        if let Some(idle_timeout) = self.idle_timeout {
+            config.db_options.idle_timeout = idle_timeout;
+        }
+        if let Some(max_lifetime) = self.max_lifetime {
+            config.db_options.max_lifetime = max_lifetime;
         }
     }
 }
@@ -630,6 +681,11 @@ where
     if config.smtp_options.tls_required.is_some() {
         println!(
             "DEPRECATED: smtp_options.tls_required field is deprecated, it never did anything. You can replace it with smtp_options.smtp_encryption."
+        );
+    }
+    if config.database_url.is_some() {
+        println!(
+            "DEPRECATED: database_url field is deprecated. You can replace it with db_options.url."
         );
     }
     Ok(config)
