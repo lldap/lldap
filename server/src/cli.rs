@@ -174,6 +174,9 @@ pub struct RunOpts {
 
     #[clap(flatten)]
     pub ldaps_opts: LdapsOpts,
+
+    #[clap(flatten)]
+    pub db_opts: DbOpts,
 }
 
 #[derive(Debug, Parser, Clone)]
@@ -207,6 +210,34 @@ pub struct LdapsOpts {
     /// Ldaps certificate key file. Default: key.pem
     #[clap(long, env = "LLDAP_LDAPS_OPTIONS__KEY_FILE")]
     pub ldaps_key_file: Option<String>,
+}
+
+#[derive(Debug, Parser, Clone)]
+#[clap(next_help_heading = Some("DB"))]
+pub struct DbOpts {
+    /// Database connection URL
+    #[clap(long, env = "LLDAP_DB_OPTIONS__URL")]
+    pub url: Option<DatabaseUrl>,
+
+    /// Minimum number of DB connections
+    #[clap(long, env = "LLDAP_DB_OPTIONS__MIN_CONNECTIONS")]
+    pub min_connections: Option<u16>,
+
+    /// Maximum number of DB connections
+    #[clap(long, env = "LLDAP_DB_OPTIONS__MAX_CONNECTIONS")]
+    pub max_connections: Option<u16>,
+
+    /// DB connection timeout in seconds
+    #[clap(long, env = "LLDAP_DB_OPTIONS__CONNECT_TIMEOUT")]
+    pub connect_timeout: Option<u32>,
+
+    /// DB idle timeout in seconds
+    #[clap(long, env = "LLDAP_DB_OPTIONS__IDLE_TIMEOUT")]
+    pub idle_timeout: Option<u32>,
+
+    /// DB connection max lifetime in seconds
+    #[clap(long, env = "LLDAP_DB_OPTIONS__MAX_LIFETIME")]
+    pub max_lifetime: Option<u32>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, clap::ValueEnum)]
