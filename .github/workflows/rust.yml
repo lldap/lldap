@@ -36,9 +36,10 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v5.0.0
       - name: Install Rust ${{ env.RUST_VERSION }}
-        uses: dtolnay/rust-toolchain@stable
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
+          override: true
       - uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --verbose --workspace
@@ -60,9 +61,11 @@ jobs:
         uses: actions/checkout@v5.0.0
 
       - name: Install Rust ${{ env.RUST_VERSION }}
-        uses: dtolnay/rust-toolchain@stable
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
+          override: true
+          components: clippy
 
       - uses: Swatinem/rust-cache@v2
 
@@ -82,9 +85,11 @@ jobs:
         uses: actions/checkout@v5.0.0
 
       - name: Install Rust ${{ env.RUST_VERSION }}
-        uses: dtolnay/rust-toolchain@stable
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
+          override: true
+          components: rustfmt
 
       - uses: Swatinem/rust-cache@v2
 
@@ -106,10 +111,16 @@ jobs:
         uses: actions/checkout@v5.0.0
 
       - name: Install Rust ${{ env.RUST_VERSION }} and nightly
-        run: |
-          rustup toolchain install ${{ env.RUST_VERSION }} --component llvm-tools-preview
-          rustup toolchain install nightly --component llvm-tools-preview
-          rustup default ${{ env.RUST_VERSION }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+          components: llvm-tools-preview
+      - name: Install nightly toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          components: llvm-tools-preview
 
       - uses: taiki-e/install-action@cargo-llvm-cov
 
