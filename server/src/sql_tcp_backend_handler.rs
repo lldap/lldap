@@ -174,4 +174,14 @@ impl TcpBackendHandler for SqlBackendHandler {
         }
         Ok(())
     }
+
+    #[instrument(skip_all, level = "debug")]
+    async fn is_user_login_enabled(&self, user: &UserId) -> Result<bool> {
+        debug!(?user);
+        let user_model = model::User::find_by_id(user.clone())
+            .one(self.pool())
+            .await?
+            .ok_or_else(|| DomainError::EntityNotFound(user.to_string()))?;
+        Ok(user_model.login_enabled)
+    }
 }

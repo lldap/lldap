@@ -1,4 +1,7 @@
-use crate::{auth_service::check_if_token_is_valid, tcp_server::AppState};
+use crate::{
+    auth_service::check_if_token_is_valid, tcp_backend_handler::TcpBackendHandler,
+    tcp_server::AppState,
+};
 use actix_web::FromRequest;
 use actix_web::HttpMessage;
 use actix_web::{Error, HttpRequest, HttpResponse, error::JsonPayloadError, web};
@@ -119,14 +122,14 @@ where
     Ok(response.content_type("application/json").body(gql_response))
 }
 
-async fn graphql_route<Handler: BackendHandler + Clone>(
+async fn graphql_route<Handler: BackendHandler + Clone + TcpBackendHandler>(
     req: actix_web::HttpRequest,
     payload: actix_web::web::Payload,
     data: web::Data<AppState<Handler>>,
 ) -> Result<HttpResponse, Error> {
     let mut inner_payload = payload.into_inner();
     let bearer = BearerAuth::from_request(&req, &mut inner_payload).await?;
-    let validation_result = check_if_token_is_valid(&data, bearer.token())?;
+    let validation_result = check_if_token_is_valid(&data, bearer.token()).await?;
     let context = Context::<Handler> {
         handler: data.backend_handler.clone(),
         validation_result,
@@ -142,7 +145,7 @@ async fn graphql_route<Handler: BackendHandler + Clone>(
 
 pub fn configure_endpoint<Backend>(cfg: &mut web::ServiceConfig)
 where
-    Backend: BackendHandler + Clone + 'static,
+    Backend: BackendHandler + Clone + TcpBackendHandler + 'static,
 {
     let json_config = web::JsonConfig::default()
         .limit(4096)
