@@ -13,6 +13,9 @@ GROUP_CONFIGS_DIR="${GROUP_CONFIGS_DIR:-/bootstrap/group-configs}"
 LLDAP_SET_PASSWORD_PATH="${LLDAP_SET_PASSWORD_PATH:-/app/lldap_set_password}"
 LLDAP_FORCE_SET_PASSWORD="${LLDAP_FORCE_SET_PASSWORD:-true}"
 DO_CLEANUP="${DO_CLEANUP:-false}"
+DO_CLEANUP_USERS="${DO_CLEANUP_USERS:-$DO_CLEANUP}"
+DO_CLEANUP_GROUP_MEMBERSHIP="${DO_CLEANUP_GROUP_MEMBERSHIP:-$DO_CLEANUP}"
+DO_CLEANUP_GROUPS="${DO_CLEANUP_GROUPS:-$DO_CLEANUP}"
 
 # Fallback to support legacy defaults
 if [[ ! -d $USER_CONFIGS_DIR ]] && [[ -d "/user-configs" ]]; then
@@ -682,7 +685,7 @@ main() {
   else
     local group_name=''
     while read -r group_name; do
-      if [[ "$DO_CLEANUP" == 'true' ]]; then
+      if [[ "$DO_CLEANUP_GROUPS" == 'true' ]]; then
         delete_group "$group_name"
       else
         printf '[WARNING] Group "%s" is not declared in config files\n' "$group_name"
@@ -742,7 +745,7 @@ main() {
 
     local user_group_name=''
     while read -r user_group_name; do
-      if [[ "$DO_CLEANUP" == 'true' ]]; then
+      if [[ "$DO_CLEANUP_GROUP_MEMBERSHIP" == 'true' ]]; then
         remove_user_from_group "$id" "$user_group_name"
       else
         printf '[WARNING] User "%s" is not declared as member of the "%s" group in the config files\n' "$id" "$user_group_name"
@@ -759,7 +762,7 @@ main() {
   else
     local id=''
     while read -r id; do
-      if [[ "$DO_CLEANUP" == 'true' ]]; then
+      if [[ "$DO_CLEANUP_USERS" == 'true' ]]; then
         delete_user "$id"
       else
         printf '[WARNING] User "%s" is not declared in config files\n' "$id"
