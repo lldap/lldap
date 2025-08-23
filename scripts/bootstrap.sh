@@ -11,7 +11,6 @@ GROUP_SCHEMAS_DIR="${GROUP_SCHEMAS_DIR:-/bootstrap/group-schemas}"
 USER_CONFIGS_DIR="${USER_CONFIGS_DIR:-/bootstrap/user-configs}"
 GROUP_CONFIGS_DIR="${GROUP_CONFIGS_DIR:-/bootstrap/group-configs}"
 LLDAP_SET_PASSWORD_PATH="${LLDAP_SET_PASSWORD_PATH:-/app/lldap_set_password}"
-LLDAP_FORCE_SET_PASSWORD="${LLDAP_FORCE_SET_PASSWORD:-true}"
 DO_CLEANUP="${DO_CLEANUP:-false}"
 DO_CLEANUP_USERS="${DO_CLEANUP_USERS:-$DO_CLEANUP}"
 DO_CLEANUP_GROUP_MEMBERSHIP="${DO_CLEANUP_GROUP_MEMBERSHIP:-$DO_CLEANUP}"
@@ -707,17 +706,12 @@ main() {
     done
     printf -- '\n--- %s ---\n' "$id"
 
-    local user_already_exists=0
-    if user_exists "$id"; then
-      user_already_exists=1
-    fi
-
     create_update_user "$id" "$email" "$displayName" "$firstName" "$lastName" "$avatar_file" "$avatar_url" "$gravatar_avatar" "$weserv_avatar"
     redundant_users="$(printf '%s' "$redundant_users" | jq --compact-output --arg id "$id" '. - [$id]')"
 
-    if [[ "$password_file" != 'null' ]] && [[ "$password_file" != '""' ]] && [[ "$user_already_exists" == 0 || "$LLDAP_FORCE_SET_PASSWORD" == 'true' ]]; then
-      LLDAP_USER_PASSWORD="$(cat $password_file)" "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id"
-    elif [[ "$password" != 'null' ]] && [[ "$password" != '""' ]] && [[ "$user_already_exists" == 0 || "$LLDAP_FORCE_SET_PASSWORD" == 'true' ]]; then
+    if [[ "$password_file" != 'null' ]] && [[ "$password_file" != '""' ]]; then
+      "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$(cat $password_file)"
+    elif [[ "$password" != 'null' ]] && [[ "$password" != '""' ]]; then
       "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$password"
     fi
 
