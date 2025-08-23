@@ -246,10 +246,10 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: lldap-bootstrap
-          image: lldap/lldap:v0.5.0
+          image: lldap/lldap:latest
 
           command:
-            - /bootstrap/bootstrap.sh
+            - /app/bootstrap.sh
 
           env:
             - name: LLDAP_URL
@@ -264,15 +264,7 @@ spec:
             - name: DO_CLEANUP
               value: "true"
 
-            - name: LLDAP_FORCE_SET_PASSWORD
-              value: "false"
-
           volumeMounts:
-            - name: bootstrap
-              mountPath: /bootstrap/bootstrap.sh
-              readOnly: true
-              subPath: bootstrap.sh
-
             - name: user-configs
               mountPath: /bootstrap/user-configs
               readOnly: true
@@ -282,14 +274,6 @@ spec:
               readOnly: true
 
       volumes:
-        - name: bootstrap
-          configMap:
-            name: bootstrap
-            defaultMode: 0555
-            items:
-              - key: bootstrap.sh
-                path: bootstrap.sh
-
         - name: user-configs
           projected:
             sources:
@@ -307,15 +291,4 @@ spec:
                   items:
                     - key: group-configs.json
                       path: group-configs.json
-```
-### Kubernetes config map for bootstrap.sh script
-
-```yaml
-apiVersion: v1
-data:
-  bootstrap.sh: |
-    PASTE CONTENT OF bootstrap.sh HERE
-kind: ConfigMap
-metadata:
-  name: bootstrap
 ```
