@@ -36,6 +36,9 @@ The script can:
 - `GROUP_SCHEMAS_DIR` (default value: `/bootstrap/group-schemas`) - directory where the group schema JSON configs could be found
 - `LLDAP_SET_PASSWORD_PATH` - path to the `lldap_set_password` utility (default value: `/app/lldap_set_password`)
 - `DO_CLEANUP` (default value: `false`) - delete groups and users not specified in config files, also remove users from groups that they do not belong to
+- `DO_CLEANUP_USERS` (default value: `false`) - same as `DO_CLEANUP` but only for users.
+- `DO_CLEANUP_GROUP_MEMBERSHIP` (default value: `false`) - same as `DO_CLEANUP` but only for group membership.
+- `DO_CLEANUP_GROUPS` (default value: `false`) - same as `DO_CLEANUP` but only for groups.
 
 ## Config files
 
