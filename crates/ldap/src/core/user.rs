@@ -93,6 +93,18 @@ pub fn get_user_attribute(
                 .to_rfc3339()
                 .into_bytes(),
         ],
+        UserFieldType::PrimaryField(UserColumn::ModifiedDate) => vec![
+            chrono::Utc
+                .from_utc_datetime(&user.modified_date)
+                .to_rfc3339()
+                .into_bytes(),
+        ],
+        UserFieldType::PrimaryField(UserColumn::PasswordModifiedDate) => vec![
+            chrono::Utc
+                .from_utc_datetime(&user.password_modified_date)
+                .to_rfc3339()
+                .into_bytes(),
+        ],
         UserFieldType::Attribute(attr, _, _) => get_custom_attribute(&user.attributes, &attr)?,
         UserFieldType::NoMatch => match attribute.as_str() {
             "1.1" => return None,

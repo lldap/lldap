@@ -268,10 +268,12 @@ impl SqlBackendHandler {
             .display_name
             .as_ref()
             .map(|s| s.as_str().to_lowercase());
+        let now = chrono::Utc::now().naive_utc();
         let update_group = model::groups::ActiveModel {
             group_id: Set(request.group_id),
             display_name: request.display_name.map(Set).unwrap_or_default(),
             lowercase_display_name: lower_display_name.map(Set).unwrap_or_default(),
+            modified_date: Set(now),
             ..Default::default()
         };
         update_group.update(transaction).await?;

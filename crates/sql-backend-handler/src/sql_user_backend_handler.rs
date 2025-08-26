@@ -190,11 +190,13 @@ impl SqlBackendHandler {
         request: UpdateUserRequest,
     ) -> Result<()> {
         let lower_email = request.email.as_ref().map(|s| s.as_str().to_lowercase());
+        let now = chrono::Utc::now().naive_utc();
         let update_user = model::users::ActiveModel {
             user_id: ActiveValue::Set(request.user_id.clone()),
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
             lowercase_email: lower_email.map(ActiveValue::Set).unwrap_or_default(),
             display_name: to_value(&request.display_name),
+            modified_date: ActiveValue::Set(now),
             ..Default::default()
         };
         let mut update_user_attributes = Vec::new();

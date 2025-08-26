@@ -27,6 +27,8 @@ pub enum Users {
     TotpSecret,
     MfaType,
     Uuid,
+    ModifiedDate,
+    PasswordModifiedDate,
 }
 
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
@@ -37,6 +39,7 @@ pub(crate) enum Groups {
     LowercaseDisplayName,
     CreationDate,
     Uuid,
+    ModifiedDate,
 }
 
 #[derive(DeriveIden, Clone, Copy)]
@@ -1112,6 +1115,142 @@ async fn migrate_to_v10(transaction: DatabaseTransaction) -> Result<DatabaseTran
     Ok(transaction)
 }
 
+async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
+    // Add modified_date to users table
+    transaction
+        .execute(
+            builder.build(
+                Table::alter()
+                    .table(Users::Table)
+                    .add_column(
+                        ColumnDef::new(Users::ModifiedDate)
+                            .date_time()
+                            .not_null()
+                            .default("CURRENT_TIMESTAMP"),
+                    ),
+            ),
+        )
+        .await?;
+    
+    // Add password_modified_date to users table
+    transaction
+        .execute(
+            builder.build(
+                Table::alter()
+                    .table(Users::Table)
+                    .add_column(
+                        ColumnDef::new(Users::PasswordModifiedDate)
+                            .date_time()
+                            .not_null()
+                            .default("CURRENT_TIMESTAMP"),
+                    ),
+            ),
+        )
+        .await?;
+    
+    // Add modified_date to groups table
+    transaction
+        .execute(
+            builder.build(
+                Table::alter()
+                    .table(Groups::Table)
+                    .add_column(
+                        ColumnDef::new(Groups::ModifiedDate)
+                            .date_time()
+                            .not_null()
+                            .default("CURRENT_TIMESTAMP"),
+                    ),
+            ),
+        )
+        .await?;
+    
+    // Initialize existing users with modified_date = creation_date
+    transaction
+        .execute(
+            builder.build(
+                Query::update()
+                    .table(Users::Table)
+                    .value(Users::ModifiedDate, Expr::col(Users::CreationDate))
+                    .value(Users::PasswordModifiedDate, Expr::col(Users::CreationDate)),
+            ),
+        )
+        .await?;
+    
+    // Initialize existing groups with modified_date = creation_date
+    transaction
+        .execute(
+            builder.build(
+                Query::update()
+                    .table(Groups::Table)
+                    .value(Groups::ModifiedDate, Expr::col(Groups::CreationDate)),
+            ),
+        )
+        .await?;
+    
+    // Add the new timestamp attributes to the user attribute schema as hardcoded read-only attributes
+    transaction
+        .execute(
+            builder.build(
+                Query::insert()
+                    .into_table(UserAttributeSchema::Table)
+                    .columns([
+                        UserAttributeSchema::UserAttributeSchemaName,
+                        UserAttributeSchema::UserAttributeSchemaType,
+                        UserAttributeSchema::UserAttributeSchemaIsList,
+                        UserAttributeSchema::UserAttributeSchemaIsUserVisible,
+                        UserAttributeSchema::UserAttributeSchemaIsUserEditable,
+                        UserAttributeSchema::UserAttributeSchemaIsHardcoded,
+                    ])
+                    .values_panic([
+                        "modified_date".into(),
+                        AttributeType::DateTime.into(),
+                        false.into(),
+                        true.into(),
+                        false.into(),
+                        true.into(),
+                    ])
+                    .values_panic([
+                        "password_modified_date".into(),
+                        AttributeType::DateTime.into(),
+                        false.into(),
+                        true.into(),
+                        false.into(),
+                        true.into(),
+                    ]),
+            ),
+        )
+        .await?;
+    
+    // Add the new timestamp attribute to the group attribute schema as hardcoded read-only attribute
+    transaction
+        .execute(
+            builder.build(
+                Query::insert()
+                    .into_table(GroupAttributeSchema::Table)
+                    .columns([
+                        GroupAttributeSchema::GroupAttributeSchemaName,
+                        GroupAttributeSchema::GroupAttributeSchemaType,
+                        GroupAttributeSchema::GroupAttributeSchemaIsList,
+                        GroupAttributeSchema::GroupAttributeSchemaIsGroupVisible,
+                        GroupAttributeSchema::GroupAttributeSchemaIsGroupEditable,
+                        GroupAttributeSchema::GroupAttributeSchemaIsHardcoded,
+                    ])
+                    .values_panic([
+                        "modified_date".into(),
+                        AttributeType::DateTime.into(),
+                        false.into(),
+                        true.into(),
+                        false.into(),
+                        true.into(),
+                    ]),
+            ),
+        )
+        .await?;
+    
+    Ok(transaction)
+}
+
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -1142,6 +1281,7 @@ pub(crate) async fn migrate_from_version(
         to_sync!(migrate_to_v8),
         to_sync!(migrate_to_v9),
         to_sync!(migrate_to_v10),
+        to_sync!(migrate_to_v11),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {

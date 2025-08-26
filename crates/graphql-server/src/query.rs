@@ -958,6 +958,7 @@ mod tests {
                 name: "club_name".into(),
                 value: "Gang of Four".to_string().into(),
             }],
+            modified_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
         });
         groups.insert(GroupDetails {
             group_id: GroupId(7),
@@ -965,6 +966,7 @@ mod tests {
             creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
             uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: Vec::new(),
+            modified_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
         });
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))

@@ -21,6 +21,8 @@ pub struct Model {
     pub totp_secret: Option<String>,
     pub mfa_type: Option<String>,
     pub uuid: Uuid,
+    pub modified_date: chrono::NaiveDateTime,
+    pub password_modified_date: chrono::NaiveDateTime,
 }
 
 impl EntityName for Entity {
@@ -40,6 +42,8 @@ pub enum Column {
     TotpSecret,
     MfaType,
     Uuid,
+    ModifiedDate,
+    PasswordModifiedDate,
 }
 
 impl ColumnTrait for Column {
@@ -56,6 +60,8 @@ impl ColumnTrait for Column {
             Column::TotpSecret => ColumnType::String(StringLen::N(64)),
             Column::MfaType => ColumnType::String(StringLen::N(64)),
             Column::Uuid => ColumnType::String(StringLen::N(36)),
+            Column::ModifiedDate => ColumnType::DateTime,
+            Column::PasswordModifiedDate => ColumnType::DateTime,
         }
         .def()
     }
@@ -121,6 +127,8 @@ impl From<Model> for lldap_domain::types::User {
             creation_date: user.creation_date,
             uuid: user.uuid,
             attributes: Vec::new(),
+            modified_date: user.modified_date,
+            password_modified_date: user.password_modified_date,
         }
     }
 }
