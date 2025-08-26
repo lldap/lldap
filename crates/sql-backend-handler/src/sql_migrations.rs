@@ -1127,7 +1127,7 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
                         ColumnDef::new(Users::ModifiedDate)
                             .date_time()
                             .not_null()
-                            .default("CURRENT_TIMESTAMP"),
+                            .default(chrono::Utc::now().naive_utc()),
                     ),
             ),
         )
@@ -1143,7 +1143,7 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
                         ColumnDef::new(Users::PasswordModifiedDate)
                             .date_time()
                             .not_null()
-                            .default("CURRENT_TIMESTAMP"),
+                            .default(chrono::Utc::now().naive_utc()),
                     ),
             ),
         )
@@ -1159,7 +1159,7 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
                         ColumnDef::new(Groups::ModifiedDate)
                             .date_time()
                             .not_null()
-                            .default("CURRENT_TIMESTAMP"),
+                            .default(chrono::Utc::now().naive_utc()),
                     ),
             ),
         )
