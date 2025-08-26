@@ -1165,85 +1165,26 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
         )
         .await?;
     
-    // Initialize existing users with modified_date = creation_date
+    // Initialize existing users with modified_date and password_modified_date = now
+    let now = chrono::Utc::now().naive_utc();
     transaction
         .execute(
             builder.build(
                 Query::update()
                     .table(Users::Table)
-                    .value(Users::ModifiedDate, Expr::col(Users::CreationDate))
-                    .value(Users::PasswordModifiedDate, Expr::col(Users::CreationDate)),
+                    .value(Users::ModifiedDate, now)
+                    .value(Users::PasswordModifiedDate, now),
             ),
         )
         .await?;
     
-    // Initialize existing groups with modified_date = creation_date
+    // Initialize existing groups with modified_date = now
     transaction
         .execute(
             builder.build(
                 Query::update()
                     .table(Groups::Table)
-                    .value(Groups::ModifiedDate, Expr::col(Groups::CreationDate)),
-            ),
-        )
-        .await?;
-    
-    // Add the new timestamp attributes to the user attribute schema as hardcoded read-only attributes
-    transaction
-        .execute(
-            builder.build(
-                Query::insert()
-                    .into_table(UserAttributeSchema::Table)
-                    .columns([
-                        UserAttributeSchema::UserAttributeSchemaName,
-                        UserAttributeSchema::UserAttributeSchemaType,
-                        UserAttributeSchema::UserAttributeSchemaIsList,
-                        UserAttributeSchema::UserAttributeSchemaIsUserVisible,
-                        UserAttributeSchema::UserAttributeSchemaIsUserEditable,
-                        UserAttributeSchema::UserAttributeSchemaIsHardcoded,
-                    ])
-                    .values_panic([
-                        "modified_date".into(),
-                        AttributeType::DateTime.into(),
-                        false.into(),
-                        true.into(),
-                        false.into(),
-                        true.into(),
-                    ])
-                    .values_panic([
-                        "password_modified_date".into(),
-                        AttributeType::DateTime.into(),
-                        false.into(),
-                        true.into(),
-                        false.into(),
-                        true.into(),
-                    ]),
-            ),
-        )
-        .await?;
-    
-    // Add the new timestamp attribute to the group attribute schema as hardcoded read-only attribute
-    transaction
-        .execute(
-            builder.build(
-                Query::insert()
-                    .into_table(GroupAttributeSchema::Table)
-                    .columns([
-                        GroupAttributeSchema::GroupAttributeSchemaName,
-                        GroupAttributeSchema::GroupAttributeSchemaType,
-                        GroupAttributeSchema::GroupAttributeSchemaIsList,
-                        GroupAttributeSchema::GroupAttributeSchemaIsGroupVisible,
-                        GroupAttributeSchema::GroupAttributeSchemaIsGroupEditable,
-                        GroupAttributeSchema::GroupAttributeSchemaIsHardcoded,
-                    ])
-                    .values_panic([
-                        "modified_date".into(),
-                        AttributeType::DateTime.into(),
-                        false.into(),
-                        true.into(),
-                        false.into(),
-                        true.into(),
-                    ]),
+                    .value(Groups::ModifiedDate, now),
             ),
         )
         .await?;

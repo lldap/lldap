@@ -716,6 +716,8 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                 let value: Option<DomainAttributeValue> = match attribute_schema.name.as_str() {
                     "user_id" => Some(user.user_id.clone().into_string().into()),
                     "creation_date" => Some(user.creation_date.into()),
+                    "modified_date" => Some(user.modified_date.into()),
+                    "password_modified_date" => Some(user.password_modified_date.into()),
                     "mail" => Some(user.email.clone().into_string().into()),
                     "uuid" => Some(user.uuid.clone().into_string().into()),
                     "display_name" => user.display_name.as_ref().map(|d| d.clone().into()),
@@ -760,6 +762,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                     match attribute_schema.name.as_str() {
                         "group_id" => (group.id.0 as i64).into(),
                         "creation_date" => group.creation_date.into(),
+                        "modified_date" => group.modified_date.into(),
                         "uuid" => group.uuid.clone().into_string().into(),
                         "display_name" => group.display_name.clone().into_string().into(),
                         _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
@@ -802,6 +805,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                     match attribute_schema.name.as_str() {
                         "group_id" => (group.group_id.0 as i64).into(),
                         "creation_date" => group.creation_date.into(),
+                        "modified_date" => group.modified_date.into(),
                         "uuid" => group.uuid.clone().into_string().into(),
                         "display_name" => group.display_name.clone().into_string().into(),
                         _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
