@@ -55,20 +55,24 @@ version = "1"
 mockall = "0.11.4"
 pretty_assertions = "1"
 
-#[dev-dependencies.lldap_auth]
-#path = "../auth"
-#features = ["test"]
-#
-#[dev-dependencies.lldap_opaque_handler]
-#path = "../opaque-handler"
-#features = ["test"]
+[dev-dependencies.lldap_auth]
+path = "../auth"
+features = ["test"]
+
+[dev-dependencies.lldap_domain]
+path = "../domain"
+features = ["test"]
+
+[dev-dependencies.lldap_opaque_handler]
+path = "../opaque-handler"
+features = ["test"]
 
 [dev-dependencies.lldap_test_utils]
 path = "../test-utils"
-#
-#[dev-dependencies.lldap_sql_backend_handler]
-#path = "../sql-backend-handler"
-#features = ["test"]
+
+[dev-dependencies.lldap_sql_backend_handler]
+path = "../sql-backend-handler"
+features = ["test"]
 
 [dev-dependencies.tokio]
 features = ["full"]

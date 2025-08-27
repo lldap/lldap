@@ -279,12 +279,8 @@ pub fn map_group_field(field: &AttributeName, schema: &PublicSchema) -> GroupFie
         "entrydn" => GroupFieldType::EntryDn,
         "objectclass" => GroupFieldType::ObjectClass,
         "cn" | "displayname" | "uid" | "display_name" | "id" => GroupFieldType::DisplayName,
-        "creationdate" | "createtimestamp" | "creation_date" => {
-            GroupFieldType::CreationDate
-        }
-        "modifytimestamp" | "modifydate" | "modified_date" => {
-            GroupFieldType::ModifiedDate
-        }
+        "creationdate" | "createtimestamp" | "creation_date" => GroupFieldType::CreationDate,
+        "modifytimestamp" | "modifydate" | "modified_date" => GroupFieldType::ModifiedDate,
         "member" | "uniquemember" => GroupFieldType::Member,
         "entryuuid" | "uuid" => GroupFieldType::Uuid,
         "group_id" | "groupid" => GroupFieldType::GroupId,

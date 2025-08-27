@@ -1000,6 +1000,14 @@ mod tests {
                             "value": ["bob@bobbers.on"],
                           },
                           {
+                            "name": "modified_date",
+                            "value": ["1970-01-01T00:00:00+00:00"],
+                          },
+                          {
+                            "name": "password_modified_date",
+                            "value": ["1970-01-01T00:00:00+00:00"],
+                          },
+                          {
                             "name": "user_id",
                             "value": ["bob"],
                           },
@@ -1033,6 +1041,10 @@ mod tests {
                                 "value": ["3"],
                               },
                               {
+                                "name": "modified_date",
+                                "value": ["1970-01-01T00:00:00.000000042+00:00"],
+                              },
+                              {
                                 "name": "uuid",
                                 "value": ["a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"],
                               },
@@ -1058,6 +1070,10 @@ mod tests {
                               {
                                 "name": "group_id",
                                 "value": ["7"],
+                              },
+                              {
+                                "name": "modified_date",
+                                "value": ["1970-01-01T00:00:00.000000012+00:00"],
                               },
                               {
                                 "name": "uuid",
@@ -1253,6 +1269,22 @@ mod tests {
                                     "isHardcoded": true,
                                 },
                                 {
+                                    "name": "modified_date",
+                                    "attributeType": "DATE_TIME",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "password_modified_date",
+                                    "attributeType": "DATE_TIME",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                                {
                                     "name": "user_id",
                                     "attributeType": "STRING",
                                     "isList": false,
@@ -1292,6 +1324,14 @@ mod tests {
                                 {
                                     "name": "group_id",
                                     "attributeType": "INTEGER",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "modified_date",
+                                    "attributeType": "DATE_TIME",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -1371,6 +1411,8 @@ mod tests {
                                 {"name": "creation_date"},
                                 {"name": "display_name"},
                                 {"name": "mail"},
+                                {"name": "modified_date"},
+                                {"name": "password_modified_date"},
                                 {"name": "user_id"},
                                 {"name": "uuid"},
                             ],

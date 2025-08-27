@@ -158,7 +158,7 @@ mod tests {
                         creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                         uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
                         attributes: Vec::new(),
-                    modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                        modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
                     });
                 }
                 Ok(g)

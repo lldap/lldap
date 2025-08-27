@@ -1121,50 +1121,44 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
     transaction
         .execute(
             builder.build(
-                Table::alter()
-                    .table(Users::Table)
-                    .add_column(
-                        ColumnDef::new(Users::ModifiedDate)
-                            .date_time()
-                            .not_null()
-                            .default(chrono::Utc::now().naive_utc()),
-                    ),
+                Table::alter().table(Users::Table).add_column(
+                    ColumnDef::new(Users::ModifiedDate)
+                        .date_time()
+                        .not_null()
+                        .default(chrono::Utc::now().naive_utc()),
+                ),
             ),
         )
         .await?;
-    
+
     // Add password_modified_date to users table
     transaction
         .execute(
             builder.build(
-                Table::alter()
-                    .table(Users::Table)
-                    .add_column(
-                        ColumnDef::new(Users::PasswordModifiedDate)
-                            .date_time()
-                            .not_null()
-                            .default(chrono::Utc::now().naive_utc()),
-                    ),
+                Table::alter().table(Users::Table).add_column(
+                    ColumnDef::new(Users::PasswordModifiedDate)
+                        .date_time()
+                        .not_null()
+                        .default(chrono::Utc::now().naive_utc()),
+                ),
             ),
         )
         .await?;
-    
+
     // Add modified_date to groups table
     transaction
         .execute(
             builder.build(
-                Table::alter()
-                    .table(Groups::Table)
-                    .add_column(
-                        ColumnDef::new(Groups::ModifiedDate)
-                            .date_time()
-                            .not_null()
-                            .default(chrono::Utc::now().naive_utc()),
-                    ),
+                Table::alter().table(Groups::Table).add_column(
+                    ColumnDef::new(Groups::ModifiedDate)
+                        .date_time()
+                        .not_null()
+                        .default(chrono::Utc::now().naive_utc()),
+                ),
             ),
         )
         .await?;
-    
+
     // Initialize existing users with modified_date and password_modified_date = now
     let now = chrono::Utc::now().naive_utc();
     transaction
@@ -1177,7 +1171,7 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
             ),
         )
         .await?;
-    
+
     // Initialize existing groups with modified_date = now
     transaction
         .execute(
@@ -1188,7 +1182,7 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
             ),
         )
         .await?;
-    
+
     Ok(transaction)
 }
 
