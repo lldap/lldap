@@ -1159,30 +1159,6 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
         )
         .await?;
 
-    // Initialize existing users with modified_date and password_modified_date = now
-    let now = chrono::Utc::now().naive_utc();
-    transaction
-        .execute(
-            builder.build(
-                Query::update()
-                    .table(Users::Table)
-                    .value(Users::ModifiedDate, now)
-                    .value(Users::PasswordModifiedDate, now),
-            ),
-        )
-        .await?;
-
-    // Initialize existing groups with modified_date = now
-    transaction
-        .execute(
-            builder.build(
-                Query::update()
-                    .table(Groups::Table)
-                    .value(Groups::ModifiedDate, now),
-            ),
-        )
-        .await?;
-
     Ok(transaction)
 }
 

@@ -291,11 +291,12 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
 }
 
 pub(crate) fn is_root_dse_request(request: &LdapSearchRequest) -> bool {
-    if request.base.is_empty()
-        && request.scope == LdapSearchScope::Base
-        && matches!(&request.filter, LdapFilter::Present(attribute) if attribute.eq_ignore_ascii_case("objectclass"))
-    {
-        return true;
+    if request.base.is_empty() && request.scope == LdapSearchScope::Base {
+        if let LdapFilter::Present(attribute) = &request.filter {
+            if attribute.eq_ignore_ascii_case("objectclass") {
+                return true;
+            }
+        }
     }
     false
 }

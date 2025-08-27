@@ -395,12 +395,12 @@ impl UserBackendHandler for SqlBackendHandler {
 
     #[instrument(skip_all, level = "debug", err, fields(user_id = ?user_id.as_str(), group_id))]
     async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
-        let user_id_owned = user_id.clone();
+        let user_id = user_id.clone();
         self.sql_pool
             .transaction::<_, _, sea_orm::DbErr>(|transaction| {
                 Box::pin(async move {
                     let new_membership = model::memberships::ActiveModel {
-                        user_id: ActiveValue::Set(user_id_owned),
+                        user_id: ActiveValue::Set(user_id),
                         group_id: ActiveValue::Set(group_id),
                     };
                     new_membership.insert(transaction).await?;
@@ -423,16 +423,16 @@ impl UserBackendHandler for SqlBackendHandler {
 
     #[instrument(skip_all, level = "debug", err, fields(user_id = ?user_id.as_str(), group_id))]
     async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
-        let user_id_owned = user_id.clone();
+        let user_id = user_id.clone();
         self.sql_pool
             .transaction::<_, _, sea_orm::DbErr>(|transaction| {
                 Box::pin(async move {
-                    let res = model::Membership::delete_by_id((user_id_owned.clone(), group_id))
+                    let res = model::Membership::delete_by_id((user_id.clone(), group_id))
                         .exec(transaction)
                         .await?;
                     if res.rows_affected == 0 {
                         return Err(sea_orm::DbErr::Custom(format!(
-                            "No such membership: '{user_id_owned}' -> {group_id:?}"
+                            "No such membership: '{user_id}' -> {group_id:?}"
                         )));
                     }
 
