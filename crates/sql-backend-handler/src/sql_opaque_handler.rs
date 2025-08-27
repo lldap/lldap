@@ -202,6 +202,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
             user_id: ActiveValue::Set(username.clone()),
             password_hash: ActiveValue::Set(Some(password_file.serialize())),
             password_modified_date: ActiveValue::Set(now),
+            modified_date: ActiveValue::Set(now),
             ..Default::default()
         };
         user_update.update(&self.sql_pool).await?;
