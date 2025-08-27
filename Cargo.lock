@@ -2729,7 +2729,6 @@ dependencies = [
  "lldap_domain_handlers",
  "lldap_domain_model",
  "lldap_ldap",
- "lldap_opaque_handler",
  "lldap_sql_backend_handler",
  "lldap_test_utils",
  "lldap_validation",
