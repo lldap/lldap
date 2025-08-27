@@ -327,6 +327,8 @@ impl UserBackendHandler for SqlBackendHandler {
             display_name: to_value(&request.display_name),
             creation_date: ActiveValue::Set(now),
             uuid: ActiveValue::Set(uuid),
+            modified_date: ActiveValue::Set(now),
+            password_modified_date: ActiveValue::Set(now),
             ..Default::default()
         };
         let mut new_user_attributes = Vec::new();

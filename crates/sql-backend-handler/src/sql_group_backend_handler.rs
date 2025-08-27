@@ -206,6 +206,7 @@ impl GroupBackendHandler for SqlBackendHandler {
             lowercase_display_name: Set(lower_display_name),
             creation_date: Set(now),
             uuid: Set(uuid),
+            modified_date: Set(now),
             ..Default::default()
         };
         Ok(self
