@@ -197,9 +197,12 @@ impl OpaqueHandler for SqlOpaqueHandler {
         let password_file =
             opaque::server::registration::get_password_file(request.registration_upload);
         // Set the user password to the new password.
+        let now = chrono::Utc::now().naive_utc();
         let user_update = model::users::ActiveModel {
             user_id: ActiveValue::Set(username.clone()),
             password_hash: ActiveValue::Set(Some(password_file.serialize())),
+            password_modified_date: ActiveValue::Set(now),
+            modified_date: ActiveValue::Set(now),
             ..Default::default()
         };
         user_update.update(&self.sql_pool).await?;

@@ -716,6 +716,8 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                 let value: Option<DomainAttributeValue> = match attribute_schema.name.as_str() {
                     "user_id" => Some(user.user_id.clone().into_string().into()),
                     "creation_date" => Some(user.creation_date.into()),
+                    "modified_date" => Some(user.modified_date.into()),
+                    "password_modified_date" => Some(user.password_modified_date.into()),
                     "mail" => Some(user.email.clone().into_string().into()),
                     "uuid" => Some(user.uuid.clone().into_string().into()),
                     "display_name" => user.display_name.as_ref().map(|d| d.clone().into()),
@@ -760,6 +762,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                     match attribute_schema.name.as_str() {
                         "group_id" => (group.id.0 as i64).into(),
                         "creation_date" => group.creation_date.into(),
+                        "modified_date" => group.modified_date.into(),
                         "uuid" => group.uuid.clone().into_string().into(),
                         "display_name" => group.display_name.clone().into_string().into(),
                         _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
@@ -802,6 +805,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                     match attribute_schema.name.as_str() {
                         "group_id" => (group.group_id.0 as i64).into(),
                         "creation_date" => group.creation_date.into(),
+                        "modified_date" => group.modified_date.into(),
                         "uuid" => group.uuid.clone().into_string().into(),
                         "display_name" => group.display_name.clone().into_string().into(),
                         _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
@@ -958,6 +962,7 @@ mod tests {
                 name: "club_name".into(),
                 value: "Gang of Four".to_string().into(),
             }],
+            modified_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
         });
         groups.insert(GroupDetails {
             group_id: GroupId(7),
@@ -965,6 +970,7 @@ mod tests {
             creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
             uuid: lldap_domain::uuid!("b1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: Vec::new(),
+            modified_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
         });
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
@@ -992,6 +998,14 @@ mod tests {
                           {
                             "name": "mail",
                             "value": ["bob@bobbers.on"],
+                          },
+                          {
+                            "name": "modified_date",
+                            "value": ["1970-01-01T00:00:00+00:00"],
+                          },
+                          {
+                            "name": "password_modified_date",
+                            "value": ["1970-01-01T00:00:00+00:00"],
                           },
                           {
                             "name": "user_id",
@@ -1027,6 +1041,10 @@ mod tests {
                                 "value": ["3"],
                               },
                               {
+                                "name": "modified_date",
+                                "value": ["1970-01-01T00:00:00.000000042+00:00"],
+                              },
+                              {
                                 "name": "uuid",
                                 "value": ["a1a2a3a4-b1b2-c1c2-d1d2-d3d4d5d6d7d8"],
                               },
@@ -1052,6 +1070,10 @@ mod tests {
                               {
                                 "name": "group_id",
                                 "value": ["7"],
+                              },
+                              {
+                                "name": "modified_date",
+                                "value": ["1970-01-01T00:00:00.000000012+00:00"],
                               },
                               {
                                 "name": "uuid",
@@ -1247,6 +1269,22 @@ mod tests {
                                     "isHardcoded": true,
                                 },
                                 {
+                                    "name": "modified_date",
+                                    "attributeType": "DATE_TIME",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "password_modified_date",
+                                    "attributeType": "DATE_TIME",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                                {
                                     "name": "user_id",
                                     "attributeType": "STRING",
                                     "isList": false,
@@ -1286,6 +1324,14 @@ mod tests {
                                 {
                                     "name": "group_id",
                                     "attributeType": "INTEGER",
+                                    "isList": false,
+                                    "isVisible": true,
+                                    "isEditable": false,
+                                    "isHardcoded": true,
+                                },
+                                {
+                                    "name": "modified_date",
+                                    "attributeType": "DATE_TIME",
                                     "isList": false,
                                     "isVisible": true,
                                     "isEditable": false,
@@ -1365,6 +1411,8 @@ mod tests {
                                 {"name": "creation_date"},
                                 {"name": "display_name"},
                                 {"name": "mail"},
+                                {"name": "modified_date"},
+                                {"name": "password_modified_date"},
                                 {"name": "user_id"},
                                 {"name": "uuid"},
                             ],

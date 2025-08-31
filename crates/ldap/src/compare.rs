@@ -124,6 +124,7 @@ mod tests {
                 users: vec![UserId::new("bob")],
                 uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 attributes: Vec::new(),
+                modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
             }])
         });
         let ldap_handler = setup_bound_admin_handler(mock).await;
@@ -218,6 +219,7 @@ mod tests {
                 users: vec![UserId::new("bob")],
                 uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
                 attributes: Vec::new(),
+                modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
             }])
         });
         let ldap_handler = setup_bound_admin_handler(mock).await;
