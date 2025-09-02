@@ -18,9 +18,9 @@ The user `binduser` has to be member of either `lldap_strict_readonly` or `lldap
 | `LDAP_SERVER_PORT` | Port | `6360` | When starting Open-WebUI sometimes it only accepts the default LDAP or LDAPS port (only ENV configuration) |
 | `LDAP_ATTRIBUTE_FOR_MAIL` | Attribute for Mail | `mail` | default |
 | `LDAP_ATTRIBUTE_FOR_USERNAME` | Attribute for Username | `uid` | default |
-| `LDAP_APP_DN` | Application DN | `uid=binduser,ou=people,dc=example,de=org` | Hovering shows: Bind user-dn |
+| `LDAP_APP_DN` | Application DN | `uid=binduser,ou=people,dc=example,dc=org` | Hovering shows: Bind user-dn |
 | `LDAP_APP_PASSWORD` | Application DN Password | <binduser-pw> | - |
-| `LDAP_SEARCH_BASE` | Search Base | `[cn=<somegroup,]ou=people,dc=example,de=org` | Who should get access from your instance. `[Group]` means optional. |
+| `LDAP_SEARCH_BASE` | Search Base | `[cn=<somegroup>,]ou=people,dc=example,dc=org` | Who should get access from your instance. `[Group]` means optional. |
 | `LDAP_SEARCH_FILTER` | Search Filter | `(objectClass=person)` | Query which resolves the names for new account names in Open WebUI. |
 | `LDAP_USE_TLS` | TLS | `true` | Toggle |
 | `LDAP_CA_CERT_FILE` | Certificate Path | `/ca-chain.pem` | required when TLS activated |
