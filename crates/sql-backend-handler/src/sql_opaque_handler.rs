@@ -15,33 +15,6 @@ use tracing::{debug, info, instrument, warn};
 
 type SqlOpaqueHandler = SqlBackendHandler;
 
-#[instrument(skip_all, level = "debug", err, fields(username = %username.as_str()))]
-fn passwords_match(
-    password_file_bytes: &[u8],
-    clear_password: &str,
-    opaque_setup: &opaque::server::ServerSetup,
-    username: &UserId,
-) -> Result<()> {
-    use opaque::{client, server};
-    let mut rng = rand::rngs::OsRng;
-    let client_login_start_result = client::login::start_login(clear_password, &mut rng)?;
-
-    let password_file = server::ServerRegistration::deserialize(password_file_bytes)
-        .map_err(opaque::AuthenticationError::ProtocolError)?;
-    let server_login_start_result = server::login::start_login(
-        &mut rng,
-        opaque_setup,
-        Some(password_file),
-        client_login_start_result.message,
-        username,
-    )?;
-    client::login::finish_login(
-        client_login_start_result.state,
-        server_login_start_result.message,
-    )?;
-    Ok(())
-}
-
 impl SqlBackendHandler {
     fn get_orion_secret_key(&self) -> Result<orion::aead::SecretKey> {
         Ok(orion::aead::SecretKey::from_slice(
@@ -71,13 +44,16 @@ impl LoginHandler for SqlBackendHandler {
             .await?
         {
             info!(r#"Login attempt for "{}""#, &request.name);
-            if passwords_match(
-                &password_hash,
-                &request.password,
-                &self.opaque_setup,
-                &request.name,
-            )
-            .is_ok()
+            if self
+                .crypto_service
+                .verify_password(
+                    &password_hash,
+                    &request.password,
+                    &self.opaque_setup,
+                    &request.name,
+                )
+                .await
+                .is_ok()
             {
                 return Ok(());
             }
@@ -103,25 +79,18 @@ impl OpaqueHandler for SqlOpaqueHandler {
     ) -> Result<login::ServerLoginStartResponse> {
         let user_id = request.username;
         info!(r#"OPAQUE login attempt for "{}""#, &user_id);
-        let maybe_password_file = self
-            .get_password_file_for_user(user_id.clone())
-            .await?
-            .map(|bytes| {
-                opaque::server::ServerRegistration::deserialize(&bytes).map_err(|_| {
-                    DomainError::InternalError(format!("Corrupted password file for {}", &user_id))
-                })
-            })
-            .transpose()?;
+        let maybe_password_file = self.get_password_file_for_user(user_id.clone()).await?;
 
-        let mut rng = rand::rngs::OsRng;
         // Get the CredentialResponse for the user, or a dummy one if no user/no password.
-        let start_response = opaque::server::login::start_login(
-            &mut rng,
-            &self.opaque_setup,
-            maybe_password_file,
-            request.login_start_request,
-            &user_id,
-        )?;
+        let start_response = self
+            .crypto_service
+            .opaque_login_start(
+                &self.opaque_setup,
+                maybe_password_file.as_deref(),
+                request.login_start_request,
+                &user_id,
+            )
+            .await?;
         let secret_key = self.get_orion_secret_key()?;
         let server_data = login::ServerData {
             username: user_id,
@@ -147,14 +116,18 @@ impl OpaqueHandler for SqlOpaqueHandler {
         )?)?;
         // Finish the login: this makes sure the client data is correct, and gives a session key we
         // don't need.
-        match opaque::server::login::finish_login(server_login, request.credential_finalization) {
+        match self
+            .crypto_service
+            .opaque_login_finish(server_login, request.credential_finalization)
+            .await
+        {
             Ok(session) => {
                 info!(r#"OPAQUE login successful for "{}""#, &username);
                 let _ = session.session_key;
             }
             Err(e) => {
                 warn!(r#"OPAQUE login attempt failed for "{}""#, &username);
-                return Err(e.into());
+                return Err(e);
             }
         };
 
@@ -167,11 +140,14 @@ impl OpaqueHandler for SqlOpaqueHandler {
         request: registration::ClientRegistrationStartRequest,
     ) -> Result<registration::ServerRegistrationStartResponse> {
         // Generate the server-side key and derive the data to send back.
-        let start_response = opaque::server::registration::start_registration(
-            &self.opaque_setup,
-            request.registration_start_request,
-            &request.username,
-        )?;
+        let start_response = self
+            .crypto_service
+            .opaque_registration_start(
+                &self.opaque_setup,
+                request.registration_start_request,
+                &request.username,
+            )
+            .await?;
         let secret_key = self.get_orion_secret_key()?;
         let server_data = registration::ServerData {
             username: request.username,
@@ -194,8 +170,10 @@ impl OpaqueHandler for SqlOpaqueHandler {
             &base64::engine::general_purpose::STANDARD.decode(&request.server_data)?,
         )?)?;
 
-        let password_file =
-            opaque::server::registration::get_password_file(request.registration_upload);
+        let password_file = self
+            .crypto_service
+            .opaque_registration_finish(request.registration_upload)
+            .await?;
         // Set the user password to the new password.
         let now = chrono::Utc::now().naive_utc();
         let user_update = model::users::ActiveModel {
