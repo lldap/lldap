@@ -126,7 +126,7 @@ async fn setup_sql_tables(options: &DbOptions, verbose: bool) -> Result<Database
         .max_lifetime(Duration::from_secs(options.max_lifetime as u64))
         .sqlx_logging(true)
         .sqlx_logging_level( if verbose { LevelFilter::Debug } else { LevelFilter::Info } );
-        
+
     let sql_pool = Database::connect(connect_opts)
         .await
         .context(format!("while connecting to {}", options.url))?;
@@ -138,7 +138,7 @@ async fn setup_sql_tables(options: &DbOptions, verbose: bool) -> Result<Database
 }
 
 #[instrument(skip_all)]
-async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
+async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, DatabaseConnection)> {
     info!("Starting LLDAP version {}", env!("CARGO_PKG_VERSION"));
 
     let sql_pool = setup_sql_tables(&config.db_options, config.verbose).await?;
@@ -228,9 +228,9 @@ async fn set_up_server(config: Configuration) -> Result<ServerBuilder> {
         .await
         .context("while binding the TCP server")?;
     // Run every hour.
-    let scheduler = Scheduler::new("0 0 * * * * *", sql_pool);
+    let scheduler = Scheduler::new("0 0 * * * * *", sql_pool.clone());
     scheduler.start();
-    Ok(server_builder)
+    Ok((server_builder, sql_pool))
 }
 
 async fn run_server_command(opts: RunOpts) -> Result<()> {
@@ -239,9 +239,14 @@ async fn run_server_command(opts: RunOpts) -> Result<()> {
     let config = configuration::init(opts)?;
     logging::init(&config)?;
 
-    let server = set_up_server(config).await?.workers(1);
+    let (server, sql_pool) = set_up_server(config).await?;
+    let server = server.workers(1);
 
-    server.run().await.context("while starting the server")
+    let result = server.run().await.context("while starting the server");
+    if let Err(e) = sql_pool.close().await {
+        error!("Error closing database connection pool: {}", e);
+    }
+    result
 }
 
 async fn send_test_email_command(opts: TestEmailOpts) -> Result<()> {
@@ -289,8 +294,11 @@ async fn create_schema_command(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
     let config = configuration::init(opts)?;
     logging::init(&config)?;
-    setup_sql_tables(&config.db_options, config.verbose).await?;
+    let sql_pool = setup_sql_tables(&config.db_options, config.verbose).await?;
     info!("Schema created successfully.");
+    if let Err(e) = sql_pool.close().await {
+        error!("Error closing database connection pool: {}", e);
+    }
     Ok(())
 }
 

@@ -546,6 +546,8 @@ pub struct User {
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
     pub attributes: Vec<Attribute>,
+    pub modified_date: NaiveDateTime,
+    pub password_modified_date: NaiveDateTime,
 }
 
 #[cfg(feature = "test")]
@@ -559,6 +561,8 @@ impl Default for User {
             creation_date: epoch,
             uuid: Uuid::from_name_and_date("", &epoch),
             attributes: Vec::new(),
+            modified_date: epoch,
+            password_modified_date: epoch,
         }
     }
 }
@@ -654,6 +658,7 @@ pub struct Group {
     pub uuid: Uuid,
     pub users: Vec<UserId>,
     pub attributes: Vec<Attribute>,
+    pub modified_date: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -663,6 +668,7 @@ pub struct GroupDetails {
     pub creation_date: NaiveDateTime,
     pub uuid: Uuid,
     pub attributes: Vec<Attribute>,
+    pub modified_date: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

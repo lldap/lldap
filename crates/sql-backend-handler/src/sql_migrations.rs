@@ -27,6 +27,8 @@ pub enum Users {
     TotpSecret,
     MfaType,
     Uuid,
+    ModifiedDate,
+    PasswordModifiedDate,
 }
 
 #[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
@@ -37,6 +39,7 @@ pub(crate) enum Groups {
     LowercaseDisplayName,
     CreationDate,
     Uuid,
+    ModifiedDate,
 }
 
 #[derive(DeriveIden, Clone, Copy)]
@@ -1112,6 +1115,53 @@ async fn migrate_to_v10(transaction: DatabaseTransaction) -> Result<DatabaseTran
     Ok(transaction)
 }
 
+async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    let builder = transaction.get_database_backend();
+    // Add modified_date to users table
+    transaction
+        .execute(
+            builder.build(
+                Table::alter().table(Users::Table).add_column(
+                    ColumnDef::new(Users::ModifiedDate)
+                        .date_time()
+                        .not_null()
+                        .default(chrono::Utc::now().naive_utc()),
+                ),
+            ),
+        )
+        .await?;
+
+    // Add password_modified_date to users table
+    transaction
+        .execute(
+            builder.build(
+                Table::alter().table(Users::Table).add_column(
+                    ColumnDef::new(Users::PasswordModifiedDate)
+                        .date_time()
+                        .not_null()
+                        .default(chrono::Utc::now().naive_utc()),
+                ),
+            ),
+        )
+        .await?;
+
+    // Add modified_date to groups table
+    transaction
+        .execute(
+            builder.build(
+                Table::alter().table(Groups::Table).add_column(
+                    ColumnDef::new(Groups::ModifiedDate)
+                        .date_time()
+                        .not_null()
+                        .default(chrono::Utc::now().naive_utc()),
+                ),
+            ),
+        )
+        .await?;
+
+    Ok(transaction)
+}
+
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -1142,6 +1192,7 @@ pub(crate) async fn migrate_from_version(
         to_sync!(migrate_to_v8),
         to_sync!(migrate_to_v9),
         to_sync!(migrate_to_v10),
+        to_sync!(migrate_to_v11),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {

@@ -190,11 +190,13 @@ impl SqlBackendHandler {
         request: UpdateUserRequest,
     ) -> Result<()> {
         let lower_email = request.email.as_ref().map(|s| s.as_str().to_lowercase());
+        let now = chrono::Utc::now().naive_utc();
         let update_user = model::users::ActiveModel {
             user_id: ActiveValue::Set(request.user_id.clone()),
             email: request.email.map(ActiveValue::Set).unwrap_or_default(),
             lowercase_email: lower_email.map(ActiveValue::Set).unwrap_or_default(),
             display_name: to_value(&request.display_name),
+            modified_date: ActiveValue::Set(now),
             ..Default::default()
         };
         let mut update_user_attributes = Vec::new();
@@ -325,6 +327,8 @@ impl UserBackendHandler for SqlBackendHandler {
             display_name: to_value(&request.display_name),
             creation_date: ActiveValue::Set(now),
             uuid: ActiveValue::Set(uuid),
+            modified_date: ActiveValue::Set(now),
+            password_modified_date: ActiveValue::Set(now),
             ..Default::default()
         };
         let mut new_user_attributes = Vec::new();
@@ -391,24 +395,70 @@ impl UserBackendHandler for SqlBackendHandler {
 
     #[instrument(skip_all, level = "debug", err, fields(user_id = ?user_id.as_str(), group_id))]
     async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
-        let new_membership = model::memberships::ActiveModel {
-            user_id: ActiveValue::Set(user_id.clone()),
-            group_id: ActiveValue::Set(group_id),
-        };
-        new_membership.insert(&self.sql_pool).await?;
+        let user_id = user_id.clone();
+        self.sql_pool
+            .transaction::<_, _, sea_orm::DbErr>(|transaction| {
+                Box::pin(async move {
+                    let new_membership = model::memberships::ActiveModel {
+                        user_id: ActiveValue::Set(user_id),
+                        group_id: ActiveValue::Set(group_id),
+                    };
+                    new_membership.insert(transaction).await?;
+
+                    // Update group modification time
+                    let now = chrono::Utc::now().naive_utc();
+                    let update_group = model::groups::ActiveModel {
+                        group_id: Set(group_id),
+                        modified_date: Set(now),
+                        ..Default::default()
+                    };
+                    update_group.update(transaction).await?;
+
+                    Ok(())
+                })
+            })
+            .await?;
         Ok(())
     }
 
     #[instrument(skip_all, level = "debug", err, fields(user_id = ?user_id.as_str(), group_id))]
     async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
-        let res = model::Membership::delete_by_id((user_id.clone(), group_id))
-            .exec(&self.sql_pool)
-            .await?;
-        if res.rows_affected == 0 {
-            return Err(DomainError::EntityNotFound(format!(
-                "No such membership: '{user_id}' -> {group_id:?}"
-            )));
-        }
+        let user_id = user_id.clone();
+        self.sql_pool
+            .transaction::<_, _, sea_orm::DbErr>(|transaction| {
+                Box::pin(async move {
+                    let res = model::Membership::delete_by_id((user_id.clone(), group_id))
+                        .exec(transaction)
+                        .await?;
+                    if res.rows_affected == 0 {
+                        return Err(sea_orm::DbErr::Custom(format!(
+                            "No such membership: '{user_id}' -> {group_id:?}"
+                        )));
+                    }
+
+                    // Update group modification time
+                    let now = chrono::Utc::now().naive_utc();
+                    let update_group = model::groups::ActiveModel {
+                        group_id: Set(group_id),
+                        modified_date: Set(now),
+                        ..Default::default()
+                    };
+                    update_group.update(transaction).await?;
+
+                    Ok(())
+                })
+            })
+            .await
+            .map_err(|e| match e {
+                sea_orm::TransactionError::Connection(sea_orm::DbErr::Custom(msg)) => {
+                    DomainError::EntityNotFound(msg)
+                }
+                sea_orm::TransactionError::Transaction(sea_orm::DbErr::Custom(msg)) => {
+                    DomainError::EntityNotFound(msg)
+                }
+                sea_orm::TransactionError::Connection(e) => DomainError::DatabaseError(e),
+                sea_orm::TransactionError::Transaction(e) => DomainError::DatabaseError(e),
+            })?;
         Ok(())
     }
 }

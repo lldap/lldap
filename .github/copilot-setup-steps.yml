@@ -1,0 +1,26 @@
+name: Copilot Setup Steps for LLDAP Development
+
+steps:
+  - name: Update package list
+    run: sudo apt-get update
+
+  - name: Install system dependencies
+    run: sudo apt-get install -y curl gzip binaryen build-essential
+
+  - name: Install Rust toolchain
+    run: |
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      source ~/.cargo/env
+      echo 'source ~/.cargo/env' >> ~/.bashrc
+
+  - name: Install wasm-pack for frontend builds
+    run: |
+      source ~/.cargo/env
+      cargo install wasm-pack
+
+  - name: Verify installations
+    run: |
+      source ~/.cargo/env
+      rustc --version
+      cargo --version
+      wasm-pack --version

@@ -13,7 +13,12 @@ pub mod group {
             "creation_date" => Some(AttributeDescription {
                 attribute_identifier: name,
                 attribute_name: "creationdate",
-                aliases: vec![name, "createtimestamp", "modifytimestamp"],
+                aliases: vec![name, "createtimestamp"],
+            }),
+            "modified_date" => Some(AttributeDescription {
+                attribute_identifier: name,
+                attribute_name: "modifydate",
+                aliases: vec![name, "modifytimestamp"],
             }),
             "display_name" => Some(AttributeDescription {
                 attribute_identifier: name,
@@ -60,7 +65,17 @@ pub mod user {
             "creation_date" => Some(AttributeDescription {
                 attribute_identifier: name,
                 attribute_name: "creationdate",
-                aliases: vec![name, "createtimestamp", "modifytimestamp"],
+                aliases: vec![name, "createtimestamp"],
+            }),
+            "modified_date" => Some(AttributeDescription {
+                attribute_identifier: name,
+                attribute_name: "modifydate",
+                aliases: vec![name, "modifytimestamp"],
+            }),
+            "password_modified_date" => Some(AttributeDescription {
+                attribute_identifier: name,
+                attribute_name: "passwordmodifydate",
+                aliases: vec![name, "pwdchangedtime"],
             }),
             "display_name" => Some(AttributeDescription {
                 attribute_identifier: name,
