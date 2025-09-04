@@ -31,9 +31,9 @@ use lldap_sql_backend_handler::{
     SqlBackendHandler, register_password,
     sql_tables::{self, get_private_key_info, set_private_key_info},
 };
+use log::LevelFilter;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::time::Duration;
-use log::LevelFilter;
 use tracing::{Instrument, Level, debug, error, info, instrument, span, warn};
 
 use lldap_domain::requests::{CreateGroupRequest, CreateUserRequest};
@@ -125,14 +125,22 @@ async fn setup_sql_tables(options: &DbOptions, verbose: bool) -> Result<Database
         .idle_timeout(Duration::from_secs(options.idle_timeout as u64))
         .max_lifetime(Duration::from_secs(options.max_lifetime as u64))
         .sqlx_logging(true)
-        .sqlx_logging_level( if verbose { LevelFilter::Debug } else { LevelFilter::Info } );
+        .sqlx_logging_level(if verbose {
+            LevelFilter::Debug
+        } else {
+            LevelFilter::Info
+        });
 
     let sql_pool = Database::connect(connect_opts)
         .await
         .context(format!("while connecting to {}", options.url))?;
 
-    sql_tables::init_table(&sql_pool).await.context("while creating base tables")?;
-    jwt_sql_tables::init_table(&sql_pool).await.context("while creating JWT tables")?;
+    sql_tables::init_table(&sql_pool)
+        .await
+        .context("while creating base tables")?;
+    jwt_sql_tables::init_table(&sql_pool)
+        .await
+        .context("while creating JWT tables")?;
 
     Ok(sql_pool)
 }
@@ -243,9 +251,13 @@ async fn run_server_command(opts: RunOpts) -> Result<()> {
     let server = server.workers(1);
 
     let result = server.run().await.context("while starting the server");
+
+    debug!("Closing database connections");
     if let Err(e) = sql_pool.close().await {
         error!("Error closing database connection pool: {}", e);
     }
+
+    info!("LLDAP Server shutdown complete");
     result
 }
 
