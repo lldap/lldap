@@ -80,6 +80,7 @@ async fn send_email(
 }
 
 pub async fn send_password_reset_email(
+    display_name: &str,
     username: &str,
     to: &str,
     token: &str,
@@ -93,7 +94,10 @@ pub async fn send_password_reset_email(
         .unwrap()
         .extend(["reset-password", "step2", token]);
     let body = format!(
-        "Hello {username},
+        "Hello {display_name},
+
+Your username is: \"{username}\"
+
 This email has been sent to you in order to validate your identity.
 If you did not initiate the process your credentials might have been
 compromised. You should reset your password and contact an administrator.
