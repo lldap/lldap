@@ -228,54 +228,10 @@ async fn run_server_command(opts: RunOpts) -> Result<()> {
     let (server, sql_pool) = set_up_server(config).await?;
     let server = server.workers(1);
 
-    // Setup signal handling for graceful shutdown
-    let sql_pool_for_shutdown = sql_pool.clone();
-
-    tokio::spawn(async move {
-        // Wait for SIGTERM or SIGINT
-        #[cfg(unix)]
-        {
-            let mut sigterm =
-                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                    .expect("Failed to register SIGTERM handler");
-            let mut sigint =
-                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
-                    .expect("Failed to register SIGINT handler");
-
-            tokio::select! {
-                _ = sigterm.recv() => {
-                    info!("Received SIGTERM, closing database connection pool");
-                }
-                _ = sigint.recv() => {
-                    info!("Received SIGINT, closing database connection pool");
-                }
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            tokio::signal::ctrl_c()
-                .await
-                .expect("Failed to listen for ctrl-c");
-            info!("Received Ctrl-C, closing database connection pool");
-        }
-
-        // Close the database connection pool
-        if let Err(e) = sql_pool_for_shutdown.close().await {
-            error!("Error closing database connection pool: {}", e);
-        } else {
-            info!("Database connection pool closed");
-        }
-    });
-
     let result = server.run().await.context("while starting the server");
-
-    // Ensure database pool is closed even if server exits normally
     if let Err(e) = sql_pool.close().await {
         error!("Error closing database connection pool: {}", e);
-    } else {
-        info!("Database connection pool closed");
     }
-
     result
 }
 
@@ -326,12 +282,9 @@ async fn create_schema_command(opts: RunOpts) -> Result<()> {
     logging::init(&config)?;
     let sql_pool = setup_sql_tables(&config.database_url).await?;
     info!("Schema created successfully.");
-
-    // Close the database connection pool
     if let Err(e) = sql_pool.close().await {
         error!("Error closing database connection pool: {}", e);
     }
-
     Ok(())
 }
 
