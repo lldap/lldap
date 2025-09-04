@@ -20,6 +20,7 @@ itertools = "0.10"
 ldap3_proto = "0.6.0"
 orion = "0.17"
 serde_json = "1"
+tokio = { version = "1.25", features = ["sync", "rt"] }
 tracing = "*"
 
 [dependencies.chrono]
