@@ -186,6 +186,7 @@ where
         Some(token) => token,
     };
     if let Err(e) = super::mail::send_password_reset_email(
+        user.display_name.as_deref(),
         user.user_id.as_str(),
         user.email.as_str(),
         &token,
