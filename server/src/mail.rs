@@ -93,10 +93,7 @@ pub async fn send_password_reset_email(
         .path_segments_mut()
         .unwrap()
         .extend(["reset-password", "step2", token]);
-    let greeting = match display_name {
-        Some(name) if !name.is_empty() => format!("Hello {name},"),
-        _ => format!("Hello {username},"),
-    };
+    let greeting = format!("Hello {},", display_name.unwrap_or(username));
     
     let body = format!(
         "{greeting}
