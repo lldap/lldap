@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use base64::Engine;
 use lldap_auth::opaque;
 use lldap_domain::types::UserId;
-use lldap_domain_handlers::handler::{BindRequest, LoginHandler};
+use lldap_domain_handlers::handler::{BindRequest, LoginHandler, UserRequestFilter, UserListerBackendHandler};
 use lldap_domain_model::{
     error::{DomainError, Result},
     model::{self, UserColumn},
@@ -60,22 +60,58 @@ impl SqlBackendHandler {
             .await?
             .and_then(|u| u.0))
     }
+
+    #[instrument(skip(self), level = "debug", err)]
+    async fn find_user_id_by_email(&self, email: &str) -> Result<Option<UserId>> {
+        // Find user ID by email address
+        let users = self
+            .list_users(
+                Some(UserRequestFilter::Equality(UserColumn::Email, email.to_owned())),
+                false,
+            )
+            .await?;
+        
+        if users.len() > 1 {
+            warn!("Multiple users found with email '{}', login ambiguous", email);
+            return Ok(None);
+        }
+        
+        Ok(users.first().map(|user_and_groups| user_and_groups.user.user_id.clone()))
+    }
 }
 
 #[async_trait]
 impl LoginHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn bind(&self, request: BindRequest) -> Result<()> {
-        if let Some(password_hash) = self
+        // First try to authenticate with the provided name as a user ID
+        let mut actual_user_id = request.name.clone();
+        let mut password_hash = self
             .get_password_file_for_user(request.name.clone())
-            .await?
-        {
-            info!(r#"Login attempt for "{}""#, &request.name);
+            .await?;
+        
+        // If no user found by user ID, try to find by email
+        if password_hash.is_none() {
+            debug!(r#"User "{}" not found by user ID, trying email lookup"#, &request.name);
+            if let Some(user_id_by_email) = self
+                .find_user_id_by_email(&request.name.as_str())
+                .await?
+            {
+                debug!(r#"Found user by email: "{}""#, &user_id_by_email);
+                actual_user_id = user_id_by_email;
+                password_hash = self
+                    .get_password_file_for_user(actual_user_id.clone())
+                    .await?;
+            }
+        }
+
+        if let Some(password_hash) = password_hash {
+            info!(r#"Login attempt for "{}" (input: "{}")"#, &actual_user_id, &request.name);
             if passwords_match(
                 &password_hash,
                 &request.password,
                 &self.opaque_setup,
-                &request.name,
+                &actual_user_id,
             )
             .is_ok()
             {
@@ -323,6 +359,49 @@ mod tests {
         handler
             .bind(BindRequest {
                 name: UserId::new("bob"),
+                password: "wrong_password".to_string(),
+            })
+            .await
+            .unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn test_bind_user_with_email() {
+        let sql_pool = get_initialized_db().await;
+        let handler = SqlOpaqueHandler::new(generate_random_private_key(), sql_pool.clone());
+        insert_user(&handler, "bob", "bob00").await;
+
+        // Test login with username (should work as before)
+        handler
+            .bind(BindRequest {
+                name: UserId::new("bob"),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap();
+
+        // Test login with email (new functionality)
+        handler
+            .bind(BindRequest {
+                name: UserId::new("bob@bob.bob"),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap();
+
+        // Test login with non-existent email
+        handler
+            .bind(BindRequest {
+                name: UserId::new("nonexistent@bob.bob"),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap_err();
+
+        // Test login with wrong password using email
+        handler
+            .bind(BindRequest {
+                name: UserId::new("bob@bob.bob"),
                 password: "wrong_password".to_string(),
             })
             .await
