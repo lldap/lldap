@@ -1,4 +1,4 @@
-use crate::sql_tables::DbConnection;
+use crate::{password_service::PasswordService, sql_tables::DbConnection};
 use async_trait::async_trait;
 use lldap_auth::opaque::server::ServerSetup;
 use lldap_domain_handlers::handler::BackendHandler;
@@ -7,6 +7,7 @@ use lldap_domain_handlers::handler::BackendHandler;
 pub struct SqlBackendHandler {
     pub(crate) opaque_setup: ServerSetup,
     pub(crate) sql_pool: DbConnection,
+    pub(crate) crypto_service: PasswordService,
 }
 
 impl SqlBackendHandler {
@@ -14,6 +15,7 @@ impl SqlBackendHandler {
         SqlBackendHandler {
             opaque_setup,
             sql_pool,
+            crypto_service: PasswordService::new(),
         }
     }
 
