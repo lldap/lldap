@@ -105,11 +105,11 @@ fn sql_connection_pool_limits(options: &DbOptions) -> (u32, u32) {
     match options.url.db_type() {
         "sqlite" => (
             options.min_connections.unwrap_or(1).into(),
-            options.max_connections.unwrap_or(5).into(),
+            options.max_connections.unwrap_or(4).into(),
         ),
         _ => (
-            options.min_connections.unwrap_or(5).into(),
-            options.max_connections.unwrap_or(10).into(),
+            options.min_connections.unwrap_or(4).into(),
+            options.max_connections.unwrap_or(8).into(),
         ),
     }
 }

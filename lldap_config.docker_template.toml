@@ -88,19 +88,6 @@
 ## Alternatively, you can set it to "always" to reset every time the server starts.
 # force_ldap_user_pass_reset = false
 
-## Database URL.
-## This encodes the type of database (SQlite, MySQL, or PostgreSQL)
-## , the path, the user, password, and sometimes the mode (when
-## relevant).
-## Note: SQlite should come with "?mode=rwc" to create the DB
-## if not present.
-## Example URLs:
-##  - "postgres://postgres-user:password@postgres-server/my-database"
-##  - "mysql://mysql-user:password@mysql-server/my-database"
-##
-## This can be overridden with the LLDAP_DATABASE_URL env variable.
-database_url = "sqlite:///data/users.db?mode=rwc"
-
 ## Private key file.
 ## Not recommended, use key_seed instead.
 ## Contains the secret private key used to store the passwords safely.
@@ -124,6 +111,24 @@ key_seed = "RanD0m STR1ng"
 ## list to silence the warning.
 #ignored_user_attributes = [ "sAMAccountName" ]
 #ignored_group_attributes = [ "mail", "userPrincipalName" ]
+
+## Options to configure the database connection.
+## To set these options from environment variables, use the following format
+## (example with "url"): LLDAP_DB_OPTIONS__URL
+[db_options]
+## Database URL.
+## This encodes the type of database (SQlite, MySQL, or PostgreSQL)
+## , the path, the user, password, and sometimes the mode (when
+## relevant).
+## Note: SQlite should come with "?mode=rwc" to create the DB
+## if not present.
+## Example URLs:
+##  - "postgres://postgres-user:password@postgres-server/my-database"
+##  - "mysql://mysql-user:password@mysql-server/my-database"
+##
+## This can be overridden with the LLDAP_DB_OPTIONS__URL env variable.
+url = "sqlite:///data/users.db?mode=rwc"
+
 
 ## Options to configure SMTP parameters, to send password reset emails.
 ## To set these options from environment variables, use the following format
