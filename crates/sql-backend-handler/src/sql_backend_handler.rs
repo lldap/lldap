@@ -24,14 +24,14 @@ impl SqlBackendHandler {
     pub fn pool(&self) -> &DbConnection {
         &self.sql_pool
     }
-
-    pub fn is_readonly(&self) -> bool {
-        self.readonly
-    }
 }
 
 #[async_trait]
-impl BackendHandler for SqlBackendHandler {}
+impl BackendHandler for SqlBackendHandler {
+    fn is_readonly(&self) -> bool {
+        self.readonly
+    }
+}
 
 #[cfg(test)]
 pub mod tests {

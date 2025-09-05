@@ -123,49 +123,63 @@ fn http_config<Backend>(
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
-    let enable_password_reset = mail_options.enable_password_reset;
-    cfg.app_data(web::Data::new(AppState::<Backend> {
-        backend_handler: AccessControlledBackendHandler::new(backend_handler),
-        jwt_key: hmac::Mac::new_from_slice(jwt_secret.unsecure().as_bytes()).unwrap(),
-        jwt_blacklist: RwLock::new(jwt_blacklist),
-        server_url,
-        assets_path: assets_path.clone(),
-        mail_options,
-    }))
-    .route(
-        "/health",
-        web::get().to(async || HttpResponse::Ok().finish()),
-    )
-    .route("/settings", web::get().to(get_settings::<Backend>))
-    .service(
-        web::scope("/auth")
-            .configure(|cfg| auth_service::configure_server::<Backend>(cfg, enable_password_reset)),
-    )
-    // API endpoint.
-    .service(
-        web::scope("/api")
-            .wrap(auth_service::CookieToHeaderTranslatorFactory)
-            .configure(crate::graphql_server::configure_endpoint::<Backend>),
-    )
-    .service(
-        web::resource("/pkg/lldap_app_bg.wasm.gz")
-            .route(web::route().to(wasm_handler_compressed::<Backend>)),
-    )
-    .service(
-        web::resource("/pkg/lldap_app_bg.wasm").route(web::route().to(wasm_handler::<Backend>)),
-    )
-    .service(web::resource("/static/main.js").route(web::route().to(main_js_handler::<Backend>)))
-    // Serve the /pkg path with the compiled WASM app.
-    .service(Files::new("/pkg", assets_path.join("pkg")))
-    // Serve static files
-    .service(Files::new("/static", assets_path.join("static")))
-    // Serve static fonts
-    .service(Files::new(
-        "/static/fonts",
-        assets_path.join("static/fonts"),
-    ))
-    // Default to serve index.html for unknown routes, to support routing.
-    .default_service(web::route().guard(guard::Get()).to(index::<Backend>));
+    let is_readonly = backend_handler.is_readonly();
+    let enable_password_reset = mail_options.enable_password_reset && !is_readonly;
+
+    let config = cfg
+        .app_data(web::Data::new(AppState::<Backend> {
+            backend_handler: AccessControlledBackendHandler::new(backend_handler),
+            jwt_key: hmac::Mac::new_from_slice(jwt_secret.unsecure().as_bytes()).unwrap(),
+            jwt_blacklist: RwLock::new(jwt_blacklist),
+            server_url,
+            assets_path: assets_path.clone(),
+            mail_options,
+        }))
+        .route(
+            "/health",
+            web::get().to(async || HttpResponse::Ok().finish()),
+        );
+
+    if is_readonly {
+        info!(
+            "The provided backend handler is read-only, authentication and user management endpoints will not be available."
+        );
+    } else {
+        // Only configure these routes when the backend is writable
+        config
+            .route("/settings", web::get().to(get_settings::<Backend>))
+            .service(web::scope("/auth").configure(|cfg| {
+                auth_service::configure_server::<Backend>(cfg, enable_password_reset)
+            }))
+            // API endpoint.
+            .service(
+                web::scope("/api")
+                    .wrap(auth_service::CookieToHeaderTranslatorFactory)
+                    .configure(crate::graphql_server::configure_endpoint::<Backend>),
+            )
+            .service(
+                web::resource("/pkg/lldap_app_bg.wasm.gz")
+                    .route(web::route().to(wasm_handler_compressed::<Backend>)),
+            )
+            .service(
+                web::resource("/pkg/lldap_app_bg.wasm")
+                    .route(web::route().to(wasm_handler::<Backend>)),
+            )
+            .service(
+                web::resource("/static/main.js").route(web::route().to(main_js_handler::<Backend>)),
+            )
+            // Serve the /pkg path with the compiled WASM app.
+            .service(Files::new("/pkg", assets_path.join("pkg")))
+            // Serve static files
+            .service(Files::new("/static", assets_path.join("static")))
+            // Serve static fonts
+            .service(Files::new(
+                "/static/fonts",
+                assets_path.join("static/fonts"),
+            ))
+            // Default to serve index.html for unknown routes, to support routing.
+            .default_service(web::route().guard(guard::Get()).to(index::<Backend>));
+    }
 }
 
 pub(crate) struct AppState<Backend> {

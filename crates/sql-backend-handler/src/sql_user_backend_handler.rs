@@ -5,7 +5,8 @@ use lldap_domain::{
     types::{AttributeName, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId, Uuid},
 };
 use lldap_domain_handlers::handler::{
-    ReadSchemaBackendHandler, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
+    BackendHandler, ReadSchemaBackendHandler, UserBackendHandler, UserListerBackendHandler,
+    UserRequestFilter,
 };
 use lldap_domain_model::{
     error::{DomainError, Result},

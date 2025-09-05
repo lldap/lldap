@@ -27,6 +27,7 @@ use actix::Actor;
 use actix_server::ServerBuilder;
 use anyhow::{Context, Result, anyhow, bail};
 use futures_util::TryFutureExt;
+use lldap_domain_handlers::handler::BackendHandler;
 use lldap_sql_backend_handler::{
     SqlBackendHandler, register_password,
     sql_tables::{self, get_private_key_info, set_private_key_info},
@@ -260,7 +261,7 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
     )
     .context("while binding the LDAP server")?;
 
-    // TODO: disable this competely? Even GraphQL needs JWT auth
+    // when the backend is readonly, just the /health checkpoint is available
     let server_builder = tcp_server::build_tcp_server(&config, backend_handler, server_builder)
         .await
         .context("while binding the TCP server")?;
