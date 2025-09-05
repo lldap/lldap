@@ -89,6 +89,11 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
         .await?
         .is_empty()
     {
+        if handler.is_readonly() {
+            bail!(
+                "The group {group_name} does not exist, but the backend is in readonly mode, so it cannot be created."
+            );
+        }
         warn!("Could not find {} group, trying to create it", group_name);
         handler
             .create_group(CreateGroupRequest {
@@ -135,12 +140,14 @@ async fn setup_sql_tables(options: &DbOptions, verbose: bool) -> Result<Database
         .await
         .context(format!("while connecting to {}", options.url))?;
 
-    sql_tables::init_table(&sql_pool)
-        .await
-        .context("while creating base tables")?;
-    jwt_sql_tables::init_table(&sql_pool)
-        .await
-        .context("while creating JWT tables")?;
+    if !options.readonly {
+        sql_tables::init_table(&sql_pool)
+            .await
+            .context("while creating base tables")?;
+        jwt_sql_tables::init_table(&sql_pool)
+            .await
+            .context("while creating jwt tables")?;
+    }
 
     Ok(sql_pool)
 }
@@ -166,6 +173,11 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
             );
         }
         (Ok(true), _) | (Err(_), true) => {
+            if config.db_options.readonly {
+                bail!(
+                    "The private key encoding the passwords has changed since last successful startup, but the backend is in readonly mode"
+                );
+            }
             set_private_key_info(&sql_pool, private_key_info).await?;
         }
         (Ok(false), false) => {}
@@ -173,8 +185,13 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
             return Err(anyhow!("The private key encoding the passwords has changed since last successful startup. Changing the private key will invalidate all existing passwords. If you want to proceed, restart the server with the CLI arg --force-update-private-key=true or the env variable LLDAP_FORCE_UPDATE_PRIVATE_KEY=true. You probably also want --force-ldap-user-pass-reset / LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password to the value in the configuration.").context(e));
         }
     }
-    let backend_handler =
-        SqlBackendHandler::new(config.get_server_setup().clone(), sql_pool.clone());
+
+    let backend_handler = SqlBackendHandler::new(
+        config.get_server_setup().clone(),
+        sql_pool.clone(),
+        config.db_options.readonly,
+    );
+
     ensure_group_exists(&backend_handler, "lldap_admin").await?;
     ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
     ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;
@@ -190,6 +207,11 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
         false
     };
     if !admin_present {
+        if config.db_options.readonly {
+            bail!(
+                "No admin user found, but the backend is in readonly mode, so the admin user cannot be created."
+            );
+        }
         warn!(
             "Could not find an admin user, trying to create the user \"admin\" with the config-provided password"
         );
@@ -198,6 +220,11 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
             .map_err(|e| anyhow!("Error setting up admin login/account: {:#}", e))
             .context("while creating the admin user")?;
     } else if config.force_ldap_user_pass_reset.is_positive() {
+        if config.db_options.readonly {
+            bail!(
+                "An admin user password must reset was requsted, but the backend is in readonly mode."
+            );
+        }
         let span = if config.force_ldap_user_pass_reset.is_yes() {
             span!(
                 Level::WARN,
@@ -232,12 +259,17 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
         actix_server::Server::build(),
     )
     .context("while binding the LDAP server")?;
+
+    // TODO: disable this competely? Even GraphQL needs JWT auth
     let server_builder = tcp_server::build_tcp_server(&config, backend_handler, server_builder)
         .await
         .context("while binding the TCP server")?;
-    // Run every hour.
-    let scheduler = Scheduler::new("0 0 * * * * *", sql_pool.clone());
-    scheduler.start();
+
+    if !config.db_options.readonly {
+        // Run every hour.
+        let scheduler = Scheduler::new("0 0 * * * * *", sql_pool.clone());
+        scheduler.start();
+    }
     Ok((server_builder, sql_pool))
 }
 
@@ -306,6 +338,11 @@ async fn create_schema_command(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
     let config = configuration::init(opts)?;
     logging::init(&config)?;
+
+    if config.db_options.readonly {
+        bail!("Cannot create the database schema when the backend is in readonly mode.");
+    }
+
     let sql_pool = setup_sql_tables(&config.db_options, config.verbose).await?;
     info!("Schema created successfully.");
     if let Err(e) = sql_pool.close().await {

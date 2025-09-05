@@ -238,6 +238,10 @@ pub struct DbOpts {
     /// DB connection max lifetime in seconds
     #[clap(long, env = "LLDAP_DB_OPTIONS__MAX_LIFETIME")]
     pub max_lifetime: Option<u32>,
+
+    /// DB connection is readonly (e.g. replica). Default: false.
+    #[clap(long, env = "LLDAP_DB_OPTIONS__READONLY")]
+    pub readonly: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, clap::ValueEnum)]

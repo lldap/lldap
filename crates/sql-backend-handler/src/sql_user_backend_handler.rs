@@ -317,6 +317,11 @@ impl UserBackendHandler for SqlBackendHandler {
 
     #[instrument(skip(self), level = "debug", err, fields(user_id = ?request.user_id.as_str()))]
     async fn create_user(&self, request: CreateUserRequest) -> Result<()> {
+        if self.is_readonly() {
+            return Err(DomainError::InternalError(
+                "Cannot create user in readonly mode".to_string(),
+            ));
+        }
         let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(request.user_id.as_str(), &now);
         let lower_email = request.email.as_str().to_lowercase();
@@ -370,6 +375,11 @@ impl UserBackendHandler for SqlBackendHandler {
 
     #[instrument(skip(self), level = "debug", err, fields(user_id = ?request.user_id.as_str()))]
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
+        if self.is_readonly() {
+            return Err(DomainError::InternalError(
+                "Cannot update user in readonly mode".to_string(),
+            ));
+        }
         self.sql_pool
             .transaction::<_, (), DomainError>(|transaction| {
                 Box::pin(
@@ -382,6 +392,11 @@ impl UserBackendHandler for SqlBackendHandler {
 
     #[instrument(skip_all, level = "debug", err, fields(user_id = ?user_id.as_str()))]
     async fn delete_user(&self, user_id: &UserId) -> Result<()> {
+        if self.is_readonly() {
+            return Err(DomainError::InternalError(
+                "Cannot delete user in readonly mode".to_string(),
+            ));
+        }
         let res = model::User::delete_by_id(user_id.clone())
             .exec(&self.sql_pool)
             .await?;
@@ -395,6 +410,11 @@ impl UserBackendHandler for SqlBackendHandler {
 
     #[instrument(skip_all, level = "debug", err, fields(user_id = ?user_id.as_str(), group_id))]
     async fn add_user_to_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
+        if self.is_readonly() {
+            return Err(DomainError::InternalError(
+                "Cannot add user to group in readonly mode".to_string(),
+            ));
+        }
         let user_id = user_id.clone();
         self.sql_pool
             .transaction::<_, _, sea_orm::DbErr>(|transaction| {
@@ -423,6 +443,11 @@ impl UserBackendHandler for SqlBackendHandler {
 
     #[instrument(skip_all, level = "debug", err, fields(user_id = ?user_id.as_str(), group_id))]
     async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()> {
+        if self.is_readonly() {
+            return Err(DomainError::InternalError(
+                "Cannot remove user from group in readonly mode".to_string(),
+            ));
+        }
         let user_id = user_id.clone();
         self.sql_pool
             .transaction::<_, _, sea_orm::DbErr>(|transaction| {
@@ -781,8 +806,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_details() {
-        let handler =
-            SqlBackendHandler::new(generate_random_private_key(), get_initialized_db().await);
+        let handler = SqlBackendHandler::new(
+            generate_random_private_key(),
+            get_initialized_db().await,
+            false,
+        );
         insert_user_no_password(&handler, "bob").await;
         {
             let user = handler.get_user_details(&UserId::new("bob")).await.unwrap();
@@ -798,8 +826,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_user_lowercase() {
-        let handler =
-            SqlBackendHandler::new(generate_random_private_key(), get_initialized_db().await);
+        let handler = SqlBackendHandler::new(
+            generate_random_private_key(),
+            get_initialized_db().await,
+            false,
+        );
         insert_user_no_password(&handler, "Bob").await;
         {
             let user = handler.get_user_details(&UserId::new("bOb")).await.unwrap();
