@@ -1,0 +1,69 @@
+###
+### lldap - podman quadlet file
+### https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html
+###
+
+[Unit]
+Description=LLDAP container
+Documentation=https://github.com/lldap/lldap
+Requires=lldap-db.service
+
+[Service]
+Restart=on-failure
+
+[Container]
+AutoUpdate=registry
+ContainerName=lldap
+Image=docker.io/lldap/lldap:stable-debian
+
+# using multiple networks for traefik and db, not essential
+Network=lldap-frontend.network
+Network=lldap-backend.network
+
+# environment variables
+Environment=UID=1000
+Environment=GID=1000
+Environment=LLDAP_LDAP_BASE_DN=dc=example,dc=com
+Environment=LLDAP_DATABASE_URL=postgres://lldapuser:lldappass@lldap-db/lldap
+Environment=LLDAP_LDAP_USER_EMAIL=admin@example.com
+
+# set secrets in files, see below for environment variable method
+Environment=LLDAP_KEY_SEED_FILE=/run/secrets/lldap-key-seed
+Environment=LLDAP_JWT_SECRET_FILE=/run/secrets/lldap-jwt-secret
+Environment=LLDAP_LDAP_USER_PASS_FILE=/run/secrets/lldap-ldap-user-pass
+
+
+# health check
+HealthCmd=/app/lldap healthcheck
+HealthInterval=30s
+HealthRetries=3
+HealthStartPeriod=15s
+HealthTimeout=30s
+
+# if using traefik, automatically configure to proxy the web service
+# Label=traefik.enable="true"
+# Label=traefik.http.routers.lldap.rule="Host(`lldap.example.com`)"
+# Label=traefik.http.routers.lldap.middlewares="authelia@docker"
+# Label=traefik.http.services.lldap.loadbalancer.server.port=17170
+
+# secrets
+# file based secrets
+Secret=lldap-jwt-secret,type=mount,uid=1000
+Secret=lldap-key-seed,type=mount,uid=1000
+Secret=lldap-ldap-user-pass,type=mount,uid=1000
+
+# env variable secrets
+# Secret=lldap-jwt-secret,type=env,target=LLDAP_JWT_SECRET
+# Secret=lldap-key-seed,type=env,target=LLDAP_KEY_SEED
+# Secret=lldap-ldap-user-pass,type=env,target=LLDAP_LDAP_USER_PASS
+
+# Bootstrapping. Uncomment the remainder of this section. Once
+# the bootstrap files are ready. re-comment once bootstrapping is done.
+# Secret=lldap-ldap-user-pass,type=env,target=LLDAP_ADMIN_PASSWORD
+# Environment=LLDAP_URL=http://localhost:17170
+# Environment=LLDAP_ADMIN_USERNAME=admin
+# Environment=LLDAP_ADMIN_PASSWORD_FILE=/run/secrets/lldap-ldap-user-pass
+# Volume=%h/containers/lldap:/bootstrap:ro,Z
+
+[Install]
+WantedBy=default.target

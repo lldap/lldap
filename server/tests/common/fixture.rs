@@ -2,8 +2,8 @@ use crate::common::{
     auth::get_token,
     env,
     graphql::{
-        add_user_to_group, create_group, create_user, delete_group_query, delete_user_query, post,
         AddUserToGroup, CreateGroup, CreateUser, DeleteGroupQuery, DeleteUserQuery,
+        add_user_to_group, create_group, create_user, delete_group_query, delete_user_query, post,
     },
 };
 use assert_cmd::prelude::*;
@@ -43,14 +43,13 @@ const MAX_HEALTHCHECK_ATTEMPS: u8 = 10;
 
 impl LLDAPFixture {
     pub fn new() -> Self {
-        let mut cmd = create_lldap_command();
-        cmd.arg("run");
-        cmd.arg("--verbose");
-        let child = cmd.spawn().expect("Unable to start server");
+        let child = create_lldap_command("run")
+            .arg("--verbose")
+            .spawn()
+            .expect("Unable to start server");
         let mut started = false;
         for _ in 0..MAX_HEALTHCHECK_ATTEMPS {
-            let status = create_lldap_command()
-                .arg("healthcheck")
+            let status = create_lldap_command("healthcheck")
                 .status()
                 .expect("healthcheck fail");
             if status.success() {
@@ -103,7 +102,7 @@ impl LLDAPFixture {
             create_user::Variables {
                 user: create_user::CreateUserInput {
                     id: user.clone(),
-                    email: format!("{}@lldap.test", user),
+                    email: Some(format!("{user}@lldap.test")),
                     avatar: None,
                     display_name: None,
                     first_name: None,
@@ -182,11 +181,11 @@ impl Drop for LLDAPFixture {
             Signal::SIGTERM,
         );
         if let Err(err) = result {
-            println!("Failed to send kill signal: {:?}", err);
+            println!("Failed to send kill signal: {err:?}");
             let _ = self
                 .child
                 .kill()
-                .map_err(|err| println!("Failed to kill LLDAP: {:?}", err));
+                .map_err(|err| println!("Failed to kill LLDAP: {err:?}"));
             return;
         }
 
@@ -194,10 +193,7 @@ impl Drop for LLDAPFixture {
             let status = self.child.try_wait();
             match status {
                 Err(e) => {
-                    println!(
-                        "Failed to get status while waiting for graceful exit: {}",
-                        e
-                    );
+                    println!("Failed to get status while waiting for graceful exit: {e}");
                     break;
                 }
                 Ok(None) => {
@@ -205,7 +201,7 @@ impl Drop for LLDAPFixture {
                 }
                 Ok(Some(status)) => {
                     if !status.success() {
-                        println!("LLDAP exited with status {}", status)
+                        println!("LLDAP exited with status {status}")
                     }
                     return;
                 }
@@ -216,7 +212,7 @@ impl Drop for LLDAPFixture {
         let _ = self
             .child
             .kill()
-            .map_err(|err| println!("Failed to kill LLDAP: {:?}", err));
+            .map_err(|err| println!("Failed to kill LLDAP: {err:?}"));
     }
 }
 
@@ -224,12 +220,12 @@ pub fn new_id(prefix: Option<&str>) -> String {
     let id = Uuid::new_v4();
     let id = format!("{}-lldap-test", id.simple());
     match prefix {
-        Some(prefix) => format!("{}{}", prefix, id),
+        Some(prefix) => format!("{prefix}{id}"),
         None => id,
     }
 }
 
-fn create_lldap_command() -> Command {
+fn create_lldap_command(subcommand: &str) -> Command {
     let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("cargo bin not found");
     // This gives us the absolute path of the repo base instead of running it in server/
     let path = canonicalize("..").expect("canonical path");
@@ -237,5 +233,10 @@ fn create_lldap_command() -> Command {
     cmd.current_dir(path);
     cmd.env(env::DB_KEY, db_url);
     cmd.env(env::PRIVATE_KEY_SEED, "Random value");
+    cmd.env(env::JWT_SECRET, "Random value");
+    cmd.env(env::LDAP_USER_PASSWORD, "password");
+    cmd.arg(subcommand);
+    cmd.arg("--config-file=/dev/null");
+    cmd.arg("--server-key-file=''");
     cmd
 }

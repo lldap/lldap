@@ -33,6 +33,9 @@
 ## The public URL of the server, for password reset links.
 #http_url = "http://localhost"
 
+## The path to the front-end assets (relative to the working directory).
+#assets_path = "./app"
+
 ## Random secret for JWT signature.
 ## This secret should be random, and should be shared with application
 ## servers that need to consume the JWTs.
@@ -82,6 +85,7 @@
 ## Break glass in case of emergency: if you lost the admin password, you
 ## can set this to true to force a reset of the admin password to the value
 ## of ldap_user_pass above.
+## Alternatively, you can set it to "always" to reset every time the server starts.
 # force_ldap_user_pass_reset = false
 
 ## Database URL.

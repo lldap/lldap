@@ -1,14 +1,23 @@
 use crate::{
     components::{
-        form::{field::Field, submit::Submit},
+        form::{
+            attribute_input::{ListAttributeInput, SingleAttributeInput},
+            field::Field,
+            submit::Submit,
+        },
         router::AppRoute,
     },
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
+        form_utils::{
+            AttributeValue, EmailIsRequired, GraphQlAttributeSchema, IsAdmin,
+            read_all_form_attributes,
+        },
+        schema::AttributeType,
     },
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, ensure};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use lldap_auth::{opaque, registration};
@@ -16,6 +25,31 @@ use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form_derive::Model;
 use yew_router::{prelude::History, scope_ext::RouterScopeExt};
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
+    query_path = "queries/get_user_attributes_schema.graphql",
+    response_derives = "Debug,Clone,PartialEq,Eq",
+    custom_scalars_module = "crate::infra::graphql",
+    extern_enums("AttributeType")
+)]
+pub struct GetUserAttributesSchema;
+
+use get_user_attributes_schema::ResponseData;
+
+pub type Attribute = get_user_attributes_schema::GetUserAttributesSchemaSchemaUserSchemaAttributes;
+
+impl From<&Attribute> for GraphQlAttributeSchema {
+    fn from(attr: &Attribute) -> Self {
+        Self {
+            name: attr.name.clone(),
+            is_list: attr.is_list,
+            is_readonly: attr.is_readonly,
+            is_editable: attr.is_editable,
+        }
+    }
+}
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -29,17 +63,14 @@ pub struct CreateUser;
 pub struct CreateUserForm {
     common: CommonComponentParts<Self>,
     form: yew_form::Form<CreateUserModel>,
+    attributes_schema: Option<Vec<Attribute>>,
+    form_ref: NodeRef,
 }
 
 #[derive(Model, Validate, PartialEq, Eq, Clone, Default)]
 pub struct CreateUserModel {
     #[validate(length(min = 1, message = "Username is required"))]
     username: String,
-    #[validate(email(message = "A valid email is required"))]
-    email: String,
-    display_name: String,
-    first_name: String,
-    last_name: String,
     #[validate(custom(
         function = "empty_or_long",
         message = "Password should be longer than 8 characters (or left empty)"
@@ -59,6 +90,7 @@ fn empty_or_long(value: &str) -> Result<(), validator::ValidationError> {
 
 pub enum Msg {
     Update,
+    ListAttributesResponse(Result<ResponseData>),
     SubmitForm,
     CreateUserResponse(Result<create_user::ResponseData>),
     SuccessfulCreation,
@@ -79,21 +111,43 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
     ) -> Result<bool> {
         match msg {
             Msg::Update => Ok(true),
+            Msg::ListAttributesResponse(schema) => {
+                self.attributes_schema =
+                    Some(schema?.schema.user_schema.attributes.into_iter().collect());
+                Ok(true)
+            }
             Msg::SubmitForm => {
-                if !self.form.validate() {
-                    bail!("Check the form for errors");
-                }
+                ensure!(self.form.validate(), "Check the form for errors");
+
+                let all_values = read_all_form_attributes(
+                    self.attributes_schema.iter().flatten(),
+                    &self.form_ref,
+                    IsAdmin(true),
+                    EmailIsRequired(true),
+                )?;
+                let attributes = Some(
+                    all_values
+                        .into_iter()
+                        .filter(|a| !a.values.is_empty())
+                        .map(
+                            |AttributeValue { name, values }| create_user::AttributeValueInput {
+                                name,
+                                value: values,
+                            },
+                        )
+                        .collect(),
+                );
+
                 let model = self.form.model();
-                let to_option = |s: String| if s.is_empty() { None } else { Some(s) };
                 let req = create_user::Variables {
                     user: create_user::CreateUserInput {
                         id: model.username,
-                        email: model.email,
-                        displayName: to_option(model.display_name),
-                        firstName: to_option(model.first_name),
-                        lastName: to_option(model.last_name),
+                        email: None,
+                        displayName: None,
+                        firstName: None,
+                        lastName: None,
                         avatar: None,
-                        attributes: None,
+                        attributes,
                     },
                 };
                 self.common.call_graphql::<CreateUser, _>(
@@ -177,11 +231,20 @@ impl Component for CreateUserForm {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_: &Context<Self>) -> Self {
-        Self {
+    fn create(ctx: &Context<Self>) -> Self {
+        let mut component = Self {
             common: CommonComponentParts::<Self>::create(),
             form: yew_form::Form::<CreateUserModel>::new(CreateUserModel::default()),
-        }
+            attributes_schema: None,
+            form_ref: NodeRef::default(),
+        };
+        component.common.call_graphql::<GetUserAttributesSchema, _>(
+            ctx,
+            get_user_attributes_schema::Variables {},
+            Msg::ListAttributesResponse,
+            "Error trying to fetch user schema",
+        );
+        component
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
@@ -192,38 +255,22 @@ impl Component for CreateUserForm {
         let link = &ctx.link();
         html! {
           <div class="row justify-content-center">
-            <form class="form py-3" style="max-width: 636px">
+            <form class="form py-3"
+              ref={self.form_ref.clone()}>
               <Field<CreateUserModel>
                 form={&self.form}
                 required=true
                 label="User name"
                 field_name="username"
                 oninput={link.callback(|_| Msg::Update)} />
-              <Field<CreateUserModel>
-                form={&self.form}
-                required=true
-                label="Email"
-                field_name="email"
-                input_type="email"
-                oninput={link.callback(|_| Msg::Update)} />
-              <Field<CreateUserModel>
-                form={&self.form}
-                label="Display name"
-                field_name="display_name"
-                autocomplete="name"
-                oninput={link.callback(|_| Msg::Update)} />
-              <Field<CreateUserModel>
-                form={&self.form}
-                label="First name"
-                field_name="first_name"
-                autocomplete="given-name"
-                oninput={link.callback(|_| Msg::Update)} />
-              <Field<CreateUserModel>
-                form={&self.form}
-                label="Last name"
-                field_name="last_name"
-                autocomplete="family-name"
-                oninput={link.callback(|_| Msg::Update)} />
+              {
+                  self.attributes_schema
+                      .iter()
+                      .flatten()
+                      .filter(|a| !a.is_readonly)
+                      .map(get_custom_attribute_input)
+                      .collect::<Vec<_>>()
+              }
               <Field<CreateUserModel>
                 form={&self.form}
                 label="Password"
@@ -252,6 +299,24 @@ impl Component for CreateUserForm {
               } else { html! {} }
             }
           </div>
+        }
+    }
+}
+
+fn get_custom_attribute_input(attribute_schema: &Attribute) -> Html {
+    if attribute_schema.is_list {
+        html! {
+            <ListAttributeInput
+                name={attribute_schema.name.clone()}
+                attribute_type={attribute_schema.attribute_type}
+            />
+        }
+    } else {
+        html! {
+            <SingleAttributeInput
+                name={attribute_schema.name.clone()}
+                attribute_type={attribute_schema.attribute_type}
+            />
         }
     }
 }

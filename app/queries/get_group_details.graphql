@@ -8,5 +8,22 @@ query GetGroupDetails($id: Int!) {
       id
       displayName
     }
+    attributes {
+      name
+      value
+    }
+  }
+  schema {
+    groupSchema {
+      attributes {
+        name
+        attributeType
+        isList
+        isVisible
+        isEditable
+        isHardcoded
+        isReadonly
+      }
+    }
   }
 }

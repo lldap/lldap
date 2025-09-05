@@ -3,15 +3,15 @@ use crate::{
         form::{checkbox::CheckBox, field::Field, select::Select, submit::Submit},
         router::AppRoute,
     },
-    convert_attribute_type,
     infra::{
         common_component::{CommonComponent, CommonComponentParts},
-        schema::{validate_attribute_type, AttributeType},
+        schema::{AttributeType, validate_attribute_type},
     },
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
+use lldap_validation::attributes::validate_attribute_name;
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form_derive::Model;
@@ -22,11 +22,10 @@ use yew_router::{prelude::History, scope_ext::RouterScopeExt};
     schema_path = "../schema.graphql",
     query_path = "queries/create_group_attribute.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::infra::graphql",
+    extern_enums("AttributeType")
 )]
 pub struct CreateGroupAttribute;
-
-convert_attribute_type!(create_group_attribute::AttributeType);
 
 pub struct CreateGroupAttributeForm {
     common: CommonComponentParts<Self>,
@@ -62,10 +61,18 @@ impl CommonComponent<CreateGroupAttributeForm> for CreateGroupAttributeForm {
                     bail!("Check the form for errors");
                 }
                 let model = self.form.model();
-                let attribute_type = model.attribute_type.parse::<AttributeType>().unwrap();
+                validate_attribute_name(&model.attribute_name).or_else(|invalid_chars| {
+                    let invalid = String::from_iter(invalid_chars);
+                    bail!(
+                        "Attribute name contains one or more invalid characters: {}",
+                        invalid
+                    );
+                })?;
+                let attribute_type =
+                    AttributeType::try_from(model.attribute_type.as_str()).unwrap();
                 let req = create_group_attribute::Variables {
                     name: model.attribute_name,
-                    attribute_type: create_group_attribute::AttributeType::from(attribute_type),
+                    attribute_type,
                     is_list: model.is_list,
                     is_visible: model.is_visible,
                 };
@@ -137,7 +144,7 @@ impl Component for CreateGroupAttributeForm {
                 oninput={link.callback(|_| Msg::Update)}>
                 <option selected=true value="String">{"String"}</option>
                 <option value="Integer">{"Integer"}</option>
-                <option value="Jpeg">{"Jpeg"}</option>
+                <option value="JpegPhoto">{"Jpeg"}</option>
                 <option value="DateTime">{"DateTime"}</option>
               </Select<CreateGroupAttributeModel>>
               <CheckBox<CreateGroupAttributeModel>

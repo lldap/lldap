@@ -2,8 +2,8 @@
 
 use std::collections::HashSet;
 
-use anyhow::{anyhow, Result};
-use requestty::{prompt_one, Question};
+use anyhow::{Result, anyhow};
+use requestty::{Question, prompt_one};
 
 mod ldap;
 mod lldap;

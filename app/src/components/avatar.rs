@@ -1,11 +1,12 @@
-use crate::infra::functional::{use_graphql_call, LoadableResult};
+use crate::infra::functional::{LoadableResult, use_graphql_call};
 use graphql_client::GraphQLQuery;
-use yew::{function_component, html, virtual_dom::AttrValue, Properties};
+use yew::{Properties, function_component, html, virtual_dom::AttrValue};
 
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "../schema.graphql",
     query_path = "queries/get_user_details.graphql",
+    variables_derives = "Clone,PartialEq,Eq",
     response_derives = "Debug, Hash, PartialEq, Eq, Clone",
     custom_scalars_module = "crate::infra::graphql"
 )]

@@ -1,24 +1,23 @@
 [package]
-authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
-description = "CLI migration tool to go from OpenLDAP to LLDAP"
-edition = "2021"
-homepage = "https://github.com/lldap/lldap"
-license = "GPL-3.0-only"
 name = "lldap_migration_tool"
-repository = "https://github.com/lldap/lldap"
 version = "0.4.2"
+description = "CLI migration tool to go from OpenLDAP to LLDAP"
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 anyhow = "*"
 base64 = "0.13"
 rand = "0.8"
 requestty = "0.4.1"
-serde = "1"
 serde_json = "1"
 smallvec = "*"
 
 [dependencies.lldap_auth]
-path = "../auth"
+path = "../crates/auth"
 features = ["opaque_client"]
 
 [dependencies.graphql_client]
@@ -35,3 +34,6 @@ features = ["json", "blocking", "rustls-tls"]
 version = "*"
 default-features = false
 features = ["sync", "tls-rustls"]
+
+[dependencies.serde]
+workspace = true

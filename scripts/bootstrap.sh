@@ -3,13 +3,26 @@
 set -e
 set -o pipefail
 
-LLDAP_URL="${LLDAP_URL}"
-LLDAP_ADMIN_USERNAME="${LLDAP_ADMIN_USERNAME}"
-LLDAP_ADMIN_PASSWORD="${LLDAP_ADMIN_PASSWORD}"
-USER_CONFIGS_DIR="${USER_CONFIGS_DIR:-/user-configs}"
-GROUP_CONFIGS_DIR="${GROUP_CONFIGS_DIR:-/group-configs}"
+LLDAP_URL="${LLDAP_URL:-http://localhost:17170}"
+LLDAP_ADMIN_USERNAME="${LLDAP_ADMIN_USERNAME:-admin}"
+LLDAP_ADMIN_PASSWORD="${LLDAP_ADMIN_PASSWORD:-password}"
+USER_SCHEMAS_DIR="${USER_SCHEMAS_DIR:-/bootstrap/user-schemas}"
+GROUP_SCHEMAS_DIR="${GROUP_SCHEMAS_DIR:-/bootstrap/group-schemas}"
+USER_CONFIGS_DIR="${USER_CONFIGS_DIR:-/bootstrap/user-configs}"
+GROUP_CONFIGS_DIR="${GROUP_CONFIGS_DIR:-/bootstrap/group-configs}"
 LLDAP_SET_PASSWORD_PATH="${LLDAP_SET_PASSWORD_PATH:-/app/lldap_set_password}"
 DO_CLEANUP="${DO_CLEANUP:-false}"
+DO_CLEANUP_USERS="${DO_CLEANUP_USERS:-$DO_CLEANUP}"
+DO_CLEANUP_GROUP_MEMBERSHIP="${DO_CLEANUP_GROUP_MEMBERSHIP:-$DO_CLEANUP}"
+DO_CLEANUP_GROUPS="${DO_CLEANUP_GROUPS:-$DO_CLEANUP}"
+
+# Fallback to support legacy defaults
+if [[ ! -d $USER_CONFIGS_DIR ]] && [[ -d "/user-configs" ]]; then
+  USER_CONFIGS_DIR="/user-configs"
+fi
+if [[ ! -d $GROUP_CONFIGS_DIR ]] && [[ -d "/group-configs" ]]; then
+  GROUP_CONFIGS_DIR="/group-configs"
+fi
 
 check_install_dependencies() {
   local commands=('curl' 'jq' 'jo')
@@ -170,7 +183,7 @@ get_user_details() {
   local id="$1"
 
   # shellcheck disable=SC2016
-  local query='{"query":"query GetUserDetails($id: String!) {user(userId: $id) {id email displayName firstName lastName creationDate uuid groups {id displayName}}}","operationName":"GetUserDetails"}'
+  local query='{"query":"query GetUserDetails($id: String!) {user(userId: $id) {id email displayName firstName lastName creationDate uuid groups {id displayName} attributes {name value}}}","operationName":"GetUserDetails"}'
   make_query <(printf '%s' "$query") <(jo -- id="$id")
 }
 
@@ -252,7 +265,7 @@ get_users_list() {
 }
 
 user_exists() {
-  if [[ "$(get_users_list | jq --raw-output --arg id "$1" '.data.users | any(.[]; contains({"id": $id}))')" == 'true' ]]; then
+  if [[ "$(get_users_list | jq --raw-output --arg id "$1" '.data.users | any(.[]; .id == $id)')" == 'true' ]]; then
     return 0
   else
     return 1
@@ -278,6 +291,207 @@ delete_user() {
   else
     printf 'User "%s" successfully deleted\n' "$id"
   fi
+}
+
+get_group_property_list() {
+  local query='{"query":"query GetGroupAttributesSchema { schema { groupSchema { attributes { name }}}}","operationName":"GetGroupAttributesSchema"}'
+  make_query <(printf '%s' "$query") <(printf '{}')
+}
+group_property_exists() {
+  if [[ "$(get_group_property_list | jq --raw-output --arg name "$1" '.data.schema.groupSchema.attributes | any(.[]; select(.name == $name))')" == 'true' ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+create_group_schema_property() {
+  local name="$1"
+  local attributeType="$2"
+  local isEditable="$3"
+  local isList="$4"
+  local isVisible="$5"
+
+  if group_property_exists "$name"; then
+    printf 'Group property "%s" already exists\n' "$name"
+    return
+  fi
+
+  # shellcheck disable=SC2016
+  local query='{"query":"mutation CreateGroupAttribute($name: String!, $attributeType: AttributeType!, $isList: Boolean!, $isVisible: Boolean!, $isEditable: Boolean!) {addGroupAttribute(name: $name, attributeType: $attributeType, isList: $isList, isVisible: $isVisible, isEditable: $isEditable) {ok}}","operationName":"CreateGroupAttribute"}'
+
+  local response='' error=''
+  response="$(make_query <(printf '%s' "$query") <(jo -- name="$name" attributeType="$attributeType" isEditable="$isEditable" isList="$isList" isVisible="$isVisible"))"
+  error="$(printf '%s' "$response" | jq --raw-output '.errors | if . != null then .[].message else empty end')"
+  if [[ -n "$error" ]]; then
+    printf '%s\n' "$error"
+  else
+    printf 'Group attribute "%s" successfully created\n' "$name"
+  fi
+}
+
+get_user_property_list() {
+  local query='{"query":"query GetUserAttributesSchema { schema { userSchema { attributes { name }}}}","operationName":"GetUserAttributesSchema"}'
+  make_query <(printf '%s' "$query") <(printf '{}')
+}
+user_property_exists() {
+  if [[ "$(get_user_property_list | jq --raw-output --arg name "$1" '.data.schema.userSchema.attributes | any(.[]; select(.name == $name))')" == 'true' ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+create_user_schema_property() {
+  local name="$1"
+  local attributeType="$2"
+  local isEditable="$3"
+  local isList="$4"
+  local isVisible="$5"
+
+  if user_property_exists "$name"; then
+    printf 'User property "%s" already exists\n' "$name"
+    return
+  fi
+
+  # shellcheck disable=SC2016
+  local query='{"query":"mutation CreateUserAttribute($name: String!, $attributeType: AttributeType!, $isList: Boolean!, $isVisible: Boolean!, $isEditable: Boolean!) {addUserAttribute(name: $name, attributeType: $attributeType, isList: $isList, isVisible: $isVisible, isEditable: $isEditable) {ok}}","operationName":"CreateUserAttribute"}'
+
+  local response='' error=''
+  response="$(make_query <(printf '%s' "$query") <(jo -- name="$name" attributeType="$attributeType" isEditable="$isEditable" isList="$isList" isVisible="$isVisible"))"
+  error="$(printf '%s' "$response" | jq --raw-output '.errors | if . != null then .[].message else empty end')"
+  if [[ -n "$error" ]]; then
+    printf '%s\n' "$error"
+  else
+    printf 'User attribute "%s" successfully created\n' "$name"
+  fi
+}
+
+update_group_attributes() {
+  local group_id="$1"
+  local attributes_json="$2"
+  
+  # shellcheck disable=SC2016
+  local query
+  query=$(jq -n -c \
+    --argjson groupId "$group_id" \
+    --argjson attributes "$attributes_json" '
+    {
+      "query": "mutation UpdateGroup($group: UpdateGroupInput!) {updateGroup(group: $group) {ok}}",
+      "operationName": "UpdateGroup",
+      "variables": {
+        "group": {
+          "id": $groupId,
+          "insertAttributes": $attributes
+        }
+      }
+    }
+  ')
+  
+  local response='' error=''
+  response="$(curl --silent --request POST \
+    --url "$LLDAP_URL/api/graphql" \
+    --header "Authorization: Bearer $TOKEN" \
+    --header 'Content-Type: application/json' \
+    --data "$query")"
+  
+  error="$(printf '%s' "$response" | jq --raw-output '.errors | if . != null then .[].message else empty end')"
+  if [[ -n "$error" ]]; then
+    printf 'Error updating attributes for group ID "%s": %s\n' "$group_id" "$error"
+  else
+    printf 'Custom attributes for group ID "%s" successfully updated\n' "$group_id"
+  fi
+}
+
+update_user_attributes() {
+  local user_id="$1"
+  local attributes_json="$2"
+
+  local query
+  query=$(jq -n -c \
+    --arg userId "$user_id" \
+    --argjson attributes "$attributes_json" '
+    {
+      "query": "mutation UpdateUser($user: UpdateUserInput!) {updateUser(user: $user) {ok}}",
+      "operationName": "UpdateUser",
+      "variables":{
+        "user": {
+          "id":$userId,
+          "insertAttributes":$attributes
+        }
+      }
+    }
+  ')
+  
+  local response='' error=''
+  response="$(curl --silent --request POST \
+    --url "$LLDAP_URL/api/graphql" \
+    --header "Authorization: Bearer $TOKEN" \
+    --header 'Content-Type: application/json' \
+    --data "$query")"
+  
+  error="$(printf '%s' "$response" | jq --raw-output '.errors | if . != null then .[].message else empty end')"
+  if [[ -n "$error" ]]; then
+    printf 'Error updating attributes for user "%s": %s\n' "$user_id" "$error"
+  else
+    printf 'Custom attributes for user "%s" successfully updated\n' "$user_id"
+  fi
+}
+
+extract_custom_group_attributes() {
+  extract_custom_attributes "$1" '"name"'
+}
+
+extract_custom_user_attributes() {
+  extract_custom_attributes "$1" '"id","email","password","password_file","displayName","firstName","lastName","groups","avatar_file","avatar_url","gravatar_avatar","weserv_avatar"'
+}
+
+extract_custom_attributes() {
+  local json_config="$1"
+  local standard_fields="$2"
+
+  # Extract all keys from the user config
+  local all_keys=$(echo "$json_config" | jq 'keys | .[]')
+  
+  # Filter out standard fields
+  local custom_keys=$(echo "$all_keys" | jq -c --arg std_fields "$standard_fields" 'select(. | inside($std_fields) | not)')
+  
+  # Build attribute array for GraphQL
+  local attributes_array="["
+  local first=true
+  
+  while read -r key; do
+    if $first; then
+      first=false
+    else
+      attributes_array+=","
+    fi
+    
+    key=$(echo "$key" | tr -d '"')
+
+    # If key is empty - this condition traps configurations without custom attributes
+    if [ -z "$key" ]; then continue; fi
+
+    # Get the value
+    local value=$(echo "$json_config" | jq --arg key "$key" '.[$key]')
+
+    # If the value is null, skip it
+    if echo "$value" | jq -e 'type == "null"' > /dev/null; then
+      continue
+    # Check if value is a JSON array
+    elif echo "$value" | jq -e 'type == "array"' > /dev/null; then
+      # For array types, ensure each element is a string, use compact JSON
+      local array_values=$(echo "$value" | jq -c 'map(tostring)')
+      attributes_array+="{\"name\":\"$key\",\"value\":$array_values}"
+    else
+      # For single values, make sure it's a string
+      local string_value=$(echo "$value" | jq 'tostring')
+      attributes_array+="{\"name\":\"$key\",\"value\":[$string_value]}"
+    fi
+  done < <(echo "$custom_keys")
+  
+  attributes_array+="]"
+  echo "$attributes_array"
 }
 
 __common_user_mutation_query() {
@@ -385,10 +599,26 @@ main() {
   check_install_dependencies
   check_required_env_vars
 
-  local user_config_files=("${USER_CONFIGS_DIR}"/*.json)
-  local group_config_files=("${GROUP_CONFIGS_DIR}"/*.json)
+  local user_config_files=()
+  local group_config_files=()
+  local user_schema_files=()
+  local group_schema_files=()
 
-  if ! check_configs_validity "${group_config_files[@]}" "${user_config_files[@]}"; then
+  local file=''
+  [[ -d "$USER_CONFIGS_DIR" ]] && for file in "${USER_CONFIGS_DIR}"/*.json; do
+    user_config_files+=("$file")
+  done
+  [[ -d "$GROUP_CONFIGS_DIR" ]] && for file in "${GROUP_CONFIGS_DIR}"/*.json; do
+    group_config_files+=("$file")
+  done
+  [[ -d "$USER_SCHEMAS_DIR" ]] && for file in "${USER_SCHEMAS_DIR}"/*.json; do
+    user_schema_files+=("$file")
+  done
+  [[ -d "$GROUP_SCHEMAS_DIR" ]] && for file in "${GROUP_SCHEMAS_DIR}"/*.json; do
+    group_schema_files+=("$file")
+  done
+
+  if ! check_configs_validity "${group_config_files[@]}" "${user_config_files[@]}" "${group_schema_files[@]}" "${user_schema_files[@]}"; then
     exit 1
   fi
 
@@ -399,16 +629,52 @@ main() {
 
   auth "$LLDAP_URL" "$LLDAP_ADMIN_USERNAME" "$LLDAP_ADMIN_PASSWORD"
 
+  printf -- '\n--- group schemas ---\n'
+  local group_schema_config_row=''
+  [[ ${#group_schema_files[@]} -gt 0 ]] && while read -r group_schema_config_row; do
+    local field='' name='' attributeType='' isEditable='' isList='' isVisible=''
+    for field in 'name' 'attributeType' 'isEditable' 'isList' 'isVisible'; do
+      declare "$field"="$(printf '%s' "$group_schema_config_row" | jq --raw-output --arg field "$field" '.[$field]')"
+    done
+    create_group_schema_property "$name" "$attributeType" "$isEditable" "$isList" "$isVisible"
+  done < <(jq --compact-output '.[]' -- "${group_schema_files[@]}")
+  printf -- '--- group schemas ---\n'
+
+  printf -- '\n--- user schemas ---\n'
+  local user_schema_config_row=''
+  [[ ${#user_schema_files[@]} -gt 0 ]] && while read -r user_schema_config_row; do
+    local field='' name='' attributeType='' isEditable='' isList='' isVisible=''
+    for field in 'name' 'attributeType' 'isEditable' 'isList' 'isVisible'; do
+      declare "$field"="$(printf '%s' "$user_schema_config_row" | jq --raw-output --arg field "$field" '.[$field]')"
+    done
+    create_user_schema_property "$name" "$attributeType" "$isEditable" "$isList" "$isVisible"
+  done < <(jq --compact-output '.[]' -- "${user_schema_files[@]}")
+  printf -- '--- user schemas ---\n'
+
   local redundant_groups=''
   redundant_groups="$(get_group_list | jq '[ .data.groups[].displayName ]' | jq --compact-output '. - ["lldap_admin","lldap_password_manager","lldap_strict_readonly"]')"
 
   printf -- '\n--- groups ---\n'
   local group_config=''
-  while read -r group_config; do
+  [[ ${#group_config_files[@]} -gt 0 ]] && while read -r group_config; do
     local group_name=''
     group_name="$(printf '%s' "$group_config" | jq --raw-output '.name')"
     create_group "$group_name"
     redundant_groups="$(printf '%s' "$redundant_groups" | jq --compact-output --arg name "$group_name" '. - [$name]')"
+    # Process custom attributes
+    printf -- '--- Processing custom attributes for group %s ---\n' "$group_name"
+    local attributes_json
+    attributes_json=$(extract_custom_group_attributes "$group_config")
+    
+    if [[ "$attributes_json" != "[]" ]]; then
+      # Get the group ID
+      local group_id
+      group_id="$(get_group_id "$group_name")"
+      
+      update_group_attributes "$group_id" "$attributes_json"
+    else
+      printf 'No custom attributes found for group "%s"\n' "$group_name"
+    fi
   done < <(jq --compact-output '.' -- "${group_config_files[@]}")
   printf -- '--- groups ---\n'
 
@@ -418,7 +684,7 @@ main() {
   else
     local group_name=''
     while read -r group_name; do
-      if [[ "$DO_CLEANUP" == 'true' ]]; then
+      if [[ "$DO_CLEANUP_GROUPS" == 'true' ]]; then
         delete_group "$group_name"
       else
         printf '[WARNING] Group "%s" is not declared in config files\n' "$group_name"
@@ -433,9 +699,9 @@ main() {
   TMP_AVATAR_DIR="$(mktemp -d)"
 
   local user_config=''
-  while read -r user_config; do
-    local field='' id='' email='' displayName='' firstName='' lastName='' avatar_file='' avatar_url='' gravatar_avatar='' weserv_avatar='' password=''
-    for field in 'id' 'email' 'displayName' 'firstName' 'lastName' 'avatar_file' 'avatar_url' 'gravatar_avatar' 'weserv_avatar' 'password'; do
+  [[ ${#user_config_files[@]} -gt 0 ]] && while read -r user_config; do
+    local field='' id='' email='' displayName='' firstName='' lastName='' avatar_file='' avatar_url='' gravatar_avatar='' weserv_avatar='' password='' password_file=''
+    for field in 'id' 'email' 'displayName' 'firstName' 'lastName' 'avatar_file' 'avatar_url' 'gravatar_avatar' 'weserv_avatar' 'password' 'password_file'; do
       declare "$field"="$(printf '%s' "$user_config" | jq --raw-output --arg field "$field" '.[$field]')"
     done
     printf -- '\n--- %s ---\n' "$id"
@@ -443,8 +709,21 @@ main() {
     create_update_user "$id" "$email" "$displayName" "$firstName" "$lastName" "$avatar_file" "$avatar_url" "$gravatar_avatar" "$weserv_avatar"
     redundant_users="$(printf '%s' "$redundant_users" | jq --compact-output --arg id "$id" '. - [$id]')"
 
-    if [[ "$password" != 'null' ]] && [[ "$password" != '""' ]]; then
-      "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$password"
+    if [[ "$password_file" != 'null' ]] && [[ "$password_file" != '""' ]]; then
+      LLDAP_USER_PASSWORD="$(cat $password_file)" "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id"
+    elif [[ "$password" != 'null' ]] && [[ "$password" != '""' ]]; then
+      LLDAP_USER_PASSWORD="$password" "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id"
+    fi
+
+    # Process custom attributes
+    printf -- '--- Processing custom attributes for user %s ---\n' "$id"
+    local attributes_json
+    attributes_json=$(extract_custom_user_attributes "$user_config")
+    
+    if [[ "$attributes_json" != "[]" ]]; then
+      update_user_attributes "$id" "$attributes_json"
+    else
+      printf 'No custom attributes found for user "%s"\n' "$id"
     fi
 
     local redundant_user_groups=''
@@ -460,7 +739,7 @@ main() {
 
     local user_group_name=''
     while read -r user_group_name; do
-      if [[ "$DO_CLEANUP" == 'true' ]]; then
+      if [[ "$DO_CLEANUP_GROUP_MEMBERSHIP" == 'true' ]]; then
         remove_user_from_group "$id" "$user_group_name"
       else
         printf '[WARNING] User "%s" is not declared as member of the "%s" group in the config files\n' "$id" "$user_group_name"
@@ -477,7 +756,7 @@ main() {
   else
     local id=''
     while read -r id; do
-      if [[ "$DO_CLEANUP" == 'true' ]]; then
+      if [[ "$DO_CLEANUP_USERS" == 'true' ]]; then
         delete_user "$id"
       else
         printf '[WARNING] User "%s" is not declared in config files\n' "$id"

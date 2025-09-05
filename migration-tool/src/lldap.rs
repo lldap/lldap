@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use graphql_client::GraphQLQuery;
-use requestty::{prompt_one, Question};
+use requestty::{Question, prompt_one};
 use reqwest::blocking::{Client, ClientBuilder};
 use smallvec::SmallVec;
 
-use crate::ldap::{check_host_exists, LdapGroup};
+use crate::ldap::{LdapGroup, check_host_exists};
 
 pub struct GraphQLClient {
     url: String,
@@ -88,7 +88,7 @@ impl User {
     query_path = "queries/create_user.graphql",
     response_derives = "Debug",
     variables_derives = "Debug,Clone",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::graphql"
 )]
 struct CreateUser;
 
@@ -100,7 +100,7 @@ pub type CreateUserInput = create_user::CreateUserInput;
     query_path = "queries/create_group.graphql",
     response_derives = "Debug",
     variables_derives = "Debug,Clone",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::graphql"
 )]
 struct CreateGroup;
 
@@ -109,7 +109,7 @@ struct CreateGroup;
     schema_path = "../schema.graphql",
     query_path = "queries/list_users.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::graphql"
 )]
 struct ListUsers;
 
@@ -118,7 +118,7 @@ struct ListUsers;
     schema_path = "../schema.graphql",
     query_path = "queries/list_groups.graphql",
     response_derives = "Debug",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::graphql"
 )]
 struct ListGroups;
 
@@ -364,7 +364,7 @@ pub fn get_lldap_groups(graphql_client: &GraphQLClient) -> Result<Vec<LldapGroup
     query_path = "queries/add_user_to_group.graphql",
     response_derives = "Debug",
     variables_derives = "Debug,Clone",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::graphql"
 )]
 struct AddUserToGroup;
 

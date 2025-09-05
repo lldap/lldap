@@ -3,6 +3,8 @@ use std::env::var;
 
 pub const DB_KEY: &str = "LLDAP_DATABASE_URL";
 pub const PRIVATE_KEY_SEED: &str = "LLDAP_KEY_SEED";
+pub const JWT_SECRET: &str = "LLDAP_JWT_SECRET";
+pub const LDAP_USER_PASSWORD: &str = "LLDAP_LDAP_USER_PASS";
 
 pub fn database_url() -> String {
     let url = var(DB_KEY).ok();
@@ -12,13 +14,13 @@ pub fn database_url() -> String {
 pub fn ldap_url() -> String {
     let port = var("LLDAP_LDAP_PORT").ok();
     let port = port.unwrap_or("3890".to_string());
-    format!("ldap://localhost:{}", port)
+    format!("ldap://localhost:{port}")
 }
 
 pub fn http_url() -> String {
     let port = var("LLDAP_HTTP_PORT").ok();
     let port = port.unwrap_or("17170".to_string());
-    format!("http://localhost:{}", port)
+    format!("http://localhost:{port}")
 }
 
 pub fn admin_dn() -> String {

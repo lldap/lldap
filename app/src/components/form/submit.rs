@@ -1,5 +1,5 @@
 use web_sys::MouseEvent;
-use yew::{function_component, html, virtual_dom::AttrValue, Callback, Children, Properties};
+use yew::{Callback, Children, Properties, function_component, html, virtual_dom::AttrValue};
 
 #[derive(Properties, PartialEq)]
 pub struct Props {

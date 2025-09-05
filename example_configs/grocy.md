@@ -10,7 +10,7 @@ Replace `dc=example,dc=com` with your LLDAP configured domain.
 Needs to be set to `Grocy\Middleware\LdapAuthMiddleware` in order to use LDAP
 
 ### LDAP_ADDRESS
-The address of your ldap server, eg: `ldap://lldap.example.com:389`
+The address of your ldap server, eg: `ldap://lldap.example.com:3890`
 
 ### LDAP_BASE_DN
 The base dn, usually points directly to the `people`, eg: `ou=people,dc=example,dc=com`

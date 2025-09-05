@@ -14,15 +14,14 @@ Backend:
     is defined in `schema.graphql`.
   * The static frontend files are served by this port too.
 
-Note that secure protocols (LDAPS, HTTPS) are currently not supported. This can
-be worked around by using a reverse proxy in front of the server (for the HTTP
-API) that wraps/unwraps the HTTPS messages, or only open the service to
-localhost or other trusted docker containers (for the LDAP API).
+Note that HTTPS is currently not supported. This can be worked around by using
+a reverse proxy in front of the server (for the HTTP API) that wraps/unwraps
+the HTTPS messages. LDAPS is supported.
 
 Frontend:
 * User management UI.
 * Written in Rust compiled to WASM as an SPA with the Yew library.
-* Based on components, with a React-like organization.
+* Based on components, with a React-like framework.
 
 Data storage:
 * The data (users, groups, memberships, active JWTs, ...) is stored in SQL.
@@ -50,19 +49,19 @@ Data storage:
 Authentication is done via the OPAQUE protocol, meaning that the passwords are
 never sent to the server, but instead the client proves that they know the
 correct password (zero-knowledge proof). This is likely overkill, especially
-considered that the LDAP interface requires sending the password to the server,
-but it's one less potential flaw (especially since the LDAP interface can be
-restricted to an internal docker-only network while the web app is exposed to
-the Internet).
+considered that the LDAP interface requires sending the password in cleartext
+to the server, but it's one less potential flaw (especially since the LDAP
+interface can be restricted to an internal docker-only network while the web
+app is exposed to the Internet).
 
 OPAQUE's "passwords" (user-specific blobs of data that can only be used in a
 zero-knowledge proof that the password is correct) are hashed using Argon2, the
 state of the art in terms of password storage. They are hashed using a secret
-provided in the configuration (which can be given as environment variable or
-command line argument as well): this should be kept secret and shouldn't change
-(it would invalidate all passwords). Note that even if it was compromised, the
-attacker wouldn't be able to decrypt the passwords without running an expensive
-brute-force search independently for each password.
+provided in the configuration (which can be given as environment variable,
+command line argument or a file as well): this should be kept secret and
+shouldn't change (it would invalidate all passwords). Note that even if it was
+compromised, the attacker wouldn't be able to decrypt the passwords without
+running an expensive brute-force search independently for each password.
 
 ### JWTs and refresh tokens
 

@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  MSRV: 1.85.0
 
 jobs:
   pre_job:
@@ -33,14 +34,19 @@ jobs:
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4.1.5
+        uses: actions/checkout@v5.0.0
+      - name: Install Rust
+        id: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+            toolchain: "${{ env.MSRV }}"
       - uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --verbose --workspace
       - name: Run tests
-        run: cargo test --verbose --workspace
+        run: cargo +${{steps.toolchain.outputs.name}} test --verbose --workspace
       - name: Generate GraphQL schema
-        run: cargo run -- export_graphql_schema -o generated_schema.graphql
+        run: cargo +${{steps.toolchain.outputs.name}} run -- export_graphql_schema -o generated_schema.graphql
       - name: Check schema
         run: diff schema.graphql generated_schema.graphql || (echo "The schema file is out of date. Please run `./export_schema.sh`" && false)
 
@@ -52,15 +58,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4.1.5
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
+        uses: actions/checkout@v5.0.0
+      - name: Install Rust
+        id: toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
-          command: clippy
-          args: --tests --all -- -D warnings
+            toolchain: "${{ env.MSRV }}"
+            components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo +${{steps.toolchain.outputs.name}} clippy --tests --workspace -- -D warnings
 
   format:
     name: cargo fmt
@@ -69,15 +75,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4.1.5
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Run cargo fmt
-        uses: actions-rs/cargo@v1
+        uses: actions/checkout@v5.0.0
+      - name: Install Rust
+        id: toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
-          command: fmt
-          args: --all -- --check
+            toolchain: "${{ env.MSRV }}"
+            components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo +${{steps.toolchain.outputs.name}} fmt --check --all
 
   coverage:
     name: Code coverage
@@ -88,7 +94,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4.1.5
+        uses: actions/checkout@v5.0.0
 
       - name: Install Rust
         run: rustup toolchain install nightly --component llvm-tools-preview && rustup component add llvm-tools-preview --toolchain stable-x86_64-unknown-linux-gnu

@@ -1,15 +1,16 @@
 use crate::{
     components::{
         delete_user_attribute::DeleteUserAttribute,
+        fragments::attribute_schema::render_attribute_name,
         router::{AppRoute, Link},
     },
-    convert_attribute_type,
     infra::{
+        attributes::user,
         common_component::{CommonComponent, CommonComponentParts},
         schema::AttributeType,
     },
 };
-use anyhow::{anyhow, Error, Result};
+use anyhow::{Error, Result, anyhow};
 use gloo_console::log;
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
@@ -19,15 +20,14 @@ use yew::prelude::*;
     schema_path = "../schema.graphql",
     query_path = "queries/get_user_attributes_schema.graphql",
     response_derives = "Debug,Clone,PartialEq,Eq",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::infra::graphql",
+    extern_enums("AttributeType")
 )]
 pub struct GetUserAttributesSchema;
 
 use get_user_attributes_schema::ResponseData;
 
 pub type Attribute = get_user_attributes_schema::GetUserAttributesSchemaSchemaUserSchemaAttributes;
-
-convert_attribute_type!(get_user_attributes_schema::AttributeType);
 
 #[derive(yew::Properties, Clone, PartialEq, Eq)]
 pub struct Props {
@@ -53,21 +53,21 @@ impl CommonComponent<UserSchemaTable> for UserSchemaTable {
                 Ok(true)
             }
             Msg::OnError(e) => Err(e),
-            Msg::OnAttributeDeleted(attribute_name) => {
-                match self.attributes {
-                    None => {
-                        log!(format!("Attribute {attribute_name} was  deleted but component has no attributes"));
-                        Err(anyhow!("invalid state"))
-                    }
-                    Some(_) => {
-                        self.attributes
-                            .as_mut()
-                            .unwrap()
-                            .retain(|a| a.name != attribute_name);
-                        Ok(true)
-                    }
+            Msg::OnAttributeDeleted(attribute_name) => match self.attributes {
+                None => {
+                    log!(format!(
+                        "Attribute {attribute_name} was  deleted but component has no attributes"
+                    ));
+                    Err(anyhow!("invalid state"))
                 }
-            }
+                Some(_) => {
+                    self.attributes
+                        .as_mut()
+                        .unwrap()
+                        .retain(|a| a.name != attribute_name);
+                    Ok(true)
+                }
+            },
         }
     }
 
@@ -144,16 +144,17 @@ impl UserSchemaTable {
 
     fn view_attribute(&self, ctx: &Context<Self>, attribute: &Attribute) -> Html {
         let link = ctx.link();
-        let attribute_type = AttributeType::from(attribute.attribute_type.clone());
+        let attribute_type = attribute.attribute_type;
         let checkmark = html! {
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16">
           <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z"></path>
         </svg>
                 };
         let hardcoded = ctx.props().hardcoded;
+        let desc = user::resolve_user_attribute_description_or_default(&attribute.name);
         html! {
             <tr key={attribute.name.clone()}>
-                <td>{&attribute.name}</td>
+                <td>{render_attribute_name(hardcoded, &desc)}</td>
                 <td>{if attribute.is_list { format!("List<{attribute_type}>")} else {attribute_type.to_string()}}</td>
                 <td>{if attribute.is_editable {checkmark.clone()} else {html!{}}}</td>
                 <td>{if attribute.is_visible {checkmark.clone()} else {html!{}}}</td>

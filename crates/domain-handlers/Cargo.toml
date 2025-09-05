@@ -1,0 +1,46 @@
+[package]
+name = "lldap_domain_handlers"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+test = []
+
+[dependencies]
+async-trait = "0.1"
+base64 = "0.21"
+ldap3_proto = "0.6.0"
+serde_bytes = "0.11"
+
+[dev-dependencies]
+pretty_assertions = "1"
+
+[dependencies.chrono]
+features = ["serde"]
+version = "0.4"
+
+[dependencies.derive_more]
+features = ["debug", "display", "from", "from_str"]
+default-features = false
+version = "1"
+
+[dependencies.lldap_auth]
+path = "../auth"
+features = ["opaque_server", "opaque_client", "sea_orm"]
+
+[dependencies.lldap_domain]
+path = "../domain"
+
+[dependencies.lldap_domain_model]
+path = "../domain-model"
+
+[dependencies.serde]
+workspace = true
+
+[dependencies.uuid]
+features = ["v1", "v3"]
+version = "1"

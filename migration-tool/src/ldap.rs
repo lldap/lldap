@@ -1,6 +1,6 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use ldap3::{ResultEntry, SearchEntry};
-use requestty::{prompt_one, Question};
+use requestty::{Question, prompt_one};
 use smallvec::SmallVec;
 
 use crate::lldap::User;
@@ -189,7 +189,7 @@ impl TryFrom<ResultEntry> for User {
         Ok(User::new(
             crate::lldap::CreateUserInput {
                 id,
-                email,
+                email: Some(email),
                 display_name,
                 first_name,
                 last_name,

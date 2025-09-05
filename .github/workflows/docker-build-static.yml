@@ -39,7 +39,7 @@ env:
 # GitHub actions randomly timeout when downloading musl-gcc, using custom dev image   #
 # Look into .github/workflows/Dockerfile.dev for development image details            #
 # Using lldap dev image based on https://hub.docker.com/_/rust and musl-gcc bundled   #
-# lldap/rust-dev:latest                                                               #
+# lldap/rust-dev                                                                      #
 #######################################################################################
 # Cargo build
 ### armv7, aarch64 and amd64 is musl based
@@ -87,7 +87,7 @@ jobs:
       image: lldap/rust-dev:latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.1.5
+        uses: actions/checkout@v5.0.0
       - uses: actions/cache@v4
         with:
           path: |
@@ -132,7 +132,7 @@ jobs:
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.1.5
+        uses: actions/checkout@v5.0.0
       - uses: actions/cache@v4
         with:
           path: |
@@ -216,6 +216,8 @@ jobs:
            LLDAP_database_url: postgres://lldapuser:lldappass@localhost/lldap
            LLDAP_ldap_port: 3890
            LLDAP_http_port: 17170
+           LLDAP_JWT_SECRET: verysecret
+           LLDAP_LDAP_USER_PASS: password
 
 
        - name: Run lldap with mariadb DB (MySQL Compatible) and healthcheck
@@ -227,6 +229,8 @@ jobs:
            LLDAP_database_url: mysql://lldapuser:lldappass@localhost/lldap
            LLDAP_ldap_port: 3891
            LLDAP_http_port: 17171
+           LLDAP_JWT_SECRET: verysecret
+           LLDAP_LDAP_USER_PASS: password
 
 
        - name: Run lldap with sqlite DB and healthcheck
@@ -238,6 +242,8 @@ jobs:
            LLDAP_database_url: sqlite://users.db?mode=rwc
            LLDAP_ldap_port: 3892
            LLDAP_http_port: 17172
+           LLDAP_JWT_SECRET: verysecret
+           LLDAP_LDAP_USER_PASS: password
 
        - name: Check DB container logs
          run: |
@@ -294,7 +300,7 @@ jobs:
 
     steps:
        - name: Checkout scripts
-         uses: actions/checkout@v4.1.5
+         uses: actions/checkout@v5.0.0
          with:
            sparse-checkout: 'scripts'
 
@@ -324,9 +330,9 @@ jobs:
               sleep 10s
               bin/lldap healthcheck
          env:
-           LLDAP_database_url: sqlite://users.db?mode=rwc
-           LLDAP_ldap_port: 3890
-           LLDAP_http_port: 17170
+           LLDAP_DATABASE_URL: sqlite://users.db?mode=rwc
+           LLDAP_LDAP_PORT: 3890
+           LLDAP_HTTP_PORT: 17170
            LLDAP_LDAP_USER_PASS: ldappass
            LLDAP_JWT_SECRET: somejwtsecret
 
@@ -350,8 +356,11 @@ jobs:
               sed -i -r -e "s/X'([[:xdigit:]]+'[^'])/'\\\x\\1/g" -e ":a; s/(INSERT INTO (user_attribute_schema|jwt_storage)\(.*\) VALUES\(.*),1([^']*\);)$/\1,true\3/; s/(INSERT INTO (user_attribute_schema|jwt_storage)\(.*\) VALUES\(.*),0([^']*\);)$/\1,false\3/; ta" -e '1s/^/BEGIN;\n/' -e '$aCOMMIT;' ./dump.sql
 
        - name: Create schema on postgres
+         env:
+           LLDAP_DATABASE_URL: postgres://lldapuser:lldappass@localhost:5432/lldap
+           LLDAP_JWT_SECRET: somejwtsecret
          run: |
-              bin/lldap create_schema -d postgres://lldapuser:lldappass@localhost:5432/lldap
+              bin/lldap create_schema
 
        - name: Copy converted db to postgress and import
          run: |
@@ -368,7 +377,10 @@ jobs:
               sed  -i '1 i\SET FOREIGN_KEY_CHECKS = 0;' ./dump.sql
 
        - name: Create schema on mariadb
-         run: bin/lldap create_schema -d mysql://lldapuser:lldappass@localhost:3306/lldap
+         env:
+           LLDAP_DATABASE_URL: mysql://lldapuser:lldappass@localhost:3306/lldap
+           LLDAP_JWT_SECRET: somejwtsecret
+         run: bin/lldap create_schema
 
        - name: Copy converted db to mariadb and import
          run: |
@@ -384,7 +396,10 @@ jobs:
               sed  -i '1 i\SET FOREIGN_KEY_CHECKS = 0;' ./dump.sql
 
        - name: Create schema on mysql
-         run: bin/lldap create_schema -d mysql://lldapuser:lldappass@localhost:3307/lldap
+         env:
+           LLDAP_DATABASE_URL: mysql://lldapuser:lldappass@localhost:3307/lldap
+           LLDAP_JWT_SECRET: somejwtsecret
+         run: bin/lldap create_schema
 
        - name: Copy converted db to mysql and import
          run: |
@@ -399,10 +414,9 @@ jobs:
               sleep 10s
               bin/lldap healthcheck
          env:
-           LLDAP_database_url: postgres://lldapuser:lldappass@localhost:5432/lldap
-           LLDAP_ldap_port: 3891
-           LLDAP_http_port: 17171
-           LLDAP_LDAP_USER_PASS: ldappass
+           LLDAP_DATABASE_URL: postgres://lldapuser:lldappass@localhost:5432/lldap
+           LLDAP_LDAP_PORT: 3891
+           LLDAP_HTTP_PORT: 17171
            LLDAP_JWT_SECRET: somejwtsecret
 
        - name: Run lldap with mariaDB and healthcheck again
@@ -411,9 +425,9 @@ jobs:
               sleep 10s
               bin/lldap healthcheck
          env:
-           LLDAP_database_url: mysql://lldapuser:lldappass@localhost:3306/lldap
-           LLDAP_ldap_port: 3892
-           LLDAP_http_port: 17172
+           LLDAP_DATABASE_URL: mysql://lldapuser:lldappass@localhost:3306/lldap
+           LLDAP_LDAP_PORT: 3892
+           LLDAP_HTTP_PORT: 17172
            LLDAP_JWT_SECRET: somejwtsecret
 
        - name: Run lldap with mysql and healthcheck again
@@ -422,9 +436,9 @@ jobs:
               sleep 10s
               bin/lldap healthcheck
          env:
-           LLDAP_database_url: mysql://lldapuser:lldappass@localhost:3307/lldap
-           LLDAP_ldap_port: 3893
-           LLDAP_http_port: 17173
+           LLDAP_DATABASE_URL: mysql://lldapuser:lldappass@localhost:3307/lldap
+           LLDAP_LDAP_PORT: 3893
+           LLDAP_HTTP_PORT: 17173
            LLDAP_JWT_SECRET: somejwtsecret
 
        - name: Test Dummy User Postgres
@@ -482,7 +496,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.1.5
+        uses: actions/checkout@v5.0.0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -512,7 +526,7 @@ jobs:
           tags: ${{ matrix.container }}-base
 
       - name: Build ${{ matrix.container }} Base Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           # On PR will fail, force fully uncomment push: true, or docker image will fail for next steps
@@ -613,7 +627,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build ${{ matrix.container }}-rootless Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -627,7 +641,7 @@ jobs:
 
 ### This docker build always the last, due :latest tag pushed multiple times, for whatever variants may added in future add docker build above this
       - name: Build ${{ matrix.container }} Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -738,5 +752,9 @@ jobs:
           artifacts:  aarch64-lldap.tar.gz,
                       amd64-lldap.tar.gz,
                       armhf-lldap.tar.gz
+          draft: true
+          omitBodyDuringUpdate: true
+          omitDraftDuringUpdate: true
+          omitNameDuringUpdate: true
         env:
          GITHUB_TOKEN: ${{ github.token }}

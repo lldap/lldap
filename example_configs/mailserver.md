@@ -64,6 +64,7 @@ services:
       - LDAP_QUERY_FILTER_DOMAIN=(mail=*@%s)
       # <<< Postfix LDAP Integration
       # >>> Dovecot LDAP Integration
+      - ENABLE_QUOTAS=0
       - DOVECOT_AUTH_BIND=yes
       - DOVECOT_USER_FILTER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
       - DOVECOT_USER_ATTRS==uid=5000,=gid=5000,=home=/var/mail/%Ln,=mail=maildir:~/Maildir

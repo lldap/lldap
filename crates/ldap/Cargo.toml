@@ -1,0 +1,66 @@
+[package]
+name = "lldap_ldap"
+version = "0.1.0"
+description = "LDAP operations support"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = "*"
+ldap3_proto = "0.6.0"
+tracing = "*"
+itertools = "0.10"
+
+[dependencies.derive_more]
+features = ["from"]
+default-features = false
+version = "1"
+
+[dependencies.chrono]
+features = ["serde"]
+version = "*"
+
+[dependencies.rand]
+features = ["small_rng", "getrandom"]
+version = "0.8"
+
+[dependencies.uuid]
+version = "1"
+features = ["v1", "v3"]
+
+[dependencies.lldap_access_control]
+path = "../access-control"
+
+[dependencies.lldap_auth]
+path = "../auth"
+features = ["opaque_server", "opaque_client", "sea_orm"]
+
+[dependencies.lldap_domain]
+path = "../domain"
+
+[dependencies.lldap_domain_handlers]
+path = "../domain-handlers"
+
+[dependencies.lldap_domain_model]
+path = "../domain-model"
+
+[dependencies.lldap_opaque_handler]
+path = "../opaque-handler"
+
+[dev-dependencies.lldap_test_utils]
+path = "../test-utils"
+
+[dev-dependencies]
+mockall = "0.11.4"
+pretty_assertions = "1"
+
+[dev-dependencies.tokio]
+features = ["full"]
+version = "1.25"
+
+[dev-dependencies.lldap_domain]
+path = "../domain"
+features = ["test"]

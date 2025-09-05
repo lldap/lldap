@@ -1,5 +1,5 @@
 use crate::common::env;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use graphql_client::GraphQLQuery;
 use reqwest::blocking::Client;
 
@@ -103,7 +103,7 @@ where
         })
     };
     let url = env::http_url() + "/api/graphql";
-    let auth_header = format!("Bearer {}", token);
+    let auth_header = format!("Bearer {token}");
     client
         .post(url)
         .header(reqwest::header::AUTHORIZATION, auth_header)

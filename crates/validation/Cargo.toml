@@ -1,0 +1,9 @@
+[package]
+name = "lldap_validation"
+version = "0.6.0"
+authors = ["Simon Broeng Jensen <sbj@cwconsult.dk>"]
+description = "Validation logic for LLDAP"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true

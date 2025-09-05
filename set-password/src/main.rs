@@ -1,4 +1,6 @@
-use anyhow::{bail, ensure, Context, Result};
+use std::env;
+
+use anyhow::{Context, Result, bail, ensure};
 use clap::Parser;
 use lldap_auth::{opaque, registration};
 use reqwest::Url;
@@ -27,9 +29,9 @@ pub struct CliOpts {
     #[clap(short, long)]
     pub username: String,
 
-    /// New password for the user.
+    /// New password for the user. Can also be passed as the environment variable LLDAP_USER_PASSWORD.
     #[clap(short, long)]
-    pub password: String,
+    pub password: Option<String>,
 
     /// Bypass password requirements such as minimum length. Unsafe.
     #[clap(long)]
@@ -100,8 +102,14 @@ pub fn register_finish(
 
 fn main() -> Result<()> {
     let opts = CliOpts::parse();
+
+    let password = match opts.password {
+        Some(v) => v,
+        None => env::var("LLDAP_USER_PASSWORD").unwrap_or_default(),
+    };
+
     ensure!(
-        opts.bypass_password_policy || opts.password.len() >= 8,
+        opts.bypass_password_policy || password.len() >= 8,
         "New password is too short, expected at least 8 characters"
     );
     ensure!(
@@ -118,7 +126,7 @@ fn main() -> Result<()> {
 
     let mut rng = rand::rngs::OsRng;
     let registration_start_request =
-        opaque::client::registration::start_registration(opts.password.as_bytes(), &mut rng)
+        opaque::client::registration::start_registration(password.as_bytes(), &mut rng)
             .context("Could not initiate password change")?;
     let start_request = registration::ClientRegistrationStartRequest {
         username: opts.username.clone().into(),

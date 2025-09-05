@@ -8,7 +8,7 @@ use crate::{
         common_component::{CommonComponent, CommonComponentParts},
     },
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use lldap_auth::{
     opaque::client::registration as opaque_registration,
     password_reset::ServerPasswordResetResponse, registration,
@@ -148,7 +148,7 @@ impl Component for ResetPasswordStep2Form {
             (None, None) => {
                 return html! {
                   {"Validating token"}
-                }
+                };
             }
             (None, Some(e)) => {
                 return html! {
@@ -163,7 +163,7 @@ impl Component for ResetPasswordStep2Form {
                       {"Back"}
                     </Link>
                   </>
-                }
+                };
             }
             _ => (),
         };

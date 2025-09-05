@@ -5,6 +5,162 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] 2025-07-21
+
+Small release, focused on LDAP improvements and ongoing maintenance.
+
+### Added
+
+ - LDAP
+    - Support for searching groups by their `groupid`
+    - Support for `whoamiOID`
+    - Support for creating groups
+    - Support for subschema entry
+ - Custom assets path.
+ - New endpoint for requesting client settings
+
+### Changed
+
+ - A missing JWT secret now prevents startup.
+ - Attributes with invalid characters (such as underscores) cannot be created anymore.
+ - Searching custom (string) attributes is now case insensitive.
+ - Using the top-level `firstName`, `lastName` and `avatar` GraphQL fields for users is now deprecated. Use the `attributes` field instead.
+
+### Fixed
+
+ - `lldap_set_password` now uses the system's SSL certificates.
+
+### Cleanups
+
+ - Split the main `lldap` crate into many sub-crates
+ - Various dependency version bumps
+ - Upgraded to 2024 Rust edition
+ - Docs/FAQ improvements
+
+### Bootstrap script
+
+ - Custom attributes support
+ - Read the paswsord from a file
+ - Resilient to no user or group files
+
+### New services
+
+ - Discord integration (Discord role to LLDAP user)
+ - HashiCorp
+ - Jellyfin 2FA with Duo
+ - Kimai
+ - Mailcow
+ - Peertube
+ - Penpot
+ - PgAdmin
+ - Project Quay
+ - Quadlet
+ - Snipe-IT
+ - SSSD
+ - Stalwart
+ - UnifiOS
+
+## [0.6.1] 2024-11-22
+
+Small release, mainly to fix a migration issue with Sqlite and Postgresql.
+
+### Added
+
+ - Added a link to a community terraform provider (#1035)
+
+### Changed
+
+ - The opaque dependency now points to the official crate rather than a fork (#1040)
+
+### Fixed
+
+ - Migration of the DB schema from 7 to 8 is now automatic for sqlite, and fixed for postgres (#1045)
+ - The startup warning about `key_seed` applying instead of `key_file` now has instructions on how to silence it (#1032)
+
+### New services
+
+- OneDev
+
+## [0.6.0] 2024-11-09
+
+### Breaking
+
+- The endpoint `/auth/reset/step1` is now `POST` instead of `GET` (#704)
+
+### Added
+
+- Custom attributes are now supported (#67) ! You can add new fields (string, integers, JPEG or dates) to users and query them. That unlocks many integrations with other services, and allows for a deeper/more customized integration. Special thanks to @pixelrazor and @bojidar-bg for their help with the UI.
+- Custom object classes (for all users/groups) can now be added (#833)
+- Barebones support for Paged Results Control (no paging, no respect for windows, but a correct response with all the results) (#698)
+- A daily docker image is tagged and released. (#613)
+- A bootstrap script allows reading the list of users/groups from a file and making sure the server contains exactly the same thing. (#654)
+- Make it possible to serve lldap behind a sub-path in (#752)
+- LLDAP can now be found on a custom package repository for opensuse, fedora, ubuntu, debian and centos ([Repository link](https://software.opensuse.org//download.html?project=home%3AMasgalor%3ALLDAP&package=lldap)). Thanks @Masgalor for setting it up and maintaining it.
+- There's now an option to force reset the admin password (#748) optionally on every restart (#959)
+- There's a rootless docker container (#755)
+- entryDN is now supported (#780)
+- Unknown LDAP controls are now detected and ignored (#787, #799)
+- A community-developed CLI for scripting (#793)
+- Added a way to print raw logs to debug long-running sessions (#992)
+
+
+### Changed
+
+- The official docker repository is now `lldap/lldap`
+- Removed password length limitation in lldap_set_password tool
+- Group names and emails are now case insensitive, but keep their casing (#666)
+- Better error messages (and exit code (#745)) when changing the private key (#778, #1008), using the wrong SMTP port (#970), using the wrong env variables (#972)
+- Allow `member=` filters with plain user names (not full DNs) (#949)
+- Correctly detect and refuse anonymous binds (#974)
+- Clearer logging (#971, #981, #982)
+
+### Fixed
+
+- Logging out applies globally, not just in the local browser. (#721)
+- It's no longer possible to create the same user twice (#745)
+- Fix wide substring filters (#738)
+- Don't log the database password if provided in the connection URL (#735)
+- Fix a panic when postgres uses a different collation (#821)
+- The UI now defaults to the user ID for users with no display names (#843)
+- Fix searching for users with more than one `memberOf` filter (#872)
+- Fix compilation on Windows (#932) and Illumos (#964)
+- The UI now correctly detects whether password resets are enabled. (#753)
+- Fix a missing lowercasing of username when changing passwords through LDAP (#1012)
+- Fix SQLite writers erroring when racing (#1021)
+- LDAP sessions no longer buffer their logs until unbind, causing memory leaks (#1025)
+
+### Performance
+
+- Only expand attributes once per query, not per result (#687)
+
+### Security
+
+- When asked to send a password reset to an unknown email, sleep for 3 seconds and don't print the email in the error (#887)
+
+### New services
+
+Linux user accounts can now be managed by LLDAP, using PAM and nslcd.
+
+- Apereo CAS server
+- Carpal
+- Gitlab
+- Grocy
+- Harbor
+- Home Assistant
+- Jenkins
+- Kasm
+- Maddy
+- Mastodon
+- Metabase
+- MegaRAC-BMC
+- Netbox
+- OCIS
+- Prosody
+- Radicale
+- SonarQube
+- Traccar
+- Zitadel
+
 ## [0.5.0] 2023-09-14
 
 ### Breaking
@@ -71,7 +227,7 @@ systems, including PAM authentication.
 ## [0.4.3] 2023-04-11
 
 The repository has changed from `nitnelave/lldap` to `lldap/lldap`, both on GitHub
-and on DockerHub (although we will keep publishing the images to 
+and on DockerHub (although we will keep publishing the images to
 `nitnelave/lldap` for the foreseeable future). All data on GitHub has been
 migrated, and the new docker images are available both on DockerHub and on the
 GHCR under `lldap/lldap`.

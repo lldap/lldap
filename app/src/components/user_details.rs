@@ -5,9 +5,13 @@ use crate::{
         router::{AppRoute, Link},
         user_details_form::UserDetailsForm,
     },
-    infra::common_component::{CommonComponent, CommonComponentParts},
+    infra::{
+        common_component::{CommonComponent, CommonComponentParts},
+        form_utils::GraphQlAttributeSchema,
+        schema::AttributeType,
+    },
 };
-use anyhow::{bail, Error, Result};
+use anyhow::{Error, Result, bail};
 use graphql_client::GraphQLQuery;
 use yew::prelude::*;
 
@@ -16,18 +20,38 @@ use yew::prelude::*;
     schema_path = "../schema.graphql",
     query_path = "queries/get_user_details.graphql",
     response_derives = "Debug, Hash, PartialEq, Eq, Clone",
-    custom_scalars_module = "crate::infra::graphql"
+    custom_scalars_module = "crate::infra::graphql",
+    extern_enums("AttributeType")
 )]
 pub struct GetUserDetails;
 
 pub type User = get_user_details::GetUserDetailsUser;
 pub type Group = get_user_details::GetUserDetailsUserGroups;
+pub type Attribute = get_user_details::GetUserDetailsUserAttributes;
+pub type AttributeSchema = get_user_details::GetUserDetailsSchemaUserSchemaAttributes;
+
+impl From<&AttributeSchema> for GraphQlAttributeSchema {
+    fn from(attr: &AttributeSchema) -> Self {
+        Self {
+            name: attr.name.clone(),
+            is_list: attr.is_list,
+            is_readonly: attr.is_readonly,
+            is_editable: attr.is_editable,
+        }
+    }
+}
 
 pub struct UserDetails {
     common: CommonComponentParts<Self>,
     /// The user info. If none, the error is in `error`. If `error` is None, then we haven't
     /// received the server response yet.
-    user: Option<User>,
+    user_and_schema: Option<(User, Vec<AttributeSchema>)>,
+}
+
+impl UserDetails {
+    fn mut_groups(&mut self) -> &mut Vec<Group> {
+        &mut self.user_and_schema.as_mut().unwrap().0.groups
+    }
 }
 
 /// State machine describing the possible transitions of the component state.
@@ -50,22 +74,20 @@ impl CommonComponent<UserDetails> for UserDetails {
     fn handle_msg(&mut self, _: &Context<Self>, msg: <Self as Component>::Message) -> Result<bool> {
         match msg {
             Msg::UserDetailsResponse(response) => match response {
-                Ok(user) => self.user = Some(user.user),
+                Ok(user) => {
+                    self.user_and_schema = Some((user.user, user.schema.user_schema.attributes))
+                }
                 Err(e) => {
-                    self.user = None;
+                    self.user_and_schema = None;
                     bail!("Error getting user details: {}", e);
                 }
             },
             Msg::OnError(e) => return Err(e),
             Msg::OnUserAddedToGroup(group) => {
-                self.user.as_mut().unwrap().groups.push(group);
+                self.mut_groups().push(group);
             }
             Msg::OnUserRemovedFromGroup((_, group_id)) => {
-                self.user
-                    .as_mut()
-                    .unwrap()
-                    .groups
-                    .retain(|g| g.id != group_id);
+                self.mut_groups().retain(|g| g.id != group_id);
             }
         }
         Ok(true)
@@ -178,7 +200,7 @@ impl Component for UserDetails {
     fn create(ctx: &Context<Self>) -> Self {
         let mut table = Self {
             common: CommonComponentParts::<Self>::create(),
-            user: None,
+            user_and_schema: None,
         };
         table.get_user_details(ctx);
         table
@@ -189,10 +211,8 @@ impl Component for UserDetails {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        match (&self.user, &self.common.error) {
-            (None, None) => html! {{"Loading..."}},
-            (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
-            (Some(u), error) => {
+        match (&self.user_and_schema, &self.common.error) {
+            (Some((u, schema)), error) => {
                 html! {
                   <>
                     <h3>{u.id.to_string()}</h3>
@@ -207,13 +227,20 @@ impl Component for UserDetails {
                     <div>
                       <h5 class="row m-3 fw-bold">{"User details"}</h5>
                     </div>
-                    <UserDetailsForm user={u.clone()} />
+                    <UserDetailsForm
+                      user={u.clone()}
+                      user_attributes_schema={schema.clone()}
+                      is_admin={ctx.props().is_admin}
+                      is_edited_user_admin={u.groups.iter().any(|g| g.display_name == "lldap_admin")}
+                    />
                     {self.view_group_memberships(ctx, u)}
                     {self.view_add_group_button(ctx, u)}
                     {self.view_messages(error)}
                   </>
                 }
             }
+            (None, None) => html! {{"Loading..."}},
+            (None, Some(e)) => html! {<div>{"Error: "}{e.to_string()}</div>},
         }
     }
 }

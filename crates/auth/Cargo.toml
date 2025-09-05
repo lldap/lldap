@@ -1,0 +1,54 @@
+[package]
+name = "lldap_auth"
+version = "0.6.0"
+description = "Authentication protocol for LLDAP"
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["opaque_server", "opaque_client"]
+opaque_server = []
+opaque_client = []
+js = []
+sea_orm = ["dep:sea-orm"]
+test = []
+
+[dependencies]
+rust-argon2 = "2"
+curve25519-dalek = "3"
+digest = "0.9"
+generic-array = "0.14"
+rand = "0.8"
+sha2 = "0.9"
+thiserror = "2"
+
+[dependencies.derive_more]
+features = ["debug", "display"]
+default-features = false
+version = "1"
+
+[dependencies.opaque-ke]
+version = "0.7"
+
+[dependencies.chrono]
+version = "*"
+features = ["serde"]
+
+[dependencies.sea-orm]
+workspace = true
+features = ["macros"]
+optional = true
+
+[dependencies.serde]
+workspace = true
+
+# For WASM targets, use the JS getrandom.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]
+version = "0.2"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.getrandom]
+version = "0.2"
+features = ["js"]

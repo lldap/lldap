@@ -1,15 +1,21 @@
 [workspace]
 members = [
-  "server",
-  "auth",
-  "app",
-  "migration-tool",
-  "set-password",
+    "server",
+    "app",
+    "migration-tool",
+    "set-password",
+    "crates/*",
 ]
-
 default-members = ["server"]
-
 resolver = "2"
+
+[workspace.package]
+authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
+documentation = "https://github.com/lldap/lldap"
+edition = "2024"
+homepage = "https://github.com/lldap/lldap"
+license = "GPL-3.0-only"
+repository = "https://github.com/lldap/lldap"
 
 [profile.release]
 lto = true
@@ -17,9 +23,12 @@ lto = true
 [profile.release.package.lldap_app]
 opt-level = 's'
 
-[patch.crates-io.opaque-ke]
-git = 'https://github.com/nitnelave/opaque-ke/'
-branch = 'zeroize_1.5'
-
 [patch.crates-io.lber]
 git = 'https://github.com/inejge/ldap3/'
+
+[workspace.dependencies.sea-orm]
+version = "1.1.8"
+default-features = false
+
+[workspace.dependencies.serde]
+version = "1"

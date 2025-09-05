@@ -21,16 +21,16 @@ use crate::{
 };
 
 use gloo_console::error;
+use lldap_frontend_options::Options;
 use yew::{
-    function_component,
+    Context, function_component,
     html::Scope,
-    prelude::{html, Component, Html},
-    Context,
+    prelude::{Component, Html, html},
 };
 use yew_router::{
+    BrowserRouter, Switch,
     prelude::{History, Location},
     scope_ext::RouterScopeExt,
-    BrowserRouter, Switch,
 };
 
 #[function_component(AppContainer)]
@@ -51,7 +51,7 @@ pub struct App {
 pub enum Msg {
     Login((String, bool)),
     Logout,
-    PasswordResetProbeFinished(anyhow::Result<bool>),
+    SettingsReceived(anyhow::Result<Options>),
 }
 
 impl Component for App {
@@ -76,9 +76,8 @@ impl Component for App {
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
         };
-        ctx.link().send_future(async move {
-            Msg::PasswordResetProbeFinished(HostService::probe_password_reset().await)
-        });
+        ctx.link()
+            .send_future(async move { Msg::SettingsReceived(HostService::get_settings().await) });
         app.apply_initial_redirections(ctx);
         app
     }
@@ -103,14 +102,11 @@ impl Component for App {
                 self.redirect_to = None;
                 history.push(AppRoute::Login);
             }
-            Msg::PasswordResetProbeFinished(Ok(enabled)) => {
-                self.password_reset_enabled = Some(enabled);
+            Msg::SettingsReceived(Ok(settings)) => {
+                self.password_reset_enabled = Some(settings.password_reset_enabled);
             }
-            Msg::PasswordResetProbeFinished(Err(err)) => {
-                self.password_reset_enabled = Some(false);
-                error!(&format!(
-                    "Could not probe for password reset support: {err:#}"
-                ));
+            Msg::SettingsReceived(Err(err)) => {
+                error!(err.to_string());
             }
         }
         true
@@ -126,7 +122,7 @@ impl Component for App {
             <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
             <div class="container py-3 bg-kug">
               <div class="row justify-content-center" style="padding-bottom: 80px;">
-                <main class="py-3" style="max-width: 1000px">
+                <main class="py-3">
                   <Switch<AppRoute>
                     render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled))}
                   />
@@ -200,15 +196,21 @@ impl App {
             AppRoute::CreateUser => html! {
                 <CreateUserForm/>
             },
-            AppRoute::Index | AppRoute::ListUsers => html! {
-                <div>
-                  <UserTable />
+            AppRoute::Index | AppRoute::ListUsers => {
+                let user_button = html! {
                   <Link classes="btn btn-primary" to={AppRoute::CreateUser}>
                     <i class="bi-person-plus me-2"></i>
                     {"Create a user"}
                   </Link>
-                </div>
-            },
+                };
+                html! {
+                  <div>
+                    { user_button.clone() }
+                    <UserTable />
+                    { user_button }
+                  </div>
+                }
+            }
             AppRoute::CreateGroup => html! {
                 <CreateGroupForm/>
             },
@@ -218,15 +220,23 @@ impl App {
             AppRoute::CreateGroupAttribute => html! {
                 <CreateGroupAttributeForm/>
             },
-            AppRoute::ListGroups => html! {
-                <div>
-                  <GroupTable />
+            AppRoute::ListGroups => {
+                let group_button = html! {
                   <Link classes="btn btn-primary" to={AppRoute::CreateGroup}>
                     <i class="bi-plus-circle me-2"></i>
                     {"Create a group"}
                   </Link>
-                </div>
-            },
+                };
+                // Note: There's a weird bug when switching from the users page to the groups page
+                // where the two groups buttons are at the bottom. I don't know why.
+                html! {
+                  <div>
+                    { group_button.clone() }
+                    <GroupTable />
+                    { group_button }
+                  </div>
+                }
+            }
             AppRoute::ListUserSchema => html! {
                 <ListUserSchema />
             },
@@ -234,7 +244,7 @@ impl App {
                 <ListGroupSchema />
             },
             AppRoute::GroupDetails { group_id } => html! {
-                <GroupDetails group_id={*group_id} />
+                <GroupDetails group_id={*group_id} is_admin={is_admin} />
             },
             AppRoute::UserDetails { user_id } => html! {
                 <UserDetails username={user_id.clone()} is_admin={is_admin} />
