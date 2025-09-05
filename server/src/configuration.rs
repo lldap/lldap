@@ -98,6 +98,8 @@ pub struct DbOptions {
     pub idle_timeout: u32,
     #[builder(default = "3600")]
     pub max_lifetime: u32,
+    #[builder(default = "false")]
+    pub readonly: bool,
 }
 
 impl std::default::Default for DbOptions {
@@ -523,6 +525,9 @@ impl ConfigOverrider for DbOpts {
         }
         if let Some(max_lifetime) = self.max_lifetime {
             config.db_options.max_lifetime = max_lifetime;
+        }
+        if let Some(readonly) = self.readonly {
+            config.db_options.readonly = readonly;
         }
     }
 }

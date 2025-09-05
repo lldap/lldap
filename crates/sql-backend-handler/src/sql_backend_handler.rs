@@ -8,19 +8,25 @@ pub struct SqlBackendHandler {
     pub(crate) opaque_setup: ServerSetup,
     pub(crate) sql_pool: DbConnection,
     pub(crate) crypto_service: PasswordService,
+    pub(crate) readonly: bool,
 }
 
 impl SqlBackendHandler {
-    pub fn new(opaque_setup: ServerSetup, sql_pool: DbConnection) -> Self {
+    pub fn new(opaque_setup: ServerSetup, sql_pool: DbConnection, readonly: bool) -> Self {
         SqlBackendHandler {
             opaque_setup,
             sql_pool,
             crypto_service: PasswordService::new(),
+            readonly,
         }
     }
 
     pub fn pool(&self) -> &DbConnection {
         &self.sql_pool
+    }
+
+    pub fn is_readonly(&self) -> bool {
+        self.readonly
     }
 }
 
@@ -148,7 +154,7 @@ pub mod tests {
     impl TestFixture {
         pub async fn new() -> Self {
             let sql_pool = get_initialized_db().await;
-            let handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool);
+            let handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool, false);
             insert_user_no_password(&handler, "bob").await;
             insert_user_no_password(&handler, "patrick").await;
             insert_user_no_password(&handler, "John").await;
@@ -168,7 +174,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_sql_injection() {
         let sql_pool = get_initialized_db().await;
-        let handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool);
+        let handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool, false);
         let user_name = UserId::new(r#"bob"e"i'o;aü"#);
         insert_user_no_password(&handler, user_name.as_str()).await;
         {

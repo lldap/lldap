@@ -259,7 +259,8 @@ mod tests {
     async fn test_opaque_flow() -> Result<()> {
         let sql_pool = get_initialized_db().await;
         crate::logging::init_for_tests();
-        let backend_handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool);
+        let backend_handler =
+            SqlBackendHandler::new(generate_random_private_key(), sql_pool, false);
         insert_user_no_password(&backend_handler, "bob").await;
         insert_user_no_password(&backend_handler, "john").await;
         attempt_login(&backend_handler, "bob", "bob00")
@@ -281,7 +282,7 @@ mod tests {
     #[tokio::test]
     async fn test_bind_user() {
         let sql_pool = get_initialized_db().await;
-        let handler = SqlOpaqueHandler::new(generate_random_private_key(), sql_pool.clone());
+        let handler = SqlOpaqueHandler::new(generate_random_private_key(), sql_pool.clone(), false);
         insert_user(&handler, "bob", "bob00").await;
 
         handler
@@ -310,7 +311,8 @@ mod tests {
     #[tokio::test]
     async fn test_user_no_password() {
         let sql_pool = get_initialized_db().await;
-        let handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool.clone());
+        let handler =
+            SqlBackendHandler::new(generate_random_private_key(), sql_pool.clone(), false);
         insert_user_no_password(&handler, "bob").await;
 
         handler
