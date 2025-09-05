@@ -6,7 +6,7 @@ use lldap_domain::{
     types::{AttributeName, Group, GroupDetails, GroupId, Serialized, Uuid},
 };
 use lldap_domain_handlers::handler::{
-    GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+    BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
 };
 use lldap_domain_model::{
     error::{DomainError, Result},
@@ -186,6 +186,11 @@ impl GroupBackendHandler for SqlBackendHandler {
 
     #[instrument(skip(self), level = "debug", err, fields(group_id = ?request.group_id))]
     async fn update_group(&self, request: UpdateGroupRequest) -> Result<()> {
+        if self.is_readonly() {
+            return Err(DomainError::InternalError(
+                "Cannot update group in readonly mode".to_string(),
+            ));
+        }
         Ok(self
             .sql_pool
             .transaction::<_, (), DomainError>(|transaction| {
@@ -198,6 +203,11 @@ impl GroupBackendHandler for SqlBackendHandler {
 
     #[instrument(skip(self), level = "debug", ret, err)]
     async fn create_group(&self, request: CreateGroupRequest) -> Result<GroupId> {
+        if self.is_readonly() {
+            return Err(DomainError::InternalError(
+                "Cannot create group in readonly mode".to_string(),
+            ));
+        }
         let now = chrono::Utc::now().naive_utc();
         let uuid = Uuid::from_name_and_date(request.display_name.as_str(), &now);
         let lower_display_name = request.display_name.as_str().to_lowercase();
@@ -248,6 +258,11 @@ impl GroupBackendHandler for SqlBackendHandler {
 
     #[instrument(skip(self), level = "debug", err)]
     async fn delete_group(&self, group_id: GroupId) -> Result<()> {
+        if self.is_readonly() {
+            return Err(DomainError::InternalError(
+                "Cannot delete group in readonly mode".to_string(),
+            ));
+        }
         let res = model::Group::delete_by_id(group_id)
             .exec(&self.sql_pool)
             .await?;

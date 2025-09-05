@@ -69,7 +69,9 @@ mockall::mock! {
         async fn delete_group_object_class(&self, name: &LdapObjectClass) -> Result<()>;
     }
     #[async_trait]
-    impl BackendHandler for TestBackendHandler {}
+    impl BackendHandler for TestBackendHandler {
+        fn is_readonly(&self) -> bool;
+    }
     #[async_trait]
     impl OpaqueHandler for TestBackendHandler {
         async fn login_start(

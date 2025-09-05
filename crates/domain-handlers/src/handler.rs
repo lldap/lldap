@@ -184,6 +184,7 @@ pub trait BackendHandler:
     + ReadSchemaBackendHandler
     + SchemaBackendHandler
 {
+    fn is_readonly(&self) -> bool;
 }
 
 #[cfg(test)]
