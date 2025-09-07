@@ -30,3 +30,6 @@ features = ["json", "blocking", "rustls-tls", "rustls-tls-native-roots"]
 
 [dependencies.serde]
 workspace = true
+
+[dependencies.lldap_frontend_options]
+path = "../crates/frontend-options"

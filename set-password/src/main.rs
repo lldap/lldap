@@ -3,6 +3,7 @@ use std::env;
 use anyhow::{Context, Result, bail, ensure};
 use clap::Parser;
 use lldap_auth::{opaque, registration};
+use lldap_frontend_options::{Options, validate_password};
 use reqwest::Url;
 use serde::Serialize;
 
@@ -100,6 +101,44 @@ pub fn register_finish(
     .map(|_| ())
 }
 
+fn get_settings(base_url: &Url, token: &str) -> Result<Options> {
+    let url = append_to_url(base_url, "settings");
+    let client = reqwest::blocking::Client::new();
+    let resp = client
+        .get(url)
+        .bearer_auth(token)
+        .send()?
+        .error_for_status()?;
+    let options: Options = resp.json()?;
+    Ok(options)
+}
+
+/*
+fn fetch_password_policy(base_url: &Url, token: &str) -> Result<PasswordPolicyOptions> {
+
+    println!("Attempting to fetch.");
+
+    let query = serde_json::json!({
+        "query": "query { config { passwordPolicy { minLength requireUppercase requireLowercase requireDigit requireSpecial } } }"
+    });
+
+    let response = client
+        .post(graphql_url)
+        .bearer_auth(token)
+        .json(&query)
+        .send()?
+        .error_for_status()?;
+
+    let parsed: GraphQLResponse<ConfigResponse> = response.json()?;
+    if let Some(data) = parsed.data {
+        Ok(data.config.password_policy)
+    } else {
+        bail!("Could not retrieve password policy: {:?}", parsed.errors);
+    }
+}
+
+*/
+
 fn main() -> Result<()> {
     let opts = CliOpts::parse();
 
@@ -108,10 +147,6 @@ fn main() -> Result<()> {
         None => env::var("LLDAP_USER_PASSWORD").unwrap_or_default(),
     };
 
-    ensure!(
-        opts.bypass_password_policy || password.len() >= 8,
-        "New password is too short, expected at least 8 characters"
-    );
     ensure!(
         opts.base_url.scheme() == "http" || opts.base_url.scheme() == "https",
         "Base URL should start with `http://` or `https://`"
@@ -123,6 +158,12 @@ fn main() -> Result<()> {
         }
         (None, None) => bail!("Either the token or the admin password is required"),
     };
+
+    if !opts.bypass_password_policy {
+        let settings = get_settings(&opts.base_url, &token)?;
+        //let policy = fetch_password_policy(&opts.base_url, &token)?;
+        validate_password(&password, &settings.password_policy)?;
+    }
 
     let mut rng = rand::rngs::OsRng;
     let registration_start_request =
@@ -150,3 +191,5 @@ fn main() -> Result<()> {
     println!("Successfully changed {}'s password", &opts.username);
     Ok(())
 }
+
+

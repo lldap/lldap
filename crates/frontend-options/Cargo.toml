@@ -8,5 +8,8 @@ homepage.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[dependencies]
+anyhow = "*"
+
 [dependencies.serde]
 workspace = true
