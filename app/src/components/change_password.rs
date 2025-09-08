@@ -11,6 +11,8 @@ use crate::{
 use anyhow::{Result, anyhow, bail};
 use gloo_console::error;
 use lldap_auth::*;
+use crate::infra::api;
+//use lldap_frontend_options::{validate_password, PasswordPolicyOptions};
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -34,29 +36,18 @@ impl OpaqueData {
 /// The fields of the form, with the constraints.
 #[derive(Model, Validate, PartialEq, Eq, Clone, Default)]
 pub struct FormModel {
-    #[validate(custom(
-        function = "empty_or_long",
-        message = "Password should be longer than 8 characters"
-    ))]
     old_password: String,
-    #[validate(length(min = 8, message = "Invalid password. Min length: 8"))]
     password: String,
     #[validate(must_match(other = "password", message = "Passwords must match"))]
     confirm_password: String,
-}
-
-fn empty_or_long(value: &str) -> Result<(), validator::ValidationError> {
-    if value.is_empty() || value.len() >= 8 {
-        Ok(())
-    } else {
-        Err(validator::ValidationError::new(""))
-    }
 }
 
 pub struct ChangePasswordForm {
     common: CommonComponentParts<Self>,
     form: Form<FormModel>,
     opaque_data: OpaqueData,
+    password_policy: Option<lldap_frontend_options::PasswordPolicyOptions>,
+    error_message: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Eq, Properties)]
@@ -72,6 +63,8 @@ pub enum Msg {
     SubmitNewPassword,
     RegistrationStartResponse(Result<Box<registration::ServerRegistrationStartResponse>>),
     RegistrationFinishResponse(Result<()>),
+    PasswordPolicyResponse(lldap_frontend_options::PasswordPolicyOptions),
+    ShowError(String),
 }
 
 impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
@@ -83,10 +76,27 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
         use anyhow::Context;
         match msg {
             Msg::FormUpdate => Ok(true),
+            Msg::PasswordPolicyResponse(policy) => {
+                self.password_policy = Some(policy);
+                Ok(true)
+            }
+            Msg::ShowError(err) => {
+                self.error_message = Some(err);
+                Ok(true)
+            }
             Msg::Submit => {
                 if !self.form.validate() {
                     bail!("Check the form for errors");
                 }
+
+                //check if we have password policy
+                if let Some(policy) = &self.password_policy {
+                    let new_password = &self.form.model().password;
+                    if let Err(e) = lldap_frontend_options::validate_password(new_password, policy) {
+                        bail!(format!("Invalid password: {}", e));
+                    }
+                }
+
                 if ctx.props().is_admin {
                     self.handle_msg(ctx, Msg::SubmitNewPassword)
                 } else {
@@ -94,6 +104,8 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                     if old_password.is_empty() {
                         bail!("Current password should not be empty");
                     }
+
+
                     let mut rng = rand::rngs::OsRng;
                     let login_start_request =
                         opaque::client::login::start_login(&old_password, &mut rng)
@@ -195,13 +207,34 @@ impl Component for ChangePasswordForm {
     type Message = Msg;
     type Properties = Props;
 
-    fn create(_: &Context<Self>) -> Self {
-        ChangePasswordForm {
+    fn create(ctx: &Context<Self>) -> Self {
+        let this = Self {
             common: CommonComponentParts::<Self>::create(),
             form: yew_form::Form::<FormModel>::new(FormModel::default()),
             opaque_data: OpaqueData::None,
+            password_policy: None,
+            error_message: None,
+        };
+
+        let link = ctx.link().clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            match api::HostService::get_settings().await {
+                Ok(options) => {
+                    // send policy to component via Msg::FormUpdate
+                    link.send_message(Msg::PasswordPolicyResponse(options.password_policy));
+                }
+                Err(e) => {
+                    // optional: store error in component state
+                    link.send_message(Msg::ShowError(format!("Could not fetch password policy: {}", e)));
+                }
+            }
+        });
+
+        // return component instance
+        this
         }
-    }
+
+
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         CommonComponentParts::<Self>::update(self, ctx, msg)
