@@ -33,12 +33,13 @@ impl Default for PasswordPolicyOptions {
 }
 
 pub fn validate_password(password: &str, policy: &PasswordPolicyOptions) -> Result<()> {
+    let mut errors = Vec::new();
 
     if password.len() < policy.min_length {
-        bail!(
+        errors.push(format!(
             "Password must be at least {} characters long.",
             policy.min_length
-        );
+        ));
     }
 
     let mut uppercase = 0;
@@ -59,28 +60,28 @@ pub fn validate_password(password: &str, policy: &PasswordPolicyOptions) -> Resu
     }
 
     if uppercase < policy.min_uppercase {
-        bail!(
+        errors.push(format!(
             "Password must contain at least {} uppercase characters.",
             policy.min_uppercase
-        );
+        ));
     }
 
     if lowercase < policy.min_lowercase {
-        bail!(
+        errors.push(format!(
             "Password must contain at least {} lowercase characters.",
             policy.min_lowercase
-        );
+        ));
     }
 
     if digits < policy.min_digits {
-       bail!( 
+        errors.push(format!(
             "Password must contain at least {} digit(s).",
             policy.min_digits
-        );
+        ));
     }
 
     if special < policy.min_special {
-        bail!(
+        errors.push(format!(
             "Password must contain at least {} special character(s) from: {}",
             policy.min_special,
             policy
@@ -89,8 +90,14 @@ pub fn validate_password(password: &str, policy: &PasswordPolicyOptions) -> Resu
                 .map(|c| c.to_string())
                 .collect::<Vec<_>>()
                 .join(" ")
-        );
+        ));
     }
 
-    Ok(())
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        // join all messages into one big error string, or handle Vec<String> upstream
+        bail!("{}", errors.join("\n"));
+    }
 }
+

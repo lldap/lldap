@@ -92,8 +92,8 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                 //check if we have password policy
                 if let Some(policy) = &self.password_policy {
                     let new_password = &self.form.model().password;
-                    if let Err(e) = lldap_frontend_options::validate_password(new_password, policy) {
-                        bail!(format!("Invalid password: {}", e));
+                    if let Err(errors) = lldap_frontend_options::validate_password(new_password, policy) {
+                        bail!(format!("Invalid password:\n {}", errors));
                     }
                 }
 
@@ -244,61 +244,63 @@ impl Component for ChangePasswordForm {
         let is_admin = ctx.props().is_admin;
         let link = ctx.link();
         html! {
-          <>
-            <div class="mb-2 mt-2">
-              <h5 class="fw-bold">
+            <>
+                <div class="mb-2 mt-2">
+                <h5 class="fw-bold">
                 {"Change password"}
-              </h5>
-            </div>
-            {
-              if let Some(e) = &self.common.error {
-                html! {
-                  <div class="alert alert-danger mt-3 mb-3">
-                    {e.to_string() }
-                  </div>
+            </h5>
+                </div>
+                {
+                    if let Some(e) = &self.common.error {
+                        let err_str = e.to_string();
+                        let lines = err_str.lines();
+                        html! {
+                            <div class="alert alert-danger mt-3 mb-3">
+                            { for lines.map(|line| html! { <p>{ line }</p> }) }
+                            </div>
+                        }
+                    } else { html! {} }
                 }
-              } else { html! {} }
-            }
             <form class="form">
-              {if !is_admin { html! {
-                <Field<FormModel>
-                  form={&self.form}
-                  required=true
-                  label="Current password"
-                  field_name="old_password"
-                  input_type="password"
-                  autocomplete="current-password"
-                  oninput={link.callback(|_| Msg::FormUpdate)} />
-              }} else { html! {} }}
-              <Field<FormModel>
+            {if !is_admin { html! {
+                                      <Field<FormModel>
+                                          form={&self.form}
+                                      required=true
+                                          label="Current password"
+                                          field_name="old_password"
+                                          input_type="password"
+                                          autocomplete="current-password"
+                                          oninput={link.callback(|_| Msg::FormUpdate)} />
+                                  }} else { html! {} }}
+            <Field<FormModel>
                 form={&self.form}
-                required=true
+            required=true
                 label="New password"
                 field_name="password"
                 input_type="password"
                 autocomplete="new-password"
                 oninput={link.callback(|_| Msg::FormUpdate)} />
-              <Field<FormModel>
+                <Field<FormModel>
                 form={&self.form}
-                required=true
+            required=true
                 label="Confirm password"
                 field_name="confirm_password"
                 input_type="password"
                 autocomplete="new-password"
                 oninput={link.callback(|_| Msg::FormUpdate)} />
-              <Submit
+                <Submit
                 disabled={self.common.is_task_running()}
-                onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}
-                text="Save changes" >
+            onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}
+            text="Save changes" >
                 <Link
-                  classes="btn btn-secondary ms-2 col-auto col-form-label"
-                  to={AppRoute::UserDetails{user_id: ctx.props().username.clone()}}>
-                  <i class="bi-arrow-return-left me-2"></i>
-                  {"Back"}
-                </Link>
-              </Submit>
-            </form>
-          </>
+                classes="btn btn-secondary ms-2 col-auto col-form-label"
+                to={AppRoute::UserDetails{user_id: ctx.props().username.clone()}}>
+                <i class="bi-arrow-return-left me-2"></i>
+                {"Back"}
+            </Link>
+                </Submit>
+                </form>
+                </>
         }
     }
 }
