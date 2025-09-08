@@ -10,7 +10,6 @@ pub struct Options {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct PasswordPolicyOptions {
-    /// Minimum total length of the password
     pub min_length: usize,
     pub min_uppercase: usize,
     pub min_lowercase: usize,

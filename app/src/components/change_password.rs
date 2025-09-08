@@ -12,7 +12,7 @@ use anyhow::{Result, anyhow, bail};
 use gloo_console::error;
 use lldap_auth::*;
 use crate::infra::api;
-//use lldap_frontend_options::{validate_password, PasswordPolicyOptions};
+use lldap_frontend_options::{validate_password, PasswordPolicyOptions};
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -46,7 +46,7 @@ pub struct ChangePasswordForm {
     common: CommonComponentParts<Self>,
     form: Form<FormModel>,
     opaque_data: OpaqueData,
-    password_policy: Option<lldap_frontend_options::PasswordPolicyOptions>,
+    password_policy: Option<PasswordPolicyOptions>,
     error_message: Option<String>,
 }
 
@@ -92,7 +92,7 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                 //check if we have password policy
                 if let Some(policy) = &self.password_policy {
                     let new_password = &self.form.model().password;
-                    if let Err(errors) = lldap_frontend_options::validate_password(new_password, policy) {
+                    if let Err(errors) = validate_password(new_password, policy) {
                         bail!(format!("Invalid password:\n {}", errors));
                     }
                 }
