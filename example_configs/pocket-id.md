@@ -1,6 +1,6 @@
 # LLDAP Configuration for Pocket-ID 
 
-[Pocket-ID](https://pocket-id.org/) simple and easy-to-use OIDC provider that allows users to authenticate with their passkeys to your services.
+[Pocket-ID](https://pocket-id.org/) is a simple, easy-to-use OIDC provider that lets users authenticate to your services using passkeys.
 
 |               |                         | Value                                                       |
 |-----------------------|------------------------------------|-----------------------------------------------------------|
