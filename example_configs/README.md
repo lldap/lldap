@@ -51,7 +51,7 @@ configuration files:
 - [Peertube](peertube.md)
 - [Penpot](penpot.md)
 - [pgAdmin](pgadmin.md)
-- [Pocket-Id](pocket-id.md)
+- [Pocket-ID](pocket-id.md)
 - [Portainer](portainer.md)
 - [PowerDNS Admin](powerdns_admin.md)
 - [Prosody](prosody.md)
