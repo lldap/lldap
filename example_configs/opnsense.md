@@ -92,6 +92,9 @@ Enable the following options on the OPNsense configuration page for your LLDAP s
 - Synchronize groups: `Checked`
 - Automatic user creation: `Checked`
 
+### Constraint Groups
+This limits the groups to prevent injection attacks. If you want to enable this feature, you need to add ou=groups,dc=example,dc=com to the Authentication Containers field. Be sure to separate with a semicolon. Otherwise disable this option.
+
 ### Create OPNsense Group
 
 Go to `System > Access > Groups` and create a new group with the **same** name as the LLDAP group used to authenticate users for OPNsense.
