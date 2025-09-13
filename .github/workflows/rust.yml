@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  MSRV: 1.85.0
+  MSRV: "1.89"
 
 jobs:
   pre_job:
@@ -42,7 +42,7 @@ jobs:
             toolchain: "${{ env.MSRV }}"
       - uses: Swatinem/rust-cache@v2
       - name: Build
-        run: cargo build --verbose --workspace
+        run: cargo +${{steps.toolchain.outputs.name}} build --verbose --workspace
       - name: Run tests
         run: cargo +${{steps.toolchain.outputs.name}} test --verbose --workspace
       - name: Generate GraphQL schema
