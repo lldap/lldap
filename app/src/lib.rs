@@ -2,6 +2,7 @@
 #![forbid(non_ascii_idents)]
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::let_unit_value)]
+#![allow(clippy::unnecessary_operation)] // Doesn't work well with the html macro.
 
 pub mod components;
 pub mod infra;

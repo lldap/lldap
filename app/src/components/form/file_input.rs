@@ -147,20 +147,18 @@ impl Component for JpegFileInput {
                 true
             }
             Msg::FileLoaded(file_name, data) => {
-                if let Some(avatar) = &mut self.avatar {
-                    if let Some(file) = &avatar.file {
-                        if file.name() == file_name {
-                            if let Result::Ok(data) = data {
-                                if !is_valid_jpeg(data.as_slice()) {
-                                    // Clear the selection.
-                                    self.avatar = Some(JsFile::default());
-                                    // TODO: bail!("Chosen image is not a valid JPEG");
-                                } else {
-                                    avatar.contents = Some(data);
-                                    return true;
-                                }
-                            }
-                        }
+                if let Some(avatar) = &mut self.avatar
+                    && let Some(file) = &avatar.file
+                    && file.name() == file_name
+                    && let Result::Ok(data) = data
+                {
+                    if !is_valid_jpeg(data.as_slice()) {
+                        // Clear the selection.
+                        self.avatar = Some(JsFile::default());
+                        // TODO: bail!("Chosen image is not a valid JPEG");
+                    } else {
+                        avatar.contents = Some(data);
+                        return true;
                     }
                 }
                 self.reader = None;

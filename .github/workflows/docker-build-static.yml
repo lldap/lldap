@@ -24,7 +24,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-
+  MSRV: "1.89"
 
 ### CI Docs
 
@@ -88,6 +88,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5.0.0
+      - name: Install Rust
+        id: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+            toolchain: "${{ env.MSRV }}"
+            targets: "wasm32-unknown-unknown"
       - uses: actions/cache@v4
         with:
           path: |
@@ -99,8 +105,6 @@ jobs:
           key: lldap-ui-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             lldap-ui-
-      - name: Add wasm target (rust)
-        run: rustup target add wasm32-unknown-unknown
       - name: Install wasm-pack with cargo
         run: cargo install wasm-pack || true
         env:
@@ -133,6 +137,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5.0.0
+      - name: Install Rust
+        id: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+            toolchain: "${{ env.MSRV }}"
+            targets: "${{ matrix.target }}"
       - uses: actions/cache@v4
         with:
           path: |
