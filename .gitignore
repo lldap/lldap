@@ -29,3 +29,8 @@ recipe.json
 lldap_config.toml
 cert.pem
 key.pem
+
+# Nix
+result
+result-*
+.direnv
