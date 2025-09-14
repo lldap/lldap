@@ -208,7 +208,9 @@ pub mod types {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JWTClaims {
+    #[serde(with = "chrono::serde::ts_seconds")]
     pub exp: DateTime<Utc>,
+    #[serde(with = "chrono::serde::ts_seconds")]
     pub iat: DateTime<Utc>,
     pub user: String,
     pub groups: HashSet<String>,
