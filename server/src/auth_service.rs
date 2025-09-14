@@ -189,6 +189,7 @@ where
         user.display_name
             .as_deref()
             .unwrap_or_else(|| user.user_id.as_str()),
+        user.user_id.as_str(),
         user.email.as_str(),
         &token,
         &data.server_url,

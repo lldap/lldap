@@ -31,13 +31,13 @@ Starting `lldap.service` will start all the other services, but stopping it will
 - At this point, you should be able to start the container.
     - Test this with:
     ```bash
-        $ podman --user daemon-reload
-        $ podman --user start lldap
-        $ podman --user status lldap
+        $ systemctl --user daemon-reload
+        $ systemctl --user start lldap
+        $ systemctl --user status lldap
     ```
     - Assuming it launched correctly, you should now stop it again.
     ```bash
-        $ podman --user stop lldap
+        $ systemctl --user stop lldap
     ```
 - Make any adjustments you feel are necessary to the network files.
 - Now all that's left to do is the [bootstrapping process](../bootstrap/bootstrap.md#docker-compose):
@@ -45,8 +45,8 @@ Starting `lldap.service` will start all the other services, but stopping it will
     - Toward the end of the container section, uncomment the lines in `lldap.container` regarding the bootstrap process.
     - Start the container:
         ```bash
-        $ podman --user daemon-reload
-        $ podman --user start lldap
+        $ systemctl --user daemon-reload
+        $ systemctl --user start lldap
         ```
     - Attach a terminal to the container, and run `bootstrap.sh`:
         ```bash
