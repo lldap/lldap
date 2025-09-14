@@ -86,6 +86,17 @@ fn set_cookies_from_jwt(response: login::ServerLoginResponse) -> Result<(String,
         .context("Error setting cookie")
 }
 
+fn extract_user_info_from_auth_response(
+    response: login::ServerAuthResponse,
+) -> Result<(String, bool)> {
+    match response {
+        login::ServerAuthResponse::Token(token_response) => set_cookies_from_jwt(token_response),
+        login::ServerAuthResponse::TrustedHeader(header_response) => {
+            Ok((header_response.user_id, header_response.is_admin))
+        }
+    }
+}
+
 impl HostService {
     pub async fn graphql_query<QueryType>(
         variables: QueryType::Variables,
@@ -170,13 +181,13 @@ impl HostService {
     }
 
     pub async fn refresh() -> Result<(String, bool)> {
-        call_server_json_with_error_message::<login::ServerLoginResponse, _>(
+        call_server_json_with_error_message::<login::ServerAuthResponse, _>(
             &(base_url() + "/auth/refresh"),
             GET_REQUEST,
             "Could not start authentication: ",
         )
         .await
-        .and_then(set_cookies_from_jwt)
+        .and_then(extract_user_info_from_auth_response)
     }
 
     // The `_request` parameter is to make it the same shape as the other functions.

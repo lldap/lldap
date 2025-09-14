@@ -159,3 +159,22 @@ key_seed = "RanD0m STR1ng"
 #cert_file="/data/cert.pem"
 ## Certificate key file.
 #key_file="/data/key.pem"
+
+## Options to configure trusted header authentication.
+## To set these options from environment variables, use the following format
+## (example with "enabled"): LLDAP_TRUSTED_HEADER_OPTIONS__ENABLED
+[trusted_header_options]
+## Whether to enable trusted header authentication.
+## When enabled, users can be authenticated via a trusted header (e.g. from a reverse proxy).
+## The existing username/password login will remain available as fallback.
+#enabled=false
+## Name of the header containing the username.
+#header_name="Remote-User"
+## Optional logout URL to redirect to when using trusted header authentication.
+## If not specified, users will be redirected to the regular login page.
+#logout_url="https://example.com/logout"
+## List of trusted proxy IP addresses/networks that are allowed to send trusted headers.
+## Only requests from these IPs will be authenticated via trusted headers.
+## Supports both single IP addresses (e.g., "192.168.1.1") and CIDR notation (e.g., "10.0.0.0/8").
+## Default: ["127.0.0.0/8", "::1/128"] (localhost only)
+#trusted_proxies=["127.0.0.0/8", "::1/128", "10.0.0.0/8"]
