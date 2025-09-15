@@ -24,6 +24,7 @@ generic-array = "0.14"
 rand = "0.8"
 sha2 = "0.9"
 thiserror = "2"
+uuid = { version = "1.18.1", features = ["serde"] }
 
 [dependencies.derive_more]
 features = ["debug", "display"]

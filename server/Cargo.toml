@@ -136,7 +136,7 @@ features = ["full"]
 version = "1.25"
 
 [dependencies.uuid]
-features = ["v1", "v3"]
+features = ["v1", "v3", "v4"]
 version = "1"
 
 [dependencies.tracing-forest]
