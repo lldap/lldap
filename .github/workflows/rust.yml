@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  MSRV: "1.89"
+  MSRV: "1.89.0"
 
 jobs:
   pre_job:

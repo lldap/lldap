@@ -25,6 +25,16 @@ reviews:
     unit_tests:
       enabled: false
 
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    title:
+      mode: "off"
+    description:
+      mode: "off"
+    issue_assessment:
+      mode: "off"
+
 chat:
   art: false
   auto_reply: false
