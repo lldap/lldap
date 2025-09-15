@@ -4,6 +4,7 @@ use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt;
+use uuid::Uuid;
 
 pub mod access_control;
 pub mod opaque;
@@ -212,6 +213,7 @@ pub struct JWTClaims {
     pub exp: DateTime<Utc>,
     #[serde(with = "chrono::serde::ts_seconds")]
     pub iat: DateTime<Utc>,
+    pub jti: Uuid,
     pub user: String,
     pub groups: HashSet<String>,
 }
