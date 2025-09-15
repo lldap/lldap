@@ -1,45 +1,36 @@
-# CodeRabbit Configuration
-# Making the agent less verbose while keeping automatic reviews
+# docs: https://docs.coderabbit.ai/reference/yaml-template for full configuration options
+tone_instructions: "Be concise"
 
-# Review settings
 reviews:
-  # Keep automatic reviews enabled
-  auto_review: true
-  # Disable request changes - just provide suggestions
-  request_changes: false
-  # Disable drafts to avoid verbose draft comments
-  drafts: false
-
-# Comment settings to minimize verbosity
-comment:
-  # Disable summary comments at PR level
-  summary: false
-  # Disable per-file summary comments 
-  per_file_summary: false
-  # Disable overall review summary
-  review_summary: false
-  # Disable walkthrough comments
-  walkthrough: false
-  # Disable poems and creative content
+  profile: "chill"
+  high_level_summary: false
+  review_status: false
+  commit_status: false 
+  collapse_walkthrough: true
+  changed_files_summary: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  assess_linked_issues: false
+  related_issues: false
+  related_prs: false
+  suggested_labels: false
+  suggested_reviewers: false
   poem: false
-  # Keep inline comments for actual code issues
-  inline: true
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
 
-# Language and tone settings
-language:
-  # Use concise language, disable verbose explanations
-  verbose: false
-  # Keep tone professional and brief
-  tone: "concise"
-
-# Chat settings
 chat:
-  # Disable automatic chat responses to reduce noise
+  art: false
   auto_reply: false
 
-# Additional settings to reduce verbosity
-features:
-  # Disable summary generation
-  summary_generation: false
-  # Disable learning suggestions
-  learning_suggestions: false
+knowledge_base:
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: false
