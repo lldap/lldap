@@ -1,0 +1,45 @@
+# CodeRabbit Configuration
+# Making the agent less verbose while keeping automatic reviews
+
+# Review settings
+reviews:
+  # Keep automatic reviews enabled
+  auto_review: true
+  # Disable request changes - just provide suggestions
+  request_changes: false
+  # Disable drafts to avoid verbose draft comments
+  drafts: false
+
+# Comment settings to minimize verbosity
+comment:
+  # Disable summary comments at PR level
+  summary: false
+  # Disable per-file summary comments 
+  per_file_summary: false
+  # Disable overall review summary
+  review_summary: false
+  # Disable walkthrough comments
+  walkthrough: false
+  # Disable poems and creative content
+  poem: false
+  # Keep inline comments for actual code issues
+  inline: true
+
+# Language and tone settings
+language:
+  # Use concise language, disable verbose explanations
+  verbose: false
+  # Keep tone professional and brief
+  tone: "concise"
+
+# Chat settings
+chat:
+  # Disable automatic chat responses to reduce noise
+  auto_reply: false
+
+# Additional settings to reduce verbosity
+features:
+  # Disable summary generation
+  summary_generation: false
+  # Disable learning suggestions
+  learning_suggestions: false
