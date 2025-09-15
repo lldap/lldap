@@ -1,0 +1,36 @@
+# docs: https://docs.coderabbit.ai/reference/yaml-template for full configuration options
+tone_instructions: "Be concise"
+
+reviews:
+  profile: "chill"
+  high_level_summary: false
+  review_status: false
+  commit_status: false 
+  collapse_walkthrough: true
+  changed_files_summary: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  assess_linked_issues: false
+  related_issues: false
+  related_prs: false
+  suggested_labels: false
+  suggested_reviewers: false
+  poem: false
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+
+chat:
+  art: false
+  auto_reply: false
+
+knowledge_base:
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: false
