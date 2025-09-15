@@ -289,16 +289,10 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
         ],
     })
 }
-
 pub(crate) fn is_root_dse_request(request: &LdapSearchRequest) -> bool {
-    if request.base.is_empty()
+    request.base.is_empty()
         && request.scope == LdapSearchScope::Base
-        && let LdapFilter::Present(attribute) = &request.filter
-        && attribute.eq_ignore_ascii_case("objectclass")
-    {
-        return true;
-    }
-    false
+        && matches!(&request.filter, LdapFilter::Present(attr) if attr.eq_ignore_ascii_case("objectclass"))
 }
 
 pub(crate) fn is_subschema_entry_request(request: &LdapSearchRequest) -> bool {
@@ -672,7 +666,7 @@ mod tests {
         mock.expect_list_users()
             .with(
                 eq(Some(UserRequestFilter::And(vec![
-                    UserRequestFilter::And(Vec::new()),
+                    UserRequestFilter::True,
                     UserRequestFilter::UserId(UserId::new("test")),
                 ]))),
                 eq(false),
@@ -707,7 +701,7 @@ mod tests {
     async fn test_search_readonly_user() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::And(Vec::new()))), eq(false))
+            .with(eq(Some(UserRequestFilter::True)), eq(false))
             .times(1)
             .return_once(|_, _| Ok(vec![]));
         let ldap_handler = setup_bound_readonly_handler(mock).await;
@@ -724,7 +718,7 @@ mod tests {
     async fn test_search_member_of() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
-            .with(eq(Some(UserRequestFilter::And(Vec::new()))), eq(true))
+            .with(eq(Some(UserRequestFilter::True)), eq(true))
             .times(1)
             .return_once(|_, _| {
                 Ok(vec![UserAndGroups {
@@ -769,7 +763,7 @@ mod tests {
         mock.expect_list_users()
             .with(
                 eq(Some(UserRequestFilter::And(vec![
-                    UserRequestFilter::And(Vec::new()),
+                    UserRequestFilter::True,
                     UserRequestFilter::UserId(UserId::new("bob")),
                 ]))),
                 eq(false),
@@ -975,7 +969,7 @@ mod tests {
     async fn test_search_groups() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::And(Vec::new()))))
+            .with(eq(Some(GroupRequestFilter::True)))
             .times(1)
             .return_once(|_| {
                 Ok(vec![
@@ -1114,14 +1108,12 @@ mod tests {
                 GroupRequestFilter::DisplayName("group_1".into()),
                 GroupRequestFilter::Member(UserId::new("bob")),
                 GroupRequestFilter::DisplayName("rockstars".into()),
-                false.into(),
                 GroupRequestFilter::Uuid(uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc")),
                 true.into(),
                 true.into(),
                 true.into(),
                 true.into(),
-                GroupRequestFilter::Not(Box::new(false.into())),
-                false.into(),
+                true.into(),
                 GroupRequestFilter::DisplayNameSubString(SubStringFilter {
                     initial: Some("iNIt".to_owned()),
                     any: vec!["1".to_owned(), "2aA".to_owned()],
@@ -1195,11 +1187,9 @@ mod tests {
     async fn test_search_groups_filter_2() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::Or(vec![
-                GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
-                    "group_2".into(),
-                ))),
-            ]))))
+            .with(eq(Some(GroupRequestFilter::Not(Box::new(
+                GroupRequestFilter::DisplayName("group_2".into()),
+            )))))
             .times(1)
             .return_once(|_| {
                 Ok(vec![Group {
@@ -1309,7 +1299,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
             .with(eq(Some(GroupRequestFilter::And(vec![
-                GroupRequestFilter::And(Vec::new()),
+                GroupRequestFilter::True,
                 GroupRequestFilter::DisplayName("rockstars".into()),
             ]))))
             .times(1)
@@ -1370,11 +1360,9 @@ mod tests {
     async fn test_search_groups_error() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::Or(vec![
-                GroupRequestFilter::Not(Box::new(GroupRequestFilter::DisplayName(
-                    "group_2".into(),
-                ))),
-            ]))))
+            .with(eq(Some(GroupRequestFilter::Not(Box::new(
+                GroupRequestFilter::DisplayName("group_2".into()),
+            )))))
             .times(1)
             .return_once(|_| {
                 Err(lldap_domain_model::error::DomainError::InternalError(
@@ -1422,44 +1410,35 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
             .with(
-                eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(
-                    vec![
-                        UserRequestFilter::Not(Box::new(UserRequestFilter::UserId(UserId::new(
-                            "bob",
-                        )))),
-                        UserRequestFilter::UserId("bob_1".to_string().into()),
-                        false.into(),
-                        true.into(),
-                        false.into(),
-                        true.into(),
-                        true.into(),
-                        false.into(),
-                        UserRequestFilter::Or(vec![
-                            UserRequestFilter::AttributeEquality(
-                                AttributeName::from("first_name"),
-                                "FirstName".to_string().into(),
-                            ),
-                            UserRequestFilter::AttributeEquality(
-                                AttributeName::from("first_name"),
-                                "firstname".to_string().into(),
-                            ),
-                        ]),
-                        false.into(),
-                        UserRequestFilter::UserIdSubString(SubStringFilter {
+                eq(Some(UserRequestFilter::Or(vec![
+                    UserRequestFilter::Not(Box::new(UserRequestFilter::UserId(UserId::new("bob")))),
+                    UserRequestFilter::UserId("bob_1".to_string().into()),
+                    false.into(),
+                    false.into(),
+                    false.into(),
+                    UserRequestFilter::AttributeEquality(
+                        AttributeName::from("first_name"),
+                        "FirstName".to_string().into(),
+                    ),
+                    UserRequestFilter::AttributeEquality(
+                        AttributeName::from("first_name"),
+                        "firstname".to_string().into(),
+                    ),
+                    false.into(),
+                    UserRequestFilter::UserIdSubString(SubStringFilter {
+                        initial: Some("iNIt".to_owned()),
+                        any: vec!["1".to_owned(), "2aA".to_owned()],
+                        final_: Some("finAl".to_owned()),
+                    }),
+                    UserRequestFilter::SubString(
+                        UserColumn::DisplayName,
+                        SubStringFilter {
                             initial: Some("iNIt".to_owned()),
                             any: vec!["1".to_owned(), "2aA".to_owned()],
                             final_: Some("finAl".to_owned()),
-                        }),
-                        UserRequestFilter::SubString(
-                            UserColumn::DisplayName,
-                            SubStringFilter {
-                                initial: Some("iNIt".to_owned()),
-                                any: vec!["1".to_owned(), "2aA".to_owned()],
-                                final_: Some("finAl".to_owned()),
-                            },
-                        ),
-                    ],
-                )]))),
+                        },
+                    ),
+                ]))),
                 eq(false),
             )
             .times(1)
@@ -1598,11 +1577,9 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
             .with(
-                eq(Some(UserRequestFilter::And(vec![UserRequestFilter::Or(
-                    vec![UserRequestFilter::Not(Box::new(
-                        UserRequestFilter::Equality(UserColumn::DisplayName, "bob".to_string()),
-                    ))],
-                )]))),
+                eq(Some(UserRequestFilter::Not(Box::new(
+                    UserRequestFilter::Equality(UserColumn::DisplayName, "bob".to_string()),
+                )))),
                 eq(false),
             )
             .times(1)
@@ -1709,7 +1686,7 @@ mod tests {
             }])
         });
         mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::And(Vec::new()))))
+            .with(eq(Some(GroupRequestFilter::True)))
             .times(1)
             .return_once(|_| {
                 Ok(vec![Group {
@@ -1795,7 +1772,7 @@ mod tests {
             }])
         });
         mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::And(Vec::new()))))
+            .with(eq(Some(GroupRequestFilter::True)))
             .returning(|_| {
                 Ok(vec![Group {
                     id: GroupId(1),
