@@ -69,7 +69,7 @@ version = "*"
 
 [dependencies.tracing-subscriber]
 version = "0.3"
-features = ["env-filter", "tracing-log"]
+features = ["env-filter", "tracing-log", "chrono"]
 
 [dependencies.lettre]
 features = ["builder", "serde", "smtp-transport", "tokio1-rustls-tls"]
