@@ -222,7 +222,7 @@ fn convert_user_filter(
             let res = filters
                 .iter()
                 .map(rec)
-                .filter(|c| !matches!(c, Ok(UserRequestFilter::False)))
+                .filter(|c| !matches!(c, Ok(UserRequestFilter::True)))
                 .flat_map(|f| match f {
                     Ok(UserRequestFilter::And(v)) => v.into_iter().map(Ok).collect(),
                     f => vec![f],
@@ -240,7 +240,7 @@ fn convert_user_filter(
             let res = filters
                 .iter()
                 .map(rec)
-                .filter(|c| !matches!(c, Ok(UserRequestFilter::True)))
+                .filter(|c| !matches!(c, Ok(UserRequestFilter::False)))
                 .flat_map(|f| match f {
                     Ok(UserRequestFilter::Or(v)) => v.into_iter().map(Ok).collect(),
                     f => vec![f],
