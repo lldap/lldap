@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::common::env;
 use anyhow::{Context, Result, anyhow};
 use graphql_client::GraphQLQuery;

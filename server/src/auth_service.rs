@@ -35,6 +35,7 @@ use std::{
 };
 use time::ext::NumericalDuration;
 use tracing::{debug, info, instrument, warn};
+use uuid::Uuid;
 
 type Token<S> = jwt::Token<jwt::Header, JWTClaims, S>;
 type SignedToken = Token<jwt::token::Signed>;
@@ -56,6 +57,7 @@ async fn create_jwt<Handler: TcpBackendHandler>(
     let claims = JWTClaims {
         exp: Utc::now() + chrono::Duration::days(1),
         iat: Utc::now(),
+        jti: Uuid::new_v4(),
         user: user.to_string(),
         groups: groups
             .into_iter()

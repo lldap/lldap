@@ -184,11 +184,11 @@ fn get_group_attribute_equality_filter(
         ]),
         (Ok(_), Err(e)) => {
             warn!("Invalid value for attribute {} (lowercased): {}", field, e);
-            GroupRequestFilter::from(false)
+            GroupRequestFilter::False
         }
         (Err(e), _) => {
             warn!("Invalid value for attribute {}: {}", field, e);
-            GroupRequestFilter::from(false)
+            GroupRequestFilter::False
         }
     }
 }
@@ -209,7 +209,7 @@ fn convert_group_filter(
                     .map(|id| GroupRequestFilter::GroupId(GroupId(id)))
                     .unwrap_or_else(|_| {
                         warn!("Given group id is not a valid integer: {}", value_lc);
-                        GroupRequestFilter::from(false)
+                        GroupRequestFilter::False
                     })),
                 GroupFieldType::DisplayName => Ok(GroupRequestFilter::DisplayName(value_lc.into())),
                 GroupFieldType::Uuid => Uuid::try_from(value_lc.as_str())
@@ -226,7 +226,7 @@ fn convert_group_filter(
                 .map(GroupRequestFilter::Member)
                 .unwrap_or_else(|e| {
                     warn!("Invalid member filter on group: {}", e);
-                    GroupRequestFilter::from(false)
+                    GroupRequestFilter::False
                 })),
                 GroupFieldType::ObjectClass => Ok(GroupRequestFilter::from(
                     get_default_group_object_classes()
@@ -246,7 +246,7 @@ fn convert_group_filter(
                     .map(GroupRequestFilter::DisplayName)
                     .unwrap_or_else(|_| {
                         warn!("Invalid dn filter on group: {}", value_lc);
-                        GroupRequestFilter::from(false)
+                        GroupRequestFilter::False
                     }))
                 }
                 GroupFieldType::NoMatch => {
@@ -257,7 +257,7 @@ fn convert_group_filter(
                             field
                         );
                     }
-                    Ok(GroupRequestFilter::from(false))
+                    Ok(GroupRequestFilter::False)
                 }
                 GroupFieldType::Attribute(field, typ, is_list) => Ok(
                     get_group_attribute_equality_filter(&field, typ, is_list, value),
@@ -272,21 +272,55 @@ fn convert_group_filter(
                 }),
             }
         }
-        LdapFilter::And(filters) => Ok(GroupRequestFilter::And(
-            filters.iter().map(rec).collect::<LdapResult<_>>()?,
-        )),
-        LdapFilter::Or(filters) => Ok(GroupRequestFilter::Or(
-            filters.iter().map(rec).collect::<LdapResult<_>>()?,
-        )),
-        LdapFilter::Not(filter) => Ok(GroupRequestFilter::Not(Box::new(rec(filter)?))),
+        LdapFilter::And(filters) => {
+            let res = filters
+                .iter()
+                .map(rec)
+                .filter(|f| !matches!(f, Ok(GroupRequestFilter::False)))
+                .flat_map(|f| match f {
+                    Ok(GroupRequestFilter::And(v)) => v.into_iter().map(Ok).collect(),
+                    f => vec![f],
+                })
+                .collect::<LdapResult<Vec<_>>>()?;
+            if res.is_empty() {
+                Ok(GroupRequestFilter::True)
+            } else if res.len() == 1 {
+                Ok(res.into_iter().next().unwrap())
+            } else {
+                Ok(GroupRequestFilter::And(res))
+            }
+        }
+        LdapFilter::Or(filters) => {
+            let res = filters
+                .iter()
+                .map(rec)
+                .filter(|c| !matches!(c, Ok(GroupRequestFilter::True)))
+                .flat_map(|f| match f {
+                    Ok(GroupRequestFilter::Or(v)) => v.into_iter().map(Ok).collect(),
+                    f => vec![f],
+                })
+                .collect::<LdapResult<Vec<_>>>()?;
+            if res.is_empty() {
+                Ok(GroupRequestFilter::False)
+            } else if res.len() == 1 {
+                Ok(res.into_iter().next().unwrap())
+            } else {
+                Ok(GroupRequestFilter::Or(res))
+            }
+        }
+        LdapFilter::Not(filter) => Ok(match rec(filter)? {
+            GroupRequestFilter::True => GroupRequestFilter::False,
+            GroupRequestFilter::False => GroupRequestFilter::True,
+            f => GroupRequestFilter::Not(Box::new(f)),
+        }),
         LdapFilter::Present(field) => {
             let field = AttributeName::from(field.as_str());
             Ok(match map_group_field(&field, schema) {
                 GroupFieldType::Attribute(name, _, _) => {
                     GroupRequestFilter::CustomAttributePresent(name)
                 }
-                GroupFieldType::NoMatch => GroupRequestFilter::from(false),
-                _ => GroupRequestFilter::from(true),
+                GroupFieldType::NoMatch => GroupRequestFilter::False,
+                _ => GroupRequestFilter::True,
             })
         }
         LdapFilter::Substring(field, substring_filter) => {
@@ -295,7 +329,7 @@ fn convert_group_filter(
                 GroupFieldType::DisplayName => Ok(GroupRequestFilter::DisplayNameSubString(
                     substring_filter.clone().into(),
                 )),
-                GroupFieldType::NoMatch => Ok(GroupRequestFilter::from(false)),
+                GroupFieldType::NoMatch => Ok(GroupRequestFilter::False),
                 _ => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
                     message: format!(

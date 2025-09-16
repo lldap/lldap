@@ -7,6 +7,7 @@ authors.workspace = true
 homepage.workspace = true
 license.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [features]
 default = ["opaque_server", "opaque_client"]
@@ -24,6 +25,7 @@ generic-array = "0.14"
 rand = "0.8"
 sha2 = "0.9"
 thiserror = "2"
+uuid = { version = "1.18.1", features = ["serde"] }
 
 [dependencies.derive_more]
 features = ["debug", "display"]

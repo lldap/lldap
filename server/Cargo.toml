@@ -9,6 +9,7 @@ authors.workspace = true
 homepage.workspace = true
 license.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 actix = "0.13"
@@ -136,7 +137,7 @@ features = ["full"]
 version = "1.25"
 
 [dependencies.uuid]
-features = ["v1", "v3"]
+features = ["v1", "v3", "v4"]
 version = "1"
 
 [dependencies.tracing-forest]

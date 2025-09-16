@@ -8,7 +8,7 @@ pub mod group {
 
     use super::AttributeDescription;
 
-    pub fn resolve_group_attribute_description(name: &str) -> Option<AttributeDescription> {
+    pub fn resolve_group_attribute_description(name: &str) -> Option<AttributeDescription<'_>> {
         match name {
             "creation_date" => Some(AttributeDescription {
                 attribute_identifier: name,
@@ -39,7 +39,7 @@ pub mod group {
         }
     }
 
-    pub fn resolve_group_attribute_description_or_default(name: &str) -> AttributeDescription {
+    pub fn resolve_group_attribute_description_or_default(name: &str) -> AttributeDescription<'_> {
         match resolve_group_attribute_description(name) {
             Some(d) => d,
             None => AttributeDescription {
@@ -55,7 +55,7 @@ pub mod user {
 
     use super::AttributeDescription;
 
-    pub fn resolve_user_attribute_description(name: &str) -> Option<AttributeDescription> {
+    pub fn resolve_user_attribute_description(name: &str) -> Option<AttributeDescription<'_>> {
         match name {
             "avatar" => Some(AttributeDescription {
                 attribute_identifier: name,
@@ -111,7 +111,7 @@ pub mod user {
         }
     }
 
-    pub fn resolve_user_attribute_description_or_default(name: &str) -> AttributeDescription {
+    pub fn resolve_user_attribute_description_or_default(name: &str) -> AttributeDescription<'_> {
         match resolve_user_attribute_description(name) {
             Some(d) => d,
             None => AttributeDescription {

@@ -202,11 +202,11 @@ fn get_user_attribute_equality_filter(
         ]),
         (Ok(_), Err(e)) => {
             warn!("Invalid value for attribute {} (lowercased): {}", field, e);
-            UserRequestFilter::from(false)
+            UserRequestFilter::False
         }
         (Err(e), _) => {
             warn!("Invalid value for attribute {}: {}", field, e);
-            UserRequestFilter::from(false)
+            UserRequestFilter::False
         }
     }
 }
@@ -218,13 +218,47 @@ fn convert_user_filter(
 ) -> LdapResult<UserRequestFilter> {
     let rec = |f| convert_user_filter(ldap_info, f, schema);
     match filter {
-        LdapFilter::And(filters) => Ok(UserRequestFilter::And(
-            filters.iter().map(rec).collect::<LdapResult<_>>()?,
-        )),
-        LdapFilter::Or(filters) => Ok(UserRequestFilter::Or(
-            filters.iter().map(rec).collect::<LdapResult<_>>()?,
-        )),
-        LdapFilter::Not(filter) => Ok(UserRequestFilter::Not(Box::new(rec(filter)?))),
+        LdapFilter::And(filters) => {
+            let res = filters
+                .iter()
+                .map(rec)
+                .filter(|c| !matches!(c, Ok(UserRequestFilter::False)))
+                .flat_map(|f| match f {
+                    Ok(UserRequestFilter::And(v)) => v.into_iter().map(Ok).collect(),
+                    f => vec![f],
+                })
+                .collect::<LdapResult<Vec<_>>>()?;
+            if res.is_empty() {
+                Ok(UserRequestFilter::True)
+            } else if res.len() == 1 {
+                Ok(res.into_iter().next().unwrap())
+            } else {
+                Ok(UserRequestFilter::And(res))
+            }
+        }
+        LdapFilter::Or(filters) => {
+            let res = filters
+                .iter()
+                .map(rec)
+                .filter(|c| !matches!(c, Ok(UserRequestFilter::True)))
+                .flat_map(|f| match f {
+                    Ok(UserRequestFilter::Or(v)) => v.into_iter().map(Ok).collect(),
+                    f => vec![f],
+                })
+                .collect::<LdapResult<Vec<_>>>()?;
+            if res.is_empty() {
+                Ok(UserRequestFilter::False)
+            } else if res.len() == 1 {
+                Ok(res.into_iter().next().unwrap())
+            } else {
+                Ok(UserRequestFilter::Or(res))
+            }
+        }
+        LdapFilter::Not(filter) => Ok(match rec(filter)? {
+            UserRequestFilter::True => UserRequestFilter::False,
+            UserRequestFilter::False => UserRequestFilter::True,
+            f => UserRequestFilter::Not(Box::new(f)),
+        }),
         LdapFilter::Equality(field, value) => {
             let field = AttributeName::from(field.as_str());
             let value_lc = value.to_ascii_lowercase();
@@ -250,7 +284,7 @@ fn convert_user_filter(
                             field
                         );
                     }
-                    Ok(UserRequestFilter::from(false))
+                    Ok(UserRequestFilter::False)
                 }
                 UserFieldType::ObjectClass => Ok(UserRequestFilter::from(
                     get_default_user_object_classes()
@@ -269,7 +303,7 @@ fn convert_user_filter(
                 .map(UserRequestFilter::MemberOf)
                 .unwrap_or_else(|e| {
                     warn!("Invalid memberOf filter: {}", e);
-                    UserRequestFilter::from(false)
+                    UserRequestFilter::False
                 })),
                 UserFieldType::EntryDn | UserFieldType::Dn => {
                     Ok(get_user_id_from_distinguished_name_or_plain_name(
@@ -280,7 +314,7 @@ fn convert_user_filter(
                     .map(UserRequestFilter::UserId)
                     .unwrap_or_else(|_| {
                         warn!("Invalid dn filter on user: {}", value_lc);
-                        UserRequestFilter::from(false)
+                        UserRequestFilter::False
                     }))
                 }
             }
@@ -291,8 +325,8 @@ fn convert_user_filter(
                 UserFieldType::Attribute(name, _, _) => {
                     UserRequestFilter::CustomAttributePresent(name)
                 }
-                UserFieldType::NoMatch => UserRequestFilter::from(false),
-                _ => UserRequestFilter::from(true),
+                UserFieldType::NoMatch => UserRequestFilter::False,
+                _ => UserRequestFilter::True,
             })
         }
         LdapFilter::Substring(field, substring_filter) => {
@@ -311,7 +345,7 @@ fn convert_user_filter(
                     code: LdapResultCode::UnwillingToPerform,
                     message: format!("Unsupported user attribute for substring filter: {field:?}"),
                 }),
-                UserFieldType::NoMatch => Ok(UserRequestFilter::from(false)),
+                UserFieldType::NoMatch => Ok(UserRequestFilter::False),
                 UserFieldType::PrimaryField(UserColumn::Email) => Ok(UserRequestFilter::SubString(
                     UserColumn::LowercaseEmail,
                     substring_filter.clone().into(),
