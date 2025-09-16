@@ -5,9 +5,8 @@ use actix_service::{ServiceFactoryExt, fn_service};
 use anyhow::{Context, Result, anyhow};
 use ldap3_proto::{LdapCodec, control::LdapControl, proto::LdapMsg, proto::LdapOp};
 use lldap_access_control::AccessControlledBackendHandler;
-use lldap_domain::types::AttributeName;
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
-use lldap_ldap::LdapHandler;
+use lldap_ldap::{LdapHandler, LdapInfo};
 use lldap_opaque_handler::OpaqueHandler;
 use rustls::PrivateKey;
 use tokio_rustls::TlsAcceptor as RustlsTlsAcceptor;
@@ -71,9 +70,7 @@ where
 async fn handle_ldap_stream<Stream, Backend>(
     stream: Stream,
     backend_handler: Backend,
-    ldap_base_dn: String,
-    ignored_user_attributes: Vec<AttributeName>,
-    ignored_group_attributes: Vec<AttributeName>,
+    ldap_info: &'static LdapInfo,
 ) -> Result<Stream>
 where
     Backend: BackendHandler + LoginHandler + OpaqueHandler + 'static,
@@ -88,9 +85,7 @@ where
     let session_uuid = Uuid::new_v4();
     let mut session = LdapHandler::new(
         AccessControlledBackendHandler::new(backend_handler),
-        ldap_base_dn,
-        ignored_user_attributes,
-        ignored_group_attributes,
+        ldap_info,
         session_uuid,
     );
 
@@ -170,9 +165,19 @@ where
 {
     let context = (
         backend_handler,
-        config.ldap_base_dn.clone(),
-        config.ignored_user_attributes.clone(),
-        config.ignored_group_attributes.clone(),
+        Box::leak(Box::new(
+            LdapInfo::new(
+                &config.ldap_base_dn,
+                config.ignored_user_attributes.clone(),
+                config.ignored_group_attributes.clone(),
+            )
+            .with_context(|| {
+                format!(
+                    "Invalid value for ldap_base_dn in configuration: {}",
+                    &config.ldap_base_dn
+                )
+            })?,
+        )) as &'static LdapInfo,
     );
 
     let context_for_tls = context.clone();
@@ -182,15 +187,8 @@ where
         fn_service(move |stream: TcpStream| {
             let context = context.clone();
             async move {
-                let (handler, base_dn, ignored_user_attributes, ignored_group_attributes) = context;
-                handle_ldap_stream(
-                    stream,
-                    handler,
-                    base_dn,
-                    ignored_user_attributes,
-                    ignored_group_attributes,
-                )
-                .await
+                let (handler, ldap_info) = context;
+                handle_ldap_stream(stream, handler, ldap_info).await
             }
         })
         .map_err(|err: anyhow::Error| error!("[LDAP] Service Error: {:#}", err))
@@ -211,19 +209,9 @@ where
             fn_service(move |stream: TcpStream| {
                 let tls_context = tls_context.clone();
                 async move {
-                    let (
-                        (handler, base_dn, ignored_user_attributes, ignored_group_attributes),
-                        tls_acceptor,
-                    ) = tls_context;
+                    let ((handler, ldap_info), tls_acceptor) = tls_context;
                     let tls_stream = tls_acceptor.accept(stream).await?;
-                    handle_ldap_stream(
-                        tls_stream,
-                        handler,
-                        base_dn,
-                        ignored_user_attributes,
-                        ignored_group_attributes,
-                    )
-                    .await
+                    handle_ldap_stream(tls_stream, handler, ldap_info).await
                 }
             })
             .map_err(|err: anyhow::Error| error!("[LDAPS] Service Error: {:#}", err))

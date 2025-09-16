@@ -300,6 +300,23 @@ pub struct LdapInfo {
     pub ignored_group_attributes: Vec<AttributeName>,
 }
 
+impl LdapInfo {
+    pub fn new(
+        base_dn: &str,
+        ignored_user_attributes: Vec<AttributeName>,
+        ignored_group_attributes: Vec<AttributeName>,
+    ) -> LdapResult<Self> {
+        let base_dn = parse_distinguished_name(&base_dn.to_ascii_lowercase())?;
+        let base_dn_str = join(base_dn.iter().map(|(k, v)| format!("{k}={v}")), ",");
+        Ok(Self {
+            base_dn,
+            base_dn_str,
+            ignored_user_attributes,
+            ignored_group_attributes,
+        })
+    }
+}
+
 pub fn get_custom_attribute(
     attributes: &[Attribute],
     attribute_name: &AttributeName,
@@ -519,6 +536,16 @@ mod tests {
             parse_distinguished_name(" ou  = people , dc = example , dc =  com ")
                 .expect("parsing failed"),
             parsed_dn
+        );
+    }
+
+    #[test]
+    fn test_whitespace_in_ldap_info() {
+        assert_eq!(
+            LdapInfo::new("   ou=people, dc =example,  dc=com \n", vec![], vec![])
+                .unwrap()
+                .base_dn_str,
+            "ou=people,dc=example,dc=com"
         );
     }
 }

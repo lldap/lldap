@@ -17,7 +17,7 @@ use lldap_domain::{
     public_schema::PublicSchema,
     types::{Group, UserAndGroups},
 };
-use tracing::{debug, instrument, warn};
+use tracing::{debug, warn};
 
 #[derive(Debug)]
 enum SearchScope {
@@ -396,7 +396,6 @@ async fn do_search_internal(
     })
 }
 
-#[instrument(skip_all, level = "debug")]
 pub async fn do_search(
     backend_handler: &impl UserAndGroupListerBackendHandler,
     ldap_info: &LdapInfo,

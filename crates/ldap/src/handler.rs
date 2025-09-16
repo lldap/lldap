@@ -2,7 +2,7 @@ use crate::{
     compare,
     core::{
         error::{LdapError, LdapResult},
-        utils::{LdapInfo, parse_distinguished_name},
+        utils::LdapInfo,
     },
     create, delete, modify,
     password::{self, do_password_modification},
@@ -18,7 +18,7 @@ use ldap3_proto::proto::{
 };
 use lldap_access_control::AccessControlledBackendHandler;
 use lldap_auth::access_control::ValidationResults;
-use lldap_domain::{public_schema::PublicSchema, types::AttributeName};
+use lldap_domain::public_schema::PublicSchema;
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler, ReadSchemaBackendHandler};
 use lldap_opaque_handler::OpaqueHandler;
 use tracing::{debug, instrument};
@@ -59,7 +59,7 @@ pub(crate) fn make_modify_response(code: LdapResultCode, message: String) -> Lda
 pub struct LdapHandler<Backend> {
     user_info: Option<ValidationResults>,
     backend_handler: AccessControlledBackendHandler<Backend>,
-    ldap_info: LdapInfo,
+    ldap_info: &'static LdapInfo,
     session_uuid: uuid::Uuid,
 }
 
@@ -89,23 +89,13 @@ enum Credentials<'s> {
 impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend> {
     pub fn new(
         backend_handler: AccessControlledBackendHandler<Backend>,
-        mut ldap_base_dn: String,
-        ignored_user_attributes: Vec<AttributeName>,
-        ignored_group_attributes: Vec<AttributeName>,
+        ldap_info: &'static LdapInfo,
         session_uuid: uuid::Uuid,
     ) -> Self {
-        ldap_base_dn.make_ascii_lowercase();
         Self {
             user_info: None,
             backend_handler,
-            ldap_info: LdapInfo {
-                base_dn: parse_distinguished_name(&ldap_base_dn).unwrap_or_else(|_| {
-                    panic!("Invalid value for ldap_base_dn in configuration: {ldap_base_dn}")
-                }),
-                base_dn_str: ldap_base_dn,
-                ignored_user_attributes,
-                ignored_group_attributes,
-            },
+            ldap_info,
             session_uuid,
         }
     }
@@ -114,9 +104,9 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     pub fn new_for_tests(backend_handler: Backend, ldap_base_dn: &str) -> Self {
         Self::new(
             AccessControlledBackendHandler::new(backend_handler),
-            ldap_base_dn.to_string(),
-            vec![],
-            vec![],
+            Box::leak(Box::new(
+                LdapInfo::new(ldap_base_dn, Vec::new(), Vec::new()).unwrap(),
+            )),
             uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
         )
     }
@@ -171,13 +161,13 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
         let backend_handler = self
             .backend_handler
             .get_user_restricted_lister_handler(user_info);
-        search::do_search(&backend_handler, &self.ldap_info, request).await
+        search::do_search(&backend_handler, self.ldap_info, request).await
     }
 
     #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
     pub async fn do_bind(&mut self, request: &LdapBindRequest) -> Vec<LdapOp> {
         let (code, message) =
-            match password::do_bind(&self.ldap_info, request, self.get_login_handler()).await {
+            match password::do_bind(self.ldap_info, request, self.get_login_handler()).await {
                 Ok(user_id) => {
                     self.user_info = self
                         .backend_handler
@@ -211,7 +201,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                     };
                     do_password_modification(
                         credentials,
-                        &self.ldap_info,
+                        self.ldap_info,
                         &self.backend_handler,
                         self.get_opaque_handler(),
                         &password_request,
@@ -257,7 +247,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 self.backend_handler
                     .get_readable_handler(credentials, &user_id)
             },
-            &self.ldap_info,
+            self.ldap_info,
             credentials,
             request,
         )
@@ -275,7 +265,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 code: LdapResultCode::InsufficentAccessRights,
                 message: "Unauthorized write".to_string(),
             })?;
-        create::create_user_or_group(backend_handler, &self.ldap_info, request).await
+        create::create_user_or_group(backend_handler, self.ldap_info, request).await
     }
 
     #[instrument(skip_all, level = "debug")]
@@ -288,7 +278,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
                 code: LdapResultCode::InsufficentAccessRights,
                 message: "Unauthorized write".to_string(),
             })?;
-        delete::delete_user_or_group(backend_handler, &self.ldap_info, request).await
+        delete::delete_user_or_group(backend_handler, self.ldap_info, request).await
     }
 
     #[instrument(skip_all, level = "debug")]
