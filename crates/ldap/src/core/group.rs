@@ -276,7 +276,7 @@ fn convert_group_filter(
             let res = filters
                 .iter()
                 .map(rec)
-                .filter(|f| !matches!(f, Ok(GroupRequestFilter::False)))
+                .filter(|f| !matches!(f, Ok(GroupRequestFilter::True)))
                 .flat_map(|f| match f {
                     Ok(GroupRequestFilter::And(v)) => v.into_iter().map(Ok).collect(),
                     f => vec![f],
@@ -294,7 +294,7 @@ fn convert_group_filter(
             let res = filters
                 .iter()
                 .map(rec)
-                .filter(|c| !matches!(c, Ok(GroupRequestFilter::True)))
+                .filter(|c| !matches!(c, Ok(GroupRequestFilter::False)))
                 .flat_map(|f| match f {
                     Ok(GroupRequestFilter::Or(v)) => v.into_iter().map(Ok).collect(),
                     f => vec![f],

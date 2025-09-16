@@ -762,10 +762,7 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users()
             .with(
-                eq(Some(UserRequestFilter::And(vec![
-                    UserRequestFilter::True,
-                    UserRequestFilter::UserId(UserId::new("bob")),
-                ]))),
+                eq(Some(UserRequestFilter::UserId(UserId::new("bob")))),
                 eq(false),
             )
             .times(1)
@@ -1108,12 +1105,9 @@ mod tests {
                 GroupRequestFilter::DisplayName("group_1".into()),
                 GroupRequestFilter::Member(UserId::new("bob")),
                 GroupRequestFilter::DisplayName("rockstars".into()),
+                false.into(),
                 GroupRequestFilter::Uuid(uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc")),
-                true.into(),
-                true.into(),
-                true.into(),
-                true.into(),
-                true.into(),
+                false.into(),
                 GroupRequestFilter::DisplayNameSubString(SubStringFilter {
                     initial: Some("iNIt".to_owned()),
                     any: vec!["1".to_owned(), "2aA".to_owned()],
@@ -1298,10 +1292,9 @@ mod tests {
     async fn test_search_group_as_scope() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
-            .with(eq(Some(GroupRequestFilter::And(vec![
-                GroupRequestFilter::True,
-                GroupRequestFilter::DisplayName("rockstars".into()),
-            ]))))
+            .with(eq(Some(GroupRequestFilter::DisplayName(
+                "rockstars".into(),
+            ))))
             .times(1)
             .return_once(|_| Ok(vec![]));
         let ldap_handler = setup_bound_readonly_handler(mock).await;
@@ -1413,9 +1406,9 @@ mod tests {
                 eq(Some(UserRequestFilter::Or(vec![
                     UserRequestFilter::Not(Box::new(UserRequestFilter::UserId(UserId::new("bob")))),
                     UserRequestFilter::UserId("bob_1".to_string().into()),
-                    false.into(),
-                    false.into(),
-                    false.into(),
+                    true.into(),
+                    true.into(),
+                    true.into(),
                     UserRequestFilter::AttributeEquality(
                         AttributeName::from("first_name"),
                         "FirstName".to_string().into(),
@@ -1424,7 +1417,6 @@ mod tests {
                         AttributeName::from("first_name"),
                         "firstname".to_string().into(),
                     ),
-                    false.into(),
                     UserRequestFilter::UserIdSubString(SubStringFilter {
                         initial: Some("iNIt".to_owned()),
                         any: vec!["1".to_owned(), "2aA".to_owned()],
