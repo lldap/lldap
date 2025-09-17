@@ -46,7 +46,9 @@ advanced guides (scripting, migrations, ...) you can contribute to.
 ### Code
 
 If you don't know what to start with, check out the 
-[good first issues](https://github.com/lldap/lldap/labels/good%20first%20issue). 
+[good first issues](https://github.com/lldap/lldap/labels/good%20first%20issue).
+
+For an alternative development environment setup, see [docs/nix-development.md](docs/nix-development.md). 
 
 Otherwise, if you want to fix a specific bug or implement a feature, make sure
 to start by creating an issue for it (if it doesn't already exist). There, we
