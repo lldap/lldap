@@ -214,7 +214,7 @@ fn format_attribute_value(attr_type: &AttributeType, raw: &str) -> String {
         AttributeType::DateTime => {
             console!(format!("Parsing date: {}", raw));
             chrono::DateTime::parse_from_rfc3339(raw)
-                .map(|dt| dt.to_local_time_display().to_string())
+                .map(|dt| dt.to_local_time_display())
                 .unwrap_or_else(|_| "Invalid date".to_string())
         }
         AttributeType::JpegPhoto => "Unimplemented JPEG display".to_string(),
