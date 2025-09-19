@@ -122,7 +122,7 @@ impl GroupTable {
                 </Link>
               </td>
               <td>
-                {&group.creation_date.naive_local().date()}
+                {&group.creation_date.with_timezone(&chrono::offset::Local).date_naive()}
               </td>
               <td>
                 <DeleteGroup

@@ -163,7 +163,7 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                     Err(e) => return Err(e),
                     Ok(r) => log!(&format!(
                         "Created user '{}' at '{}'",
-                        &r.create_user.id, &r.create_user.creation_date
+                        &r.create_user.id, &r.create_user.creation_date.with_timezone(&chrono::offset::Local).date_naive()
                     )),
                 };
                 let model = self.form.model();

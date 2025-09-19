@@ -131,7 +131,7 @@ impl UserTable {
               <td>{&user.display_name}</td>
               <td>{&user.first_name}</td>
               <td>{&user.last_name}</td>
-              <td>{&user.creation_date.naive_local().date()}</td>
+              <td>{&user.creation_date.with_timezone(&chrono::offset::Local).date_naive()}</td>
               <td>
                 <DeleteUser
                   username={user.id.clone()}

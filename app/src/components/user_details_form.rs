@@ -160,11 +160,24 @@ fn get_custom_attribute_input(
     attribute_schema: &AttributeSchema,
     user_attributes: &[Attribute],
 ) -> Html {
-    let values = user_attributes
+    let mut values = user_attributes
         .iter()
         .find(|a| a.name == attribute_schema.name)
         .map(|attribute| attribute.value.clone())
         .unwrap_or_default();
+    let value_to_str = match attribute_schema.attribute_type {
+        AttributeType::String | AttributeType::Integer => |v: String| v,
+        AttributeType::DateTime => |v: String| {
+            console!(format!("Parsing date: {}", &v));
+            chrono::DateTime::parse_from_rfc3339(&v)
+                .map(|dt| dt.with_timezone(&chrono::offset::Local).naive_local().to_string())
+                .unwrap_or_else(|_| "Invalid date".to_string())
+        },
+        AttributeType::JpegPhoto => |_: String| "Unimplemented JPEG display".to_string(),
+    };
+
+    values = values.into_iter().map(value_to_str).collect();
+
     if attribute_schema.is_list {
         html! {
             <ListAttributeInput
@@ -198,7 +211,7 @@ fn get_custom_attribute_static(
         AttributeType::DateTime => |v: String| {
             console!(format!("Parsing date: {}", &v));
             chrono::DateTime::parse_from_rfc3339(&v)
-                .map(|dt| dt.naive_utc().to_string())
+                .map(|dt| dt.with_timezone(&chrono::offset::Local).naive_local().to_string())
                 .unwrap_or_else(|_| "Invalid date".to_string())
         },
         AttributeType::JpegPhoto => |_: String| "Unimplemented JPEG display".to_string(),
