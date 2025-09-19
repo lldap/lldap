@@ -1,4 +1,5 @@
 use crate::{
+    DateToLocalDisplay,
     components::{
         form::{
             attribute_input::{ListAttributeInput, SingleAttributeInput},
@@ -170,7 +171,7 @@ fn get_custom_attribute_input(
         AttributeType::DateTime => |v: String| {
             console!(format!("Parsing date: {}", &v));
             chrono::DateTime::parse_from_rfc3339(&v)
-                .map(|dt| dt.with_timezone(&chrono::offset::Local).naive_local().to_string())
+                .map(|dt| dt.to_local_time_display().to_string())
                 .unwrap_or_else(|_| "Invalid date".to_string())
         },
         AttributeType::JpegPhoto => |_: String| "Unimplemented JPEG display".to_string(),
@@ -211,7 +212,7 @@ fn get_custom_attribute_static(
         AttributeType::DateTime => |v: String| {
             console!(format!("Parsing date: {}", &v));
             chrono::DateTime::parse_from_rfc3339(&v)
-                .map(|dt| dt.with_timezone(&chrono::offset::Local).naive_local().to_string())
+                .map(|dt| dt.to_local_time_display().to_string())
                 .unwrap_or_else(|_| "Invalid date".to_string())
         },
         AttributeType::JpegPhoto => |_: String| "Unimplemented JPEG display".to_string(),

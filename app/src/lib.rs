@@ -15,3 +15,16 @@ pub fn run_app() -> Result<(), JsValue> {
 
     Ok(())
 }
+
+trait DateToLocalDisplay {
+    fn to_local_date_display(&self) -> impl core::fmt::Display;
+    fn to_local_time_display(&self) -> impl core::fmt::Display;
+}
+impl<Tz: chrono::TimeZone> DateToLocalDisplay for chrono::DateTime<Tz> {
+    fn to_local_date_display(&self) -> impl core::fmt::Display {
+        self.with_timezone(&chrono::offset::Local).date_naive()
+    }
+    fn to_local_time_display(&self) -> impl core::fmt::Display {
+        self.with_timezone(&chrono::offset::Local).naive_local()
+    }
+}

@@ -1,4 +1,5 @@
 use crate::{
+    DateToLocalDisplay,
     components::{
         delete_user::DeleteUser,
         router::{AppRoute, Link},
@@ -131,7 +132,7 @@ impl UserTable {
               <td>{&user.display_name}</td>
               <td>{&user.first_name}</td>
               <td>{&user.last_name}</td>
-              <td>{&user.creation_date.with_timezone(&chrono::offset::Local).date_naive()}</td>
+              <td>{&user.creation_date.to_local_date_display()}</td>
               <td>
                 <DeleteUser
                   username={user.id.clone()}

@@ -1,4 +1,5 @@
 use crate::{
+    DateToLocalDisplay,
     components::{
         form::{
             attribute_input::{ListAttributeInput, SingleAttributeInput},
@@ -163,7 +164,8 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                     Err(e) => return Err(e),
                     Ok(r) => log!(&format!(
                         "Created user '{}' at '{}'",
-                        &r.create_user.id, &r.create_user.creation_date.with_timezone(&chrono::offset::Local).date_naive()
+                        &r.create_user.id,
+                        &r.create_user.creation_date.to_local_date_display()
                     )),
                 };
                 let model = self.form.model();
