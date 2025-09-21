@@ -1,7 +1,7 @@
 codecov:
   require_ci_to_pass: yes
 comment:
-  layout: "condensed_header, condesed_diffs, condensed_files"
+  layout: "condensed_header, diff, condensed_files"
   hide_project_coverage: true
   require_changes: "coverage_drop"
 coverage:
