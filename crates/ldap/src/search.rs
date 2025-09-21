@@ -2124,31 +2124,13 @@ mod tests {
                 groups: None,
             }])
         });
-        mock.expect_get_schema().returning(|| {
-            Ok(Schema {
-                user_attributes: AttributeList {
-                    attributes: Vec::new(),
-                },
-                group_attributes: AttributeList {
-                    attributes: Vec::new(),
-                },
-                extra_user_object_classes: Vec::new(),
-                extra_group_object_classes: Vec::new(),
-            })
-        });
-
         let ldap_handler = setup_bound_admin_handler(mock).await;
 
-        let request = LdapSearchRequest {
-            base: "ou=people,dc=example,dc=com".into(),
-            scope: LdapSearchScope::Subtree,
-            aliases: LdapDerefAliases::Never,
-            sizelimit: 0,
-            timelimit: 0,
-            typesonly: false,
-            filter: LdapFilter::Equality("uid".into(), "testuser".into()),
-            attrs: vec!["pwdChangedTime".into()],
-        };
+        let request = make_search_request(
+            "ou=people,dc=example,dc=com",
+            LdapFilter::Equality("uid".into(), "testuser".into()),
+            vec!["pwdChangedTime"],
+        );
 
         let result = ldap_handler.do_search_or_dse(&request).await.unwrap();
 
