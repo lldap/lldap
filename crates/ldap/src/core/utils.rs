@@ -3,7 +3,7 @@ use crate::core::{
     group::{REQUIRED_GROUP_ATTRIBUTES, get_default_group_object_classes},
     user::{REQUIRED_USER_ATTRIBUTES, get_default_user_object_classes},
 };
-use chrono::TimeZone;
+use chrono::{NaiveDateTime, TimeZone};
 use itertools::join;
 use ldap3_proto::LdapResultCode;
 use lldap_domain::{
@@ -17,6 +17,16 @@ use lldap_domain::{
 use lldap_domain_model::model::UserColumn;
 use std::collections::BTreeMap;
 use tracing::{debug, instrument, warn};
+
+/// Convert a NaiveDateTime to LDAP GeneralizedTime format (YYYYMMDDHHMMSSZ)
+/// This is the standard format required by LDAP for timestamp attributes like pwdChangedTime
+pub fn to_generalized_time(dt: &NaiveDateTime) -> Vec<u8> {
+    chrono::Utc
+        .from_utc_datetime(dt)
+        .format("%Y%m%d%H%M%SZ")
+        .to_string()
+        .into_bytes()
+}
 
 fn make_dn_pair<I>(mut iter: I) -> LdapResult<(String, String)>
 where
@@ -321,12 +331,6 @@ pub fn get_custom_attribute(
     attributes: &[Attribute],
     attribute_name: &AttributeName,
 ) -> Option<Vec<Vec<u8>>> {
-    let convert_date = |date| {
-        chrono::Utc
-            .from_utc_datetime(date)
-            .to_rfc3339()
-            .into_bytes()
-    };
     attributes
         .iter()
         .find(|a| &a.name == attribute_name)
@@ -352,9 +356,9 @@ pub fn get_custom_attribute(
             AttributeValue::JpegPhoto(Cardinality::Unbounded(l)) => {
                 l.iter().map(|p| p.clone().into_bytes()).collect()
             }
-            AttributeValue::DateTime(Cardinality::Singleton(dt)) => vec![convert_date(dt)],
+            AttributeValue::DateTime(Cardinality::Singleton(dt)) => vec![to_generalized_time(dt)],
             AttributeValue::DateTime(Cardinality::Unbounded(l)) => {
-                l.iter().map(convert_date).collect()
+                l.iter().map(to_generalized_time).collect()
             }
         })
 }

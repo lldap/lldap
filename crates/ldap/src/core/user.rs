@@ -3,10 +3,10 @@ use crate::core::{
     utils::{
         ExpandedAttributes, LdapInfo, UserFieldType, expand_attribute_wildcards,
         get_custom_attribute, get_group_id_from_distinguished_name_or_plain_name,
-        get_user_id_from_distinguished_name_or_plain_name, map_user_field,
+        get_user_id_from_distinguished_name_or_plain_name, map_user_field, to_generalized_time,
     },
 };
-use chrono::TimeZone;
+
 use ldap3_proto::{
     LdapFilter, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry, proto::LdapOp,
 };
@@ -87,24 +87,15 @@ pub fn get_user_attribute(
         UserFieldType::PrimaryField(UserColumn::DisplayName) => {
             vec![user.display_name.clone()?.into_bytes()]
         }
-        UserFieldType::PrimaryField(UserColumn::CreationDate) => vec![
-            chrono::Utc
-                .from_utc_datetime(&user.creation_date)
-                .to_rfc3339()
-                .into_bytes(),
-        ],
-        UserFieldType::PrimaryField(UserColumn::ModifiedDate) => vec![
-            chrono::Utc
-                .from_utc_datetime(&user.modified_date)
-                .to_rfc3339()
-                .into_bytes(),
-        ],
-        UserFieldType::PrimaryField(UserColumn::PasswordModifiedDate) => vec![
-            chrono::Utc
-                .from_utc_datetime(&user.password_modified_date)
-                .to_rfc3339()
-                .into_bytes(),
-        ],
+        UserFieldType::PrimaryField(UserColumn::CreationDate) => {
+            vec![to_generalized_time(&user.creation_date)]
+        }
+        UserFieldType::PrimaryField(UserColumn::ModifiedDate) => {
+            vec![to_generalized_time(&user.modified_date)]
+        }
+        UserFieldType::PrimaryField(UserColumn::PasswordModifiedDate) => {
+            vec![to_generalized_time(&user.password_modified_date)]
+        }
         UserFieldType::Attribute(attr, _, _) => get_custom_attribute(&user.attributes, &attr)?,
         UserFieldType::NoMatch => match attribute.as_str() {
             "1.1" => return None,

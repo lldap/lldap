@@ -875,7 +875,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "createTimestamp".to_string(),
-                            vals: vec![b"1970-01-01T00:00:00+00:00".to_vec()]
+                            vals: vec![b"19700101000000Z".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
@@ -918,7 +918,7 @@ mod tests {
                         },
                         LdapPartialAttribute {
                             atype: "createTimestamp".to_string(),
-                            vals: vec![b"2014-07-08T09:10:11+00:00".to_vec()]
+                            vals: vec![b"20140708091011Z".to_vec()]
                         },
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
@@ -1798,13 +1798,7 @@ mod tests {
                     },
                     LdapPartialAttribute {
                         atype: "createtimestamp".to_string(),
-                        vals: vec![
-                            chrono::Utc
-                                .timestamp_opt(0, 0)
-                                .unwrap()
-                                .to_rfc3339()
-                                .into_bytes(),
-                        ],
+                        vals: vec![b"19700101000000Z".to_vec()],
                     },
                     LdapPartialAttribute {
                         atype: "entryuuid".to_string(),
@@ -2106,5 +2100,60 @@ mod tests {
                 make_search_success()
             ]),
         );
+    }
+
+    #[tokio::test]
+    async fn test_pwd_changed_time_format() {
+        use chrono::prelude::*;
+        let mut mock = MockTestBackendHandler::new();
+        let test_date = chrono::Utc
+            .with_ymd_and_hms(2024, 12, 31, 14, 30, 45)
+            .unwrap()
+            .naive_utc();
+
+        mock.expect_list_users().times(1).return_once(move |_, _| {
+            Ok(vec![UserAndGroups {
+                user: User {
+                    user_id: UserId::new("testuser"),
+                    email: "test@example.com".into(),
+                    display_name: Some("Test User".to_string()),
+                    uuid: uuid!("12345678-9abc-def0-1234-56789abcdef0"),
+                    password_modified_date: test_date,
+                    ..Default::default()
+                },
+                groups: None,
+            }])
+        });
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+
+        let request = make_search_request(
+            "ou=people,dc=example,dc=com",
+            LdapFilter::Equality("uid".into(), "testuser".into()),
+            vec!["pwdChangedTime"],
+        );
+
+        let result = ldap_handler.do_search_or_dse(&request).await.unwrap();
+
+        if let LdapOp::SearchResultEntry(entry) = &result[0] {
+            assert_eq!(entry.dn, "uid=testuser,ou=people,dc=example,dc=com");
+            assert_eq!(entry.attributes.len(), 1);
+
+            let pwd_changed_time_attr = &entry.attributes[0];
+            assert_eq!(pwd_changed_time_attr.atype, "pwdChangedTime");
+            assert_eq!(pwd_changed_time_attr.vals.len(), 1);
+
+            let timestamp_str = std::str::from_utf8(&pwd_changed_time_attr.vals[0])
+                .expect("Invalid UTF-8 in timestamp");
+
+            // Verify it's in GeneralizedTime format (YYYYMMDDHHMMSSZ)
+            assert_eq!(timestamp_str, "20241231143045Z");
+
+            // Verify the format can be parsed back correctly
+            let parsed_time = chrono::NaiveDateTime::parse_from_str(timestamp_str, "%Y%m%d%H%M%SZ")
+                .expect("Invalid GeneralizedTime format");
+            assert_eq!(parsed_time, test_date);
+        } else {
+            panic!("Expected SearchResultEntry");
+        }
     }
 }
