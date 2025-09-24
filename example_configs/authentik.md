@@ -64,7 +64,7 @@ dc=example,dc=com
 
 # Additional settings
 
-## Group
+## Parent Group
 ```
 ---------
 ```
@@ -97,6 +97,16 @@ ou=groups
 ## Group membership field
 ```
 member
+```
+
+## User membership attribute
+```
+distinguishedName
+```
+
+## Looking using user attribute
+```
+false
 ```
 
 ## Object uniqueness field
