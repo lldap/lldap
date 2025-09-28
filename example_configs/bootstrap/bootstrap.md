@@ -246,14 +246,14 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: lldap-bootstrap
-          image: lldap/lldap:v0.5.0
+          image: lldap/lldap:latest
 
           command:
-            - /bootstrap/bootstrap.sh
+            - /app/bootstrap.sh
 
           env:
             - name: LLDAP_URL
-              value: "http://lldap:8080"
+              value: "http://lldap:17170"
 
             - name: LLDAP_ADMIN_USERNAME
               valueFrom: { secretKeyRef: { name: lldap-admin-user, key: username } }
@@ -265,11 +265,6 @@ spec:
               value: "true"
 
           volumeMounts:
-            - name: bootstrap
-              mountPath: /bootstrap/bootstrap.sh
-              readOnly: true
-              subPath: bootstrap.sh
-
             - name: user-configs
               mountPath: /bootstrap/user-configs
               readOnly: true
@@ -279,27 +274,9 @@ spec:
               readOnly: true
 
       volumes:
-        - name: bootstrap
-          configMap:
-            name: bootstrap
-            defaultMode: 0555
-            items:
-              - key: bootstrap.sh
-                path: bootstrap.sh
-
         - name: user-configs
           projected:
             sources:
-              - secret:
-                  name: lldap-admin-user
-                  items:
-                    - key: user-config.json
-                      path: admin-config.json
-              - secret:
-                  name: lldap-password-manager-user
-                  items:
-                    - key: user-config.json
-                      path: password-manager-config.json
               - secret:
                   name: lldap-bootstrap-configs
                   items:

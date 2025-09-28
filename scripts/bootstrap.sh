@@ -710,9 +710,9 @@ main() {
     redundant_users="$(printf '%s' "$redundant_users" | jq --compact-output --arg id "$id" '. - [$id]')"
 
     if [[ "$password_file" != 'null' ]] && [[ "$password_file" != '""' ]]; then
-      LLDAP_USER_PASSWORD="$(cat $password_file)" "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id"
+      "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$(cat $password_file)"
     elif [[ "$password" != 'null' ]] && [[ "$password" != '""' ]]; then
-      LLDAP_USER_PASSWORD="$password" "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id"
+      "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$password"
     fi
 
     # Process custom attributes
