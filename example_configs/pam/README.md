@@ -1,16 +1,16 @@
 # Getting Started with UNIX PAM using SSSD
 
+This guide was tested with LDAPS on debian 12 with SSSD 2.8.2 and certificates signed by a registered CA.
+
 ## Configuring LLDAP
 
 ### Configure LDAPS
 
-This guide assumes LLDAP is being configured with ldaps.
+Even in private networks you **should** configure LLDAP to communicate over HTTPS, otherwise passwords will be
+transmitted in plain text. Just using a self-signed certificate will drastically improve security.
 
-Even in private networks you **should** configure LLDAP to communicate over HTTPS, otherwise passwords will be transmitted
-in plain text. Even using self-signed certificate will drastically improve security.
-
-You can generate an SSL certificate for it with the following command. The `subjectAltName` is **required**. Make sure
-all domains are listed there, even your `CN`.
+You can generate an SSL certificate for LLDAP with the following command. The `subjectAltName` is **required**. Make
+sure all domains are listed there, even your `CN`.
 
 ```bash
 openssl req -x509 -nodes -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 36500 -subj "/CN=ldap.example.com" -addext "subjectAltName = DNS:ldap.example.com"
@@ -49,7 +49,7 @@ Add the following custom attributes to the **Group schema.**
 
 The only optional attributes are `unixShell` and `sshPublicKey`. All other attributes **must** be fully populated for
 each group and user being used by SSSD. The `gidNumber` of the user schema represents the users primary group. To add
-more groups to a user, add the user to groups with an `gidNumber` assigned.
+more groups to a user, add the user to groups with a `gidNumber` set.
 
 ## Client setup
 
@@ -73,9 +73,10 @@ This example makes the following assumptions which need to be adjusted:
 * Bind Username: `binduser`
 * Bind Password: `bindpassword`
 
-Use your favourite text editor to create the SSSD global configuration `/etc/sssd/sssd.conf`.
-The global config filters **out** the root user and group and restricts the number of failed login attempts
-with cached credentials.
+The global config filters **out** the root user and group. It also restricts the number of failed login attempts
+with cached credentials if the server is unreachable.
+
+Use your favourite text editor to create the SSSD global configuration:
 
 ```bash
 sudo nano /etc/sssd/sssd.conf
@@ -98,10 +99,12 @@ offline_failed_login_delay = 5
 [ssh]
 ```
 
-The domain configuration is set up for the LLDAP `RFC2307bis` schema and the custom attributes created at the beginning
-of the guide. It allows all configured LDAP users to log in to the machine by default while filtering out users and
-groups which don't have their posix IDs set. Because caching is enabled make sure to check the [Debugging](#Debugging)
-section on how to flush the cache if you are having problems.
+The following domain configuration is set up for the LLDAP `RFC2307bis` schema and the custom attributes created at the
+beginning of the guide. It allows all configured LDAP users to log in by default while filtering out users and groups
+which don't have their posix IDs set.
+
+Because caching is enabled make sure to check the [Debugging](#Debugging) section on how to
+flush the cache if you are having problems.
 
 Create a separate configuration file for your domain.
 
@@ -127,7 +130,10 @@ ldap_search_base = dc=example,dc=com
 ldap_default_bind_dn = uid=binduser,ou=people,dc=example,dc=com
 ldap_default_authtok = bindpassword
 
+# For certificates signed by a registered CA
 ldap_tls_cacert = /etc/ssl/certs/ca-certificates.crt
+# For self signed certificates
+# ldap_tls_cacert = cert.pem
 ldap_tls_reqcert = demand
 
 # users
@@ -149,7 +155,8 @@ ldap_group_gid_number = gidNumber
 ldap_group_member = uniqueMember
 ```
 
-SSSD will **refuse** to run if it’s config files have the wrong permissions, so apply the following permissions to it:
+SSSD will **refuse** to run if it’s config files have the wrong permissions, so apply the following permissions to the
+files:
 
 ```bash
 sudo chmod 600 /etc/sssd/sssd.conf
@@ -195,7 +202,7 @@ sudo systemctl restart sssd
 Linux often manages permissions to tools such as Sudo and Docker based on group membership. There are two possible ways 
 to achieve this. 
 
-**Number 1**
+**Option 1**
 
 **If all your client systems are set up identically,** you can just check the group id of the local group, i.e. `sudo`
 being 27 on most Debian and Ubuntu installs, and set that as the gid in LLDAP. 
@@ -214,7 +221,7 @@ sudo groupadd docker -g 722
 
 ![image](https://github.com/user-attachments/assets/face88d0-5a20-4442-a5e3-9f6a1ae41b68)
 
-**Number 2**
+**Option 2**
 
 Create a group in LLDAP that you would like all your users who have sudo access to be in, and add the following to the
 bottom of `/etc/sudoers` . 
