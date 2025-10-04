@@ -1,27 +1,30 @@
+pub mod helpers;
+pub mod inputs;
+
+// Re-export public types
+pub use inputs::{
+    AttributeValue, CreateGroupInput, CreateUserInput, Success, UpdateGroupInput, UpdateUserInput,
+};
+
 use crate::api::{Context, field_error_callback};
-use anyhow::{Context as AnyhowContext, anyhow};
-use juniper::{FieldError, FieldResult, GraphQLInputObject, GraphQLObject, graphql_object};
+use anyhow::anyhow;
+use juniper::{FieldError, FieldResult, graphql_object};
 use lldap_access_control::{
-    AdminBackendHandler, ReadonlyBackendHandler, UserReadableBackendHandler,
-    UserWriteableBackendHandler,
+    AdminBackendHandler, UserReadableBackendHandler, UserWriteableBackendHandler,
 };
 use lldap_domain::{
-    deserialize::deserialize_attribute_value,
-    public_schema::PublicSchema,
-    requests::{
-        CreateAttributeRequest, CreateGroupRequest, CreateUserRequest, UpdateGroupRequest,
-        UpdateUserRequest,
-    },
-    schema::AttributeList,
-    types::{
-        Attribute as DomainAttribute, AttributeName, AttributeType, Email, GroupId,
-        LdapObjectClass, UserId,
-    },
+    requests::{CreateAttributeRequest, CreateUserRequest, UpdateGroupRequest, UpdateUserRequest},
+    types::{AttributeName, AttributeType, Email, GroupId, LdapObjectClass, UserId},
 };
 use lldap_domain_handlers::handler::BackendHandler;
 use lldap_validation::attributes::{ALLOWED_CHARACTERS_DESCRIPTION, validate_attribute_name};
-use std::{collections::BTreeMap, sync::Arc};
-use tracing::{Instrument, Span, debug, debug_span};
+use std::sync::Arc;
+use tracing::{Instrument, debug, debug_span};
+
+use helpers::{
+    UnpackedAttributes, consolidate_attributes, create_group_with_details, deserialize_attribute,
+    unpack_attributes,
+};
 
 #[derive(PartialEq, Eq, Debug)]
 /// The top-level GraphQL mutation type.
@@ -42,183 +45,6 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         }
     }
 }
-
-#[derive(Clone, PartialEq, Eq, Debug, GraphQLInputObject)]
-// This conflicts with the attribute values returned by the user/group queries.
-#[graphql(name = "AttributeValueInput")]
-struct AttributeValue {
-    /// The name of the attribute. It must be present in the schema, and the type informs how
-    /// to interpret the values.
-    name: String,
-    /// The values of the attribute.
-    /// If the attribute is not a list, the vector must contain exactly one element.
-    /// Integers (signed 64 bits) are represented as strings.
-    /// Dates are represented as strings in RFC3339 format, e.g. "2019-10-12T07:20:50.52Z".
-    /// JpegPhotos are represented as base64 encoded strings. They must be valid JPEGs.
-    value: Vec<String>,
-}
-
-#[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
-/// The details required to create a user.
-pub struct CreateUserInput {
-    id: String,
-    // The email can be specified as an attribute, but one of the two is required.
-    email: Option<String>,
-    display_name: Option<String>,
-    /// First name of user. Deprecated: use attribute instead.
-    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
-    first_name: Option<String>,
-    /// Last name of user. Deprecated: use attribute instead.
-    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
-    last_name: Option<String>,
-    /// Base64 encoded JpegPhoto. Deprecated: use attribute instead.
-    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
-    avatar: Option<String>,
-    /// Attributes.
-    attributes: Option<Vec<AttributeValue>>,
-}
-
-#[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
-/// The details required to create a group.
-pub struct CreateGroupInput {
-    display_name: String,
-    /// User-defined attributes.
-    attributes: Option<Vec<AttributeValue>>,
-}
-
-#[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
-/// The fields that can be updated for a user.
-pub struct UpdateUserInput {
-    id: String,
-    email: Option<String>,
-    display_name: Option<String>,
-    /// First name of user. Deprecated: use attribute instead.
-    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
-    first_name: Option<String>,
-    /// Last name of user. Deprecated: use attribute instead.
-    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
-    last_name: Option<String>,
-    /// Base64 encoded JpegPhoto. Deprecated: use attribute instead.
-    /// If both field and corresponding attribute is supplied, the attribute will take precedence.
-    avatar: Option<String>,
-    /// Attribute names to remove.
-    /// They are processed before insertions.
-    remove_attributes: Option<Vec<String>>,
-    /// Inserts or updates the given attributes.
-    /// For lists, the entire list must be provided.
-    insert_attributes: Option<Vec<AttributeValue>>,
-}
-
-#[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
-/// The fields that can be updated for a group.
-pub struct UpdateGroupInput {
-    /// The group ID.
-    id: i32,
-    /// The new display name.
-    display_name: Option<String>,
-    /// Attribute names to remove.
-    /// They are processed before insertions.
-    remove_attributes: Option<Vec<String>>,
-    /// Inserts or updates the given attributes.
-    /// For lists, the entire list must be provided.
-    insert_attributes: Option<Vec<AttributeValue>>,
-}
-
-#[derive(PartialEq, Eq, Debug, GraphQLObject)]
-pub struct Success {
-    ok: bool,
-}
-
-impl Success {
-    fn new() -> Self {
-        Self { ok: true }
-    }
-}
-
-struct UnpackedAttributes {
-    email: Option<Email>,
-    display_name: Option<String>,
-    attributes: Vec<DomainAttribute>,
-}
-
-fn unpack_attributes(
-    attributes: Vec<AttributeValue>,
-    schema: &PublicSchema,
-    is_admin: bool,
-) -> FieldResult<UnpackedAttributes> {
-    let email = attributes
-        .iter()
-        .find(|attr| attr.name == "mail")
-        .cloned()
-        .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
-        .transpose()?
-        .map(|attr| attr.value.into_string().unwrap())
-        .map(Email::from);
-    let display_name = attributes
-        .iter()
-        .find(|attr| attr.name == "display_name")
-        .cloned()
-        .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
-        .transpose()?
-        .map(|attr| attr.value.into_string().unwrap());
-    let attributes = attributes
-        .into_iter()
-        .filter(|attr| attr.name != "mail" && attr.name != "display_name")
-        .map(|attr| deserialize_attribute(&schema.get_schema().user_attributes, attr, is_admin))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(UnpackedAttributes {
-        email,
-        display_name,
-        attributes,
-    })
-}
-
-/// Consolidates caller supplied user fields and attributes into a list of attributes.
-///
-/// A number of user fields are internally represented as attributes, but are still also
-/// available as fields on user objects. This function consolidates these fields and the
-/// given attributes into a resulting attribute list. If a value is supplied for both a
-/// field and the corresponding attribute, the attribute will take precedence.
-fn consolidate_attributes(
-    attributes: Vec<AttributeValue>,
-    first_name: Option<String>,
-    last_name: Option<String>,
-    avatar: Option<String>,
-) -> Vec<AttributeValue> {
-    // Prepare map of the client provided attributes
-    let mut provided_attributes: BTreeMap<AttributeName, AttributeValue> = attributes
-        .into_iter()
-        .map(|x| {
-            (
-                x.name.clone().into(),
-                AttributeValue {
-                    name: x.name.to_ascii_lowercase(),
-                    value: x.value,
-                },
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-    // Prepare list of fallback attribute values
-    let field_attrs = [
-        ("first_name", first_name),
-        ("last_name", last_name),
-        ("avatar", avatar),
-    ];
-    for (name, value) in field_attrs.into_iter() {
-        if let Some(val) = value {
-            let attr_name: AttributeName = name.into();
-            provided_attributes
-                .entry(attr_name)
-                .or_insert_with(|| AttributeValue {
-                    name: name.to_string(),
-                    value: vec![val],
-                });
-        }
-    }
-    // Return the values of the resulting map
-    provided_attributes.into_values().collect()
-}
-
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> Mutation<Handler> {
     async fn create_user(
@@ -721,66 +547,6 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         Ok(Success::new())
     }
 }
-
-async fn create_group_with_details<Handler: BackendHandler>(
-    context: &Context<Handler>,
-    request: CreateGroupInput,
-    span: Span,
-) -> FieldResult<super::query::Group<Handler>> {
-    let handler = context
-        .get_admin_handler()
-        .ok_or_else(field_error_callback(&span, "Unauthorized group creation"))?;
-    let schema = handler.get_schema().await?;
-    let attributes = request
-        .attributes
-        .unwrap_or_default()
-        .into_iter()
-        .map(|attr| deserialize_attribute(&schema.get_schema().group_attributes, attr, true))
-        .collect::<Result<Vec<_>, _>>()?;
-    let request = CreateGroupRequest {
-        display_name: request.display_name.into(),
-        attributes,
-    };
-    let group_id = handler.create_group(request).await?;
-    let group_details = handler.get_group_details(group_id).instrument(span).await?;
-    super::query::Group::<Handler>::from_group_details(group_details, Arc::new(schema))
-}
-
-fn deserialize_attribute(
-    attribute_schema: &AttributeList,
-    attribute: AttributeValue,
-    is_admin: bool,
-) -> FieldResult<DomainAttribute> {
-    let attribute_name = AttributeName::from(attribute.name.as_str());
-    let attribute_schema = attribute_schema
-        .get_attribute_schema(&attribute_name)
-        .ok_or_else(|| anyhow!("Attribute {} is not defined in the schema", attribute.name))?;
-    if attribute_schema.is_readonly {
-        return Err(anyhow!(
-            "Permission denied: Attribute {} is read-only",
-            attribute.name
-        )
-        .into());
-    }
-    if !is_admin && !attribute_schema.is_editable {
-        return Err(anyhow!(
-            "Permission denied: Attribute {} is not editable by regular users",
-            attribute.name
-        )
-        .into());
-    }
-    let deserialized_values = deserialize_attribute_value(
-        &attribute.value,
-        attribute_schema.attribute_type,
-        attribute_schema.is_list,
-    )
-    .context(format!("While deserializing attribute {}", attribute.name))?;
-    Ok(DomainAttribute {
-        name: attribute_name,
-        value: deserialized_values,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
