@@ -662,7 +662,7 @@ mod tests {
             setup_bound_handler_with_group, setup_bound_readonly_handler,
         },
     };
-    use chrono::{DateTime, Duration, NaiveDateTime, TimeZone};
+    use chrono::TimeZone;
     use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope, LdapSubstringFilter};
     use lldap_domain::{
         schema::{AttributeList, AttributeSchema, Schema},
