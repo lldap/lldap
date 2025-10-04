@@ -145,7 +145,7 @@ the relevant details (logs of the service, LLDAP logs with `verbose=true` in
 the config).
 
 Some specific clients have been tested to work and come with sample
-configuration files, or guides. See the [`example_configs`](example_configs)
+configuration files, or guides. See the [`example_configs`](example_configs/README.md)
 folder for example configs for integration with specific services.
 
 Integration with Linux accounts is possible, through PAM and nslcd. See [PAM
