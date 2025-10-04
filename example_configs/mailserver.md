@@ -58,15 +58,15 @@ services:
       - LDAP_SEARCH_BASE=ou=people,dc=example,dc=com
       - LDAP_BIND_DN=uid=admin,ou=people,dc=example,dc=com
       - LDAP_BIND_PW=adminpassword
-      - LDAP_QUERY_FILTER_USER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%n)))
+      - LDAP_QUERY_FILTER_USER=(&(objectClass=inetOrgPerson)(mail=%u))
       - LDAP_QUERY_FILTER_GROUP=(&(objectClass=groupOfUniqueNames)(uid=%s))
-      - LDAP_QUERY_FILTER_ALIAS=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%n)))
+      - LDAP_QUERY_FILTER_ALIAS=(&(objectClass=inetOrgPerson)(mail=%s))
       - LDAP_QUERY_FILTER_DOMAIN=(mail=*@%s)
       # <<< Postfix LDAP Integration
       # >>> Dovecot LDAP Integration
       - ENABLE_QUOTAS=0
       - DOVECOT_AUTH_BIND=yes
-      - DOVECOT_USER_FILTER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%n)))
+      - DOVECOT_USER_FILTER=(&(objectClass=inetOrgPerson)(mail=%u))
       - DOVECOT_USER_ATTRS==uid=5000,=gid=5000,=home=/var/mail/%Ln,=mail=maildir:~/Maildir
       - POSTMASTER_ADDRESS=postmaster@d3n.com
     cap_add:
