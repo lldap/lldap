@@ -56,9 +56,15 @@ ou=groups,dc=example,dc=com
 ```
 #### Group Membership Attribute
 ```
-cn
+uniqueMember
 ```
 #### Group Filter 
+Is optional:
 ```
-is optional
+(objectClass=groupofuniquenames)
 ```
+
+## Admin group search configurations 
+
+Use the same configurations as above to grant each users admin rights in their respective teams.
+You can then also fetch all groups, and select which groups have universal admin rights.
