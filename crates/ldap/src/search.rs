@@ -173,6 +173,37 @@ pub(crate) fn root_dse_response(base_dn: &str) -> LdapOp {
     })
 }
 
+#[cfg(test)]
+mod root_dse_tests {
+    use super::*;
+    use crate::handler::tests::setup_bound_admin_handler;
+    use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope};
+    use lldap_test_utils::MockTestBackendHandler;
+    use pretty_assertions::assert_eq;
+
+    #[tokio::test]
+    async fn test_search_root_dse() {
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let request = LdapSearchRequest {
+            base: "".to_string(),
+            scope: LdapSearchScope::Base,
+            aliases: LdapDerefAliases::Never,
+            sizelimit: 0,
+            timelimit: 0,
+            typesonly: false,
+            filter: LdapFilter::Present("objectClass".to_string()),
+            attrs: vec!["supportedExtension".to_string()],
+        };
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                root_dse_response("dc=example,dc=com"),
+                make_search_success()
+            ])
+        );
+    }
+}
+
 pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
     let ldap_schema_description: LdapSchemaDescription = LdapSchemaDescription::from(schema);
     let current_time_utc = Utc::now().format("%Y%m%d%H%M%SZ").to_string().into_bytes();
@@ -299,181 +330,14 @@ pub(crate) fn is_subschema_entry_request(request: &LdapSearchRequest) -> bool {
     request.base == "cn=Subschema" && request.scope == LdapSearchScope::Base
 }
 
-async fn do_search_internal(
-    ldap_info: &LdapInfo,
-    backend_handler: &impl UserAndGroupListerBackendHandler,
-    request: &LdapSearchRequest,
-    schema: &PublicSchema,
-) -> LdapResult<InternalSearchResults> {
-    let dn_parts = parse_distinguished_name(&request.base.to_ascii_lowercase())?;
-    let scope = get_search_scope(&ldap_info.base_dn, &dn_parts, &request.scope);
-    debug!(?request.base, ?scope);
-    // Disambiguate the lifetimes.
-    fn cast<'a, T, R>(x: T) -> T
-    where
-        T: Fn(&'a LdapFilter) -> R + 'a,
-    {
-        x
-    }
-
-    let get_user_list = cast(async |filter: &LdapFilter| {
-        let need_groups = request
-            .attrs
-            .iter()
-            .any(|s| s.eq_ignore_ascii_case("memberof"));
-        get_user_list(
-            ldap_info,
-            filter,
-            need_groups,
-            &request.base,
-            backend_handler,
-            schema,
-        )
-        .await
-    });
-    let get_group_list = cast(|filter: &LdapFilter| async {
-        get_groups_list(ldap_info, filter, &request.base, backend_handler, schema).await
-    });
-    Ok(match scope {
-        SearchScope::Global => {
-            let users = get_user_list(&request.filter).await;
-            let groups = get_group_list(&request.filter).await;
-            match (users, groups) {
-                (Ok(users), Err(e)) => {
-                    warn!("Error while getting groups: {:#}", e);
-                    InternalSearchResults::UsersAndGroups(users, Vec::new())
-                }
-                (Err(e), Ok(groups)) => {
-                    warn!("Error while getting users: {:#}", e);
-                    InternalSearchResults::UsersAndGroups(Vec::new(), groups)
-                }
-                (Err(user_error), Err(_)) => InternalSearchResults::Raw(vec![make_search_error(
-                    user_error.code,
-                    user_error.message,
-                )]),
-                (Ok(users), Ok(groups)) => InternalSearchResults::UsersAndGroups(users, groups),
-            }
-        }
-        SearchScope::Users => {
-            InternalSearchResults::UsersAndGroups(get_user_list(&request.filter).await?, Vec::new())
-        }
-        SearchScope::Groups => InternalSearchResults::UsersAndGroups(
-            Vec::new(),
-            get_group_list(&request.filter).await?,
-        ),
-        SearchScope::User(filter) => {
-            let filter = LdapFilter::And(vec![request.filter.clone(), filter]);
-            InternalSearchResults::UsersAndGroups(get_user_list(&filter).await?, Vec::new())
-        }
-        SearchScope::Group(filter) => {
-            let filter = LdapFilter::And(vec![request.filter.clone(), filter]);
-            InternalSearchResults::UsersAndGroups(Vec::new(), get_group_list(&filter).await?)
-        }
-        SearchScope::UserOuOnly | SearchScope::GroupOuOnly => {
-            InternalSearchResults::Raw(vec![LdapOp::SearchResultEntry(LdapSearchResultEntry {
-                dn: request.base.clone(),
-                attributes: vec![LdapPartialAttribute {
-                    atype: "objectClass".to_owned(),
-                    vals: vec![b"top".to_vec(), b"organizationalUnit".to_vec()],
-                }],
-            })])
-        }
-        SearchScope::Unknown => {
-            warn!(
-                r#"The requested search tree "{}" matches neither the user subtree "ou=people,{}" nor the group subtree "ou=groups,{}""#,
-                &request.base, &ldap_info.base_dn_str, &ldap_info.base_dn_str
-            );
-            InternalSearchResults::Empty
-        }
-        SearchScope::Invalid => {
-            // Search path is not in our tree, just return an empty success.
-            warn!(
-                "The specified search tree {:?} is not under the common subtree {:?}",
-                &dn_parts, &ldap_info.base_dn
-            );
-            InternalSearchResults::Empty
-        }
-    })
-}
-
-pub async fn do_search(
-    backend_handler: &impl UserAndGroupListerBackendHandler,
-    ldap_info: &LdapInfo,
-    request: &LdapSearchRequest,
-) -> LdapResult<Vec<LdapOp>> {
-    let schema = PublicSchema::from(backend_handler.get_schema().await.map_err(|e| LdapError {
-        code: LdapResultCode::OperationsError,
-        message: format!("Unable to get schema: {e:#}"),
-    })?);
-    let search_results = do_search_internal(ldap_info, backend_handler, request, &schema).await?;
-    let mut results = match search_results {
-        InternalSearchResults::UsersAndGroups(users, groups) => {
-            convert_users_to_ldap_op(users, &request.attrs, ldap_info, &schema)
-                .chain(convert_groups_to_ldap_op(
-                    groups,
-                    &request.attrs,
-                    ldap_info,
-                    backend_handler.user_filter(),
-                    &schema,
-                ))
-                .collect()
-        }
-        InternalSearchResults::Raw(raw_results) => raw_results,
-        InternalSearchResults::Empty => Vec::new(),
-    };
-    if !matches!(results.last(), Some(LdapOp::SearchResultDone(_))) {
-        results.push(make_search_success());
-    }
-    Ok(results)
-}
-
 #[cfg(test)]
-mod tests {
+mod subschema_tests {
     use super::*;
-    use crate::{
-        core::error::LdapError,
-        handler::tests::{
-            make_group_search_request, make_user_search_request, setup_bound_admin_handler,
-            setup_bound_handler_with_group, setup_bound_readonly_handler,
-        },
-    };
-    use chrono::{DateTime, Duration, NaiveDateTime, TimeZone};
-    use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope, LdapSubstringFilter};
-    use lldap_domain::{
-        schema::{AttributeList, AttributeSchema, Schema},
-        types::{
-            Attribute, AttributeName, AttributeType, GroupDetails, GroupId, JpegPhoto,
-            LdapObjectClass, User, UserId,
-        },
-        uuid,
-    };
-    use lldap_domain_handlers::handler::*;
-    use lldap_domain_model::model::UserColumn;
+    use crate::handler::tests::setup_bound_admin_handler;
+    use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
+    use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope};
     use lldap_test_utils::MockTestBackendHandler;
-    use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
-
-    #[tokio::test]
-    async fn test_search_root_dse() {
-        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
-        let request = LdapSearchRequest {
-            base: "".to_string(),
-            scope: LdapSearchScope::Base,
-            aliases: LdapDerefAliases::Never,
-            sizelimit: 0,
-            timelimit: 0,
-            typesonly: false,
-            filter: LdapFilter::Present("objectClass".to_string()),
-            attrs: vec!["supportedExtension".to_string()],
-        };
-        assert_eq!(
-            ldap_handler.do_search_or_dse(&request).await,
-            Ok(vec![
-                root_dse_response("dc=example,dc=com"),
-                make_search_success()
-            ])
-        );
-    }
 
     fn assert_timestamp_within_margin(
         timestamp_bytes: &[u8],
@@ -658,6 +522,161 @@ mod tests {
 
         assert_eq!(actual_reponse[1], make_search_success());
     }
+}
+
+async fn do_search_internal(
+    ldap_info: &LdapInfo,
+    backend_handler: &impl UserAndGroupListerBackendHandler,
+    request: &LdapSearchRequest,
+    schema: &PublicSchema,
+) -> LdapResult<InternalSearchResults> {
+    let dn_parts = parse_distinguished_name(&request.base.to_ascii_lowercase())?;
+    let scope = get_search_scope(&ldap_info.base_dn, &dn_parts, &request.scope);
+    debug!(?request.base, ?scope);
+    // Disambiguate the lifetimes.
+    fn cast<'a, T, R>(x: T) -> T
+    where
+        T: Fn(&'a LdapFilter) -> R + 'a,
+    {
+        x
+    }
+
+    let get_user_list = cast(async |filter: &LdapFilter| {
+        let need_groups = request
+            .attrs
+            .iter()
+            .any(|s| s.eq_ignore_ascii_case("memberof"));
+        get_user_list(
+            ldap_info,
+            filter,
+            need_groups,
+            &request.base,
+            backend_handler,
+            schema,
+        )
+        .await
+    });
+    let get_group_list = cast(|filter: &LdapFilter| async {
+        get_groups_list(ldap_info, filter, &request.base, backend_handler, schema).await
+    });
+    Ok(match scope {
+        SearchScope::Global => {
+            let users = get_user_list(&request.filter).await;
+            let groups = get_group_list(&request.filter).await;
+            match (users, groups) {
+                (Ok(users), Err(e)) => {
+                    warn!("Error while getting groups: {:#}", e);
+                    InternalSearchResults::UsersAndGroups(users, Vec::new())
+                }
+                (Err(e), Ok(groups)) => {
+                    warn!("Error while getting users: {:#}", e);
+                    InternalSearchResults::UsersAndGroups(Vec::new(), groups)
+                }
+                (Err(user_error), Err(_)) => InternalSearchResults::Raw(vec![make_search_error(
+                    user_error.code,
+                    user_error.message,
+                )]),
+                (Ok(users), Ok(groups)) => InternalSearchResults::UsersAndGroups(users, groups),
+            }
+        }
+        SearchScope::Users => {
+            InternalSearchResults::UsersAndGroups(get_user_list(&request.filter).await?, Vec::new())
+        }
+        SearchScope::Groups => InternalSearchResults::UsersAndGroups(
+            Vec::new(),
+            get_group_list(&request.filter).await?,
+        ),
+        SearchScope::User(filter) => {
+            let filter = LdapFilter::And(vec![request.filter.clone(), filter]);
+            InternalSearchResults::UsersAndGroups(get_user_list(&filter).await?, Vec::new())
+        }
+        SearchScope::Group(filter) => {
+            let filter = LdapFilter::And(vec![request.filter.clone(), filter]);
+            InternalSearchResults::UsersAndGroups(Vec::new(), get_group_list(&filter).await?)
+        }
+        SearchScope::UserOuOnly | SearchScope::GroupOuOnly => {
+            InternalSearchResults::Raw(vec![LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                dn: request.base.clone(),
+                attributes: vec![LdapPartialAttribute {
+                    atype: "objectClass".to_owned(),
+                    vals: vec![b"top".to_vec(), b"organizationalUnit".to_vec()],
+                }],
+            })])
+        }
+        SearchScope::Unknown => {
+            warn!(
+                r#"The requested search tree "{}" matches neither the user subtree "ou=people,{}" nor the group subtree "ou=groups,{}""#,
+                &request.base, &ldap_info.base_dn_str, &ldap_info.base_dn_str
+            );
+            InternalSearchResults::Empty
+        }
+        SearchScope::Invalid => {
+            // Search path is not in our tree, just return an empty success.
+            warn!(
+                "The specified search tree {:?} is not under the common subtree {:?}",
+                &dn_parts, &ldap_info.base_dn
+            );
+            InternalSearchResults::Empty
+        }
+    })
+}
+
+pub async fn do_search(
+    backend_handler: &impl UserAndGroupListerBackendHandler,
+    ldap_info: &LdapInfo,
+    request: &LdapSearchRequest,
+) -> LdapResult<Vec<LdapOp>> {
+    let schema = PublicSchema::from(backend_handler.get_schema().await.map_err(|e| LdapError {
+        code: LdapResultCode::OperationsError,
+        message: format!("Unable to get schema: {e:#}"),
+    })?);
+    let search_results = do_search_internal(ldap_info, backend_handler, request, &schema).await?;
+    let mut results = match search_results {
+        InternalSearchResults::UsersAndGroups(users, groups) => {
+            convert_users_to_ldap_op(users, &request.attrs, ldap_info, &schema)
+                .chain(convert_groups_to_ldap_op(
+                    groups,
+                    &request.attrs,
+                    ldap_info,
+                    backend_handler.user_filter(),
+                    &schema,
+                ))
+                .collect()
+        }
+        InternalSearchResults::Raw(raw_results) => raw_results,
+        InternalSearchResults::Empty => Vec::new(),
+    };
+    if !matches!(results.last(), Some(LdapOp::SearchResultDone(_))) {
+        results.push(make_search_success());
+    }
+    Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        core::error::LdapError,
+        handler::tests::{
+            make_group_search_request, make_user_search_request, setup_bound_admin_handler,
+            setup_bound_handler_with_group, setup_bound_readonly_handler,
+        },
+    };
+    use chrono::{DateTime, Duration, NaiveDateTime, TimeZone};
+    use ldap3_proto::proto::{LdapDerefAliases, LdapSearchScope, LdapSubstringFilter};
+    use lldap_domain::{
+        schema::{AttributeList, AttributeSchema, Schema},
+        types::{
+            Attribute, AttributeName, AttributeType, GroupDetails, GroupId, JpegPhoto,
+            LdapObjectClass, User, UserId,
+        },
+        uuid,
+    };
+    use lldap_domain_handlers::handler::*;
+    use lldap_domain_model::model::UserColumn;
+    use lldap_test_utils::MockTestBackendHandler;
+    use mockall::predicate::eq;
+    use pretty_assertions::assert_eq;
 
     #[tokio::test]
     async fn test_search_regular_user() {
