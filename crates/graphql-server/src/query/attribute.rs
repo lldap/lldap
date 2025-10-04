@@ -1,3 +1,4 @@
+use chrono::TimeZone;
 use juniper::{FieldResult, graphql_object};
 use lldap_domain::public_schema::PublicSchema;
 use lldap_domain::schema::AttributeList as DomainAttributeList;
@@ -6,7 +7,6 @@ use lldap_domain::types::{Attribute as DomainAttribute, AttributeValue as Domain
 use lldap_domain::types::{Cardinality, Group as DomainGroup, GroupDetails, User as DomainUser};
 use lldap_domain_handlers::handler::BackendHandler;
 use serde::{Deserialize, Serialize};
-use chrono::TimeZone;
 
 use crate::api::Context;
 

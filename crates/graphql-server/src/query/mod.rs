@@ -1,15 +1,15 @@
-pub mod filters;
 pub mod attribute;
-pub mod user;
+pub mod filters;
 pub mod group;
 pub mod schema;
+pub mod user;
 
 // Re-export public types
-pub use filters::{RequestFilter, EqualityConstraint};
 pub use attribute::{AttributeSchema, AttributeValue, serialize_attribute_to_graphql};
-pub use user::User;
+pub use filters::{EqualityConstraint, RequestFilter};
 pub use group::Group;
-pub use schema::{Schema, AttributeList, ObjectClassInfo};
+pub use schema::{AttributeList, ObjectClassInfo, Schema};
+pub use user::User;
 
 use juniper::{FieldResult, graphql_object};
 use lldap_access_control::{ReadonlyBackendHandler, UserReadableBackendHandler};
@@ -163,17 +163,17 @@ mod tests {
         execute, graphql_value,
     };
     use lldap_auth::access_control::{Permission, ValidationResults};
+    use lldap_domain::schema::AttributeSchema as DomainAttributeSchema;
+    use lldap_domain::types::{Attribute as DomainAttribute, GroupDetails, User as DomainUser};
     use lldap_domain::{
         schema::{AttributeList, Schema},
         types::{AttributeName, AttributeType, LdapObjectClass},
     };
+    use lldap_domain_model::model::UserColumn;
     use lldap_test_utils::{MockTestBackendHandler, setup_default_schema};
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
-    use lldap_domain::types::{Attribute as DomainAttribute, GroupDetails, User as DomainUser};
-    use lldap_domain::schema::AttributeSchema as DomainAttributeSchema;
-    use lldap_domain_model::model::UserColumn;
 
     fn schema<'q, C, Q>(query_root: Q) -> RootNode<'q, Q, EmptyMutation<C>, EmptySubscription<C>>
     where
@@ -266,7 +266,10 @@ mod tests {
                     creation_date: chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
                     modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                     password_modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
-                    uuid: lldap_domain::types::Uuid::from_name_and_date("bob", &chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc()),
+                    uuid: lldap_domain::types::Uuid::from_name_and_date(
+                        "bob",
+                        &chrono::Utc.timestamp_millis_opt(42).unwrap().naive_utc(),
+                    ),
                     attributes: vec![
                         DomainAttribute {
                             name: "first_name".into(),
@@ -284,7 +287,10 @@ mod tests {
             group_id: GroupId(3),
             display_name: "Bobbersons".into(),
             creation_date: chrono::Utc.timestamp_nanos(42).naive_utc(),
-            uuid: lldap_domain::types::Uuid::from_name_and_date("Bobbersons", &chrono::Utc.timestamp_nanos(42).naive_utc()),
+            uuid: lldap_domain::types::Uuid::from_name_and_date(
+                "Bobbersons",
+                &chrono::Utc.timestamp_nanos(42).naive_utc(),
+            ),
             attributes: vec![DomainAttribute {
                 name: "club_name".into(),
                 value: "Gang of Four".to_string().into(),
@@ -295,7 +301,10 @@ mod tests {
             group_id: GroupId(7),
             display_name: "Jefferees".into(),
             creation_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
-            uuid: lldap_domain::types::Uuid::from_name_and_date("Jefferees", &chrono::Utc.timestamp_nanos(12).naive_utc()),
+            uuid: lldap_domain::types::Uuid::from_name_and_date(
+                "Jefferees",
+                &chrono::Utc.timestamp_nanos(12).naive_utc(),
+            ),
             attributes: Vec::new(),
             modified_date: chrono::Utc.timestamp_nanos(12).naive_utc(),
         });
@@ -303,11 +312,13 @@ mod tests {
             .with(eq(UserId::new("bob")))
             .return_once(|_| Ok(groups));
 
-        let context =
-            Context::<MockTestBackendHandler>::new_for_tests(mock, ValidationResults {
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
                 user: UserId::new("admin"),
                 permission: Permission::Admin,
-            });
+            },
+        );
 
         let schema = schema(Query::<MockTestBackendHandler>::new());
         let result = execute(QUERY, None, &schema, &Variables::new(), &context).await;
@@ -341,17 +352,21 @@ mod tests {
         setup_default_schema(&mut mock);
         mock.expect_list_users()
             .with(
-                eq(Some(lldap_domain_handlers::handler::UserRequestFilter::Or(vec![
-                    lldap_domain_handlers::handler::UserRequestFilter::UserId(UserId::new("bob")),
-                    lldap_domain_handlers::handler::UserRequestFilter::Equality(
-                        UserColumn::Email,
-                        "robert@bobbers.on".to_owned(),
-                    ),
-                    lldap_domain_handlers::handler::UserRequestFilter::AttributeEquality(
-                        AttributeName::from("first_name"),
-                        "robert".to_string().into(),
-                    ),
-                ]))),
+                eq(Some(lldap_domain_handlers::handler::UserRequestFilter::Or(
+                    vec![
+                        lldap_domain_handlers::handler::UserRequestFilter::UserId(UserId::new(
+                            "bob",
+                        )),
+                        lldap_domain_handlers::handler::UserRequestFilter::Equality(
+                            UserColumn::Email,
+                            "robert@bobbers.on".to_owned(),
+                        ),
+                        lldap_domain_handlers::handler::UserRequestFilter::AttributeEquality(
+                            AttributeName::from("first_name"),
+                            "robert".to_string().into(),
+                        ),
+                    ],
+                ))),
                 eq(false),
             )
             .return_once(|_, _| {
@@ -363,8 +378,14 @@ mod tests {
                             display_name: None,
                             creation_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                             modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
-                            password_modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
-                            uuid: lldap_domain::types::Uuid::from_name_and_date("bob", &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc()),
+                            password_modified_date: chrono::Utc
+                                .timestamp_opt(0, 0)
+                                .unwrap()
+                                .naive_utc(),
+                            uuid: lldap_domain::types::Uuid::from_name_and_date(
+                                "bob",
+                                &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+                            ),
                             attributes: Vec::new(),
                         },
                         groups: None,
@@ -376,8 +397,14 @@ mod tests {
                             display_name: None,
                             creation_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                             modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
-                            password_modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
-                            uuid: lldap_domain::types::Uuid::from_name_and_date("robert", &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc()),
+                            password_modified_date: chrono::Utc
+                                .timestamp_opt(0, 0)
+                                .unwrap()
+                                .naive_utc(),
+                            uuid: lldap_domain::types::Uuid::from_name_and_date(
+                                "robert",
+                                &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+                            ),
                             attributes: Vec::new(),
                         },
                         groups: None,
@@ -385,11 +412,13 @@ mod tests {
                 ])
             });
 
-        let context =
-            Context::<MockTestBackendHandler>::new_for_tests(mock, ValidationResults {
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
                 user: UserId::new("admin"),
                 permission: Permission::Admin,
-            });
+            },
+        );
 
         let schema = schema(Query::<MockTestBackendHandler>::new());
         assert_eq!(
@@ -446,11 +475,13 @@ mod tests {
 
         setup_default_schema(&mut mock);
 
-        let context =
-            Context::<MockTestBackendHandler>::new_for_tests(mock, ValidationResults {
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
                 user: UserId::new("admin"),
                 permission: Permission::Admin,
-            });
+            },
+        );
 
         let schema = schema(Query::<MockTestBackendHandler>::new());
         let result = execute(QUERY, None, &schema, &Variables::new(), &context).await;

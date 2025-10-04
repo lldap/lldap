@@ -1,12 +1,12 @@
+use anyhow::Context as AnyhowContext;
 use juniper::{FieldResult, GraphQLInputObject};
+use lldap_domain::deserialize::deserialize_attribute_value;
 use lldap_domain::public_schema::PublicSchema;
 use lldap_domain::types::GroupId;
+use lldap_domain::types::UserId;
 use lldap_domain_handlers::handler::UserRequestFilter as DomainRequestFilter;
 use lldap_domain_model::model::UserColumn;
-use lldap_domain::deserialize::deserialize_attribute_value;
-use lldap_domain::types::UserId;
 use lldap_ldap::{UserFieldType, map_user_field};
-use anyhow::Context as AnyhowContext;
 
 #[derive(PartialEq, Eq, Debug, GraphQLInputObject)]
 /// A filter for requests, specifying a boolean expression based on field constraints. Only one of

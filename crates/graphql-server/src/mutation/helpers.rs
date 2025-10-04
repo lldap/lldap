@@ -12,8 +12,8 @@ use lldap_domain_handlers::handler::{BackendHandler, ReadSchemaBackendHandler};
 use std::{collections::BTreeMap, sync::Arc};
 use tracing::{Instrument, Span};
 
-use crate::api::{Context, field_error_callback};
 use super::inputs::AttributeValue;
+use crate::api::{Context, field_error_callback};
 
 pub struct UnpackedAttributes {
     pub email: Option<Email>,

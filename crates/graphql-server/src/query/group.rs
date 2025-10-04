@@ -1,3 +1,4 @@
+use chrono::TimeZone;
 use juniper::{FieldResult, graphql_object};
 use lldap_access_control::ReadonlyBackendHandler;
 use lldap_domain::public_schema::PublicSchema;
@@ -6,11 +7,10 @@ use lldap_domain_handlers::handler::{BackendHandler, UserRequestFilter as Domain
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{Instrument, debug, debug_span};
-use chrono::TimeZone;
 
-use crate::api::{Context, field_error_callback};
 use super::attribute::AttributeValue;
 use super::user::User;
+use crate::api::{Context, field_error_callback};
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 /// Represents a single group.

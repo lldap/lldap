@@ -1,5 +1,5 @@
-pub mod inputs;
 pub mod helpers;
+pub mod inputs;
 
 // Re-export public types
 pub use inputs::{
@@ -17,11 +17,14 @@ use lldap_domain::{
     types::{AttributeName, AttributeType, Email, GroupId, LdapObjectClass, UserId},
 };
 use lldap_domain_handlers::handler::BackendHandler;
-use lldap_validation::attributes::{validate_attribute_name, ALLOWED_CHARACTERS_DESCRIPTION};
+use lldap_validation::attributes::{ALLOWED_CHARACTERS_DESCRIPTION, validate_attribute_name};
 use std::sync::Arc;
 use tracing::{Instrument, debug, debug_span};
 
-use helpers::{UnpackedAttributes, consolidate_attributes, create_group_with_details, deserialize_attribute, unpack_attributes};
+use helpers::{
+    UnpackedAttributes, consolidate_attributes, create_group_with_details, deserialize_attribute,
+    unpack_attributes,
+};
 
 #[derive(PartialEq, Eq, Debug)]
 /// The top-level GraphQL mutation type.

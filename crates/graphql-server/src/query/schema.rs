@@ -6,8 +6,8 @@ use lldap_domain_handlers::handler::BackendHandler;
 use lldap_ldap::{get_default_group_object_classes, get_default_user_object_classes};
 use serde::{Deserialize, Serialize};
 
-use crate::api::Context;
 use super::attribute::AttributeSchema;
+use crate::api::Context;
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct AttributeList<Handler: BackendHandler> {
