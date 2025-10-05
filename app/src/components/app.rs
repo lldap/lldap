@@ -197,17 +197,19 @@ impl App {
                 <CreateUserForm/>
             },
             AppRoute::Index | AppRoute::ListUsers => {
-                let user_button = html! {
-                  <Link classes="btn btn-primary" to={AppRoute::CreateUser}>
-                    <i class="bi-person-plus me-2"></i>
-                    {"Create a user"}
-                  </Link>
+                let user_button = |key| {
+                    html! {
+                      <Link classes="btn btn-primary" key={key} to={AppRoute::CreateUser}>
+                        <i class="bi-person-plus me-2"></i>
+                        {"Create a user"}
+                      </Link>
+                    }
                 };
                 html! {
                   <div>
-                    { user_button.clone() }
+                    { user_button("top-create-user") }
                     <UserTable />
-                    { user_button }
+                    { user_button("bottom-create-user") }
                   </div>
                 }
             }
@@ -221,19 +223,19 @@ impl App {
                 <CreateGroupAttributeForm/>
             },
             AppRoute::ListGroups => {
-                let group_button = html! {
-                  <Link classes="btn btn-primary" to={AppRoute::CreateGroup}>
-                    <i class="bi-plus-circle me-2"></i>
-                    {"Create a group"}
-                  </Link>
+                let group_button = |key| {
+                    html! {
+                      <Link classes="btn btn-primary" key={key} to={AppRoute::CreateGroup}>
+                        <i class="bi-plus-circle me-2"></i>
+                        {"Create a group"}
+                      </Link>
+                    }
                 };
-                // Note: There's a weird bug when switching from the users page to the groups page
-                // where the two groups buttons are at the bottom. I don't know why.
                 html! {
                   <div>
-                    { group_button.clone() }
+                    { group_button("top-create-group") }
                     <GroupTable />
-                    { group_button }
+                    { group_button("bottom-create-group") }
                   </div>
                 }
             }
