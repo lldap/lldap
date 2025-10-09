@@ -2,6 +2,7 @@ use crate::sql_backend_handler::SqlBackendHandler;
 use async_trait::async_trait;
 use lldap_domain::{
     requests::{CreateUserRequest, UpdateUserRequest},
+    schema::Schema,
     types::{AttributeName, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId, Uuid},
 };
 use lldap_domain_handlers::handler::{
@@ -185,10 +186,67 @@ impl UserListerBackendHandler for SqlBackendHandler {
 }
 
 impl SqlBackendHandler {
+    fn compute_user_attribute_changes(
+        user_id: &UserId,
+        request: &UpdateUserRequest,
+        schema: &Schema,
+    ) -> Result<(Vec<model::user_attributes::ActiveModel>, Vec<AttributeName>)> {
+        let mut update_user_attributes = Vec::new();
+        let mut remove_user_attributes = Vec::new();
+        let mut process_serialized =
+            |value: ActiveValue<Serialized>, attribute_name: AttributeName| match &value {
+                ActiveValue::NotSet => {
+                    remove_user_attributes.push(attribute_name);
+                }
+                ActiveValue::Set(_) => {
+                    update_user_attributes.push(model::user_attributes::ActiveModel {
+                        user_id: Set(user_id.clone()),
+                        attribute_name: Set(attribute_name),
+                        value,
+                    })
+                }
+                _ => unreachable!(),
+            };
+        for attribute in &request.insert_attributes {
+            if schema
+                .user_attributes
+                .get_attribute_type(&attribute.name)
+                .is_some()
+            {
+                process_serialized(
+                    ActiveValue::Set(attribute.value.clone().into()),
+                    attribute.name.clone(),
+                );
+            } else {
+                return Err(DomainError::InternalError(format!(
+                    "User attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
+                    &attribute.name
+                )));
+            }
+        }
+        for attribute in &request.delete_attributes {
+            if schema
+                .user_attributes
+                .get_attribute_type(attribute)
+                .is_some()
+            {
+                remove_user_attributes.push(attribute.clone());
+            } else {
+                return Err(DomainError::InternalError(format!(
+                    "User attribute name {attribute} doesn't exist in the schema, yet was attempted to be removed from the database"
+                )));
+            }
+        }
+        Ok((update_user_attributes, remove_user_attributes))
+    }
+
     async fn update_user_with_transaction(
         transaction: &DatabaseTransaction,
         request: UpdateUserRequest,
     ) -> Result<()> {
+        let schema = Self::get_schema_with_transaction(transaction).await?;
+        let (update_user_attributes, remove_user_attributes) =
+            Self::compute_user_attribute_changes(&request.user_id, &request, &schema)?;
         let lower_email = request.email.as_ref().map(|s| s.as_str().to_lowercase());
         let now = chrono::Utc::now().naive_utc();
         let update_user = model::users::ActiveModel {
@@ -199,53 +257,6 @@ impl SqlBackendHandler {
             modified_date: ActiveValue::Set(now),
             ..Default::default()
         };
-        let mut update_user_attributes = Vec::new();
-        let mut remove_user_attributes = Vec::new();
-        let mut process_serialized =
-            |value: ActiveValue<Serialized>, attribute_name: AttributeName| match &value {
-                ActiveValue::NotSet => {
-                    remove_user_attributes.push(attribute_name);
-                }
-                ActiveValue::Set(_) => {
-                    update_user_attributes.push(model::user_attributes::ActiveModel {
-                        user_id: Set(request.user_id.clone()),
-                        attribute_name: Set(attribute_name),
-                        value,
-                    })
-                }
-                _ => unreachable!(),
-            };
-        let schema = Self::get_schema_with_transaction(transaction).await?;
-        for attribute in request.insert_attributes {
-            if schema
-                .user_attributes
-                .get_attribute_type(&attribute.name)
-                .is_some()
-            {
-                process_serialized(
-                    ActiveValue::Set(attribute.value.into()),
-                    attribute.name.clone(),
-                );
-            } else {
-                return Err(DomainError::InternalError(format!(
-                    "User attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
-                    &attribute.name
-                )));
-            }
-        }
-        for attribute in request.delete_attributes {
-            if schema
-                .user_attributes
-                .get_attribute_type(&attribute)
-                .is_some()
-            {
-                remove_user_attributes.push(attribute);
-            } else {
-                return Err(DomainError::InternalError(format!(
-                    "User attribute name {attribute} doesn't exist in the schema, yet was attempted to be removed from the database"
-                )));
-            }
-        }
         update_user.update(transaction).await?;
         if !remove_user_attributes.is_empty() {
             model::UserAttributes::delete_many()
