@@ -442,8 +442,8 @@ mod tests {
     use lldap_domain::{
         schema::{AttributeList, AttributeSchema, Schema},
         types::{
-            Attribute, AttributeName, AttributeType, GroupId, JpegPhoto,
-            LdapObjectClass, User, UserId,
+            Attribute, AttributeName, AttributeType, GroupId, JpegPhoto, LdapObjectClass, User,
+            UserId,
         },
         uuid,
     };

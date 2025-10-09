@@ -393,12 +393,10 @@ pub fn convert_groups_to_ldap_op<'a>(
 mod tests {
     use super::*;
     use crate::{
-        handler::tests::{
-            make_group_search_request, setup_bound_admin_handler,
-        },
-        search::{make_search_success, make_search_request},
+        handler::tests::{make_group_search_request, setup_bound_admin_handler},
+        search::{make_search_request, make_search_success},
     };
-    use ldap3_proto::proto::{LdapSubstringFilter};
+    use ldap3_proto::proto::LdapSubstringFilter;
     use lldap_domain::{
         types::{GroupId, UserId},
         uuid,
@@ -637,7 +635,10 @@ mod tests {
         let request = make_group_search_request(
             LdapFilter::Or(vec![
                 LdapFilter::Equality("cn".to_string(), "group_1".to_string()),
-                LdapFilter::Equality("member".to_string(), "uid=bob,ou=people,dc=example,dc=com".to_string()),
+                LdapFilter::Equality(
+                    "member".to_string(),
+                    "uid=bob,ou=people,dc=example,dc=com".to_string(),
+                ),
             ]),
             vec!["cn"],
         );

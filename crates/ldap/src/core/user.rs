@@ -406,17 +406,13 @@ mod tests {
     use super::*;
     use crate::{
         handler::tests::{
-            make_user_search_request, setup_bound_admin_handler,
-            setup_bound_handler_with_group, setup_bound_readonly_handler,
+            make_user_search_request, setup_bound_admin_handler, setup_bound_handler_with_group,
+            setup_bound_readonly_handler,
         },
-        search::{make_search_success, make_search_request},
+        search::{make_search_request, make_search_success},
     };
     use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
-    use lldap_domain::{
-        types::{
-            Attribute, GroupDetails, JpegPhoto,
-        },
-    };
+    use lldap_domain::types::{Attribute, GroupDetails, JpegPhoto};
     use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
@@ -741,33 +737,26 @@ mod tests {
     async fn test_pwd_changed_time_format() {
         use lldap_domain::uuid;
         let mut mock = MockTestBackendHandler::new();
-        mock.expect_list_users()
-            .times(1)
-            .return_once(|_, _| {
-                Ok(vec![UserAndGroups {
-                    user: User {
-                        user_id: UserId::new("bob_1"),
-                        email: "bob@bobmail.bob".into(),
-                        uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
-                        attributes: vec![],
-                        password_modified_date: Utc
-                            .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
-                            .unwrap()
-                            .naive_utc(),
-                        ..Default::default()
-                    },
-                    groups: None,
-                }])
-            });
+        mock.expect_list_users().times(1).return_once(|_, _| {
+            Ok(vec![UserAndGroups {
+                user: User {
+                    user_id: UserId::new("bob_1"),
+                    email: "bob@bobmail.bob".into(),
+                    uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
+                    attributes: vec![],
+                    password_modified_date: Utc
+                        .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
+                        .unwrap()
+                        .naive_utc(),
+                    ..Default::default()
+                },
+                groups: None,
+            }])
+        });
         let ldap_handler = setup_bound_admin_handler(mock).await;
-        let request = make_user_search_request(
-            LdapFilter::And(vec![]),
-            vec!["pwdChangedTime"],
-        );
-        if let LdapOp::SearchResultEntry(entry) = &ldap_handler
-            .do_search_or_dse(&request)
-            .await
-            .unwrap()[0]
+        let request = make_user_search_request(LdapFilter::And(vec![]), vec!["pwdChangedTime"]);
+        if let LdapOp::SearchResultEntry(entry) =
+            &ldap_handler.do_search_or_dse(&request).await.unwrap()[0]
         {
             assert_eq!(entry.attributes.len(), 1);
             assert_eq!(entry.attributes[0].atype, "pwdChangedTime");
