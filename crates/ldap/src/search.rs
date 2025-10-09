@@ -496,6 +496,7 @@ mod tests {
             ])
         );
     }
+
     #[tokio::test]
     async fn test_subschema_response() {
         let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
@@ -657,6 +658,7 @@ mod tests {
 
         assert_eq!(actual_reponse[1], make_search_success());
     }
+
     #[tokio::test]
     async fn test_search_groups_unsupported_substring() {
         let ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new()).await;
@@ -672,6 +674,7 @@ mod tests {
             })
         );
     }
+
     #[tokio::test]
     async fn test_search_groups_missing_attribute_substring() {
         let request = make_group_search_request(
@@ -689,6 +692,7 @@ mod tests {
             Ok(vec![make_search_success()]),
         );
     }
+
     #[tokio::test]
     async fn test_search_groups_error() {
         let mut mock = MockTestBackendHandler::new();
@@ -718,6 +722,7 @@ mod tests {
             })
         );
     }
+
     #[tokio::test]
     async fn test_search_groups_filter_error() {
         let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
@@ -736,6 +741,7 @@ mod tests {
             })
         );
     }
+
     #[tokio::test]
     async fn test_search_filters() {
         let mut mock = MockTestBackendHandler::new();
@@ -819,6 +825,7 @@ mod tests {
             Ok(vec![make_search_success()])
         );
     }
+
     #[tokio::test]
     async fn test_search_unsupported_substring_filter() {
         let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
@@ -847,6 +854,7 @@ mod tests {
         );
         ldap_handler.do_search_or_dse(&request).await.unwrap_err();
     }
+
     #[tokio::test]
     async fn test_search_member_of_filter() {
         let mut mock = MockTestBackendHandler::new();
@@ -878,6 +886,7 @@ mod tests {
             Ok(vec![make_search_success()])
         );
     }
+
     #[tokio::test]
     async fn test_search_member_of_filter_error() {
         let mut mock = MockTestBackendHandler::new();
@@ -899,6 +908,7 @@ mod tests {
             Ok(vec![make_search_success()])
         );
     }
+
     #[tokio::test]
     async fn test_search_filters_lowercase() {
         let mut mock = MockTestBackendHandler::new();
@@ -946,6 +956,7 @@ mod tests {
             ])
         );
     }
+
     #[tokio::test]
     async fn test_search_filters_custom_object_class() {
         let mut mock = MockTestBackendHandler::new();
@@ -986,6 +997,7 @@ mod tests {
             ])
         );
     }
+
     #[tokio::test]
     async fn test_search_both() {
         let mut mock = MockTestBackendHandler::new();
@@ -1069,6 +1081,7 @@ mod tests {
             ])
         );
     }
+
     #[tokio::test]
     async fn test_search_wildcards() {
         let mut mock = MockTestBackendHandler::new();
@@ -1256,6 +1269,7 @@ mod tests {
             expected_result
         );
     }
+
     #[tokio::test]
     async fn test_search_wrong_base() {
         let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
@@ -1269,6 +1283,7 @@ mod tests {
             Ok(vec![make_search_success()])
         );
     }
+
     #[tokio::test]
     async fn test_search_unsupported_filters() {
         let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
@@ -1284,6 +1299,7 @@ mod tests {
             })
         );
     }
+
     #[tokio::test]
     async fn test_search_filter_non_attribute() {
         let mut mock = MockTestBackendHandler::new();
@@ -1301,6 +1317,7 @@ mod tests {
             Ok(vec![make_search_success()])
         );
     }
+
     #[tokio::test]
     async fn test_user_ou_search() {
         let ldap_handler = setup_bound_readonly_handler(MockTestBackendHandler::new()).await;
@@ -1328,6 +1345,7 @@ mod tests {
             ])
         );
     }
+
     #[tokio::test]
     async fn test_custom_attribute_read() {
         let mut mock = MockTestBackendHandler::new();
