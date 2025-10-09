@@ -400,3 +400,374 @@ pub fn convert_users_to_ldap_op<'a>(
         ))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        handler::tests::{
+            make_user_search_request, setup_bound_admin_handler, setup_bound_handler_with_group,
+            setup_bound_readonly_handler,
+        },
+        search::{make_search_request, make_search_success},
+    };
+    use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
+    use lldap_domain::types::{Attribute, GroupDetails, JpegPhoto};
+    use lldap_test_utils::MockTestBackendHandler;
+    use mockall::predicate::eq;
+    use pretty_assertions::assert_eq;
+
+    fn assert_timestamp_within_margin(
+        timestamp_bytes: &[u8],
+        base_timestamp_dt: DateTime<Utc>,
+        time_margin: Duration,
+    ) {
+        let timestamp_str =
+            std::str::from_utf8(timestamp_bytes).expect("Invalid conversion from UTF-8 to string");
+        let timestamp_naive = NaiveDateTime::parse_from_str(timestamp_str, "%Y%m%d%H%M%SZ")
+            .expect("Invalid timestamp format");
+        let timestamp_dt: DateTime<Utc> = Utc.from_utc_datetime(&timestamp_naive);
+
+        let within_range = (base_timestamp_dt - timestamp_dt).abs() <= time_margin;
+
+        assert!(
+            within_range,
+            "Timestamp not within range: expected within [{} - {}], got [{}]",
+            base_timestamp_dt - time_margin,
+            base_timestamp_dt + time_margin,
+            timestamp_dt
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_regular_user() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(
+                eq(Some(UserRequestFilter::And(vec![
+                    UserRequestFilter::True,
+                    UserRequestFilter::UserId(UserId::new("test")),
+                ]))),
+                eq(false),
+            )
+            .times(1)
+            .return_once(|_, _| {
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("test"),
+                        ..Default::default()
+                    },
+                    groups: None,
+                }])
+            });
+        let ldap_handler = setup_bound_handler_with_group(mock, "regular").await;
+
+        let request =
+            make_user_search_request::<String>(LdapFilter::And(vec![]), vec!["1.1".to_string()]);
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![],
+                }),
+                make_search_success()
+            ]),
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_readonly_user() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::True)), eq(false))
+            .times(1)
+            .return_once(|_, _| Ok(vec![]));
+        let ldap_handler = setup_bound_readonly_handler(mock).await;
+        let request = make_user_search_request(LdapFilter::And(vec![]), vec!["1.1"]);
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()]),
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_member_of() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::True)), eq(true))
+            .times(1)
+            .return_once(|_, _| {
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("bob"),
+                        ..Default::default()
+                    },
+                    groups: Some(vec![GroupDetails {
+                        group_id: lldap_domain::types::GroupId(42),
+                        display_name: "rockstars".into(),
+                        creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                        uuid: lldap_domain::uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                        attributes: Vec::new(),
+                        modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                    }]),
+                }])
+            });
+        let ldap_handler = setup_bound_readonly_handler(mock).await;
+        let request = make_user_search_request::<String>(
+            LdapFilter::And(vec![]),
+            vec!["memberOf".to_string()],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![LdapPartialAttribute {
+                        atype: "memberOf".to_string(),
+                        vals: vec![b"cn=rockstars,ou=groups,dc=example,dc=com".to_vec()]
+                    }],
+                }),
+                make_search_success(),
+            ]),
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_user_as_scope() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(
+                eq(Some(UserRequestFilter::UserId(UserId::new("bob")))),
+                eq(false),
+            )
+            .times(1)
+            .return_once(|_, _| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_search_request(
+            "uid=bob,ou=people,dc=example,dc=com",
+            LdapFilter::And(vec![]),
+            vec!["objectClass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()]),
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_users() {
+        use chrono::prelude::*;
+        use lldap_domain::uuid;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users().times(1).return_once(|_, _| {
+            Ok(vec![
+                UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("bob_1"),
+                        email: "bob@bobmail.bob".into(),
+                        display_name: Some("Bôb Böbberson".to_string()),
+                        uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
+                        attributes: vec![
+                            Attribute {
+                                name: "first_name".into(),
+                                value: "Bôb".to_string().into(),
+                            },
+                            Attribute {
+                                name: "last_name".into(),
+                                value: "Böbberson".to_string().into(),
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                    groups: None,
+                },
+                UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("jim"),
+                        email: "jim@cricket.jim".into(),
+                        display_name: Some("Jimminy Cricket".to_string()),
+                        attributes: vec![
+                            Attribute {
+                                name: "avatar".into(),
+                                value: JpegPhoto::for_tests().into(),
+                            },
+                            Attribute {
+                                name: "first_name".into(),
+                                value: "Jim".to_string().into(),
+                            },
+                            Attribute {
+                                name: "last_name".into(),
+                                value: "Cricket".to_string().into(),
+                            },
+                        ],
+                        uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                        creation_date: Utc
+                            .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
+                            .unwrap()
+                            .naive_utc(),
+                        modified_date: Utc
+                            .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
+                            .unwrap()
+                            .naive_utc(),
+                        password_modified_date: Utc
+                            .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
+                            .unwrap()
+                            .naive_utc(),
+                    },
+                    groups: None,
+                },
+            ])
+        });
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_user_search_request(
+            LdapFilter::And(vec![]),
+            vec![
+                "objectClass",
+                "dn",
+                "uid",
+                "mail",
+                "givenName",
+                "sn",
+                "cn",
+                "createTimestamp",
+                "entryUuid",
+                "jpegPhoto",
+            ],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "uid=bob_1,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![
+                        LdapPartialAttribute {
+                            atype: "cn".to_string(),
+                            vals: vec!["Bôb Böbberson".to_string().into_bytes()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "createTimestamp".to_string(),
+                            vals: vec![b"19700101000000Z".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "entryUuid".to_string(),
+                            vals: vec![b"698e1d5f-7a40-3151-8745-b9b8a37839da".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "givenName".to_string(),
+                            vals: vec!["Bôb".to_string().into_bytes()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "mail".to_string(),
+                            vals: vec![b"bob@bobmail.bob".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "objectClass".to_string(),
+                            vals: vec![
+                                b"inetOrgPerson".to_vec(),
+                                b"posixAccount".to_vec(),
+                                b"mailAccount".to_vec(),
+                                b"person".to_vec(),
+                                b"customUserClass".to_vec(),
+                            ]
+                        },
+                        LdapPartialAttribute {
+                            atype: "sn".to_string(),
+                            vals: vec!["Böbberson".to_string().into_bytes()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "uid".to_string(),
+                            vals: vec![b"bob_1".to_vec()]
+                        },
+                    ],
+                }),
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "uid=jim,ou=people,dc=example,dc=com".to_string(),
+                    attributes: vec![
+                        LdapPartialAttribute {
+                            atype: "cn".to_string(),
+                            vals: vec![b"Jimminy Cricket".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "createTimestamp".to_string(),
+                            vals: vec![b"20140708091011Z".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "entryUuid".to_string(),
+                            vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "givenName".to_string(),
+                            vals: vec![b"Jim".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "jpegPhoto".to_string(),
+                            vals: vec![JpegPhoto::for_tests().into_bytes()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "mail".to_string(),
+                            vals: vec![b"jim@cricket.jim".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "objectClass".to_string(),
+                            vals: vec![
+                                b"inetOrgPerson".to_vec(),
+                                b"posixAccount".to_vec(),
+                                b"mailAccount".to_vec(),
+                                b"person".to_vec(),
+                                b"customUserClass".to_vec(),
+                            ]
+                        },
+                        LdapPartialAttribute {
+                            atype: "sn".to_string(),
+                            vals: vec![b"Cricket".to_vec()]
+                        },
+                        LdapPartialAttribute {
+                            atype: "uid".to_string(),
+                            vals: vec![b"jim".to_vec()]
+                        },
+                    ],
+                }),
+                make_search_success(),
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pwd_changed_time_format() {
+        use lldap_domain::uuid;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users().times(1).return_once(|_, _| {
+            Ok(vec![UserAndGroups {
+                user: User {
+                    user_id: UserId::new("bob_1"),
+                    email: "bob@bobmail.bob".into(),
+                    uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
+                    attributes: vec![],
+                    password_modified_date: Utc
+                        .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
+                        .unwrap()
+                        .naive_utc(),
+                    ..Default::default()
+                },
+                groups: None,
+            }])
+        });
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_user_search_request(LdapFilter::And(vec![]), vec!["pwdChangedTime"]);
+        if let LdapOp::SearchResultEntry(entry) =
+            &ldap_handler.do_search_or_dse(&request).await.unwrap()[0]
+        {
+            assert_eq!(entry.attributes.len(), 1);
+            assert_eq!(entry.attributes[0].atype, "pwdChangedTime");
+            assert_eq!(entry.attributes[0].vals.len(), 1);
+            assert_timestamp_within_margin(
+                &entry.attributes[0].vals[0],
+                Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap(),
+                Duration::seconds(1),
+            );
+        } else {
+            panic!("Expected SearchResultEntry");
+        }
+    }
+}
