@@ -2,7 +2,11 @@ use crate::sql_backend_handler::SqlBackendHandler;
 use async_trait::async_trait;
 use lldap_domain::{
     requests::{CreateUserRequest, UpdateUserRequest},
-    types::{AttributeName, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId, Uuid},
+    schema::Schema,
+    types::{
+        Attribute, AttributeName, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId,
+        Uuid,
+    },
 };
 use lldap_domain_handlers::handler::{
     ReadSchemaBackendHandler, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
@@ -185,20 +189,12 @@ impl UserListerBackendHandler for SqlBackendHandler {
 }
 
 impl SqlBackendHandler {
-    async fn update_user_with_transaction(
-        transaction: &DatabaseTransaction,
-        request: UpdateUserRequest,
-    ) -> Result<()> {
-        let lower_email = request.email.as_ref().map(|s| s.as_str().to_lowercase());
-        let now = chrono::Utc::now().naive_utc();
-        let update_user = model::users::ActiveModel {
-            user_id: ActiveValue::Set(request.user_id.clone()),
-            email: request.email.map(ActiveValue::Set).unwrap_or_default(),
-            lowercase_email: lower_email.map(ActiveValue::Set).unwrap_or_default(),
-            display_name: to_value(&request.display_name),
-            modified_date: ActiveValue::Set(now),
-            ..Default::default()
-        };
+    fn compute_user_attribute_changes(
+        user_id: &UserId,
+        insert_attributes: Vec<Attribute>,
+        delete_attributes: Vec<AttributeName>,
+        schema: &Schema,
+    ) -> Result<(Vec<model::user_attributes::ActiveModel>, Vec<AttributeName>)> {
         let mut update_user_attributes = Vec::new();
         let mut remove_user_attributes = Vec::new();
         let mut process_serialized =
@@ -208,24 +204,20 @@ impl SqlBackendHandler {
                 }
                 ActiveValue::Set(_) => {
                     update_user_attributes.push(model::user_attributes::ActiveModel {
-                        user_id: Set(request.user_id.clone()),
+                        user_id: Set(user_id.clone()),
                         attribute_name: Set(attribute_name),
                         value,
                     })
                 }
                 _ => unreachable!(),
             };
-        let schema = Self::get_schema_with_transaction(transaction).await?;
-        for attribute in request.insert_attributes {
+        for attribute in insert_attributes {
             if schema
                 .user_attributes
                 .get_attribute_type(&attribute.name)
                 .is_some()
             {
-                process_serialized(
-                    ActiveValue::Set(attribute.value.into()),
-                    attribute.name.clone(),
-                );
+                process_serialized(ActiveValue::Set(attribute.value.into()), attribute.name);
             } else {
                 return Err(DomainError::InternalError(format!(
                     "User attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
@@ -233,7 +225,7 @@ impl SqlBackendHandler {
                 )));
             }
         }
-        for attribute in request.delete_attributes {
+        for attribute in delete_attributes {
             if schema
                 .user_attributes
                 .get_attribute_type(&attribute)
@@ -246,6 +238,31 @@ impl SqlBackendHandler {
                 )));
             }
         }
+        Ok((update_user_attributes, remove_user_attributes))
+    }
+
+    async fn update_user_with_transaction(
+        transaction: &DatabaseTransaction,
+        request: UpdateUserRequest,
+    ) -> Result<()> {
+        let schema = Self::get_schema_with_transaction(transaction).await?;
+        let (update_user_attributes, remove_user_attributes) =
+            Self::compute_user_attribute_changes(
+                &request.user_id,
+                request.insert_attributes,
+                request.delete_attributes,
+                &schema,
+            )?;
+        let lower_email = request.email.as_ref().map(|s| s.as_str().to_lowercase());
+        let now = chrono::Utc::now().naive_utc();
+        let update_user = model::users::ActiveModel {
+            user_id: ActiveValue::Set(request.user_id.clone()),
+            email: request.email.map(ActiveValue::Set).unwrap_or_default(),
+            lowercase_email: lower_email.map(ActiveValue::Set).unwrap_or_default(),
+            display_name: to_value(&request.display_name),
+            modified_date: ActiveValue::Set(now),
+            ..Default::default()
+        };
         update_user.update(transaction).await?;
         if !remove_user_attributes.is_empty() {
             model::UserAttributes::delete_many()
