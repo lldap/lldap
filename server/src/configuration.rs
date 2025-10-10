@@ -5,9 +5,9 @@ use crate::{
     },
     database_string::DatabaseUrl,
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use figment::{
-    Figment,
+    Figment, Provider,
     providers::{Env, Format, Serialized, Toml},
 };
 use figment_file_provider_adapter::FileAdapter;
@@ -556,6 +556,45 @@ fn expected_keys(dict: &figment::value::Dict) -> HashSet<String> {
     keys
 }
 
+fn check_for_unexpected_env_variables<P: Provider>(env_variable_provider: P) {
+    use figment::Profile;
+    let expected_keys = expected_keys(
+        &Figment::from(Serialized::defaults(
+            ConfigurationBuilder::default().private_build().unwrap(),
+        ))
+        .data()
+        .unwrap()[&Profile::default()],
+    );
+    extract_keys(&env_variable_provider.data().unwrap()[&Profile::default()])
+        .iter()
+        .filter(|k| !expected_keys.contains(k.as_str()))
+        .for_each(|k| {
+            eprintln!("WARNING: Unknown environment variable: {k}");
+        });
+}
+
+fn generate_jwt_sample_error() -> String {
+    use rand::{Rng, seq::SliceRandom};
+    struct Symbols;
+
+    impl rand::distributions::Distribution<char> for Symbols {
+        fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> char {
+            *b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+,-./:;<=>?_~!@#$%^&*()[]{}:;".choose(rng).unwrap() as char
+        }
+    }
+    format!(
+        "The JWT secret must be initialized to a random string, preferably at least 32 characters long. \
+            Either set the `jwt_secret` config value or the `LLDAP_JWT_SECRET` environment variable. \
+            You can generate the value by running\n\
+            LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\\''()*+,-./:;<=>?@[\\]^_{{|}}~' </dev/urandom | head -c 32; echo ''\n\
+            or you can use this random value: {}",
+        rand::thread_rng()
+            .sample_iter(&Symbols)
+            .take(32)
+            .collect::<String>()
+    )
+}
+
 pub fn init<C>(overrides: C) -> Result<Configuration>
 where
     C: TopLevelCommandOpts + ConfigOverrider,
@@ -581,22 +620,7 @@ where
     if config.verbose {
         println!("Configuration: {:#?}", &config);
     }
-    {
-        use figment::{Profile, Provider};
-        let expected_keys = expected_keys(
-            &Figment::from(Serialized::defaults(
-                ConfigurationBuilder::default().private_build().unwrap(),
-            ))
-            .data()
-            .unwrap()[&Profile::default()],
-        );
-        extract_keys(&env_variable_provider().data().unwrap()[&Profile::default()])
-            .iter()
-            .filter(|k| !expected_keys.contains(k.as_str()))
-            .for_each(|k| {
-                eprintln!("WARNING: Unknown environment variable: LLDAP_{k}");
-            });
-    }
+    check_for_unexpected_env_variables(env_variable_provider());
     config.server_setup = Some(get_server_setup(
         &config.key_file,
         config
@@ -606,27 +630,10 @@ where
             .unwrap_or_default(),
         figment_config,
     )?);
-    if config.jwt_secret.is_none() {
-        use rand::{Rng, seq::SliceRandom};
-        struct Symbols;
-
-        impl rand::prelude::Distribution<char> for Symbols {
-            fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> char {
-                *b"01234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+,-./:;<=>?_~!@#$%^&*()[]{}:;".choose(rng).unwrap() as char
-            }
-        }
-        bail!(
-            "The JWT secret must be initialized to a random string, preferably at least 32 characters long. \
-            Either set the `jwt_secret` config value or the `LLDAP_JWT_SECRET` environment variable. \
-            You can generate the value by running\n\
-            LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\\''()*+,-./:;<=>?@[\\]^_{{|}}~' </dev/urandom | head -c 32; echo ''\n\
-            or you can use this random value: {}",
-            rand::thread_rng()
-                .sample_iter(&Symbols)
-                .take(32)
-                .collect::<String>()
-        );
-    }
+    config
+        .jwt_secret
+        .as_ref()
+        .ok_or_else(|| anyhow!("{}", generate_jwt_sample_error()))?;
     if config.smtp_options.tls_required.is_some() {
         println!(
             "DEPRECATED: smtp_options.tls_required field is deprecated, it never did anything. You can replace it with smtp_options.smtp_encryption."
