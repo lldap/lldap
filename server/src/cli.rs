@@ -139,6 +139,10 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_LDAP_HOST")]
     pub ldap_host: Option<String>,
 
+    /// Change ldap healthcheck host. Default: "localhost"
+    #[clap(long, env = "LLDAP_LDAP_HEALTHCHECK_HOST")]
+    pub ldap_healthcheck_host: Option<String>,
+
     /// Change ldap port. Default: 3890
     #[clap(long, env = "LLDAP_LDAP_PORT")]
     pub ldap_port: Option<u16>,
@@ -146,6 +150,10 @@ pub struct RunOpts {
     /// Change HTTP API host. Default: "0.0.0.0"
     #[clap(long, env = "LLDAP_HTTP_HOST")]
     pub http_host: Option<String>,
+
+    /// Change HTTP API healthcheck host. Default: "localhost"
+    #[clap(long, env = "LLDAP_HTTP_HEALTHCHECK_HOST")]
+    pub http_healthcheck_host: Option<String>,
 
     /// Change HTTP API port. Default: 17170
     #[clap(long, env = "LLDAP_HTTP_PORT")]
