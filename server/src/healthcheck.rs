@@ -70,8 +70,11 @@ where
 }
 
 #[instrument(level = "info", err)]
-pub async fn check_ldap(port: u16) -> Result<()> {
-    check_ldap_endpoint(TcpStream::connect(format!("localhost:{port}")).await?).await
+pub async fn check_ldap(address: &str, port: u16) -> Result<()> {
+    check_ldap_endpoint(
+        TcpStream::connect(format!("{}:{}", get_ipv6_safe_address(address), port)).await?,
+    )
+    .await
 }
 
 fn get_root_certificates() -> rustls::RootCertStore {
@@ -126,19 +129,20 @@ fn get_tls_connector(ldaps_options: &LdapsOptions) -> Result<RustlsTlsConnector>
     Ok(std::sync::Arc::new(client_config).into())
 }
 
-#[instrument(skip_all, level = "info", err, fields(port = %ldaps_options.port))]
-pub async fn check_ldaps(ldaps_options: &LdapsOptions) -> Result<()> {
+#[instrument(skip_all, level = "info", err, fields(address = %address, port = %ldaps_options.port))]
+pub async fn check_ldaps(address: &str, ldaps_options: &LdapsOptions) -> Result<()> {
     if !ldaps_options.enabled {
         info!("LDAPS not enabled");
         return Ok(());
     };
     let tls_connector =
         get_tls_connector(ldaps_options).context("while preparing the tls connection")?;
-    let url = format!("localhost:{}", ldaps_options.port);
+    let safe_address = get_ipv6_safe_address(address);
+    let url = format!("{}:{}", safe_address, ldaps_options.port);
     check_ldap_endpoint(
         tls_connector
             .connect(
-                rustls::ServerName::try_from("localhost")
+                rustls::ServerName::try_from(safe_address.as_str())
                     .context("while parsing the server name")?,
                 TcpStream::connect(&url)
                     .await
@@ -151,10 +155,42 @@ pub async fn check_ldaps(ldaps_options: &LdapsOptions) -> Result<()> {
 }
 
 #[instrument(level = "info", err)]
-pub async fn check_api(port: u16) -> Result<()> {
-    reqwest::get(format!("http://localhost:{port}/health"))
-        .await?
-        .error_for_status()?;
+pub async fn check_api(address: &str, port: u16) -> Result<()> {
+    reqwest::get(format!(
+        "http://{}:{}/health",
+        get_ipv6_safe_address(address),
+        port
+    ))
+    .await?
+    .error_for_status()?;
     info!("Success");
     Ok(())
+}
+
+fn get_ipv6_safe_address(address: &str) -> String {
+    return if address
+        .parse::<std::net::IpAddr>()
+        .map(|ip| ip.is_ipv6())
+        .unwrap_or(false)
+    {
+        format!("[{address}]")
+    } else {
+        address.to_string()
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn check_get_ipv6_safe_address() {
+        // Verify localhost continues to work.
+        assert_eq!(get_ipv6_safe_address("localhost"), "localhost");
+        // Verify an IPv4 address is handled correctly.
+        assert_eq!(get_ipv6_safe_address("192.0.2.42"), "192.0.2.42");
+        // Verify an IPv6 address is handled correctly.
+        assert_eq!(get_ipv6_safe_address("2001:db8::42"), "[2001:db8::42]");
+    }
 }
