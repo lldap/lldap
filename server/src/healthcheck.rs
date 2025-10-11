@@ -142,8 +142,7 @@ pub async fn check_ldaps(address: &str, ldaps_options: &LdapsOptions) -> Result<
     check_ldap_endpoint(
         tls_connector
             .connect(
-                rustls::ServerName::try_from(safe_address.as_str())
-                    .context("while parsing the server name")?,
+                rustls::ServerName::try_from(address).context("while parsing the server name")?,
                 TcpStream::connect(&url)
                     .await
                     .context("while connecting TCP")?,
