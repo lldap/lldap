@@ -168,7 +168,7 @@ pub async fn check_api(address: &str, port: u16) -> Result<()> {
 }
 
 fn get_ipv6_safe_address(address: &str) -> String {
-    return if address
+    if address
         .parse::<std::net::IpAddr>()
         .map(|ip| ip.is_ipv6())
         .unwrap_or(false)
@@ -176,7 +176,7 @@ fn get_ipv6_safe_address(address: &str) -> String {
         format!("[{address}]")
     } else {
         address.to_string()
-    };
+    }
 }
 
 #[cfg(test)]
