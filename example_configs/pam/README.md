@@ -1,40 +1,55 @@
 # Getting Started with UNIX PAM using SSSD
 
+This guide was tested with LDAPS on debian 12 with SSSD 2.8.2 and certificates signed by a registered CA.
+
 ## Configuring LLDAP
 
 ### Configure LDAPS
 
-You **must** use LDAPS. You MUST NOT use plain LDAP. Even over a private network this costs you nearly nothing, and passwords will be sent in PLAIN TEXT without it.
+Even in private networks you **should** configure LLDAP to communicate over HTTPS, otherwise passwords will be
+transmitted in plain text. Just using a self-signed certificate will drastically improve security.
 
-```jsx
+You can generate an SSL certificate for LLDAP with the following command. The `subjectAltName` is **required**. Make
+sure all domains are listed there, even your `CN`.
+
+```bash
+openssl req -x509 -nodes -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 36500 -subj "/CN=ldap.example.com" -addext "subjectAltName = DNS:ldap.example.com"
+```
+
+With the generated certificates for your domain, copy the certificates and enable ldaps in the LLDAP configuration.
+
+```
 [ldaps_options]
 enabled=true
-port=6360
+port=636
 cert_file="cert.pem"
 key_file="key.pem"
 ```
 
-You can generate an SSL certificate for it with the following command. The `subjectAltName` is REQUIRED. Make sure all domains are listed there, even your `CN`.
+### Setting up custom attributes
 
-```bash
-openssl req -x509 -nodes -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 36500 -nodes -subj "/CN=lldap.example.net" -addext "subjectAltName = DNS:lldap.example.net"
-```
+SSSD makes use of the `posixAccount` and `sshPublicKey` object types, their attributes have to be created manually in
+LLDAP.
 
-### Setting up the custom attributes
+Add the following custom attributes to the **User schema**.
 
-You will need to add the following custom attributes to the **user schema**.
+| Attribute     | Type    | Multiple | Example    |
+|---------------|---------|:--------:|------------|
+| uidNumber     | integer |          | 3000       |
+| gidNumber     | integer |          | 3000       |
+| homeDirectory | string  |          | /home/user |
+| unixShell     | string  |          | /bin/bash  |
+| sshPublicKey  | string  |    X     | *sshKey*   |
 
-- uidNumber (integer)
-- gidNumber (integer, multiple values)
-- homeDirectory (string)
-- unixShell (string)
-- sshPublicKey (string) (only if you’re setting up SSH Public Key Sync)
+Add the following custom attributes to the **Group schema.**
 
-You will need to add the following custom attributes to the **group schema.**
+| Attribute     | Type    | Multiple | Example    |
+|---------------|---------|:--------:|------------|
+| gidNumber     | integer |          | 3000       |
 
-- gidNumber (integer)
-
-You will now need to populate these values for all the users you wish to be able to login.
+The only optional attributes are `unixShell` and `sshPublicKey`. All other attributes **must** be fully populated for
+each group and user being used by SSSD. The `gidNumber` of the user schema represents the users primary group. To add
+more groups to a user, add the user to groups with a `gidNumber` set.
 
 ## Client setup
 
@@ -45,25 +60,113 @@ You need to install the packages `sssd` `sssd-tools` `libnss-sss` `libpam-sss` `
 E.g. on Debian/Ubuntu
 
 ```bash
-sudo apt update; sudo apt install -y sssd sssd-tools libnss-sss libpam-sss libsss-sudo
+sudo apt install -y sssd sssd-tools libnss-sss libpam-sss libsss-sudo
 ```
 
 ### Configure the client packages
 
-Use your favourite text editor to create/open the file `/etc/sssd/sssd.conf` .
+This example makes the following assumptions which need to be adjusted:
 
-E.g. Using nano
+* Domain: `example.com`
+* Domain Component: `dc=example,dc=com`
+* LDAP URL: `ldaps://ldap.example.com/`
+* Bind Username: `binduser`
+* Bind Password: `bindpassword`
+
+The global config filters **out** the root user and group. It also restricts the number of failed login attempts
+with cached credentials if the server is unreachable.
+
+Use your favourite text editor to create the SSSD global configuration:
 
 ```bash
 sudo nano /etc/sssd/sssd.conf
 ```
 
-Insert the contents of the provided template (sssd.conf), but you will need to change some of the configuration in the file. Comments have been made to guide you. The config file is an example if your LLDAP server is hosted at `lldap.example.com` and your domain is `example.com` with your dc being `dc=example,dc=com`.
+```
+[sssd]
+config_file_version = 2
+services = nss, pam, ssh
+domains = example.com
 
-SSSD will **refuse** to run if it’s config file is world-readable, so apply the following permissions to it:
+[nss]
+filter_users = root
+filter_groups = root
+
+[pam]
+offline_failed_login_attempts = 3
+offline_failed_login_delay = 5
+
+[ssh]
+```
+
+The following domain configuration is set up for the LLDAP `RFC2307bis` schema and the custom attributes created at the
+beginning of the guide. It allows all configured LDAP users to log in by default while filtering out users and groups
+which don't have their posix IDs set.
+
+Because caching is enabled make sure to check the [Debugging](#Debugging) section on how to
+flush the cache if you are having problems.
+
+Create a separate configuration file for your domain.
+
+```bash
+sudo nano /etc/sssd/conf.d/example.com.conf
+```
+
+```
+[domain/example.com]
+id_provider = ldap
+auth_provider = ldap
+chpass_provider = ldap
+access_provider = permit
+
+enumerate = True
+cache_credentials = True
+
+# ldap provider
+ldap_uri = ldaps://ldap.example.com/
+ldap_schema = rfc2307bis
+ldap_search_base = dc=example,dc=com
+
+ldap_default_bind_dn = uid=binduser,ou=people,dc=example,dc=com
+ldap_default_authtok = bindpassword
+
+# For certificates signed by a registered CA
+ldap_tls_cacert = /etc/ssl/certs/ca-certificates.crt
+# For self signed certificates
+# ldap_tls_cacert = cert.pem
+ldap_tls_reqcert = demand
+
+# users
+ldap_user_search_base = ou=people,dc=example,dc=com?subtree?(uidNumber=*)
+ldap_user_object_class = posixAccount
+ldap_user_name = uid
+ldap_user_gecos = cn
+ldap_user_uid_number = uidNumber
+ldap_user_gid_number = gidNumber
+ldap_user_home_directory = homeDirectory
+ldap_user_shell = unixShell
+ldap_user_ssh_public_key = sshPublicKey
+
+# groups
+ldap_group_search_base = ou=groups,dc=example,dc=com?subtree?(gidNumber=*)
+ldap_group_object_class = groupOfUniqueNames
+ldap_group_name = cn
+ldap_group_gid_number = gidNumber
+ldap_group_member = uniqueMember
+```
+
+SSSD will **refuse** to run if its config files have the wrong permissions, so apply the following permissions to the
+files:
 
 ```bash
 sudo chmod 600 /etc/sssd/sssd.conf
+sudo chmod 600 /etc/sssd/conf.d/example.com.conf
+```
+
+Enable automatic creation of home directories:
+
+```bash
+sudo pam-auth-update --enable mkhomedir
 ```
 
 Restart SSSD to apply any changes:
@@ -72,26 +175,11 @@ Restart SSSD to apply any changes:
 sudo systemctl restart sssd
 ```
 
-Enable automatic creation of home directories
-```bash
-sudo pam-auth-update --enable mkhomedir
-```
-
 ## Permissions and SSH Key sync
 
 ### SSH Key Sync
 
-In order to do this, you need to setup the custom attribute `sshPublicKey` in the user schema. Then, you must uncomment the following line in the SSSD config file (assuming you are using the provided template):
-
-```bash
-sudo nano /etc/sssd/sssd.conf
-```
-
-```jsx
-ldap_user_ssh_public_key = sshPublicKey
-```
-
-And the following to the bottom of your OpenSSH config file:
+Add the following to the bottom of your OpenSSH config file:
 
 ```bash
 sudo nano /etc/ssh/sshd_config
@@ -111,11 +199,15 @@ sudo systemctl restart sssd
 
 ### Permissions Sync
 
-Linux often manages permissions to tools such as Sudo and Docker based on group membership. There are two possible ways to achieve this. 
+Linux often manages permissions to tools such as Sudo and Docker based on group membership. There are two possible ways 
+to achieve this. 
 
-**Number 1**
+**Option 1**
 
-**If all your client systems are setup identically,** you can just check the group id of the local group, i.e. Sudo being 27 on most Debian and Ubuntu installs, and set that as the gid in LLDAP. For tools such as docker, you can create a group before install with a custom gid on the system, which must be the same on all, and use that GID on the LLDAP group
+**If all your client systems are set up identically,** you can just check the group id of the local group, i.e. `sudo`
+being 27 on most Debian and Ubuntu installs, and set that as the gid in LLDAP. 
+For tools such as docker, you can create a group before install with a custom gid on the system, which must be the same
+on all, and use that GID on the LLDAP group
 
 Sudo
 
@@ -123,15 +215,16 @@ Sudo
 
 Docker
 
-```jsx
+```bash
 sudo groupadd docker -g 722
 ```
 
 ![image](https://github.com/user-attachments/assets/face88d0-5a20-4442-a5e3-9f6a1ae41b68)
 
-**Number 2**
+**Option 2**
 
-Create a group in LLDAP that you would like all your users who have sudo access to be in, and add the following to the bottom of `/etc/sudoers` . 
+Create a group in LLDAP that you would like all your users who have sudo access to be in, and add the following to the
+bottom of `/etc/sudoers` . 
 
 E.g. if your group is named `lldap_sudo`
 
@@ -143,14 +236,20 @@ E.g. if your group is named `lldap_sudo`
 
 To verify your config file’s validity, you can run the following command
 
-```jsx
+```bash
 sudo sssctl config-check
 ```
 
 To flush SSSD’s cache
 
-```jsx
+```bash
 sudo sss_cache -E
+```
+
+Man pages
+```bash
+man sssd
+man sssd-ldap
 ```
 
 ## Final Notes
