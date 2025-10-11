@@ -1,4 +1,5 @@
 use crate::{
+    DateToLocalDisplay,
     components::{
         form::{
             attribute_input::{ListAttributeInput, SingleAttributeInput},
@@ -160,11 +161,14 @@ fn get_custom_attribute_input(
     attribute_schema: &AttributeSchema,
     user_attributes: &[Attribute],
 ) -> Html {
-    let values = user_attributes
+    let values: Vec<_> = user_attributes
         .iter()
         .find(|a| a.name == attribute_schema.name)
-        .map(|attribute| attribute.value.clone())
-        .unwrap_or_default();
+        .into_iter()
+        .flat_map(|attribute| attribute.value.clone())
+        .map(|v| format_attribute_value(&attribute_schema.attribute_type, &v))
+        .collect();
+
     if attribute_schema.is_list {
         html! {
             <ListAttributeInput
@@ -188,25 +192,32 @@ fn get_custom_attribute_static(
     attribute_schema: &AttributeSchema,
     user_attributes: &[Attribute],
 ) -> Html {
-    let values = user_attributes
+    let values: Vec<_> = user_attributes
         .iter()
         .find(|a| a.name == attribute_schema.name)
-        .map(|attribute| attribute.value.clone())
-        .unwrap_or_default();
-    let value_to_str = match attribute_schema.attribute_type {
-        AttributeType::String | AttributeType::Integer => |v: String| v,
-        AttributeType::DateTime => |v: String| {
-            console!(format!("Parsing date: {}", &v));
-            chrono::DateTime::parse_from_rfc3339(&v)
-                .map(|dt| dt.naive_utc().to_string())
-                .unwrap_or_else(|_| "Invalid date".to_string())
-        },
-        AttributeType::JpegPhoto => |_: String| "Unimplemented JPEG display".to_string(),
-    };
+        .into_iter()
+        .flat_map(|attribute| attribute.value.clone())
+        .map(|v| format_attribute_value(&attribute_schema.attribute_type, &v))
+        .map(|v |html! { <div>{v}</div> })
+        .collect();
+
     html! {
         <StaticValue label={attribute_schema.name.clone()} id={attribute_schema.name.clone()}>
-            {values.into_iter().map(|x| html!{<div>{value_to_str(x)}</div>}).collect::<Vec<_>>()}
+            {values}
         </StaticValue>
+    }
+}
+
+fn format_attribute_value(attr_type: &AttributeType, raw: &str) -> String {
+    match attr_type {
+        AttributeType::String | AttributeType::Integer => raw.to_string(),
+        AttributeType::DateTime => {
+            console!(format!("Parsing date: {}", raw));
+            chrono::DateTime::parse_from_rfc3339(raw)
+                .map(|dt| dt.to_local_time_display())
+                .unwrap_or_else(|_| "Invalid date".to_string())
+        }
+        AttributeType::JpegPhoto => "Unimplemented JPEG display".to_string(),
     }
 }
 
