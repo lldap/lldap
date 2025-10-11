@@ -155,7 +155,7 @@ ldap_group_gid_number = gidNumber
 ldap_group_member = uniqueMember
 ```
 
-SSSD will **refuse** to run if it’s config files have the wrong permissions, so apply the following permissions to the
+SSSD will **refuse** to run if its config files have the wrong permissions, so apply the following permissions to the
 files:
 
 ```bash
