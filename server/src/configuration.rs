@@ -92,10 +92,14 @@ pub struct HttpUrl(pub Url);
 pub struct Configuration {
     #[builder(default = r#"String::from("0.0.0.0")"#)]
     pub ldap_host: String,
+    #[builder(default = r#"String::from("localhost")"#)]
+    pub ldap_healthcheck_host: String,
     #[builder(default = "3890")]
     pub ldap_port: u16,
     #[builder(default = r#"String::from("0.0.0.0")"#)]
     pub http_host: String,
+    #[builder(default = r#"String::from("localhost")"#)]
+    pub http_healthcheck_host: String,
     #[builder(default = "17170")]
     pub http_port: u16,
     #[builder(default)]
