@@ -430,11 +430,11 @@ impl ConfigOverrider for RunOpts {
 
         self.http_url
             .as_ref()
-            .inspect(|url| config.http_url = HttpUrl((*url).clone()));
+            .inspect(|&url| config.http_url = HttpUrl(url.clone()));
 
         self.database_url
             .as_ref()
-            .inspect(|database_url| config.database_url = (*database_url).clone());
+            .inspect(|&database_url| config.database_url = database_url.clone());
 
         self.force_ldap_user_pass_reset
             .inspect(|&force_ldap_user_pass_reset| {
@@ -488,11 +488,11 @@ impl ConfigOverrider for SmtpOpts {
     fn override_config(&self, config: &mut Configuration) {
         self.smtp_from
             .as_ref()
-            .inspect(|from| config.smtp_options.from = Some(Mailbox((*from).clone())));
+            .inspect(|&from| config.smtp_options.from = Some(Mailbox(from.clone())));
 
         self.smtp_reply_to
             .as_ref()
-            .inspect(|reply_to| config.smtp_options.reply_to = Some(Mailbox((*reply_to).clone())));
+            .inspect(|&reply_to| config.smtp_options.reply_to = Some(Mailbox(reply_to.clone())));
 
         self.smtp_server
             .as_ref()
@@ -507,10 +507,10 @@ impl ConfigOverrider for SmtpOpts {
 
         self.smtp_password
             .as_ref()
-            .inspect(|password| config.smtp_options.password = SecUtf8::from((*password).clone()));
+            .inspect(|&password| config.smtp_options.password = SecUtf8::from(password.clone()));
 
-        self.smtp_encryption.as_ref().inspect(|smtp_encryption| {
-            config.smtp_options.smtp_encryption = (*smtp_encryption).clone();
+        self.smtp_encryption.as_ref().inspect(|&smtp_encryption| {
+            config.smtp_options.smtp_encryption = smtp_encryption.clone();
         });
 
         self.smtp_tls_required
