@@ -1,7 +1,7 @@
 use crate::{
     cli::{
-        GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts,
-        TrueFalseAlways,
+        GeneralConfigOpts, HealthcheckOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts,
+        TestEmailOpts, TrueFalseAlways,
     },
     database_string::DatabaseUrl,
 };
@@ -83,6 +83,21 @@ impl std::default::Default for LdapsOptions {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[builder(pattern = "owned")]
+pub struct HealthcheckOptions {
+    #[builder(default = r#"String::from("localhost")"#)]
+    pub http_host: String,
+    #[builder(default = r#"String::from("localhost")"#)]
+    pub ldap_host: String,
+}
+
+impl std::default::Default for HealthcheckOptions {
+    fn default() -> Self {
+        HealthcheckOptionsBuilder::default().build().unwrap()
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize, derive_more::Debug)]
 #[debug(r#""{_0}""#)]
 pub struct HttpUrl(pub Url);
@@ -138,6 +153,8 @@ pub struct Configuration {
     #[serde(skip)]
     #[builder(field(private), default = "None")]
     server_setup: Option<ServerSetupConfig>,
+    #[builder(default)]
+    pub healthcheck_options: HealthcheckOptions,
 }
 
 impl std::default::Default for Configuration {
@@ -520,6 +537,18 @@ impl ConfigOverrider for SmtpOpts {
             .inspect(|&enable_password_reset| {
                 config.smtp_options.enable_password_reset = enable_password_reset;
             });
+    }
+}
+
+impl ConfigOverrider for HealthcheckOpts {
+    fn override_config(&self, config: &mut Configuration) {
+        self.healthcheck_http_host
+            .as_ref()
+            .inspect(|host| config.healthcheck_options.http_host.clone_from(host));
+
+        self.healthcheck_ldap_host
+            .as_ref()
+            .inspect(|host| config.healthcheck_options.ldap_host.clone_from(host));
     }
 }
 

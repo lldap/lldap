@@ -174,6 +174,9 @@ pub struct RunOpts {
 
     #[clap(flatten)]
     pub ldaps_opts: LdapsOpts,
+
+    #[clap(flatten)]
+    pub healthcheck_opts: HealthcheckOpts,
 }
 
 #[derive(Debug, Parser, Clone)]
@@ -262,6 +265,18 @@ pub struct ExportGraphQLSchemaOpts {
     /// Output to a file. If not specified, the config is printed to the standard output.
     #[clap(short, long)]
     pub output_file: Option<String>,
+}
+
+#[derive(Debug, Parser, Clone)]
+#[clap(next_help_heading = Some("HEALTHCHECK"))]
+pub struct HealthcheckOpts {
+    /// Change the HTTP Host to test the health of.  Default: "localhost"
+    #[clap(long, env = "LLDAP_HEALTHCHECK_OPTIONS__HTTP_HOST")]
+    pub healthcheck_http_host: Option<String>,
+
+    /// Change the LDAP Host to test the health of.  Default: "localhost"
+    #[clap(long, env = "LLDAP_HEALTHCHECK_OPTIONS__LDAP_HOST")]
+    pub healthcheck_ldap_host: Option<String>,
 }
 
 pub fn init() -> CLIOpts {
