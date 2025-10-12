@@ -71,10 +71,7 @@ where
 
 #[instrument(level = "info", err)]
 pub async fn check_ldap(address: &str, port: u16) -> Result<()> {
-    check_ldap_endpoint(
-        TcpStream::connect(format!("{}:{}", get_ipv6_url_safe_address(address), port)).await?,
-    )
-    .await
+    check_ldap_endpoint(TcpStream::connect((address, port)).await?).await
 }
 
 fn get_root_certificates() -> rustls::RootCertStore {
@@ -137,13 +134,11 @@ pub async fn check_ldaps(address: &str, ldaps_options: &LdapsOptions) -> Result<
     };
     let tls_connector =
         get_tls_connector(ldaps_options).context("while preparing the tls connection")?;
-    let safe_address = get_ipv6_url_safe_address(address);
-    let url = format!("{}:{}", safe_address, ldaps_options.port);
     check_ldap_endpoint(
         tls_connector
             .connect(
                 rustls::ServerName::try_from(address).context("while parsing the server name")?,
-                TcpStream::connect(&url)
+                TcpStream::connect((address, ldaps_options.port))
                     .await
                     .context("while connecting TCP")?,
             )
