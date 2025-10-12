@@ -416,37 +416,36 @@ impl ConfigOverrider for RunOpts {
     fn override_config(&self, config: &mut Configuration) {
         self.general_config.override_config(config);
 
-        if let Some(path) = self.server_key_file.as_ref() {
-            config.key_file = path.to_string();
-        }
+        self.server_key_file
+            .as_ref()
+            .inspect(|path| config.key_file = path.to_string());
 
-        if let Some(seed) = self.server_key_seed.as_ref() {
-            config.key_seed = Some(SecUtf8::from(seed));
-        }
+        self.server_key_seed
+            .as_ref()
+            .inspect(|seed| config.key_seed = Some(SecUtf8::from(seed.as_str())));
 
-        if let Some(port) = self.ldap_port {
-            config.ldap_port = port;
-        }
+        self.ldap_port.inspect(|&port| config.ldap_port = port);
 
-        if let Some(port) = self.http_port {
-            config.http_port = port;
-        }
+        self.http_port.inspect(|&port| config.http_port = port);
 
-        if let Some(url) = self.http_url.as_ref() {
-            config.http_url = HttpUrl(url.clone());
-        }
+        self.http_url
+            .as_ref()
+            .inspect(|&url| config.http_url = HttpUrl(url.clone()));
 
-        if let Some(database_url) = self.database_url.as_ref() {
-            config.database_url = database_url.clone();
-        }
+        self.database_url
+            .as_ref()
+            .inspect(|&database_url| config.database_url = database_url.clone());
 
-        if let Some(force_ldap_user_pass_reset) = self.force_ldap_user_pass_reset {
-            config.force_ldap_user_pass_reset = force_ldap_user_pass_reset;
-        }
+        self.force_ldap_user_pass_reset
+            .inspect(|&force_ldap_user_pass_reset| {
+                config.force_ldap_user_pass_reset = force_ldap_user_pass_reset;
+            });
 
-        if let Some(force_update_private_key) = self.force_update_private_key {
-            config.force_update_private_key = force_update_private_key;
-        }
+        self.force_update_private_key
+            .inspect(|&force_update_private_key| {
+                config.force_update_private_key = force_update_private_key;
+            });
+
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);
     }
@@ -461,18 +460,19 @@ impl ConfigOverrider for TestEmailOpts {
 
 impl ConfigOverrider for LdapsOpts {
     fn override_config(&self, config: &mut Configuration) {
-        if let Some(enabled) = self.ldaps_enabled {
-            config.ldaps_options.enabled = enabled;
-        }
-        if let Some(port) = self.ldaps_port {
-            config.ldaps_options.port = port;
-        }
-        if let Some(path) = self.ldaps_cert_file.as_ref() {
-            config.ldaps_options.cert_file.clone_from(path);
-        }
-        if let Some(path) = self.ldaps_key_file.as_ref() {
-            config.ldaps_options.key_file.clone_from(path);
-        }
+        self.ldaps_enabled
+            .inspect(|&enabled| config.ldaps_options.enabled = enabled);
+
+        self.ldaps_port
+            .inspect(|&port| config.ldaps_options.port = port);
+
+        self.ldaps_cert_file
+            .as_ref()
+            .inspect(|path| config.ldaps_options.cert_file.clone_from(path));
+
+        self.ldaps_key_file
+            .as_ref()
+            .inspect(|path| config.ldaps_options.key_file.clone_from(path));
     }
 }
 
@@ -486,33 +486,40 @@ impl ConfigOverrider for GeneralConfigOpts {
 
 impl ConfigOverrider for SmtpOpts {
     fn override_config(&self, config: &mut Configuration) {
-        if let Some(from) = &self.smtp_from {
-            config.smtp_options.from = Some(Mailbox(from.clone()));
-        }
-        if let Some(reply_to) = &self.smtp_reply_to {
-            config.smtp_options.reply_to = Some(Mailbox(reply_to.clone()));
-        }
-        if let Some(server) = &self.smtp_server {
-            config.smtp_options.server.clone_from(server);
-        }
-        if let Some(port) = self.smtp_port {
-            config.smtp_options.port = port;
-        }
-        if let Some(user) = &self.smtp_user {
-            config.smtp_options.user.clone_from(user);
-        }
-        if let Some(password) = &self.smtp_password {
-            config.smtp_options.password = SecUtf8::from(password.clone());
-        }
-        if let Some(smtp_encryption) = &self.smtp_encryption {
+        self.smtp_from
+            .as_ref()
+            .inspect(|&from| config.smtp_options.from = Some(Mailbox(from.clone())));
+
+        self.smtp_reply_to
+            .as_ref()
+            .inspect(|&reply_to| config.smtp_options.reply_to = Some(Mailbox(reply_to.clone())));
+
+        self.smtp_server
+            .as_ref()
+            .inspect(|server| config.smtp_options.server.clone_from(server));
+
+        self.smtp_port
+            .inspect(|&port| config.smtp_options.port = port);
+
+        self.smtp_user
+            .as_ref()
+            .inspect(|user| config.smtp_options.user.clone_from(user));
+
+        self.smtp_password
+            .as_ref()
+            .inspect(|&password| config.smtp_options.password = SecUtf8::from(password.clone()));
+
+        self.smtp_encryption.as_ref().inspect(|&smtp_encryption| {
             config.smtp_options.smtp_encryption = smtp_encryption.clone();
-        }
-        if let Some(tls_required) = self.smtp_tls_required {
-            config.smtp_options.tls_required = Some(tls_required);
-        }
-        if let Some(enable_password_reset) = self.smtp_enable_password_reset {
-            config.smtp_options.enable_password_reset = enable_password_reset;
-        }
+        });
+
+        self.smtp_tls_required
+            .inspect(|&tls_required| config.smtp_options.tls_required = Some(tls_required));
+
+        self.smtp_enable_password_reset
+            .inspect(|&enable_password_reset| {
+                config.smtp_options.enable_password_reset = enable_password_reset;
+            });
     }
 }
 
