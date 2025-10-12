@@ -18,7 +18,7 @@
 ## The host address that the healthcheck should verify for the LDAP server.
 ## If "ldap_host" is set to a specific IP address, this must be set to match if the built-in
 ## healthcheck command is used.
-#http_healthcheck_host = "localhost"
+#ldap_healthcheck_host = "localhost"
 
 ## The port on which to have the LDAP server.
 #ldap_port = 3890
