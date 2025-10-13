@@ -2546,6 +2546,7 @@ dependencies = [
  "graphql_client 0.11.0",
  "hmac 0.12.1",
  "http 1.1.0",
+ "ipnet",
  "juniper",
  "jwt 0.16.0",
  "ldap3",

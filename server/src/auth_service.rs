@@ -15,6 +15,7 @@ use chrono::prelude::*;
 use futures::future::{Ready, ok};
 use futures_util::FutureExt;
 use hmac::Hmac;
+use ipnet::IpNet;
 use jwt::{SignWithKey, VerifyWithKey};
 use lldap_access_control::{ReadonlyBackendHandler, UserReadableBackendHandler};
 use lldap_auth::{
@@ -30,7 +31,9 @@ use sha2::Sha512;
 use std::{
     collections::HashSet,
     hash::Hash,
+    net::IpAddr,
     pin::Pin,
+    str::FromStr,
     task::{Context, Poll},
 };
 use time::ext::NumericalDuration;
@@ -105,8 +108,37 @@ async fn get_refresh<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
+    // First try to refresh with existing refresh token
+    match try_refresh_token(&data, &request).await {
+        Ok(response) => return Ok(response),
+        Err(_) => {
+            // If refresh token fails, try trusted header auth if enabled
+            if data.trusted_header_options.enabled {
+                match try_trusted_header_auth(&data, &request).await {
+                    Ok(response) => return Ok(response),
+                    Err(_) => {
+                        // Both methods failed, return the original refresh token error
+                    }
+                }
+            }
+        }
+    }
+
+    // Both refresh token and trusted header auth failed
+    Err(TcpError::DomainError(DomainError::AuthenticationError(
+        "Authentication failed".to_string(),
+    )))
+}
+
+async fn try_refresh_token<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
     let jwt_key = &data.jwt_key;
-    let (refresh_token_hash, user) = get_refresh_token(request)?;
+    let (refresh_token_hash, user) = get_refresh_token(request.clone())?;
     let found = data
         .get_tcp_handler()
         .check_token(refresh_token_hash, &user)
@@ -131,10 +163,134 @@ where
                 .same_site(SameSite::Strict)
                 .finish(),
         )
-        .json(&login::ServerLoginResponse {
-            token: token.as_str().to_owned(),
-            refresh_token: None,
-        }))
+        .json(login::ServerAuthResponse::Token(
+            login::ServerLoginResponse {
+                token: token.as_str().to_owned(),
+                refresh_token: None,
+            },
+        )))
+}
+
+fn get_client_ip(request: &HttpRequest) -> Option<IpAddr> {
+    // Try to get the real IP from common proxy headers first
+    if let Some(forwarded_for) = request.headers().get("x-forwarded-for") {
+        if let Ok(header_value) = forwarded_for.to_str() {
+            // Take the first IP in the chain (the original client)
+            if let Some(ip_str) = header_value.split(',').next() {
+                if let Ok(ip) = IpAddr::from_str(ip_str.trim()) {
+                    return Some(ip);
+                }
+            }
+        }
+    }
+
+    // Try X-Real-IP header
+    if let Some(real_ip) = request.headers().get("x-real-ip") {
+        if let Ok(header_value) = real_ip.to_str() {
+            if let Ok(ip) = IpAddr::from_str(header_value.trim()) {
+                return Some(ip);
+            }
+        }
+    }
+
+    // Fallback to connection info
+    if let Some(peer_addr) = request.peer_addr() {
+        return Some(peer_addr.ip());
+    }
+
+    None
+}
+
+fn is_ip_in_trusted_proxies(ip: IpAddr, trusted_proxies: &[String]) -> bool {
+    for proxy_str in trusted_proxies {
+        if let Ok(cidr) = IpNet::from_str(proxy_str) {
+            if cidr.contains(&ip) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+async fn validate_trusted_header<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+) -> TcpResult<UserId>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    // Validate client IP is in trusted CIDRs
+    let client_ip = get_client_ip(request)
+        .ok_or_else(|| TcpError::UnauthorizedError("Could not determine client IP".to_string()))?;
+
+    if !is_ip_in_trusted_proxies(client_ip, &data.trusted_header_options.trusted_proxies) {
+        return Err(TcpError::UnauthorizedError(format!(
+            "Client IP {} not in trusted proxies",
+            client_ip
+        )));
+    }
+
+    // Get the username from the trusted header
+    let header_name = &data.trusted_header_options.header_name;
+    let username = request
+        .headers()
+        .get(header_name)
+        .and_then(|h| h.to_str().ok())
+        .ok_or_else(|| {
+            TcpError::UnauthorizedError(format!("Missing trusted header: {}", header_name))
+        })?;
+
+    // Validate the username is not empty
+    if username.trim().is_empty() {
+        return Err(TcpError::UnauthorizedError(
+            "Empty username in trusted header".to_string(),
+        ));
+    }
+
+    let user_id = UserId::new(username);
+
+    // Check if the user exists in LLDAP
+    let user_exists = !data
+        .get_readonly_handler()
+        .list_users(Some(UserRequestFilter::UserId(user_id.clone())), false)
+        .await?
+        .is_empty();
+
+    if !user_exists {
+        return Err(TcpError::UnauthorizedError(format!(
+            "User {} not found in LLDAP",
+            username
+        )));
+    }
+
+    Ok(user_id)
+}
+
+async fn try_trusted_header_auth<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    let user_id = validate_trusted_header(data, request).await?;
+    // Get user groups to determine admin status
+    let groups = data
+        .get_readonly_handler()
+        .get_user_groups(&user_id)
+        .await?;
+    let is_admin = groups
+        .iter()
+        .any(|g| g.display_name == "lldap_admin".into());
+
+    Ok(
+        HttpResponse::Ok().json(login::ServerAuthResponse::TrustedHeader(
+            login::ServerTrustedHeaderResponse {
+                user_id: user_id.to_string(),
+                is_admin,
+            },
+        )),
+    )
 }
 
 async fn get_refresh_handler<Backend>(
@@ -351,6 +507,28 @@ where
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
         .unwrap_or_else(error_to_api_response)
+}
+
+#[instrument(skip_all, level = "debug")]
+async fn get_trusted_header_successful_response<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    user_id: &UserId,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler,
+{
+    // Get user groups to determine admin status
+    let groups = data.get_readonly_handler().get_user_groups(user_id).await?;
+    let is_admin = groups
+        .iter()
+        .any(|g| g.display_name == "lldap_admin".into());
+
+    Ok(
+        HttpResponse::Ok().json(&login::ServerTrustedHeaderResponse {
+            user_id: user_id.to_string(),
+            is_admin,
+        }),
+    )
 }
 
 #[instrument(skip_all, level = "debug")]
@@ -620,6 +798,56 @@ pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
             .groups
             .iter()
             .map(|s| GroupName::from(s.as_str())),
+    ))
+}
+
+#[instrument(skip_all, level = "debug", err, ret)]
+pub(crate) async fn check_if_trusted_header_is_valid<Backend: BackendHandler>(
+    state: &AppState<Backend>,
+    request: &HttpRequest,
+) -> Result<ValidationResults, actix_web::Error> {
+    if !state.trusted_header_options.enabled {
+        return Err(ErrorUnauthorized(
+            "Trusted header authentication is disabled",
+        ));
+    }
+
+    // Validate client IP is in trusted CIDRs
+    let client_ip =
+        get_client_ip(request).ok_or_else(|| ErrorUnauthorized("Could not determine client IP"))?;
+
+    if !is_ip_in_trusted_proxies(client_ip, &state.trusted_header_options.trusted_proxies) {
+        return Err(ErrorUnauthorized(format!(
+            "Client IP {} not in trusted proxies",
+            client_ip
+        )));
+    }
+
+    let header_name = &state.trusted_header_options.header_name;
+    let username = request
+        .headers()
+        .get(header_name)
+        .and_then(|h| h.to_str().ok())
+        .ok_or_else(|| ErrorUnauthorized(format!("Missing trusted header: {}", header_name)))?;
+
+    if username.trim().is_empty() {
+        return Err(ErrorUnauthorized("Empty username in trusted header"));
+    }
+
+    let user_id = UserId::new(username);
+
+    // Get user groups to determine permissions
+    let groups = state
+        .get_readonly_handler()
+        .get_user_groups(&user_id)
+        .await
+        .map_err(|_| ErrorUnauthorized("User not found in LLDAP"))?;
+
+    Ok(state.backend_handler.get_permissions_from_groups(
+        user_id,
+        groups
+            .iter()
+            .map(|g| GroupName::from(g.display_name.as_str())),
     ))
 }
 
