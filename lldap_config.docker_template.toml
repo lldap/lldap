@@ -15,11 +15,6 @@
 ## originating from outside the container.
 #ldap_host = "0.0.0.0"
 
-## The host address that the healthcheck should verify for the LDAP server.
-## If "ldap_host" is set to a specific IP address, this must be set to match if the built-in
-## healthcheck command is used.
-#ldap_healthcheck_host = "localhost"
-
 ## The port on which to have the LDAP server.
 #ldap_port = 3890
 
@@ -30,11 +25,6 @@
 ## If LLDAP server is running in docker, set it to "0.0.0.0" ("::" for IPv6) to allow connections
 ## originating from outside the container.
 #http_host = "0.0.0.0"
-
-## The host address that the healthcheck should verify for the HTTP server.
-## If "http_host" is set to a specific IP address, this must be set to match if the built-in
-## healthcheck command is used.
-#http_healthcheck_host = "localhost"
 
 ## The port on which to have the HTTP server, for user login and
 ## administration.
@@ -169,3 +159,16 @@ key_seed = "RanD0m STR1ng"
 #cert_file="/data/cert.pem"
 ## Certificate key file.
 #key_file="/data/key.pem"
+
+## Options to configure the healthcheck command.
+## To set these options from environment variables, use the folowing format
+## (example with http_host): LLDAP_HEALTHCHECK_OPTIONS__HTTP_PORT
+[healthcheck_options]
+## The host address that the healthcheck should verify for the HTTP server.
+## If "http_host" is set to a specific IP address, this must be set to match if the built-in
+## healthcheck command is used.  Note: if this is an IPv6 address, it must be wrapped in [].
+#http_host = "localhost"
+## The host address that the healthcheck should verify for the LDAP server.
+## If "ldap_host" is set to a specific IP address, this must be set to match if the built-in
+## healthcheck command is used.
+#ldap_host = "localhost"

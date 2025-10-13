@@ -139,10 +139,6 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_LDAP_HOST")]
     pub ldap_host: Option<String>,
 
-    /// Change ldap healthcheck host. Default: "localhost"
-    #[clap(long, env = "LLDAP_LDAP_HEALTHCHECK_HOST")]
-    pub ldap_healthcheck_host: Option<String>,
-
     /// Change ldap port. Default: 3890
     #[clap(long, env = "LLDAP_LDAP_PORT")]
     pub ldap_port: Option<u16>,
@@ -150,10 +146,6 @@ pub struct RunOpts {
     /// Change HTTP API host. Default: "0.0.0.0"
     #[clap(long, env = "LLDAP_HTTP_HOST")]
     pub http_host: Option<String>,
-
-    /// Change HTTP API healthcheck host. Default: "localhost"
-    #[clap(long, env = "LLDAP_HTTP_HEALTHCHECK_HOST")]
-    pub http_healthcheck_host: Option<String>,
 
     /// Change HTTP API port. Default: 17170
     #[clap(long, env = "LLDAP_HTTP_PORT")]
@@ -182,6 +174,9 @@ pub struct RunOpts {
 
     #[clap(flatten)]
     pub ldaps_opts: LdapsOpts,
+
+    #[clap(flatten)]
+    pub healthcheck_opts: HealthcheckOpts,
 }
 
 #[derive(Debug, Parser, Clone)]
@@ -270,6 +265,18 @@ pub struct ExportGraphQLSchemaOpts {
     /// Output to a file. If not specified, the config is printed to the standard output.
     #[clap(short, long)]
     pub output_file: Option<String>,
+}
+
+#[derive(Debug, Parser, Clone)]
+#[clap(next_help_heading = Some("HEALTHCHECK"))]
+pub struct HealthcheckOpts {
+    /// Change the HTTP Host to test the health of.  Default: "localhost"
+    #[clap(long, env = "LLDAP_HEALTH_CHECK_OPTIONS__HTTP_HOST")]
+    pub http_host: Option<String>,
+
+    /// Change the LDAP Host to test the health of.  Default: "localhost"
+    #[clap(long, env = "LLDAP_HEALTH_CHECK_OPTIONS__LDAP_HOST")]
+    pub ldap_host: Option<String>,
 }
 
 pub fn init() -> CLIOpts {
