@@ -60,6 +60,21 @@ pub mod login {
         #[serde(rename = "refreshToken", skip_serializing_if = "Option::is_none")]
         pub refresh_token: Option<String>,
     }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerTrustedHeaderResponse {
+        #[serde(rename = "userId")]
+        pub user_id: String,
+        #[serde(rename = "isAdmin")]
+        pub is_admin: bool,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    #[serde(untagged)]
+    pub enum ServerAuthResponse {
+        Token(ServerLoginResponse),
+        TrustedHeader(ServerTrustedHeaderResponse),
+    }
 }
 
 /// The messages for the 3-step OPAQUE registration process.

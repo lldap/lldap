@@ -1,7 +1,7 @@
 use crate::{
     cli::{
         GeneralConfigOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts, TestEmailOpts,
-        TrueFalseAlways,
+        TrueFalseAlways, TrustedHeaderOpts,
     },
     database_string::DatabaseUrl,
 };
@@ -83,6 +83,25 @@ impl std::default::Default for LdapsOptions {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[builder(pattern = "owned")]
+pub struct TrustedHeaderOptions {
+    #[builder(default = "false")]
+    pub enabled: bool,
+    #[builder(default = r#"String::from("Remote-User")"#)]
+    pub header_name: String,
+    #[builder(default = "None")]
+    pub logout_url: Option<String>,
+    #[builder(default = r#"vec!["127.0.0.0/8".to_string(), "::1/128".to_string()]"#)]
+    pub trusted_proxies: Vec<String>,
+}
+
+impl std::default::Default for TrustedHeaderOptions {
+    fn default() -> Self {
+        TrustedHeaderOptionsBuilder::default().build().unwrap()
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize, derive_more::Debug)]
 #[debug(r#""{_0}""#)]
 pub struct HttpUrl(pub Url);
@@ -132,6 +151,8 @@ pub struct Configuration {
     pub smtp_options: MailOptions,
     #[builder(default)]
     pub ldaps_options: LdapsOptions,
+    #[builder(default)]
+    pub trusted_header_options: TrustedHeaderOptions,
     #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
     pub http_url: HttpUrl,
     #[debug(skip)]
@@ -448,6 +469,7 @@ impl ConfigOverrider for RunOpts {
 
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);
+        self.trusted_header_opts.override_config(config);
     }
 }
 
@@ -473,6 +495,29 @@ impl ConfigOverrider for LdapsOpts {
         self.ldaps_key_file
             .as_ref()
             .inspect(|path| config.ldaps_options.key_file.clone_from(path));
+    }
+}
+
+impl ConfigOverrider for TrustedHeaderOpts {
+    fn override_config(&self, config: &mut Configuration) {
+        if let Some(enabled) = self.trusted_header_enabled {
+            config.trusted_header_options.enabled = enabled;
+        }
+        if let Some(header_name) = self.trusted_header_name.as_ref() {
+            config
+                .trusted_header_options
+                .header_name
+                .clone_from(header_name);
+        }
+        if let Some(logout_url) = self.trusted_header_logout_url.as_ref() {
+            config.trusted_header_options.logout_url = Some(logout_url.clone());
+        }
+        if let Some(trusted_proxies) = self.trusted_header_trusted_proxies.as_ref() {
+            config.trusted_header_options.trusted_proxies = trusted_proxies
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect();
+        }
     }
 }
 
