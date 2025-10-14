@@ -70,8 +70,8 @@ where
 }
 
 #[instrument(level = "info", err)]
-pub async fn check_ldap(port: u16) -> Result<()> {
-    check_ldap_endpoint(TcpStream::connect(format!("localhost:{port}")).await?).await
+pub async fn check_ldap(host: &str, port: u16) -> Result<()> {
+    check_ldap_endpoint(TcpStream::connect((host, port)).await?).await
 }
 
 fn get_root_certificates() -> rustls::RootCertStore {
@@ -126,21 +126,19 @@ fn get_tls_connector(ldaps_options: &LdapsOptions) -> Result<RustlsTlsConnector>
     Ok(std::sync::Arc::new(client_config).into())
 }
 
-#[instrument(skip_all, level = "info", err, fields(port = %ldaps_options.port))]
-pub async fn check_ldaps(ldaps_options: &LdapsOptions) -> Result<()> {
+#[instrument(skip_all, level = "info", err, fields(host = %host, port = %ldaps_options.port))]
+pub async fn check_ldaps(host: &str, ldaps_options: &LdapsOptions) -> Result<()> {
     if !ldaps_options.enabled {
         info!("LDAPS not enabled");
         return Ok(());
     };
     let tls_connector =
         get_tls_connector(ldaps_options).context("while preparing the tls connection")?;
-    let url = format!("localhost:{}", ldaps_options.port);
     check_ldap_endpoint(
         tls_connector
             .connect(
-                rustls::ServerName::try_from("localhost")
-                    .context("while parsing the server name")?,
-                TcpStream::connect(&url)
+                rustls::ServerName::try_from(host).context("while parsing the server name")?,
+                TcpStream::connect((host, ldaps_options.port))
                     .await
                     .context("while connecting TCP")?,
             )
@@ -151,8 +149,8 @@ pub async fn check_ldaps(ldaps_options: &LdapsOptions) -> Result<()> {
 }
 
 #[instrument(level = "info", err)]
-pub async fn check_api(port: u16) -> Result<()> {
-    reqwest::get(format!("http://localhost:{port}/health"))
+pub async fn check_api(host: &str, port: u16) -> Result<()> {
+    reqwest::get(format!("http://{host}:{port}/health"))
         .await?
         .error_for_status()?;
     info!("Success");
