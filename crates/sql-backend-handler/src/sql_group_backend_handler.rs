@@ -66,6 +66,11 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
             .into_condition(),
         GroupId(id) => GroupColumn::GroupId.eq(id.0).into_condition(),
         Uuid(uuid) => GroupColumn::Uuid.eq(uuid.to_string()).into_condition(),
+        UuidSubString(filter) => {
+            SimpleExpr::FunctionCall(Func::lower(Expr::col((group_table, GroupColumn::Uuid))))
+                .like(filter.to_sql_filter())
+                .into_condition()
+        }
         // WHERE (group_id in (SELECT group_id FROM memberships WHERE user_id = user))
         Member(user) => GroupColumn::GroupId
             .in_subquery(

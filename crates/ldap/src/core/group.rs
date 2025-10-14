@@ -329,6 +329,9 @@ fn convert_group_filter(
                 GroupFieldType::DisplayName => Ok(GroupRequestFilter::DisplayNameSubString(
                     substring_filter.clone().into(),
                 )),
+                GroupFieldType::Uuid => Ok(GroupRequestFilter::UuidSubString(
+                    substring_filter.clone().into(),
+                )),
                 GroupFieldType::NoMatch => Ok(GroupRequestFilter::False),
                 _ => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
@@ -668,6 +671,53 @@ mod tests {
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
             Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_groups_filter_uuid_substring() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::UuidSubString(
+                SubStringFilter {
+                    initial: Some("iNIt".to_owned()),
+                    any: vec!["1".to_owned(), "2aA".to_owned()],
+                    final_: Some("finAl".to_owned()),
+                },
+            ))))
+            .times(1)
+            .return_once(|_| {
+                Ok(vec![Group {
+                    display_name: "group_1".into(),
+                    id: GroupId(1),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                    users: vec![],
+                    uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                    attributes: Vec::new(),
+                    modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                }])
+            });
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_group_search_request(
+            LdapFilter::Substring(
+                "uuid".to_owned(),
+                LdapSubstringFilter {
+                    initial: Some("iNIt".to_owned()),
+                    any: vec!["1".to_owned(), "2aA".to_owned()],
+                    final_: Some("finAl".to_owned()),
+                },
+            ),
+            vec!["1.1"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                    attributes: vec![],
+                }),
+                make_search_success(),
+            ])
         );
     }
 

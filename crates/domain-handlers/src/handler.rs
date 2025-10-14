@@ -103,6 +103,7 @@ pub enum GroupRequestFilter {
     DisplayName(GroupName),
     DisplayNameSubString(SubStringFilter),
     Uuid(Uuid),
+    UuidSubString(SubStringFilter),
     GroupId(GroupId),
     // Check if the group contains a user identified by uid.
     Member(UserId),
