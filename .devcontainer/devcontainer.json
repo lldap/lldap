@@ -1,8 +1,26 @@
 {
 	"name": "LLDAP dev",
-	"build": { "dockerfile": "Dockerfile" },
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"rust-lang.rust-analyzer"
+			],
+			"settings": {
+				"rust-analyzer.linkedProjects": [
+					"./Cargo.toml"
+				]
+			}
+		}
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/rust:1": {}
+	},
 	"forwardPorts": [
 		3890,
 		17170
-	]
+	],
+	"remoteUser": "lldapdev"
 }
