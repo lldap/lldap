@@ -85,7 +85,7 @@ MySQL/MariaDB or PostgreSQL.
 
 It's possible to install lldap from OCI images ([docker](docs/install.md#with-docker)/[podman](docs/install.md#with-podman)), from [Kubernetes](docs/install.md#with-kubernetes), or from [a regular distribution package manager](docs/install.md/#from-a-package-repository) (Archlinux, Debian, CentOS, Fedora, OpenSuse, Ubuntu, FreeBSD).
 
-Building [from source](docs/install.md#from-source) and [cross-compiling](docs/install.md#cross-compilation) to a different hardware architecture is also supported.
+Building [from source](docs/install.md#from-source) is supported; instructions for [cross-compiling](docs/development.md#cross-compilation) to a different hardware architecture are also available.
 
 ## Usage
 
@@ -205,10 +205,14 @@ service that seems definitely incompatible with LLDAP.
 - [Does lldap provide commercial support contracts?](docs/faq.md#does-lldap-provide-commercial-support-contracts)
 - [Can I make a donation to fund development?](docs/faq.md#can-i-make-a-donation-to-fund-development)
 - [Is lldap sustainable? Can we depend on it for our infrastructure?](docs/faq.md#is-lldap-sustainable-can-we-depend-on-it-for-our-infrastructure)
+- [What is `Specified path is not a directory` error in my logs?](docs/faq.md#what-is-specified-path-is-not-a-directory-error-in-my-logs)
+- [What hardware architectures are supported by LLDAP?](docs/faq.md#what-hardware-architectures-are-supported-by-lldap)
 
 ## Contributions
 
 Contributions are welcome! Just fork and open a PR. Or just file a bug.
+
+Further instructions on setting up your development environment and how to compile LLDAP can be found in [docs/development.md](docs/development.md).
 
 We don't have a code of conduct, just be respectful and remember that it's just
 normal people doing this for free on their free time.

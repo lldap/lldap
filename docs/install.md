@@ -349,62 +349,14 @@ LLDAP configuration file: /usr/local/lldap_server/lldap_config.toml<br>
 
 ### From source
 
-#### Backend
+To compile the project from source, see our [Development docs](./development.md). Once the project is successfully compiled, you may:
 
-To compile the project, you'll need:
+- create a configuration file `lldap_config.toml`, following the docker template `lldap_config.docker_template.toml`
+- create a systemd service, see [example_configs/lldap.service](../example_configs/lldap.service)
 
-- curl and gzip: `sudo apt install curl gzip`
-- Rust/Cargo: [rustup.rs](https://rustup.rs/)
+If your `lldap` binary and assets are not in the same folder, or you run the binary from a different working dir, don't forget to:
 
-Then you can compile the server (and the migration tool if you want):
+- specify the configuration file to use with the `-c` flag: `lldap run -c /etc/lldap.toml`
+- specify where to find the assets using `assets_path` in the configuration file
 
-```shell
-cargo build --release -p lldap -p lldap_migration_tool
-```
-
-The resulting binaries will be in `./target/release/`. Alternatively, you can
-just run `cargo run -- run` to run the server.
-
-#### Frontend
-
-To bring up the server, you'll need to compile the frontend. In addition to
-`cargo`, you'll need WASM-pack, which can be installed by running `cargo install wasm-pack`.
-
-Then you can build the frontend files with
-
-```shell
-./app/build.sh
-```
-
-(you'll need to run this after every front-end change to update the WASM
-package served).
-
-The default config is in `src/infra/configuration.rs`, but you can override it
-by creating an `lldap_config.toml`, setting environment variables or passing
-arguments to `cargo run`. Have a look at the docker template:
-`lldap_config.docker_template.toml`.
-
-You can also install it as a systemd service, see
-[lldap.service](example_configs/lldap.service).
-
-### Cross-compilation
-
-Docker images are provided for AMD64, ARM64 and ARM/V7.
-
-If you want to cross-compile yourself, you can do so by installing
-[`cross`](https://github.com/rust-embedded/cross):
-
-```sh
-cargo install cross
-cross build --target=armv7-unknown-linux-musleabihf -p lldap --release
-./app/build.sh
-```
-
-(Replace `armv7-unknown-linux-musleabihf` with the correct Rust target for your
-device.)
-
-You can then get the compiled server binary in
-`target/armv7-unknown-linux-musleabihf/release/lldap` and the various needed files
-(`index.html`, `main.js`, `pkg` folder) in the `app` folder. Copy them to the
-Raspberry Pi (or other target), with the folder structure maintained (`app`
-files in an `app` folder next to the binary).
+All options can be set either via the TOML configuration, or via environment variables prefixed with `LLDAP_`. For example, setting `LLDAP_assets_path` is equivalent to defining `assets_path` in your configuration file.
