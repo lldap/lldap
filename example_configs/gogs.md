@@ -3,7 +3,7 @@
 Gogs can make use of LDAP and therefore lldap.
 
 The following configuration is adapted from the example configuration at [their repository](https://github.com/thchha/lldap/new/main/example_configs).
-The example is a container configuration - the file should just live within `conf/auth.d/some_name.conf`:
+The example is a container configuration - the file should just needs to live within `conf/auth.d/some_name.conf`:
 
 ```
 $ cat /srv/git/gogs/conf/auth.d/ldap_bind_dn.conf
@@ -34,6 +34,10 @@ filter             = (&(objectClass=person)(uid=%s))
 # This renders the following filter obsolete; Though its response is accepted by Gogs.
 admin_filter       = (memberOf=cn=<yourAdminGroup>,ou=groups,dc=example,dc=com)
 ```
+
+The ´binduser` shall be a member of `lldap_strict_readonly`.
+The group `yourAdminGroup` should be adapted to your requirement - Otherwise the entire line can be omitted.
+The diamond brakets are for readability and are not required.
 
 ## Tested on Gogs
 
