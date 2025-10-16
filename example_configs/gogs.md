@@ -3,7 +3,7 @@
 Gogs can make use of LDAP and therefore lldap.
 
 The following configuration is adapted from the example configuration at [their repository](https://github.com/thchha/lldap/new/main/example_configs).
-The example is a container configuration - the file should just needs to live within `conf/auth.d/some_name.conf`:
+The example is a container configuration - the file should live within `conf/auth.d/some_name.conf`:
 
 ```
 $ cat /srv/git/gogs/conf/auth.d/ldap_bind_dn.conf
