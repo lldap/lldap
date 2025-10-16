@@ -37,7 +37,7 @@ admin_filter       = (memberOf=cn=<yourAdminGroup>,ou=groups,dc=example,dc=com)
 
 The `binduser` shall be a member of `lldap_strict_readonly`.
 The group `yourAdminGroup` should be adapted to your requirement - Otherwise the entire line can be omitted.
-The diamond brakets are for readability and are not required.
+The diamond brackets are for readability and are not required.
 
 ## Tested on Gogs
 
