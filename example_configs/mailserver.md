@@ -58,9 +58,9 @@ services:
       - LDAP_SEARCH_BASE=ou=people,dc=example,dc=com
       - LDAP_BIND_DN=uid=admin,ou=people,dc=example,dc=com
       - LDAP_BIND_PW=adminpassword
-      - LDAP_QUERY_FILTER_USER=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
+      - LDAP_QUERY_FILTER_USER=(&(objectClass=inetOrgPerson)(mail=%s))
       - LDAP_QUERY_FILTER_GROUP=(&(objectClass=groupOfUniqueNames)(uid=%s))
-      - LDAP_QUERY_FILTER_ALIAS=(&(objectClass=inetOrgPerson)(|(uid=%u)(mail=%u)))
+      - LDAP_QUERY_FILTER_ALIAS=(&(objectClass=inetOrgPerson)(mail=%s))
       - LDAP_QUERY_FILTER_DOMAIN=(mail=*@%s)
       # <<< Postfix LDAP Integration
       # >>> Dovecot LDAP Integration
@@ -78,7 +78,8 @@ services:
     container_name: roundcubemail
     restart: always
     volumes:
-      - roundcube_data:/var/www/html
+      - roundcube_config:/var/roundcube/config
+      - roundcube_plugins:/var/www/html/plugins
     ports:
       - "9002:80"
     environment:
@@ -86,12 +87,15 @@ services:
       - ROUNDCUBEMAIL_SKIN=elastic
       - ROUNDCUBEMAIL_DEFAULT_HOST=mailserver # IMAP
       - ROUNDCUBEMAIL_SMTP_SERVER=mailserver # SMTP
+      - ROUNDCUBEMAIL_COMPOSER_PLUGINS=roundcube/carddav
+      - ROUNDCUBEMAIL_PLUGINS=carddav
 
 volumes:
   mailserver-data:
   mailserver-config:
   mailserver-state:
   lldap_data:
-  roundcube_data:
+  roundcube_config:
+  roundcube_plugins:
 
 ```
