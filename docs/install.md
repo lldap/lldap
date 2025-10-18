@@ -68,7 +68,7 @@ services:
       - LLDAP_JWT_SECRET=REPLACE_WITH_RANDOM
       - LLDAP_KEY_SEED=REPLACE_WITH_RANDOM
       - LLDAP_LDAP_BASE_DN=dc=example,dc=com
-      - LLDAP_LDAP_USER_PASS=adminPas$word
+      - LLDAP_LDAP_USER_PASS=CHANGE_ME # If the password contains '$', escape it (e.g. Pas$$word sets Pas$word)
       # If using LDAPS, set enabled true and configure cert and key path
       # - LLDAP_LDAPS_OPTIONS__ENABLED=true
       # - LLDAP_LDAPS_OPTIONS__CERT_FILE=/path/to/certfile.crt
