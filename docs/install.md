@@ -93,7 +93,7 @@ front-end.
 ### With Podman
 
 LLDAP works well with rootless Podman either through command line deployment
-or using [quadlets](example_configs/podman-quadlets/). The example quadlets
+or using [quadlets](../example_configs/podman-quadlets/). The example quadlets
 include configuration with postgresql and file based secrets, but have comments
 for several other deployment strategies.
 
@@ -102,7 +102,7 @@ for several other deployment strategies.
 See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for Kubernetes
 
 You can bootstrap your lldap instance (users, groups)
-using [bootstrap.sh](example_configs/bootstrap/bootstrap.md#kubernetes-job).
+using [bootstrap.sh](../example_configs/bootstrap/bootstrap.md#kubernetes-job).
 It can be run by Argo CD for managing users in git-opt way, or as a one-shot job.
 
 ### From a package repository
@@ -114,7 +114,7 @@ Depending on the distribution you use, it might be possible to install LLDAP
 from a package repository, officially supported by the distribution or
 community contributed.
 
-Each package offers a [systemd service](https://wiki.archlinux.org/title/systemd#Using_units) `lldap.service` or [rc.d_lldap](example_configs/freebsd/rc.d_lldap) `rc.d/lldap` to (auto-)start and stop lldap.<br>
+Each package offers a [systemd service](https://wiki.archlinux.org/title/systemd#Using_units) `lldap.service` or [rc.d_lldap](../example_configs/freebsd/rc.d_lldap) `rc.d/lldap` to (auto-)start and stop lldap.<br>
 When using the distributed packages, the default login is `admin/password`. You can change that from the web UI after starting the service.
 
 <details>
@@ -385,7 +385,7 @@ arguments to `cargo run`. Have a look at the docker template:
 `lldap_config.docker_template.toml`.
 
 You can also install it as a systemd service, see
-[lldap.service](example_configs/lldap.service).
+[lldap.service](../example_configs/lldap.service).
 
 ### Cross-compilation
 
