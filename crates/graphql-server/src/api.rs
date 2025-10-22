@@ -2,7 +2,7 @@ use crate::{mutation::Mutation, query::Query};
 use juniper::{EmptySubscription, FieldError, RootNode};
 use lldap_access_control::{
     AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
-    UserReadableBackendHandler, UserWriteableBackendHandler,
+    UserManagerBackendHandler, UserReadableBackendHandler, UserWriteableBackendHandler,
 };
 use lldap_auth::{access_control::ValidationResults, types::UserId};
 use lldap_domain_handlers::handler::BackendHandler;
@@ -34,6 +34,10 @@ impl<Handler: BackendHandler> Context<Handler> {
 
     pub fn get_admin_handler(&self) -> Option<&(impl AdminBackendHandler + use<Handler>)> {
         self.handler.get_admin_handler(&self.validation_result)
+    }
+
+    pub fn get_user_manager_handler(&self) -> Option<&(impl UserManagerBackendHandler + use<Handler>)> {
+        self.handler.get_user_manager_handler(&self.validation_result)
     }
 
     pub fn get_readonly_handler(&self) -> Option<&(impl ReadonlyBackendHandler + use<Handler>)> {

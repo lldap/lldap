@@ -420,6 +420,12 @@ pub mod tests {
         setup_bound_handler_with_group(mock, "lldap_admin").await
     }
 
+    pub async fn setup_bound_user_manager_handler(
+        mock: MockTestBackendHandler,
+    ) -> LdapHandler<MockTestBackendHandler> {
+        setup_bound_handler_with_group(mock, "lldap_user_manager").await
+    }
+
     #[tokio::test]
     async fn test_whoami_empty() {
         let mut ldap_handler =

@@ -104,7 +104,7 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
                 &ldap_info.base_dn_str,
             ) {
                 Ok(uid) => {
-                    let user_is_admin = backend_handler
+                    let user_groups = backend_handler
                         .get_readable_handler(credentials, &uid)
                         .expect("Unexpected permission error")
                         .get_user_groups(&uid)
@@ -114,10 +114,14 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
                             message: format!(
                                 "Internal error while requesting user's groups: {e:#?}"
                             ),
-                        })?
+                        })?;
+                    let user_is_admin = user_groups
                         .iter()
                         .any(|g| g.display_name == "lldap_admin".into());
-                    if !credentials.can_change_password(&uid, user_is_admin) {
+                    let user_is_user_manager = user_groups
+                        .iter()
+                        .any(|g| g.display_name == "lldap_user_manager".into());
+                    if !credentials.can_change_password(&uid, user_is_admin, user_is_user_manager) {
                         Err(LdapError {
                             code: LdapResultCode::InsufficentAccessRights,
                             message: format!(

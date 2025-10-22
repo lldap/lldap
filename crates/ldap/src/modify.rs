@@ -17,6 +17,7 @@ async fn handle_modify_change(
     user_id: UserId,
     credentials: &ValidationResults,
     user_is_admin: bool,
+    user_is_user_manager: bool,
     change: &LdapModify,
 ) -> LdapResult<()> {
     if !change
@@ -33,7 +34,7 @@ async fn handle_modify_change(
             ),
         });
     }
-    if !credentials.can_change_password(&user_id, user_is_admin) {
+    if !credentials.can_change_password(&user_id, user_is_admin, user_is_user_manager) {
         return Err(LdapError {
             code: LdapResultCode::InsufficentAccessRights,
             message: format!(
@@ -81,7 +82,7 @@ where
         &ldap_info.base_dn_str,
     ) {
         Ok(uid) => {
-            let user_is_admin = get_readable_handler(credentials, uid.clone())
+            let user_groups = get_readable_handler(credentials, uid.clone())
                 .ok_or_else(|| LdapError {
                     code: LdapResultCode::InsufficentAccessRights,
                     message: format!(
@@ -95,15 +96,20 @@ where
                 .map_err(|e| LdapError {
                     code: LdapResultCode::OperationsError,
                     message: format!("Internal error while requesting user's groups: {e:#?}"),
-                })?
+                })?;
+            let user_is_admin = user_groups
                 .iter()
                 .any(|g| g.display_name == "lldap_admin".into());
+            let user_is_user_manager = user_groups
+                .iter()
+                .any(|g| g.display_name == "lldap_user_manager".into());
             for change in &request.changes {
                 handle_modify_change(
                     opaque_handler,
                     uid.clone(),
                     credentials,
                     user_is_admin,
+                    user_is_user_manager,
                     change,
                 )
                 .await?
@@ -126,7 +132,7 @@ mod tests {
     use crate::{
         handler::tests::{
             setup_bound_admin_handler, setup_bound_handler_with_group,
-            setup_bound_password_manager_handler,
+            setup_bound_password_manager_handler, setup_bound_user_manager_handler,
         },
         password::tests::expect_password_change,
     };
@@ -301,6 +307,77 @@ mod tests {
                 LdapResultCode::InvalidAttributeSyntax,
                 "Wrong number of values for password attribute: 2"
             )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_modify_password_of_regular_as_user_manager() {
+        let mut mock = MockTestBackendHandler::new();
+        setup_target_user_groups(&mut mock, "bob", Vec::new());
+        expect_password_change(&mut mock, "bob");
+        let ldap_handler = setup_bound_user_manager_handler(mock).await;
+        let request = make_password_modify_request("bob");
+        assert_eq!(
+            ldap_handler.do_modify_request(&request).await,
+            make_modify_success_response()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_modify_password_of_admin_as_user_manager() {
+        let mut mock = MockTestBackendHandler::new();
+        setup_target_user_groups(&mut mock, "bob", vec!["lldap_admin"]);
+        let ldap_handler = setup_bound_user_manager_handler(mock).await;
+        let request = make_password_modify_request("bob");
+        assert_eq!(
+            ldap_handler.do_modify_request(&request).await,
+            make_modify_failure_response(
+                LdapResultCode::InsufficentAccessRights,
+                "User `test` cannot modify the password of user `bob`"
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_modify_password_of_user_manager_as_user_manager() {
+        let mut mock = MockTestBackendHandler::new();
+        setup_target_user_groups(&mut mock, "bob", vec!["lldap_user_manager"]);
+        let ldap_handler = setup_bound_user_manager_handler(mock).await;
+        let request = make_password_modify_request("bob");
+        assert_eq!(
+            ldap_handler.do_modify_request(&request).await,
+            make_modify_failure_response(
+                LdapResultCode::InsufficentAccessRights,
+                "User `test` cannot modify the password of user `bob`"
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_modify_password_of_password_manager_as_user_manager() {
+        let mut mock = MockTestBackendHandler::new();
+        // Password managers are NOT restricted the same way as user_managers/admins
+        // User managers CAN change passwords of password managers
+        setup_target_user_groups(&mut mock, "bob", vec!["lldap_password_manager"]);
+        expect_password_change(&mut mock, "bob");
+        let ldap_handler = setup_bound_user_manager_handler(mock).await;
+        let request = make_password_modify_request("bob");
+        assert_eq!(
+            ldap_handler.do_modify_request(&request).await,
+            make_modify_success_response()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_modify_own_password_as_user_manager() {
+        let mut mock = MockTestBackendHandler::new();
+        setup_target_user_groups(&mut mock, "test", vec!["lldap_user_manager"]);
+        expect_password_change(&mut mock, "test");
+        let ldap_handler = setup_bound_user_manager_handler(mock).await;
+        let request = make_password_modify_request("test");
+        assert_eq!(
+            ldap_handler.do_modify_request(&request).await,
+            make_modify_success_response()
         );
     }
 }

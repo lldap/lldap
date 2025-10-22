@@ -33,21 +33,21 @@ pub struct FormModel {
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct Props {
-    pub on_logged_in: Callback<(String, bool)>,
+    pub on_logged_in: Callback<(String, bool, bool)>,
     pub password_reset_enabled: bool,
 }
 
 pub enum Msg {
     Update,
     Submit,
-    AuthenticationRefreshResponse(Result<(String, bool)>),
+    AuthenticationRefreshResponse(Result<(String, bool, bool)>),
     AuthenticationStartResponse(
         (
             opaque::client::login::ClientLogin,
             Result<Box<login::ServerLoginStartResponse>>,
         ),
     ),
-    AuthenticationFinishResponse(Result<(String, bool)>),
+    AuthenticationFinishResponse(Result<(String, bool, bool)>),
 }
 
 impl CommonComponent<LoginForm> for LoginForm {
