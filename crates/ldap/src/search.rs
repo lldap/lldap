@@ -421,6 +421,14 @@ pub async fn do_search(
         InternalSearchResults::Raw(raw_results) => raw_results,
         InternalSearchResults::Empty => Vec::new(),
     };
+    // RFC 4511: When performing a base scope search, if the entry doesn't exist,
+    // we should return NoSuchObject instead of Success with zero entries
+    if results.is_empty() && request.scope == LdapSearchScope::Base {
+        return Err(LdapError {
+            code: LdapResultCode::NoSuchObject,
+            message: "".to_string(),
+        });
+    }
     if !matches!(results.last(), Some(LdapOp::SearchResultDone(_))) {
         results.push(make_search_success());
     }
@@ -1446,5 +1454,77 @@ mod tests {
                 make_search_success()
             ]),
         );
+    }
+
+    #[tokio::test]
+    async fn test_search_base_scope_non_existent_user() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users().returning(|_, _| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = LdapSearchRequest {
+            scope: LdapSearchScope::Base,
+            ..make_search_request(
+                "uid=nonexistent,ou=people,dc=example,dc=com",
+                LdapFilter::And(vec![]),
+                vec!["objectClass".to_string()],
+            )
+        };
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Err(LdapError {
+                code: LdapResultCode::NoSuchObject,
+                message: "".to_string(),
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_base_scope_non_existent_group() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_groups().returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = LdapSearchRequest {
+            scope: LdapSearchScope::Base,
+            ..make_search_request(
+                "uid=nonexistent,ou=groups,dc=example,dc=com",
+                LdapFilter::And(vec![]),
+                vec!["objectClass".to_string()],
+            )
+        };
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Err(LdapError {
+                code: LdapResultCode::NoSuchObject,
+                message: "".to_string(),
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_base_scope_existing_user() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users().returning(|_, _| {
+            Ok(vec![UserAndGroups {
+                user: User {
+                    user_id: UserId::new("bob"),
+                    ..Default::default()
+                },
+                groups: None,
+            }])
+        });
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = LdapSearchRequest {
+            scope: LdapSearchScope::Base,
+            ..make_search_request(
+                "uid=bob,ou=people,dc=example,dc=com",
+                LdapFilter::And(vec![]),
+                vec!["objectClass".to_string()],
+            )
+        };
+        let results = ldap_handler.do_search_or_dse(&request).await.unwrap();
+        // Should have 2 results: SearchResultEntry and SearchResultDone
+        assert_eq!(results.len(), 2);
+        assert!(matches!(results[0], LdapOp::SearchResultEntry(_)));
+        assert!(matches!(results[1], LdapOp::SearchResultDone(_)));
     }
 }
