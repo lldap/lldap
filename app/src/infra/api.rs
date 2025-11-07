@@ -82,10 +82,12 @@ fn set_cookies_from_jwt(response: login::ServerLoginResponse) -> Result<(String,
     let is_admin = jwt_claims.groups.contains("lldap_admin");
     let is_user_manager = jwt_claims.groups.contains("lldap_user_manager");
     set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
-        .map(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
-        .map(|_| set_cookie("is_user_manager", &is_user_manager.to_string(), &jwt_claims.exp))
-        .map(|_| (jwt_claims.user.clone(), is_admin, is_user_manager))
-        .context("Error setting cookie")
+        .context("Error setting user_id cookie")?;
+    set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp)
+        .context("Error setting is_admin cookie")?;
+    set_cookie("is_user_manager", &is_user_manager.to_string(), &jwt_claims.exp)
+        .context("Error setting is_user_manager cookie")?;
+    Ok((jwt_claims.user.clone(), is_admin, is_user_manager))
 }
 
 impl HostService {

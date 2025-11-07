@@ -66,21 +66,17 @@ impl Component for App {
                     None
                 })
                 .and_then(|u| {
-                    get_cookie("is_admin")
-                        .and_then(|is_admin_opt| {
-                            get_cookie("is_user_manager")
-                                .map(|is_user_manager_opt| {
-                                    is_admin_opt.and_then(|is_admin_str| {
-                                        is_user_manager_opt.map(|is_user_manager_str| {
-                                            (u, is_admin_str == "true", is_user_manager_str == "true")
-                                        })
-                                    })
-                                })
-                        })
-                        .unwrap_or_else(|e| {
-                            error!(&e.to_string());
-                            None
-                        })
+                    let is_admin = get_cookie("is_admin")
+                        .ok()
+                        .flatten()
+                        .map(|s| s == "true")
+                        .unwrap_or(false);
+                    let is_user_manager = get_cookie("is_user_manager")
+                        .ok()
+                        .flatten()
+                        .map(|s| s == "true")
+                        .unwrap_or(false);
+                    Some((u, is_admin, is_user_manager))
                 }),
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
@@ -319,7 +315,7 @@ impl App {
     fn is_user_manager(&self) -> bool {
         match &self.user_info {
             None => false,
-            Some((_, _, is_user_manager)) => *is_user_manager,
+            Some((_, is_admin, is_user_manager)) => *is_admin || *is_user_manager,
         }
     }
 }
