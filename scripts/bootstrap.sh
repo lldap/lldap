@@ -605,6 +605,7 @@ main() {
   local group_schema_files=()
 
   local file=''
+  shopt -s nullglob
   [[ -d "$USER_CONFIGS_DIR" ]] && for file in "${USER_CONFIGS_DIR}"/*.json; do
     user_config_files+=("$file")
   done
@@ -617,6 +618,7 @@ main() {
   [[ -d "$GROUP_SCHEMAS_DIR" ]] && for file in "${GROUP_SCHEMAS_DIR}"/*.json; do
     group_schema_files+=("$file")
   done
+  shopt -u nullglob
 
   if ! check_configs_validity "${group_config_files[@]}" "${user_config_files[@]}" "${group_schema_files[@]}" "${user_schema_files[@]}"; then
     exit 1
