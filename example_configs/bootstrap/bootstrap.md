@@ -130,7 +130,7 @@ Fields description:
     "isVisible": true
   },
   {
-    "name": "mail_alias",
+    "name": "mail-alias",
     "attributeType": "STRING",
     "isEditable": false,
     "isList": true,
