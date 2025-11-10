@@ -10,12 +10,12 @@ use crate::api::{Context, field_error_callback};
 use anyhow::anyhow;
 use juniper::{FieldError, FieldResult, graphql_object};
 use lldap_access_control::{
-    AdminBackendHandler, UserManagerBackendHandler, UserReadableBackendHandler,
-    UserWriteableBackendHandler,
+    AdminBackendHandler, ReadonlyBackendHandler, UserManagerBackendHandler,
+    UserReadableBackendHandler, UserWriteableBackendHandler,
 };
 use lldap_domain::{
     requests::{CreateAttributeRequest, CreateUserRequest, UpdateGroupRequest, UpdateUserRequest},
-    types::{AttributeName, AttributeType, Email, GroupId, LdapObjectClass, UserId},
+    types::{AttributeName, AttributeType, Email, GroupId, GroupName, LdapObjectClass, UserId},
 };
 use lldap_domain_handlers::handler::BackendHandler;
 use lldap_validation::attributes::{ALLOWED_CHARACTERS_DESCRIPTION, validate_attribute_name};
@@ -257,7 +257,9 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 return Err("UserManager cannot add a user to lldap_admin or lldap_user_manager groups".into());
             }
             // UserManager cannot add users to "lldap_admin" or "lldap_user_manager" groups
-            if group_id == 1 || group_id == 4 {
+            let readonly_handler = context.get_readonly_handler().ok_or_else(field_error_callback(&span, "Unauthorized"))?;
+            let group_details = readonly_handler.get_group_details(GroupId(group_id)).await?;
+            if group_details.display_name == GroupName::from("lldap_admin") || group_details.display_name == GroupName::from("lldap_user_manager") {
                 span.in_scope(|| debug!("UserManager cannot add users to admin or lldap_user_manager groups"));
                 return Err("UserManager cannot add users to lldap_admin or lldap_user_manager groups".into());
             }
@@ -285,7 +287,9 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 "Unauthorized group membership modification",
             ))?;
         let user_id = UserId::new(&user_id);
-        if context.validation_result.user == user_id && group_id == 1 {
+        let readonly_handler = context.get_readonly_handler().ok_or_else(field_error_callback(&span, "Unauthorized"))?;
+        let group_details = readonly_handler.get_group_details(GroupId(group_id)).await?;
+        if context.validation_result.user == user_id && group_details.display_name == GroupName::from("lldap_admin") {
             span.in_scope(|| debug!("Cannot remove admin rights for current user"));
             return Err("Cannot remove admin rights for current user".into());
         }
@@ -297,7 +301,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
                 return Err("UserManager cannot modify lldap_admin or lldap_user_manager users".into());
             }
             // UserManager cannot remove users from admin or user_manager groups
-            if group_id == 1 || group_id == 4 {
+            if group_details.display_name == GroupName::from("lldap_admin") || group_details.display_name == GroupName::from("lldap_user_manager") {
                 span.in_scope(|| debug!("UserManager cannot remove users from lldap_admin or lldap_user_manager groups"));
                 return Err("UserManager cannot remove users from lldap_admin or lldap_user_manager groups".into());
             }
