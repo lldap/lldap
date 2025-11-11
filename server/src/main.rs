@@ -255,9 +255,18 @@ async fn run_healthcheck(opts: RunOpts) -> Result<()> {
     use tokio::time::timeout;
     let delay = Duration::from_millis(3000);
     let (ldap, ldaps, api) = tokio::join!(
-        timeout(delay, healthcheck::check_ldap(config.ldap_port)),
-        timeout(delay, healthcheck::check_ldaps(&config.ldaps_options)),
-        timeout(delay, healthcheck::check_api(config.http_port)),
+        timeout(
+            delay,
+            healthcheck::check_ldap(&config.healthcheck_options.ldap_host, config.ldap_port)
+        ),
+        timeout(
+            delay,
+            healthcheck::check_ldaps(&config.healthcheck_options.ldap_host, &config.ldaps_options)
+        ),
+        timeout(
+            delay,
+            healthcheck::check_api(&config.healthcheck_options.http_host, config.http_port)
+        ),
     );
 
     let failure = [ldap, ldaps, api]
