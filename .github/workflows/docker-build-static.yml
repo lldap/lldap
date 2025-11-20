@@ -87,7 +87,7 @@ jobs:
       image: lldap/rust-dev:latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5.0.1
+        uses: actions/checkout@v6.0.0
       - name: Install Rust
         id: toolchain
         uses: dtolnay/rust-toolchain@master
@@ -136,7 +136,7 @@ jobs:
         CARGO_HOME: ${GITHUB_WORKSPACE}/.cargo
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5.0.1
+        uses: actions/checkout@v6.0.0
       - name: Install Rust
         id: toolchain
         uses: dtolnay/rust-toolchain@master
@@ -310,7 +310,7 @@ jobs:
 
     steps:
        - name: Checkout scripts
-         uses: actions/checkout@v5.0.1
+         uses: actions/checkout@v6.0.0
          with:
            sparse-checkout: 'scripts'
 
@@ -506,7 +506,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5.0.1
+        uses: actions/checkout@v6.0.0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v6
