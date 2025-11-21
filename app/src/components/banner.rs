@@ -9,6 +9,7 @@ use yew::{Callback, Properties, function_component, html};
 #[derive(Properties, PartialEq)]
 pub struct Props {
     pub is_admin: bool,
+    pub is_user_manager: bool,
     pub username: Option<String>,
     pub on_logged_out: Callback<()>,
 }
@@ -24,7 +25,7 @@ pub fn banner(props: &Props) -> Html {
             </a>
 
             <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0">
-              {if props.is_admin { html! {
+              {if props.is_admin || props.is_user_manager { html! {
                 <>
                   <li>
                     <Link
@@ -34,30 +35,34 @@ pub fn banner(props: &Props) -> Html {
                       {"Users"}
                     </Link>
                   </li>
-                  <li>
-                    <Link
-                      classes="nav-link px-2 h6"
-                      to={AppRoute::ListGroups}>
-                      <i class="bi-collection me-2"></i>
-                      {"Groups"}
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      classes="nav-link px-2 h6"
-                      to={AppRoute::ListUserSchema}>
-                      <i class="bi-list-ul me-2"></i>
-                      {"User schema"}
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      classes="nav-link px-2 h6"
-                      to={AppRoute::ListGroupSchema}>
-                      <i class="bi-list-ul me-2"></i>
-                      {"Group schema"}
-                    </Link>
-                  </li>
+                  {if props.is_admin { html! {
+                    <>
+                      <li>
+                        <Link
+                          classes="nav-link px-2 h6"
+                          to={AppRoute::ListGroups}>
+                          <i class="bi-collection me-2"></i>
+                          {"Groups"}
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          classes="nav-link px-2 h6"
+                          to={AppRoute::ListUserSchema}>
+                          <i class="bi-list-ul me-2"></i>
+                          {"User schema"}
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          classes="nav-link px-2 h6"
+                          to={AppRoute::ListGroupSchema}>
+                          <i class="bi-list-ul me-2"></i>
+                          {"Group schema"}
+                        </Link>
+                      </li>
+                    </>
+                  } } else { html!{} } }
                 </>
               } } else { html!{} } }
             </ul>

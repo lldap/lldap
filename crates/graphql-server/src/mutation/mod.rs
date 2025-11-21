@@ -10,7 +10,8 @@ use crate::api::{Context, field_error_callback};
 use anyhow::anyhow;
 use juniper::{FieldError, FieldResult, graphql_object};
 use lldap_access_control::{
-    AdminBackendHandler, UserReadableBackendHandler, UserWriteableBackendHandler,
+    AdminBackendHandler, UserManagerBackendHandler, UserReadableBackendHandler,
+    UserWriteableBackendHandler,
 };
 use lldap_domain::{
     requests::{CreateAttributeRequest, CreateUserRequest, UpdateGroupRequest, UpdateUserRequest},
@@ -56,7 +57,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             debug!("{:?}", &user.id);
         });
         let handler = context
-            .get_admin_handler()
+            .get_user_manager_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized user creation"))?;
         let user_id = UserId::new(&user.id);
         let schema = handler.get_schema().await?;
@@ -129,6 +130,14 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         let handler = context
             .get_writeable_handler(&user_id)
             .ok_or_else(field_error_callback(&span, "Unauthorized user update"))?;
+        // Check if target user is admin or user_manager (UserManager cannot modify admin users)
+        if context.validation_result.is_user_manager() && context.validation_result.user != user_id {
+            let user_groups = handler.get_user_groups(&user_id).await?;
+            if user_groups.iter().any(|g| g.display_name == "lldap_admin".into()) {
+                span.in_scope(|| debug!("UserManager cannot modify admin users"));
+                return Err("UserManager cannot modify admin users".into());
+            }
+        }
         let is_admin = context.validation_result.is_admin();
         let schema = handler.get_schema().await?;
         // Consolidate attributes and fields into a combined attribute list
@@ -234,13 +243,27 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             debug!(?user_id, ?group_id);
         });
         let handler = context
-            .get_admin_handler()
+            .get_user_manager_handler()
             .ok_or_else(field_error_callback(
                 &span,
                 "Unauthorized group membership modification",
             ))?;
+        let user_id = UserId::new(&user_id);
+        // Check if target user is admin (UserManager cannot modify admin users)
+        if context.validation_result.is_user_manager() && !context.validation_result.is_admin() {
+            let user_groups = handler.get_user_groups(&user_id).await?;
+            if user_groups.iter().any(|g| g.display_name == "lldap_admin".into() || g.display_name == "lldap_user_manager".into()) {
+                span.in_scope(|| debug!("UserManager cannot add a user to lldap_admin or lldap_user_manager groups"));
+                return Err("UserManager cannot add a user to lldap_admin or lldap_user_manager groups".into());
+            }
+            // UserManager cannot add users to "lldap_admin" or "lldap_user_manager" groups
+            if group_id == 1 || group_id == 4 {
+                span.in_scope(|| debug!("UserManager cannot add users to admin or lldap_user_manager groups"));
+                return Err("UserManager cannot add users to lldap_admin or lldap_user_manager groups".into());
+            }
+        }
         handler
-            .add_user_to_group(&UserId::new(&user_id), GroupId(group_id))
+            .add_user_to_group(&user_id, GroupId(group_id))
             .instrument(span)
             .await?;
         Ok(Success::new())
@@ -256,7 +279,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             debug!(?user_id, ?group_id);
         });
         let handler = context
-            .get_admin_handler()
+            .get_user_manager_handler()
             .ok_or_else(field_error_callback(
                 &span,
                 "Unauthorized group membership modification",
@@ -265,6 +288,19 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         if context.validation_result.user == user_id && group_id == 1 {
             span.in_scope(|| debug!("Cannot remove admin rights for current user"));
             return Err("Cannot remove admin rights for current user".into());
+        }
+        // Check if target user is admin or user_manager (UserManager cannot modify admin or user_manager users)
+        if context.validation_result.is_user_manager() && !context.validation_result.is_admin() {
+            let user_groups = handler.get_user_groups(&user_id).await?;
+            if user_groups.iter().any(|g| g.display_name == "lldap_admin".into() || g.display_name == "lldap_user_manager".into()) {
+                span.in_scope(|| debug!("UserManager cannot modify lldap_admin or lldap_user_manager users"));
+                return Err("UserManager cannot modify lldap_admin or lldap_user_manager users".into());
+            }
+            // UserManager cannot remove users from admin or user_manager groups
+            if group_id == 1 || group_id == 4 {
+                span.in_scope(|| debug!("UserManager cannot remove users from lldap_admin or lldap_user_manager groups"));
+                return Err("UserManager cannot remove users from lldap_admin or lldap_user_manager groups".into());
+            }
         }
         handler
             .remove_user_from_group(&user_id, GroupId(group_id))
@@ -280,11 +316,19 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         });
         let user_id = UserId::new(&user_id);
         let handler = context
-            .get_admin_handler()
+            .get_user_manager_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized user deletion"))?;
         if context.validation_result.user == user_id {
             span.in_scope(|| debug!("Cannot delete current user"));
             return Err("Cannot delete current user".into());
+        }
+        // Check if target user is admin or user_manager (UserManager cannot delete admin or user_manager users)
+        if context.validation_result.is_user_manager() && !context.validation_result.is_admin() {
+            let user_groups = handler.get_user_groups(&user_id).await?;
+            if user_groups.iter().any(|g| g.display_name == "lldap_admin".into() || g.display_name == "lldap_user_manager".into()) {
+                span.in_scope(|| debug!("UserManager cannot delete lldap_admin or lldap_user_manager users"));
+                return Err("UserManager cannot delete lldap_admin or lldap_user_manager users".into());
+            }
         }
         handler.delete_user(&user_id).instrument(span).await?;
         Ok(Success::new())

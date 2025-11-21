@@ -77,13 +77,17 @@ async fn call_server_empty_response_with_error_message<Body: Serialize>(
     call_server(url, request, error_message).await.map(|_| ())
 }
 
-fn set_cookies_from_jwt(response: login::ServerLoginResponse) -> Result<(String, bool)> {
+fn set_cookies_from_jwt(response: login::ServerLoginResponse) -> Result<(String, bool, bool)> {
     let jwt_claims = get_claims_from_jwt(response.token.as_str()).context("Could not parse JWT")?;
     let is_admin = jwt_claims.groups.contains("lldap_admin");
+    let is_user_manager = jwt_claims.groups.contains("lldap_user_manager");
     set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
-        .map(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
-        .map(|_| (jwt_claims.user.clone(), is_admin))
-        .context("Error setting cookie")
+        .context("Error setting user_id cookie")?;
+    set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp)
+        .context("Error setting is_admin cookie")?;
+    set_cookie("is_user_manager", &is_user_manager.to_string(), &jwt_claims.exp)
+        .context("Error setting is_user_manager cookie")?;
+    Ok((jwt_claims.user.clone(), is_admin, is_user_manager))
 }
 
 impl HostService {
@@ -128,7 +132,7 @@ impl HostService {
         .await
     }
 
-    pub async fn login_finish(request: login::ClientLoginFinishRequest) -> Result<(String, bool)> {
+    pub async fn login_finish(request: login::ClientLoginFinishRequest) -> Result<(String, bool, bool)> {
         call_server_json_with_error_message::<login::ServerLoginResponse, _>(
             &(base_url() + "/auth/opaque/login/finish"),
             RequestType::Post(request),
@@ -169,7 +173,7 @@ impl HostService {
         .await
     }
 
-    pub async fn refresh() -> Result<(String, bool)> {
+    pub async fn refresh() -> Result<(String, bool, bool)> {
         call_server_json_with_error_message::<login::ServerLoginResponse, _>(
             &(base_url() + "/auth/refresh"),
             GET_REQUEST,

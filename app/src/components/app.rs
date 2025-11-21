@@ -43,13 +43,13 @@ pub fn app_container() -> Html {
 }
 
 pub struct App {
-    user_info: Option<(String, bool)>,
+    user_info: Option<(String, bool, bool)>,
     redirect_to: Option<AppRoute>,
     password_reset_enabled: Option<bool>,
 }
 
 pub enum Msg {
-    Login((String, bool)),
+    Login((String, bool, bool)),
     Logout,
     SettingsReceived(anyhow::Result<Options>),
 }
@@ -66,12 +66,17 @@ impl Component for App {
                     None
                 })
                 .and_then(|u| {
-                    get_cookie("is_admin")
-                        .map(|so| so.map(|s| (u, s == "true")))
-                        .unwrap_or_else(|e| {
-                            error!(&e.to_string());
-                            None
-                        })
+                    let is_admin = get_cookie("is_admin")
+                        .ok()
+                        .flatten()
+                        .map(|s| s == "true")
+                        .unwrap_or(false);
+                    let is_user_manager = get_cookie("is_user_manager")
+                        .ok()
+                        .flatten()
+                        .map(|s| s == "true")
+                        .unwrap_or(false);
+                    Some((u, is_admin, is_user_manager))
                 }),
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
@@ -85,8 +90,8 @@ impl Component for App {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         let history = ctx.link().history().unwrap();
         match msg {
-            Msg::Login((user_name, is_admin)) => {
-                self.user_info = Some((user_name.clone(), is_admin));
+            Msg::Login((user_name, is_admin, is_user_manager)) => {
+                self.user_info = Some((user_name.clone(), is_admin, is_user_manager));
                 history.push(self.redirect_to.take().unwrap_or_else(|| {
                     if is_admin {
                         AppRoute::ListUsers
@@ -115,16 +120,19 @@ impl Component for App {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let link = ctx.link().clone();
         let is_admin = self.is_admin();
-        let username = self.user_info.clone().map(|(username, _)| username);
+        let is_user_manager = self.is_user_manager();
+        let username = self.user_info.clone().map(|(username, _, _)| username);
         let password_reset_enabled = self.password_reset_enabled;
         html! {
           <div>
-            <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
+            <Banner is_admin={is_admin} is_user_manager={is_user_manager} username={username} on_logged_out={link.callback(|_|
+                Msg::Logout)} />
             <div class="container py-3 bg-kug">
               <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <main class="py-3">
                   <Switch<AppRoute>
-                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled))}
+                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin,  is_user_manager,
+                        password_reset_enabled))}
                   />
                 </main>
               </div>
@@ -168,8 +176,8 @@ impl App {
             (None, _, _) | (_, None, _) => Some(AppRoute::Login),
             // User is logged in, a URL was given, don't redirect.
             (_, Some(_), Some(_)) => None,
-            (_, Some((user_name, is_admin)), None) => {
-                if *is_admin {
+            (_, Some((user_name, is_admin, is_user_manager)), None) => {
+                if *is_admin || *is_user_manager {
                     Some(AppRoute::ListUsers)
                 } else {
                     Some(AppRoute::UserDetails {
@@ -187,6 +195,7 @@ impl App {
         switch: &AppRoute,
         link: &Scope<Self>,
         is_admin: bool,
+        _is_user_manager: bool,
         password_reset_enabled: Option<bool>,
     ) -> Html {
         match switch {
@@ -299,7 +308,14 @@ impl App {
     fn is_admin(&self) -> bool {
         match &self.user_info {
             None => false,
-            Some((_, is_admin)) => *is_admin,
+            Some((_, is_admin, _)) => *is_admin,
+        }
+    }
+
+    fn is_user_manager(&self) -> bool {
+        match &self.user_info {
+            None => false,
+            Some((_, is_admin, is_user_manager)) => *is_admin || *is_user_manager,
         }
     }
 }
