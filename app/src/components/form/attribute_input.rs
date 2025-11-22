@@ -69,7 +69,7 @@ fn attribute_label(props: &AttributeLabelProps) -> Html {
             class="form-label col-4 col-form-label"
             >
             {props.name[0..1].to_uppercase() + &props.name[1..].replace('_', " ")}
-            {if props.required { html!{<span class="text-danger">{"*"}</span>} } else { html!{} }}
+            {if props.required { html!{<span class="text-danger" aria-label="required">{"*"}</span>} } else { html!{} }}
             {":"}
             <button
                 class="btn btn-sm btn-link"
