@@ -303,10 +303,8 @@ impl Component for CreateUserForm {
     }
 }
 
-pub const REQUIRED_USER_ATTRIBUTES: &[&str] = &["mail"];
-
 fn get_custom_attribute_input(attribute_schema: &Attribute) -> Html {
-    let mail_is_required = REQUIRED_USER_ATTRIBUTES.contains(&attribute_schema.name.as_str());
+    let mail_is_required = &attribute_schema.name.as_str() == &"mail";
 
     if attribute_schema.is_list {
         html! {
