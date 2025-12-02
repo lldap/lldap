@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6.0.0
+        uses: actions/checkout@v6.0.1
       - name: Install Rust
         id: toolchain
         uses: dtolnay/rust-toolchain@master
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6.0.0
+        uses: actions/checkout@v6.0.1
       - name: Install Rust
         id: toolchain
         uses: dtolnay/rust-toolchain@master
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6.0.0
+        uses: actions/checkout@v6.0.1
       - name: Install Rust
         id: toolchain
         uses: dtolnay/rust-toolchain@master
@@ -94,7 +94,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6.0.0
+        uses: actions/checkout@v6.0.1
 
       - name: Install Rust
         run: rustup toolchain install nightly --component llvm-tools-preview && rustup component add llvm-tools-preview --toolchain stable-x86_64-unknown-linux-gnu
