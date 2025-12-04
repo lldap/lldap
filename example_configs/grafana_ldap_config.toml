@@ -41,7 +41,14 @@ name = "displayName"
 surname = "sn"
 username = "uid"
 
-# If you want to map your ldap groups to grafana's groups, see: https://grafana.com/docs/grafana/latest/auth/ldap/#group-mappings
+# If you want to map your ldap groups to grafana's groups, configure the group query:
+# https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/ldap/#posix-schema
+# group_search_filter = "(&(objectClass=groupOfUniqueNames)(uniqueMember=%s))"
+# group_search_base_dns = ["ou=groups,dc=example,dc=com"]
+# group_search_filter_user_attribute = "uid"
+#
+# Then configure the groups:
+# https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/ldap/#group-mappings
 # As a quick example, here is how you would map lldap's admin group to grafana's admin
 # [[servers.group_mappings]]
 # group_dn = "cn=lldap_admin,ou=groups,dc=example,dc=org"
