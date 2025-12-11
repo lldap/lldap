@@ -263,11 +263,15 @@ fn convert_user_filter(
                 )),
                 UserFieldType::PrimaryField(UserColumn::DisplayName) => {
                     // DisplayName (cn) should match case-insensitively, so we try both
-                    // the original value and the lowercase value
-                    Ok(UserRequestFilter::Or(vec![
-                        UserRequestFilter::Equality(UserColumn::DisplayName, value.to_string()),
-                        UserRequestFilter::Equality(UserColumn::DisplayName, value_lc),
-                    ]))
+                    // the original value and the lowercase value (if different)
+                    if value.as_str() == value_lc {
+                        Ok(UserRequestFilter::Equality(UserColumn::DisplayName, value_lc))
+                    } else {
+                        Ok(UserRequestFilter::Or(vec![
+                            UserRequestFilter::Equality(UserColumn::DisplayName, value.to_string()),
+                            UserRequestFilter::Equality(UserColumn::DisplayName, value_lc),
+                        ]))
+                    }
                 }
                 UserFieldType::PrimaryField(field) => {
                     Ok(UserRequestFilter::Equality(field, value_lc))
