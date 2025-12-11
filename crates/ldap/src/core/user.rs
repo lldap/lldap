@@ -261,6 +261,14 @@ fn convert_user_filter(
                     UserColumn::LowercaseEmail,
                     value_lc,
                 )),
+                UserFieldType::PrimaryField(UserColumn::DisplayName) => {
+                    // DisplayName (cn) should match case-insensitively, so we try both
+                    // the original value and the lowercase value
+                    Ok(UserRequestFilter::Or(vec![
+                        UserRequestFilter::Equality(UserColumn::DisplayName, value.to_string()),
+                        UserRequestFilter::Equality(UserColumn::DisplayName, value_lc),
+                    ]))
+                }
                 UserFieldType::PrimaryField(field) => {
                     Ok(UserRequestFilter::Equality(field, value_lc))
                 }
@@ -766,6 +774,49 @@ mod tests {
                 Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap(),
                 Duration::seconds(1),
             );
+        } else {
+            panic!("Expected SearchResultEntry");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_search_cn_case_insensitive() {
+        use lldap_domain::uuid;
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(
+                eq(Some(UserRequestFilter::Or(vec![
+                    UserRequestFilter::Equality(UserColumn::DisplayName, "TestAll".to_string()),
+                    UserRequestFilter::Equality(UserColumn::DisplayName, "testall".to_string()),
+                ]))),
+                eq(false),
+            )
+            .times(1)
+            .return_once(|_, _| {
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("testall"),
+                        email: "test@example.com".into(),
+                        display_name: Some("TestAll".to_string()),
+                        uuid: uuid!("698e1d5f-7a40-3151-8745-b9b8a37839da"),
+                        attributes: vec![],
+                        ..Default::default()
+                    },
+                    groups: None,
+                }])
+            });
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_user_search_request(
+            LdapFilter::Equality("cn".to_string(), "TestAll".to_string()),
+            vec!["cn", "uid"],
+        );
+        let results = ldap_handler.do_search_or_dse(&request).await.unwrap();
+        assert_eq!(results.len(), 2);
+        if let LdapOp::SearchResultEntry(entry) = &results[0] {
+            assert_eq!(entry.dn, "uid=testall,ou=people,dc=example,dc=com");
+            assert_eq!(entry.attributes.len(), 2);
+            assert_eq!(entry.attributes[0].atype, "cn");
+            assert_eq!(entry.attributes[0].vals[0], b"TestAll");
         } else {
             panic!("Expected SearchResultEntry");
         }

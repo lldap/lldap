@@ -923,7 +923,10 @@ mod tests {
         mock.expect_list_users()
             .with(
                 eq(Some(UserRequestFilter::Not(Box::new(
-                    UserRequestFilter::Equality(UserColumn::DisplayName, "bob".to_string()),
+                    UserRequestFilter::Or(vec![
+                        UserRequestFilter::Equality(UserColumn::DisplayName, "bob".to_string()),
+                        UserRequestFilter::Equality(UserColumn::DisplayName, "bob".to_string()),
+                    ]),
                 )))),
                 eq(false),
             )
