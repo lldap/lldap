@@ -1,4 +1,4 @@
-use crate::{configuration::LdapsOptions, ldap_server::read_certificates};
+use crate::{configuration::LdapsOptions, tls};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use futures_util::SinkExt;
 use ldap3_proto::{
@@ -91,8 +91,7 @@ fn get_tls_connector(ldaps_options: &LdapsOptions) -> Result<RustlsTlsConnector>
         .with_safe_defaults()
         .with_root_certificates(get_root_certificates())
         .with_no_client_auth();
-    let (certs, _private_key) = read_certificates(ldaps_options)?;
-    // Check that the server cert is the one in the config file.
+    let certs = tls::load_certificates(&ldaps_options.cert_file)?;
     struct CertificateVerifier {
         certificate: rustls::Certificate,
         certificate_path: String,
@@ -150,9 +149,26 @@ pub async fn check_ldaps(host: &str, ldaps_options: &LdapsOptions) -> Result<()>
 
 #[instrument(level = "info", err)]
 pub async fn check_api(host: &str, port: u16) -> Result<()> {
-    reqwest::get(format!("http://{host}:{port}/health"))
-        .await?
-        .error_for_status()?;
-    info!("Success");
-    Ok(())
+    let url = format!("http://{host}:{port}/health");
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()?;
+
+    match client.get(&url).send().await {
+        Ok(res) => {
+            res.error_for_status()?;
+            info!("Success (HTTP)");
+            Ok(())
+        }
+        Err(e) => {
+            let url_https = format!("https://{host}:{port}/health");
+            if let Ok(res) = client.get(&url_https).send().await {
+                res.error_for_status()?;
+                info!("Success (HTTPS)");
+                Ok(())
+            } else {
+                Err(e.into())
+            }
+        }
+    }
 }

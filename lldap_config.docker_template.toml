@@ -160,6 +160,16 @@ key_seed = "RanD0m STR1ng"
 ## Certificate key file.
 #key_file="/data/key.pem"
 
+[https_options]
+## Whether to enable HTTPS.
+#enabled=true
+## Port on which to listen.
+#port=17174
+## Certificate file.
+#cert_file="/data/cert.pem"
+## Certificate key file.
+#key_file="/data/key.pem"
+
 ## Options to configure the healthcheck command.
 ## To set these options from environment variables, use the following format
 ## (example with http_host): LLDAP_HEALTHCHECK_OPTIONS__HTTP_HOST

@@ -17,6 +17,7 @@ mod mail;
 mod sql_tcp_backend_handler;
 mod tcp_backend_handler;
 mod tcp_server;
+mod tls;
 
 use crate::{
     cli::{Command, RunOpts, TestEmailOpts},

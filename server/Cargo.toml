@@ -18,7 +18,6 @@ actix-http = "3"
 actix-rt = "2"
 actix-server = "2"
 actix-service = "2"
-actix-web = "4.3"
 actix-web-httpauth = "0.8"
 anyhow = "*"
 async-trait = "0.1"
@@ -49,6 +48,10 @@ tracing-attributes = "^0.1.21"
 tracing-log = "*"
 urlencoding = "2"
 webpki-roots = "0.22.2"
+
+[dependencies.actix-web]
+features = ["rustls-0_20"]
+version = "4.3"
 
 [dependencies.chrono]
 features = ["serde"]
