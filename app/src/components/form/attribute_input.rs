@@ -45,6 +45,8 @@ fn attribute_input(props: &AttributeInputProps) -> Html {
 #[derive(Properties, PartialEq)]
 struct AttributeLabelProps {
     pub name: String,
+    #[prop_or(false)]
+    pub required: bool,
 }
 #[function_component(AttributeLabel)]
 fn attribute_label(props: &AttributeLabelProps) -> Html {
@@ -66,7 +68,9 @@ fn attribute_label(props: &AttributeLabelProps) -> Html {
         <label for={props.name.clone()}
             class="form-label col-4 col-form-label"
             >
-            {props.name[0..1].to_uppercase() + &props.name[1..].replace('_', " ")}{":"}
+            {props.name[0..1].to_uppercase() + &props.name[1..].replace('_', " ")}
+            {if props.required { html!{<span class="text-danger">{"*"}</span>} } else { html!{} }}
+            {":"}
             <button
                 class="btn btn-sm btn-link"
                 type="button"
@@ -85,13 +89,15 @@ pub struct SingleAttributeInputProps {
     pub(crate) attribute_type: AttributeType,
     #[prop_or(None)]
     pub value: Option<String>,
+    #[prop_or(false)]
+    pub required: bool,
 }
 
 #[function_component(SingleAttributeInput)]
 pub fn single_attribute_input(props: &SingleAttributeInputProps) -> Html {
     html! {
         <div class="row mb-3">
-            <AttributeLabel name={props.name.clone()} />
+            <AttributeLabel name={props.name.clone()} required={props.required} />
             <div class="col-8">
             <AttributeInput
                 attribute_type={props.attribute_type}
@@ -108,6 +114,8 @@ pub struct ListAttributeInputProps {
     pub(crate) attribute_type: AttributeType,
     #[prop_or(vec!())]
     pub values: Vec<String>,
+    #[prop_or(false)]
+    pub required: bool,
 }
 
 pub enum ListAttributeInputMsg {
@@ -160,7 +168,7 @@ impl Component for ListAttributeInput {
         let link = &ctx.link();
         html! {
             <div class="row mb-3">
-                <AttributeLabel name={props.name.clone()} />
+                <AttributeLabel name={props.name.clone()} required={props.required} />
                 <div class="col-8">
                 {self.indices.iter().map(|&i| html! {
                     <div class="input-group mb-2" key={i}>
