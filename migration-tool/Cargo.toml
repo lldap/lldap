@@ -34,7 +34,7 @@ features = ["json", "blocking", "rustls-tls"]
 [dependencies.ldap3]
 version = "*"
 default-features = false
-features = ["sync", "tls-rustls"]
+features = ["sync", "tls-rustls-ring"]
 
 [dependencies.serde]
 workspace = true

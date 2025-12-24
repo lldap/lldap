@@ -185,7 +185,7 @@ version = "0.11"
 [dev-dependencies.ldap3]
 version = "*"
 default-features = false
-features = ["sync", "tls-rustls"]
+features = ["sync", "tls-rustls-ring"]
 
 [dev-dependencies.lldap_auth]
 path = "../crates/auth"
