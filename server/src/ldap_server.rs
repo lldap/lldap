@@ -1,14 +1,14 @@
 use crate::configuration::{Configuration, LdapsOptions};
+use crate::tls;
 use actix_rt::net::TcpStream;
 use actix_server::ServerBuilder;
 use actix_service::{ServiceFactoryExt, fn_service};
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use ldap3_proto::{LdapCodec, control::LdapControl, proto::LdapMsg, proto::LdapOp};
 use lldap_access_control::AccessControlledBackendHandler;
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
 use lldap_ldap::{LdapHandler, LdapInfo};
 use lldap_opaque_handler::OpaqueHandler;
-use rustls::PrivateKey;
 use tokio_rustls::TlsAcceptor as RustlsTlsAcceptor;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tracing::{debug, error, info, instrument};
@@ -102,50 +102,10 @@ where
     Ok(requests.into_inner().unsplit(resp.into_inner()))
 }
 
-fn read_private_key(key_file: &str) -> Result<PrivateKey> {
-    use rustls_pemfile::{ec_private_keys, pkcs8_private_keys, rsa_private_keys};
-    use std::{fs::File, io::BufReader};
-    pkcs8_private_keys(&mut BufReader::new(File::open(key_file)?))
-        .map_err(anyhow::Error::from)
-        .and_then(|keys| {
-            keys.into_iter()
-                .next()
-                .ok_or_else(|| anyhow!("No PKCS8 key"))
-        })
-        .or_else(|_| {
-            rsa_private_keys(&mut BufReader::new(File::open(key_file)?))
-                .map_err(anyhow::Error::from)
-                .and_then(|keys| {
-                    keys.into_iter()
-                        .next()
-                        .ok_or_else(|| anyhow!("No PKCS1 key"))
-                })
-        })
-        .or_else(|_| {
-            ec_private_keys(&mut BufReader::new(File::open(key_file)?))
-                .map_err(anyhow::Error::from)
-                .and_then(|keys| keys.into_iter().next().ok_or_else(|| anyhow!("No EC key")))
-        })
-        .with_context(|| {
-            format!("Cannot read either PKCS1, PKCS8 or EC private key from {key_file}")
-        })
-        .map(rustls::PrivateKey)
-}
-
-pub fn read_certificates(
-    ldaps_options: &LdapsOptions,
-) -> Result<(Vec<rustls::Certificate>, rustls::PrivateKey)> {
-    use std::{fs::File, io::BufReader};
-    let certs = rustls_pemfile::certs(&mut BufReader::new(File::open(&ldaps_options.cert_file)?))?
-        .into_iter()
-        .map(rustls::Certificate)
-        .collect::<Vec<_>>();
-    let private_key = read_private_key(&ldaps_options.key_file)?;
-    Ok((certs, private_key))
-}
-
 fn get_tls_acceptor(ldaps_options: &LdapsOptions) -> Result<RustlsTlsAcceptor> {
-    let (certs, private_key) = read_certificates(ldaps_options)?;
+    let certs = tls::load_certificates(&ldaps_options.cert_file)?;
+    let private_key = tls::load_private_key(&ldaps_options.key_file)?;
+
     let server_config = std::sync::Arc::new(
         rustls::ServerConfig::builder()
             .with_safe_defaults()
