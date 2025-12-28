@@ -4,6 +4,7 @@ Some specific clients have been tested to work and come with sample
 configuration files:
 
 - [Airsonic Advanced](airsonic-advanced.md)
+- [Apache HTTP Server(apache.md)
 - [Apache Guacamole](apacheguacamole.md)
 - [Apereo CAS Server](apereo_cas_server.md)
 - [Authelia](authelia.md)
