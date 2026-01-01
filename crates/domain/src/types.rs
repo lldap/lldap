@@ -7,8 +7,8 @@ use sea_orm::{
     DbErr, DeriveValueType, QueryResult, TryFromU64, TryGetError, TryGetable, Value,
     entity::IntoActiveValue,
     sea_query::{
-        ArrayType, ColumnType, Nullable, SeaRc, StringLen, ValueTypeErr,
-        extension::mysql::MySqlType, value::ValueType,
+        ArrayType, ColumnType, SeaRc, StringLen, ValueTypeErr, extension::mysql::MySqlType,
+        value::ValueType,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -412,12 +412,6 @@ impl JpegPhoto {
         )
         .unwrap();
         Self(bytes)
-    }
-}
-
-impl Nullable for JpegPhoto {
-    fn null() -> Value {
-        JpegPhoto::null().into()
     }
 }
 

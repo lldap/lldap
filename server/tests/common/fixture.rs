@@ -6,7 +6,7 @@ use crate::common::{
         add_user_to_group, create_group, create_user, delete_group_query, delete_user_query, post,
     },
 };
-use assert_cmd::prelude::*;
+use assert_cmd::cargo_bin;
 use nix::{
     sys::signal::{self, Signal},
     unistd::Pid,
@@ -226,7 +226,7 @@ pub fn new_id(prefix: Option<&str>) -> String {
 }
 
 fn create_lldap_command(subcommand: &str) -> Command {
-    let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("cargo bin not found");
+    let mut cmd = Command::new(cargo_bin!());
     // This gives us the absolute path of the repo base instead of running it in server/
     let path = canonicalize("..").expect("canonical path");
     let db_url = env::database_url();

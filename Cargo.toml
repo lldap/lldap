@@ -24,9 +24,6 @@ lto = true
 [profile.release.package.lldap_app]
 opt-level = 's'
 
-[patch.crates-io.lber]
-git = 'https://github.com/inejge/ldap3/'
-
 [workspace.dependencies.sea-orm]
 version = "1.1.8"
 default-features = false
