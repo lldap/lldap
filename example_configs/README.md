@@ -19,6 +19,7 @@ configuration files:
 - [Ejabberd](ejabberd.md)
 - [Emby](emby.md)
 - [Ergo IRCd](ergo.md)
+- [Gerrit](gerrit.md)
 - [Gitea](gitea.md)
 - [GitLab](gitlab.md)
 - [Grafana](grafana_ldap_config.toml)
