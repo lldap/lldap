@@ -3,7 +3,7 @@
 Semaphore configuration is in ```config.json```
 
 Just add the following lines:
-```
+```json
   "ldap_enable": true,
   "ldap_needtls": true,
   "ldap_server": "ldaps_server:6360",
@@ -34,4 +34,4 @@ Environment=SEMAPHORE_LDAP_MAPPING_MAIL="mail"
 Environment=SEMAPHORE_LDAP_MAPPING_DN="dn"
 ```
 
-You can loging with username or email.
+You can log in with username or email.
