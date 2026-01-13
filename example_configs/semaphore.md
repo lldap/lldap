@@ -19,7 +19,7 @@ Just add the following lines:
   }
 ```
 
-If you use docker environments:
+If you use environment variables:
 ```bash
 Environment=SEMAPHORE_LDAP_ENABLE=true
 Environment=SEMAPHORE_LDAP_SERVER="ldaps_server:6360"
