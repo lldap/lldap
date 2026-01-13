@@ -61,6 +61,7 @@ configuration files:
 - [Radicale](radicale.md)
 - [Rancher](rancher.md)
 - [Seafile](seafile.md)
+- [Semaphore](semaphore.md)
 - [Shaarli](shaarli.md)
 - [Snipe-IT](snipe-it.md)
 - [SonarQube](sonarqube.md)
