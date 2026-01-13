@@ -1,6 +1,6 @@
 # Configuration for Semaphore
 
-Semaphore configuration is in ```config.json```
+Semaphore configuration is in `config.json`
 
 Just add the following lines:
 ```json
