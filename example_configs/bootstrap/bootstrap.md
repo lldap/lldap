@@ -72,6 +72,7 @@ Fields description:
 * `id`: it's just username (**MANDATORY**)
 * `email`: self-explanatory (**MANDATORY**)
 * `password`: would be used to set the password using `lldap_set_password` utility
+* `password_file`: path to a file containing the password otherwise same as above
 * `displayName`: self-explanatory
 * `firstName`: self-explanatory
 * `lastName`: self-explanatory
