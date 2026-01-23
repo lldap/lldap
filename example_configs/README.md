@@ -11,6 +11,7 @@ configuration files:
 - [Bookstack](bookstack.env.example)
 - [Calibre-Web](calibre_web.md)
 - [Carpal](carpal.md)
+- [Continuwuity](continuwuity.md)
 - [Dell iDRAC](dell_idrac.md)
 - [Dex](dex_config.yml)
 - [Dokuwiki](dokuwiki.md)
