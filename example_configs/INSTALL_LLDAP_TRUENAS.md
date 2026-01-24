@@ -122,5 +122,5 @@ Once configured, users can authenticate to multiple applications using a single 
 
 ## References
 
-- TrueNAS Apps Catalog: https://apps.truenas.com/catalog/lldap/
-- TrueNAS SCALE Documentation: https://www.truenas.com/docs/scale/
+- [TrueNAS Apps Catalog](https://apps.truenas.com/catalog/lldap/)
+- [TrueNAS SCALE Documentation](https://www.truenas.com/docs/scale/)
