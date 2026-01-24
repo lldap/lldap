@@ -107,10 +107,13 @@ fn get_tls_acceptor(ldaps_options: &LdapsOptions) -> Result<RustlsTlsAcceptor> {
     let private_key = tls::load_private_key(&ldaps_options.key_file)?;
 
     let server_config = std::sync::Arc::new(
-        rustls::ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            .with_single_cert(certs, private_key)?,
+        rustls::ServerConfig::builder_with_provider(
+            rustls::crypto::ring::default_provider().into(),
+        )
+        .with_safe_default_protocol_versions()
+        .expect("Failed to set default protocol versions")
+        .with_no_client_auth()
+        .with_single_cert(certs, private_key)?,
     );
     Ok(server_config.into())
 }

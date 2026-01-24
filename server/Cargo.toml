@@ -34,12 +34,12 @@ jwt = "0.16"
 ldap3_proto = "0.6.0"
 log = "*"
 rand_chacha = "0.3"
-rustls-pemfile = "1"
+rustls-pemfile = "2"
 serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
 time = "0.3"
-tokio-rustls = "0.23"
+tokio-rustls = "0.26"
 tokio-stream = "*"
 tokio-util = "0.7"
 tracing = "*"
@@ -47,11 +47,19 @@ tracing-actix-web = "0.7"
 tracing-attributes = "^0.1.21"
 tracing-log = "*"
 urlencoding = "2"
-webpki-roots = "0.22.2"
+webpki-roots = "0.26"
 
 [dependencies.actix-web]
-features = ["rustls-0_20"]
-version = "4.3"
+features = ["rustls-0_23"]
+version = "4.12.1"
+
+[dependencies.rustls]
+features = ["ring", "logging", "std"]
+version = "0.23"
+
+[dependencies.rustls-pki-types]
+features = ["std"]
+version = "1"
 
 [dependencies.chrono]
 features = ["serde"]
@@ -165,10 +173,6 @@ features = [
 version = "0.11"
 default-features = false
 features = ["rustls-tls-webpki-roots"]
-
-[dependencies.rustls]
-version = "0.20"
-features = ["dangerous_configuration"]
 
 [dependencies.url]
 version = "2"

@@ -217,14 +217,14 @@ where
     let assets_path = config.assets_path.clone();
     let mail_options = config.smtp_options.clone();
     let verbose = config.verbose;
+    let host = config.http_host.clone();
+
     if !assets_path.join("index.html").exists() {
         warn!(
             "Cannot find {}, please ensure that assets_path is set correctly and that the front-end files exist.",
             assets_path.to_string_lossy()
         )
     }
-
-    let host = config.http_host.clone();
 
     if config.https_options.enabled {
         let port = config.https_options.port;
@@ -233,11 +233,13 @@ where
         let certs = tls::load_certificates(&config.https_options.cert_file)?;
         let key = tls::load_private_key(&config.https_options.key_file)?;
 
-        let tls_config = ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            .with_single_cert(certs, key)
-            .context("Error creating TLS configuration")?;
+        let tls_config =
+            ServerConfig::builder_with_provider(rustls::crypto::ring::default_provider().into())
+                .with_safe_default_protocol_versions()
+                .context("Failed to set protocol versions")?
+                .with_no_client_auth()
+                .with_single_cert(certs, key)
+                .context("Error creating TLS configuration")?;
 
         Ok(server_builder.bind("https", (host, port), move || {
             let backend_handler = backend_handler.clone();
@@ -267,7 +269,7 @@ where
                         }),
                     |_| AppConfig::default(),
                 ))
-                .rustls(tls_config.clone())
+                .rustls_0_23(tls_config.clone())
         })?)
     } else {
         let port = config.http_port;
