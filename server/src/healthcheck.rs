@@ -207,9 +207,7 @@ pub async fn check_https(host: &str, https_options: &HttpsOptions) -> Result<()>
     let url = format!("https://{host}:{port}/health");
     let certs = tls::load_certificates(&https_options.cert_file)?;
 
-    let target_cert_der = certs
-        .first()
-        .ok_or_else(|| anyhow!("Certificate file is empty"))?;
+    let target_cert_der = certs.first().ok_or_else(|| anyhow!("Certificate file is empty"))?;
 
     let reqwest_cert = reqwest::Certificate::from_der(target_cert_der.as_ref())
         .context("Failed to convert certificate for HTTP client")?;

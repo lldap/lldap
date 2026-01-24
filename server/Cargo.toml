@@ -156,7 +156,7 @@ features = ["smallvec", "chrono", "tokio"]
 version = "^0.1.6"
 
 [dependencies.actix-tls]
-features = ["default", "rustls"]
+features = ["default", "rustls-0_23"]
 version = "3"
 
 [dependencies.sea-orm]

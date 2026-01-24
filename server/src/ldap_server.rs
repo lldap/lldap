@@ -111,7 +111,7 @@ fn get_tls_acceptor(ldaps_options: &LdapsOptions) -> Result<RustlsTlsAcceptor> {
             rustls::crypto::ring::default_provider().into(),
         )
         .with_safe_default_protocol_versions()
-        .expect("Failed to set default protocol versions")
+        .context("Failed to set default protocol versions")?
         .with_no_client_auth()
         .with_single_cert(certs, private_key)?,
     );
