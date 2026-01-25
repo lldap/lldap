@@ -9,7 +9,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-anyhow = "*"
+anyhow = "1"
 
 [dependencies.serde]
 workspace = true

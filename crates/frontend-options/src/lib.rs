@@ -34,7 +34,8 @@ impl Default for PasswordPolicyOptions {
 pub fn validate_password(password: &str, policy: &PasswordPolicyOptions) -> Result<()> {
     let mut errors = Vec::new();
 
-    if password.len() < policy.min_length {
+    let pass_len = password.chars().count();
+    if pass_len < policy.min_length {
         errors.push(format!(
             "Password must be at least {} characters long.",
             policy.min_length
@@ -92,10 +93,9 @@ pub fn validate_password(password: &str, policy: &PasswordPolicyOptions) -> Resu
         ));
     }
 
-    if errors.is_empty() {
-        Ok(())
-    } else {
+    if !errors.is_empty() {
         // join all messages into one big error string, or handle Vec<String> upstream
         bail!("{}", errors.join("\n"));
     }
+    Ok(())
 }
