@@ -47,7 +47,6 @@ pub struct ChangePasswordForm {
     form: Form<FormModel>,
     opaque_data: OpaqueData,
     password_policy: Option<PasswordPolicyOptions>,
-    error_message: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Eq, Properties)]
@@ -63,8 +62,7 @@ pub enum Msg {
     SubmitNewPassword,
     RegistrationStartResponse(Result<Box<registration::ServerRegistrationStartResponse>>),
     RegistrationFinishResponse(Result<()>),
-    PasswordPolicyResponse(lldap_frontend_options::PasswordPolicyOptions),
-    ShowError(String),
+    PasswordPolicyResponse(Result<lldap_frontend_options::PasswordPolicyOptions>),
 }
 
 impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
@@ -77,11 +75,7 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
         match msg {
             Msg::FormUpdate => Ok(true),
             Msg::PasswordPolicyResponse(policy) => {
-                self.password_policy = Some(policy);
-                Ok(true)
-            }
-            Msg::ShowError(err) => {
-                self.error_message = Some(err);
+                self.password_policy = Some(policy?);
                 Ok(true)
             }
             Msg::Submit => {
@@ -207,33 +201,26 @@ impl Component for ChangePasswordForm {
     type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let this = Self {
-            common: CommonComponentParts::<Self>::create(),
-            form: yew_form::Form::<FormModel>::new(FormModel::default()),
-            opaque_data: OpaqueData::None,
-            password_policy: None,
-            error_message: None,
-        };
-
         let link = ctx.link().clone();
         wasm_bindgen_futures::spawn_local(async move {
             match api::HostService::get_settings().await {
                 Ok(options) => {
                     // send policy to component via Msg::FormUpdate
-                    link.send_message(Msg::PasswordPolicyResponse(options.password_policy));
+                    link.send_message(Msg::PasswordPolicyResponse(Ok(options.password_policy)));
                 }
                 Err(e) => {
                     // optional: store error in component state
-                    link.send_message(Msg::ShowError(format!(
-                        "Could not fetch password policy: {}",
-                        e
-                    )));
+                    link.send_message(Msg::PasswordPolicyResponse(Err(e)));
                 }
             }
         });
 
-        // return component instance
-        this
+        Self {
+            common: CommonComponentParts::<Self>::create(),
+            form: yew_form::Form::<FormModel>::new(FormModel::default()),
+            opaque_data: OpaqueData::None,
+            password_policy: None,
+        }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
