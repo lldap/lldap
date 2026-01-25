@@ -103,13 +103,16 @@ pub fn register_finish(
 
 fn get_settings(base_url: &Url, token: &str) -> Result<Options> {
     let url = append_to_url(base_url, "settings");
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()?;
     let resp = client
         .get(url)
         .bearer_auth(token)
-        .send()?
+        .send()
+        .context("Failed to GET /settings")?
         .error_for_status()?;
-    let options: Options = resp.json()?;
+    let options: Options = resp.json().context("Failed to parse /settings response")?;
     Ok(options)
 }
 
