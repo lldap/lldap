@@ -122,7 +122,7 @@ fn http_config<Backend>(
     server_url: url::Url,
     assets_path: PathBuf,
     mail_options: MailOptions,
-    password_policy: PasswordPolicyOptions
+    password_policy: PasswordPolicyOptions,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {

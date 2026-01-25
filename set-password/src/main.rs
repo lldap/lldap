@@ -164,5 +164,3 @@ fn main() -> Result<()> {
     println!("Successfully changed {}'s password", &opts.username);
     Ok(())
 }
-
-

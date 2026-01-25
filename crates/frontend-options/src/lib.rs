@@ -1,5 +1,5 @@
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
-use anyhow::{bail, Result};
 
 #[derive(Serialize, Deserialize)]
 pub struct Options {
@@ -99,4 +99,3 @@ pub fn validate_password(password: &str, policy: &PasswordPolicyOptions) -> Resu
         bail!("{}", errors.join("\n"));
     }
 }
-

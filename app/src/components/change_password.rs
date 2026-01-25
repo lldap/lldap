@@ -1,3 +1,4 @@
+use crate::infra::api;
 use crate::{
     components::{
         form::{field::Field, submit::Submit},
@@ -11,8 +12,7 @@ use crate::{
 use anyhow::{Result, anyhow, bail};
 use gloo_console::error;
 use lldap_auth::*;
-use crate::infra::api;
-use lldap_frontend_options::{validate_password, PasswordPolicyOptions};
+use lldap_frontend_options::{PasswordPolicyOptions, validate_password};
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -104,7 +104,6 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                     if old_password.is_empty() {
                         bail!("Current password should not be empty");
                     }
-
 
                     let mut rng = rand::rngs::OsRng;
                     let login_start_request =
@@ -225,16 +224,17 @@ impl Component for ChangePasswordForm {
                 }
                 Err(e) => {
                     // optional: store error in component state
-                    link.send_message(Msg::ShowError(format!("Could not fetch password policy: {}", e)));
+                    link.send_message(Msg::ShowError(format!(
+                        "Could not fetch password policy: {}",
+                        e
+                    )));
                 }
             }
         });
 
         // return component instance
         this
-        }
-
-
+    }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         CommonComponentParts::<Self>::update(self, ctx, msg)
