@@ -1,7 +1,4 @@
-use crate::{
-    configuration::{LdapsOptions},
-    tls,
-};
+use crate::{configuration::LdapsOptions, tls};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use futures_util::SinkExt;
 use ldap3_proto::{
