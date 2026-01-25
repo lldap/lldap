@@ -1,5 +1,13 @@
 use anyhow::{Result, bail};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+fn deserialize_specials<'de, D>(deserializer: D) -> Result<Vec<char>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Ok(s.chars().collect())
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Options {
@@ -15,7 +23,9 @@ pub struct PasswordPolicyOptions {
     pub min_lowercase: usize,
     pub min_digits: usize,
     pub min_special: usize,
-    pub allowed_specials: Vec<char>,
+
+    #[serde(deserialize_with = "deserialize_specials")]
+    pub special_characters: Vec<char>,
 }
 
 impl Default for PasswordPolicyOptions {
@@ -26,7 +36,7 @@ impl Default for PasswordPolicyOptions {
             min_lowercase: 0,
             min_digits: 0,
             min_special: 0,
-            allowed_specials: vec!['!', '@', '#', '$', '%', '^', '&', '*'],
+            special_characters: vec!['!', '@', '#', '$', '%', '^', '&', '*'],
         }
     }
 }
@@ -54,7 +64,7 @@ pub fn validate_password(password: &str, policy: &PasswordPolicyOptions) -> Resu
             lowercase += 1;
         } else if c.is_ascii_digit() {
             digits += 1;
-        } else if policy.allowed_specials.contains(&c) {
+        } else if policy.special_characters.contains(&c) {
             special += 1;
         }
     }
@@ -85,7 +95,7 @@ pub fn validate_password(password: &str, policy: &PasswordPolicyOptions) -> Resu
             "Password must contain at least {} special character(s) from: {}",
             policy.min_special,
             policy
-                .allowed_specials
+                .special_characters
                 .iter()
                 .map(|c| c.to_string())
                 .collect::<Vec<_>>()

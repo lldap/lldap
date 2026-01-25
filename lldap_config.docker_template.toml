@@ -91,7 +91,7 @@
 
 ## Password Policy Options
 [password_policy]
-# Minimum length of password.  Recommended 8
+# Minimum length of password.  Recommended 12, default is 8.
 min_length = 8
 # Minimum number of uppercase characters required.
 # Default is 0.  This feature is not recommended as it is an anti pattern in security.
@@ -105,9 +105,9 @@ min_length = 8
 # Minimum number of special characters required
 # Default is 0.  This feature is not recommended as it is an anti pattern in security.
 min_special = 1
-# If min_sepcial is greater than zero, this vector of chars is what characters are considered special.
+# If min_special is greater than zero, this vector of chars is what characters are considered special.
 # Default special chars are ! @ # $ % ^ & *
-#allowed_specials= ['@', '*']
+#special_characters= "!@*"
 
 ## Database URL.
 ## This encodes the type of database (SQlite, MySQL, or PostgreSQL)
