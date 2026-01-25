@@ -125,7 +125,7 @@ TrueNAS supports selecting certificates for LDAPS and configuring a public web U
 
 A full, step-by-step TrueNAS-specific guide (including recommended ports, certificate configuration, and common integrations) is available here:
 
-👉 https://github.com/lldap/lldap/blob/main/example_configs/truenas-install.md
+👉 [example_configs/truenas-install.md](https://github.com/lldap/lldap/blob/main/example_configs/truenas-install.md)
 
 ### From a package repository
 
