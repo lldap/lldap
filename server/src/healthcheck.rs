@@ -165,8 +165,11 @@ pub async fn check_ldaps(host: &str, ldaps_options: &LdapsOptions) -> Result<()>
     let tls_connector =
         get_tls_connector(ldaps_options).context("while preparing the tls connection")?;
 
-    let domain = ServerName::try_from(host.to_string())
-        .map_err(|_| anyhow!("Invalid DNS name: {}", host))?;
+    let domain = match host.parse::<std::net::IpAddr>() {
+        Ok(ip) => ServerName::IpAddress(ip.into()),
+        Err(_) => ServerName::try_from(host.to_string())
+            .map_err(|_| anyhow!("Invalid DNS name: {}", host))?,
+    };
 
     check_ldap_endpoint(
         tls_connector
