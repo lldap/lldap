@@ -1,4 +1,4 @@
-use crate::{configuration::LdapsOptions, ldap_server::read_certificates};
+use crate::{configuration::LdapsOptions, tls};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use futures_util::SinkExt;
 use ldap3_proto::{
@@ -8,6 +8,11 @@ use ldap3_proto::{
         LdapSearchScope,
     },
 };
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::{verify_tls12_signature, verify_tls13_signature};
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{DigitallySignedStruct, SignatureScheme};
+use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector as RustlsTlsConnector;
 use tokio_util::codec::{FramedRead, FramedWrite};
@@ -74,56 +79,81 @@ pub async fn check_ldap(host: &str, port: u16) -> Result<()> {
     check_ldap_endpoint(TcpStream::connect((host, port)).await?).await
 }
 
-fn get_root_certificates() -> rustls::RootCertStore {
-    let mut root_store = rustls::RootCertStore::empty();
-    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
-    root_store
-}
-
 fn get_tls_connector(ldaps_options: &LdapsOptions) -> Result<RustlsTlsConnector> {
-    let mut client_config = rustls::ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(get_root_certificates())
-        .with_no_client_auth();
-    let (certs, _private_key) = read_certificates(ldaps_options)?;
-    // Check that the server cert is the one in the config file.
+    let certs = tls::load_certificates(&ldaps_options.cert_file)?;
+    let target_cert = certs.first().expect("empty certificate chain").clone();
+
+    #[derive(Debug)]
     struct CertificateVerifier {
-        certificate: rustls::Certificate,
-        certificate_path: String,
+        certificate: CertificateDer<'static>,
     }
-    impl rustls::client::ServerCertVerifier for CertificateVerifier {
+
+    impl ServerCertVerifier for CertificateVerifier {
         fn verify_server_cert(
             &self,
-            end_entity: &rustls::Certificate,
-            _intermediates: &[rustls::Certificate],
-            _server_name: &rustls::ServerName,
-            _scts: &mut dyn Iterator<Item = &[u8]>,
+            end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
+            _server_name: &ServerName<'_>,
             _ocsp_response: &[u8],
-            _now: std::time::SystemTime,
-        ) -> std::result::Result<rustls::client::ServerCertVerified, rustls::Error> {
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, rustls::Error> {
             if end_entity != &self.certificate {
-                return Err(rustls::Error::InvalidCertificateData(format!(
-                    "Server certificate doesn't match the one in the config file {}",
-                    &self.certificate_path
-                )));
+                return Err(rustls::Error::InvalidCertificate(
+                    rustls::CertificateError::NotValidForName,
+                ));
             }
-            Ok(rustls::client::ServerCertVerified::assertion())
+            Ok(ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            message: &[u8],
+            cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            verify_tls12_signature(
+                message,
+                cert,
+                dss,
+                &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+            )
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            verify_tls13_signature(
+                message,
+                cert,
+                dss,
+                &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+            )
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            rustls::crypto::ring::default_provider()
+                .signature_verification_algorithms
+                .supported_schemes()
         }
     }
-    let mut dangerous_config = rustls::client::DangerousClientConfig {
-        cfg: &mut client_config,
-    };
-    dangerous_config.set_certificate_verifier(std::sync::Arc::new(CertificateVerifier {
-        certificate: certs.first().expect("empty certificate chain").clone(),
-        certificate_path: ldaps_options.cert_file.clone(),
-    }));
-    Ok(std::sync::Arc::new(client_config).into())
+
+    let verifier = Arc::new(CertificateVerifier {
+        certificate: target_cert,
+    });
+
+    let client_config = rustls::ClientConfig::builder_with_provider(
+        rustls::crypto::ring::default_provider().into(),
+    )
+    .with_safe_default_protocol_versions()
+    .context("Failed to set default protocol versions")?
+    .dangerous()
+    .with_custom_certificate_verifier(verifier)
+    .with_no_client_auth();
+
+    Ok(Arc::new(client_config).into())
 }
 
 #[instrument(skip_all, level = "info", err, fields(host = %host, port = %ldaps_options.port))]
@@ -134,10 +164,17 @@ pub async fn check_ldaps(host: &str, ldaps_options: &LdapsOptions) -> Result<()>
     };
     let tls_connector =
         get_tls_connector(ldaps_options).context("while preparing the tls connection")?;
+
+    let domain = match host.parse::<std::net::IpAddr>() {
+        Ok(ip) => ServerName::IpAddress(ip.into()),
+        Err(_) => ServerName::try_from(host.to_string())
+            .map_err(|_| anyhow!("Invalid DNS name: {}", host))?,
+    };
+
     check_ldap_endpoint(
         tls_connector
             .connect(
-                rustls::ServerName::try_from(host).context("while parsing the server name")?,
+                domain,
                 TcpStream::connect((host, ldaps_options.port))
                     .await
                     .context("while connecting TCP")?,
