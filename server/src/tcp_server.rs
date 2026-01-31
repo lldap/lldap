@@ -3,6 +3,7 @@ use crate::{
     configuration::{Configuration, MailOptions},
     logging::CustomRootSpanBuilder,
     tcp_backend_handler::*,
+    tls,
 };
 use actix_files::Files;
 use actix_http::{HttpServiceBuilder, header};
@@ -15,6 +16,7 @@ use lldap_access_control::{AccessControlledBackendHandler, ReadonlyBackendHandle
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
 use lldap_domain_model::error::DomainError;
 use lldap_opaque_handler::OpaqueHandler;
+use rustls::ServerConfig;
 use sha2::Sha512;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -215,51 +217,93 @@ where
     let assets_path = config.assets_path.clone();
     let mail_options = config.smtp_options.clone();
     let verbose = config.verbose;
+    let host = config.http_host.clone();
+
     if !assets_path.join("index.html").exists() {
         warn!(
             "Cannot find {}, please ensure that assets_path is set correctly and that the front-end files exist.",
             assets_path.to_string_lossy()
         )
     }
-    info!("Starting the API/web server on port {}", config.http_port);
-    server_builder
-        .bind(
-            "http",
-            (config.http_host.clone(), config.http_port),
-            move || {
-                let backend_handler = backend_handler.clone();
-                let jwt_secret = jwt_secret.clone();
-                let jwt_blacklist = jwt_blacklist.clone();
-                let server_url = server_url.clone();
-                let assets_path = assets_path.clone();
-                let mail_options = mail_options.clone();
-                HttpServiceBuilder::default()
-                    .finish(map_config(
-                        App::new()
-                            .wrap(actix_web::middleware::Condition::new(
-                                verbose,
-                                tracing_actix_web::TracingLogger::<CustomRootSpanBuilder>::new(),
-                            ))
-                            .configure(move |cfg| {
-                                http_config(
-                                    cfg,
-                                    backend_handler,
-                                    jwt_secret,
-                                    jwt_blacklist,
-                                    server_url,
-                                    assets_path,
-                                    mail_options,
-                                )
-                            }),
-                        |_| AppConfig::default(),
-                    ))
-                    .tcp()
-            },
-        )
-        .with_context(|| {
-            format!(
-                "While bringing up the TCP server with port {}",
-                config.http_port
-            )
-        })
+
+    if config.https_options.enabled {
+        let port = config.https_options.port;
+        info!("Starting the API/web server in HTTPS on port {}", port);
+
+        let certs = tls::load_certificates(&config.https_options.cert_file)?;
+        let key = tls::load_private_key(&config.https_options.key_file)?;
+
+        let tls_config =
+            ServerConfig::builder_with_provider(rustls::crypto::ring::default_provider().into())
+                .with_safe_default_protocol_versions()
+                .context("Failed to set protocol versions")?
+                .with_no_client_auth()
+                .with_single_cert(certs, key)
+                .context("Error creating TLS configuration")?;
+
+        Ok(server_builder.bind("https", (host, port), move || {
+            let backend_handler = backend_handler.clone();
+            let jwt_secret = jwt_secret.clone();
+            let jwt_blacklist = jwt_blacklist.clone();
+            let server_url = server_url.clone();
+            let assets_path = assets_path.clone();
+            let mail_options = mail_options.clone();
+
+            HttpServiceBuilder::default()
+                .finish(map_config(
+                    App::new()
+                        .wrap(actix_web::middleware::Condition::new(
+                            verbose,
+                            tracing_actix_web::TracingLogger::<CustomRootSpanBuilder>::new(),
+                        ))
+                        .configure(move |cfg| {
+                            http_config(
+                                cfg,
+                                backend_handler,
+                                jwt_secret,
+                                jwt_blacklist,
+                                server_url,
+                                assets_path,
+                                mail_options,
+                            )
+                        }),
+                    |_| AppConfig::default(),
+                ))
+                .rustls_0_23(tls_config.clone())
+        })?)
+    } else {
+        let port = config.http_port;
+        info!("Starting the API/web server in HTTP on port {}", port);
+
+        Ok(server_builder.bind("http", (host, port), move || {
+            let backend_handler = backend_handler.clone();
+            let jwt_secret = jwt_secret.clone();
+            let jwt_blacklist = jwt_blacklist.clone();
+            let server_url = server_url.clone();
+            let assets_path = assets_path.clone();
+            let mail_options = mail_options.clone();
+
+            HttpServiceBuilder::default()
+                .finish(map_config(
+                    App::new()
+                        .wrap(actix_web::middleware::Condition::new(
+                            verbose,
+                            tracing_actix_web::TracingLogger::<CustomRootSpanBuilder>::new(),
+                        ))
+                        .configure(move |cfg| {
+                            http_config(
+                                cfg,
+                                backend_handler,
+                                jwt_secret,
+                                jwt_blacklist,
+                                server_url,
+                                assets_path,
+                                mail_options,
+                            )
+                        }),
+                    |_| AppConfig::default(),
+                ))
+                .tcp()
+        })?)
+    }
 }

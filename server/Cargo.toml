@@ -171,7 +171,7 @@ features = [
 ]
 
 [dependencies.reqwest]
-version = "0.11"
+version = "0.12"
 default-features = false
 features = ["rustls-tls-webpki-roots"]
 
@@ -211,7 +211,7 @@ path = "../crates/sql-backend-handler"
 features = ["test"]
 
 [dev-dependencies.reqwest]
-version = "*"
+version = "0.12"
 default-features = false
 features = ["json", "blocking", "rustls-tls"]
 
