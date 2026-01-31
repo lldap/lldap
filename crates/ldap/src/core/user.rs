@@ -265,7 +265,10 @@ fn convert_user_filter(
                     // DisplayName (cn) should match case-insensitively, so we try both
                     // the original value and the lowercase value (if different)
                     if value.as_str() == value_lc {
-                        Ok(UserRequestFilter::Equality(UserColumn::DisplayName, value_lc))
+                        Ok(UserRequestFilter::Equality(
+                            UserColumn::DisplayName,
+                            value_lc,
+                        ))
                     } else {
                         Ok(UserRequestFilter::Or(vec![
                             UserRequestFilter::Equality(UserColumn::DisplayName, value.to_string()),
