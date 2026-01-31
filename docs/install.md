@@ -3,6 +3,7 @@
 - [With Docker](#with-docker)
 - [With Podman](#with-podman)
 - [With Kubernetes](#with-kubernetes)
+- [TrueNAS SCALE](#truenas-scale)
 - [From a package repository](#from-a-package-repository)
 - [With FreeBSD](#with-freebsd)
 - [From source](#from-source)
@@ -104,6 +105,27 @@ See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for K
 You can bootstrap your lldap instance (users, groups)
 using [bootstrap.sh](../example_configs/bootstrap/bootstrap.md#kubernetes-job).
 It can be run by Argo CD for managing users in git-opt way, or as a one-shot job.
+
+### TrueNAS SCALE
+
+LLDAP can be installed on **TrueNAS SCALE** using the built-in Apps catalog, allowing users to deploy and manage LLDAP directly from the TrueNAS web interface without manually maintaining containers.
+
+To install:
+
+1. Open the TrueNAS web interface.
+2. Navigate to **Apps → Discover Apps**.
+3. Search for **LLDAP** and click **Install**.
+4. Provide the required configuration values such as:
+   - Base DN
+   - Admin credentials
+   - LDAP / LDAPS ports
+   - Persistent storage dataset
+
+TrueNAS supports selecting certificates for LDAPS and configuring a public web URL. When LDAPS is enabled, it is recommended to disable the unencrypted LDAP port to ensure secure communication.
+
+A full, step-by-step TrueNAS-specific guide (including recommended ports, certificate configuration, and common integrations) is available here:
+
+👉 [example_configs/truenas-install.md](https://github.com/lldap/lldap/blob/main/example_configs/truenas-install.md)
 
 ### From a package repository
 
