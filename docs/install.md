@@ -42,7 +42,7 @@ Example for docker compose:
 - You can generate the secrets by running `./generate_secrets.sh`
 
 ```yaml
-version: "3"
+---
 
 volumes:
   lldap_data:
@@ -53,11 +53,13 @@ services:
     image: lldap/lldap:stable
     ports:
       # For LDAP, not recommended to expose, see Usage section.
-      #- "3890:3890"
+      # - "3890:3890"
       # For LDAPS (LDAP Over SSL), enable port if LLDAP_LDAPS_OPTIONS__ENABLED set true, look env below
-      #- "6360:6360"
-      # For the web front-end
+      # - "6360:6360"
+      # For HTTP web front-end (setup a reverse proxy and firewall rule if you want to setup this methode)
       - "17170:17170"
+      # For HTTPS web front-end.
+      # - "17174:17174"
     volumes:
       - "lldap_data:/data"
       # Alternatively, you can mount a local folder
@@ -74,6 +76,11 @@ services:
       # - LLDAP_LDAPS_OPTIONS__ENABLED=true
       # - LLDAP_LDAPS_OPTIONS__CERT_FILE=/path/to/certfile.crt
       # - LLDAP_LDAPS_OPTIONS__KEY_FILE=/path/to/keyfile.key
+      # If using HTTPS, set enable true and configure cert and key path you can also change https port access
+      # - LLDAP_HTTPS_OPTIONS__ENABLED=true
+      # - LLDAP_HTTPS_OPTIONS__PORT=17174 # It's a default value, so put it just if you want to edit port
+      # - LLDAP_HTTPS_OPTIONS__CERT_FILE=/path/to/certfile.crt
+      # - LLDAP_HTTPS_OPTIONS__KEY_FILE=/path/to/keyfile.key
       # You can also set a different database:
       # - LLDAP_DATABASE_URL=mysql://mysql-user:password@mysql-server/my-database
       # - LLDAP_DATABASE_URL=postgres://postgres-user:password@postgres-server/my-database
