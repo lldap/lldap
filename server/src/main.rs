@@ -264,10 +264,14 @@ async fn run_healthcheck(opts: RunOpts) -> Result<()> {
             delay,
             healthcheck::check_ldaps(&config.healthcheck_options.ldap_host, &config.ldaps_options)
         ),
-        timeout(
-            delay,
-            healthcheck::check_http(&config.healthcheck_options.http_host, config.http_port)
-        ),
+        timeout(delay, async {
+            if config.https_options.enabled {
+                Ok(())
+            } else {
+                healthcheck::check_http(&config.healthcheck_options.http_host, config.http_port)
+                    .await
+            }
+        }),
         timeout(
             delay,
             healthcheck::check_https(&config.healthcheck_options.http_host, &config.https_options)

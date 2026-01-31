@@ -216,6 +216,7 @@ pub async fn check_https(host: &str, https_options: &HttpsOptions) -> Result<()>
 
     let client = reqwest::Client::builder()
         .add_root_certificate(reqwest_cert)
+        .danger_accept_invalid_hostnames(true)
         .build()?;
 
     let res = client.get(&url).send().await?;
