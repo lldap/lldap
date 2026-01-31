@@ -76,7 +76,7 @@ services:
       # - LLDAP_LDAPS_OPTIONS__ENABLED=true
       # - LLDAP_LDAPS_OPTIONS__CERT_FILE=/path/to/certfile.crt
       # - LLDAP_LDAPS_OPTIONS__KEY_FILE=/path/to/keyfile.key
-      # If using HTTPS, set enable true and configure cert and key path you can also change https port access
+      # If using HTTPS, set enabled true and configure cert and key path. You can also change the HTTPS port.
       # - LLDAP_HTTPS_OPTIONS__ENABLED=true
       # - LLDAP_HTTPS_OPTIONS__PORT=17174 # It's a default value, so put it just if you want to edit port
       # - LLDAP_HTTPS_OPTIONS__CERT_FILE=/path/to/certfile.crt
