@@ -83,7 +83,7 @@ MySQL/MariaDB or PostgreSQL.
 
 ## Installation
 
-It's possible to install lldap from OCI images ([docker](docs/install.md#with-docker)/[podman](docs/install.md#with-podman)), from [Kubernetes](docs/install.md#with-kubernetes), or from [a regular distribution package manager](docs/install.md/#from-a-package-repository) (Archlinux, Debian, CentOS, Fedora, OpenSuse, Ubuntu, FreeBSD).
+It's possible to install lldap from OCI images ([docker](docs/install.md#with-docker)/[podman](docs/install.md#with-podman)), from [Kubernetes](docs/install.md#with-kubernetes), [TrueNAS](docs/install.md#truenas-scale), or from [a regular distribution package manager](docs/install.md/#from-a-package-repository) (Archlinux, Debian, CentOS, Fedora, OpenSuse, Ubuntu, FreeBSD).
 
 Building [from source](docs/install.md#from-source) and [cross-compiling](docs/install.md#cross-compilation) to a different hardware architecture is also supported.
 
