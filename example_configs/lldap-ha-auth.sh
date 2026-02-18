@@ -64,7 +64,7 @@ if [[ ! -z "$2" ]] && ! jq -e '.groups|map(.displayName)|index("'"$2"'")' <<< $U
 	exit 1
 fi
 
-DISPLAY_NAME=$(jq -r .displayName <<< $USER_JSON)
+DISPLAY_NAME=$(jq -r '.displayName // .id' <<< $USER_JSON)
 
 IS_ADMIN=false
 if [[ ! -z "$3" ]] && jq -e '.groups|map(.displayName)|index("'"$3"'")' <<< "$USER_JSON" > /dev/null 2>&1; then
