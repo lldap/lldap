@@ -3016,6 +3016,7 @@ dependencies = [
 name = "lldap_frontend_options"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "serde",
 ]
 
@@ -3104,6 +3105,7 @@ dependencies = [
  "anyhow",
  "clap",
  "lldap_auth",
+ "lldap_frontend_options",
  "rand 0.8.5",
  "reqwest 0.12.28",
  "serde",
