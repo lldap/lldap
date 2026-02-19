@@ -1,7 +1,7 @@
 use crate::{
     cli::{
-        GeneralConfigOpts, HealthcheckOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts,
-        TestEmailOpts, TrueFalseAlways,
+        GeneralConfigOpts, HealthcheckOpts, HttpsOpts, LdapsOpts, RunOpts, SmtpEncryption,
+        SmtpOpts, TestEmailOpts, TrueFalseAlways,
     },
     database_string::DatabaseUrl,
 };
@@ -77,9 +77,28 @@ pub struct LdapsOptions {
     pub key_file: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[builder(pattern = "owned")]
+pub struct HttpsOptions {
+    #[builder(default = "false")]
+    pub enabled: bool,
+    #[builder(default = "17174")]
+    pub port: u16,
+    #[builder(default = r#"String::from("cert.pem")"#)]
+    pub cert_file: String,
+    #[builder(default = r#"String::from("key.pem")"#)]
+    pub key_file: String,
+}
+
 impl std::default::Default for LdapsOptions {
     fn default() -> Self {
         LdapsOptionsBuilder::default().build().unwrap()
+    }
+}
+
+impl std::default::Default for HttpsOptions {
+    fn default() -> Self {
+        HttpsOptionsBuilder::default().build().unwrap()
     }
 }
 
@@ -147,6 +166,8 @@ pub struct Configuration {
     pub smtp_options: MailOptions,
     #[builder(default)]
     pub ldaps_options: LdapsOptions,
+    #[builder(default)]
+    pub https_options: HttpsOptions,
     #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
     pub http_url: HttpUrl,
     #[debug(skip)]
@@ -465,6 +486,7 @@ impl ConfigOverrider for RunOpts {
 
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);
+        self.https_opts.override_config(config);
     }
 }
 
@@ -490,6 +512,24 @@ impl ConfigOverrider for LdapsOpts {
         self.ldaps_key_file
             .as_ref()
             .inspect(|path| config.ldaps_options.key_file.clone_from(path));
+    }
+}
+
+impl ConfigOverrider for HttpsOpts {
+    fn override_config(&self, config: &mut Configuration) {
+        self.https_enabled
+            .inspect(|&enabled| config.https_options.enabled = enabled);
+
+        self.https_port
+            .inspect(|&port| config.https_options.port = port);
+
+        self.https_cert_file
+            .as_ref()
+            .inspect(|path| config.https_options.cert_file.clone_from(path));
+
+        self.https_key_file
+            .as_ref()
+            .inspect(|path| config.https_options.key_file.clone_from(path));
     }
 }
 

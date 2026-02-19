@@ -176,6 +176,9 @@ pub struct RunOpts {
     pub ldaps_opts: LdapsOpts,
 
     #[clap(flatten)]
+    pub https_opts: HttpsOpts,
+
+    #[clap(flatten)]
     pub healthcheck_opts: HealthcheckOpts,
 }
 
@@ -210,6 +213,26 @@ pub struct LdapsOpts {
     /// Ldaps certificate key file. Default: key.pem
     #[clap(long, env = "LLDAP_LDAPS_OPTIONS__KEY_FILE")]
     pub ldaps_key_file: Option<String>,
+}
+
+#[derive(Debug, Parser, Clone)]
+#[clap(next_help_heading = Some("HTTPS"))]
+pub struct HttpsOpts {
+    /// Enable HTTP TLS (HTTPS). Default: false.
+    #[clap(long, env = "LLDAP_HTTPS_OPTIONS__ENABLED")]
+    pub https_enabled: Option<bool>,
+
+    /// HTTPS port. Default: 17174
+    #[clap(long, env = "LLDAP_HTTPS_OPTIONS__PORT")]
+    pub https_port: Option<u16>,
+
+    /// HTTPS certificate file. Default: cert.pem
+    #[clap(long, env = "LLDAP_HTTPS_OPTIONS__CERT_FILE")]
+    pub https_cert_file: Option<String>,
+
+    /// HTTPS key file. Default: key.pem
+    #[clap(long, env = "LLDAP_HTTPS_OPTIONS__KEY_FILE")]
+    pub https_key_file: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, clap::ValueEnum)]

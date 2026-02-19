@@ -1,4 +1,4 @@
-use crate::{configuration::LdapsOptions, tls};
+use crate::{configuration::HttpsOptions, configuration::LdapsOptions, tls};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use futures_util::SinkExt;
 use ldap3_proto::{
@@ -186,10 +186,41 @@ pub async fn check_ldaps(host: &str, ldaps_options: &LdapsOptions) -> Result<()>
 }
 
 #[instrument(level = "info", err)]
-pub async fn check_api(host: &str, port: u16) -> Result<()> {
-    reqwest::get(format!("http://{host}:{port}/health"))
-        .await?
-        .error_for_status()?;
-    info!("Success");
+pub async fn check_http(host: &str, port: u16) -> Result<()> {
+    let url = format!("http://{host}:{port}/health");
+    let client = reqwest::Client::new();
+
+    let res = client.get(&url).send().await?;
+    res.error_for_status()?;
+    info!("Success (HTTP)");
+    Ok(())
+}
+
+#[instrument(skip_all, level = "info", err, fields(host = %host, port = %https_options.port))]
+pub async fn check_https(host: &str, https_options: &HttpsOptions) -> Result<()> {
+    if !https_options.enabled {
+        info!("HTTPS not enabled");
+        return Ok(());
+    }
+
+    let port = https_options.port;
+    let url = format!("https://{host}:{port}/health");
+    let certs = tls::load_certificates(&https_options.cert_file)?;
+
+    let target_cert_der = certs
+        .first()
+        .ok_or_else(|| anyhow!("Certificate file is empty"))?;
+
+    let reqwest_cert = reqwest::Certificate::from_der(target_cert_der.as_ref())
+        .context("Failed to convert certificate for HTTP client")?;
+
+    let client = reqwest::Client::builder()
+        .add_root_certificate(reqwest_cert)
+        .danger_accept_invalid_hostnames(true)
+        .build()?;
+
+    let res = client.get(&url).send().await?;
+    res.error_for_status()?;
+    info!("Success (HTTPS)");
     Ok(())
 }
