@@ -50,6 +50,7 @@ configuration files:
 - [Nexus](nexus.md)
 - [OCIS (OwnCloud Infinite Scale)](ocis.md)
 - [OneDev](onedev.md)
+- [OpenBao](openbao.md)
 - [Organizr](Organizr.md)
 - [Peertube](peertube.md)
 - [Penpot](penpot.md)
