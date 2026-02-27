@@ -114,7 +114,7 @@ jobs:
       - name: Check build path
         run: ls -al app/
       - name: Upload ui artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ui
           path: app/
@@ -159,17 +159,17 @@ jobs:
       - name: Check path
         run: ls -al target/release
       - name: Upload ${{ matrix.target}} lldap artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target}}-lldap-bin
           path: target/${{ matrix.target }}/release/lldap
       - name: Upload ${{ matrix.target }} migration tool artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}-lldap_migration_tool-bin
           path: target/${{ matrix.target }}/release/lldap_migration_tool
       - name: Upload ${{ matrix.target }} password tool artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}-lldap_set_password-bin
           path: target/${{ matrix.target }}/release/lldap_set_password
