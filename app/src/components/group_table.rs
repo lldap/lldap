@@ -1,4 +1,5 @@
 use crate::{
+    DateToLocalDisplay,
     components::{
         delete_group::DeleteGroup,
         router::{AppRoute, Link},
@@ -122,7 +123,7 @@ impl GroupTable {
                 </Link>
               </td>
               <td>
-                {&group.creation_date.naive_local().date()}
+                {&group.creation_date.to_local_date_display()}
               </td>
               <td>
                 <DeleteGroup
