@@ -14,6 +14,7 @@ use hmac::Hmac;
 use lldap_access_control::{AccessControlledBackendHandler, ReadonlyBackendHandler};
 use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
 use lldap_domain_model::error::DomainError;
+use lldap_frontend_options::PasswordPolicyOptions;
 use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::collections::HashSet;
@@ -109,6 +110,7 @@ async fn wasm_handler_compressed<Backend>(
 async fn get_settings<Backend>(data: web::Data<AppState<Backend>>) -> HttpResponse {
     HttpResponse::Ok().json(lldap_frontend_options::Options {
         password_reset_enabled: data.mail_options.enable_password_reset,
+        password_policy: data.password_policy.clone(),
     })
 }
 
@@ -120,6 +122,7 @@ fn http_config<Backend>(
     server_url: url::Url,
     assets_path: PathBuf,
     mail_options: MailOptions,
+    password_policy: PasswordPolicyOptions,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
@@ -131,6 +134,7 @@ fn http_config<Backend>(
         server_url,
         assets_path: assets_path.clone(),
         mail_options,
+        password_policy,
     }))
     .route(
         "/health",
@@ -175,6 +179,7 @@ pub(crate) struct AppState<Backend> {
     pub server_url: url::Url,
     pub assets_path: PathBuf,
     pub mail_options: MailOptions,
+    pub password_policy: PasswordPolicyOptions,
 }
 
 impl<Backend: BackendHandler> AppState<Backend> {
@@ -214,6 +219,7 @@ where
     let server_url = config.http_url.0.clone();
     let assets_path = config.assets_path.clone();
     let mail_options = config.smtp_options.clone();
+    let password_policy = config.password_policy.clone();
     let verbose = config.verbose;
     if !assets_path.join("index.html").exists() {
         warn!(
@@ -233,6 +239,7 @@ where
                 let server_url = server_url.clone();
                 let assets_path = assets_path.clone();
                 let mail_options = mail_options.clone();
+                let password_policy = password_policy.clone();
                 HttpServiceBuilder::default()
                     .finish(map_config(
                         App::new()
@@ -249,6 +256,7 @@ where
                                     server_url,
                                     assets_path,
                                     mail_options,
+                                    password_policy,
                                 )
                             }),
                         |_| AppConfig::default(),

@@ -3,6 +3,7 @@ use std::env;
 use anyhow::{Context, Result, bail, ensure};
 use clap::Parser;
 use lldap_auth::{opaque, registration};
+use lldap_frontend_options::{Options, validate_password};
 use reqwest::Url;
 use serde::Serialize;
 
@@ -100,6 +101,21 @@ pub fn register_finish(
     .map(|_| ())
 }
 
+fn get_settings(base_url: &Url, token: &str) -> Result<Options> {
+    let url = append_to_url(base_url, "settings");
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()?;
+    let resp = client
+        .get(url)
+        .bearer_auth(token)
+        .send()
+        .context("Failed to GET /settings")?
+        .error_for_status()?;
+    let options: Options = resp.json().context("Failed to parse /settings response")?;
+    Ok(options)
+}
+
 fn main() -> Result<()> {
     let opts = CliOpts::parse();
 
@@ -108,10 +124,6 @@ fn main() -> Result<()> {
         None => env::var("LLDAP_USER_PASSWORD").unwrap_or_default(),
     };
 
-    ensure!(
-        opts.bypass_password_policy || password.len() >= 8,
-        "New password is too short, expected at least 8 characters"
-    );
     ensure!(
         opts.base_url.scheme() == "http" || opts.base_url.scheme() == "https",
         "Base URL should start with `http://` or `https://`"
@@ -123,6 +135,11 @@ fn main() -> Result<()> {
         }
         (None, None) => bail!("Either the token or the admin password is required"),
     };
+
+    if !opts.bypass_password_policy {
+        let settings = get_settings(&opts.base_url, &token)?;
+        validate_password(&password, &settings.password_policy)?;
+    }
 
     let mut rng = rand::rngs::OsRng;
     let registration_start_request =
