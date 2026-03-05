@@ -528,7 +528,7 @@ jobs:
 
       - name: Docker ${{ matrix.container }} Base meta
         id: meta-base
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -556,7 +556,7 @@ jobs:
 
       - name: Docker ${{ matrix.container }}-rootless meta
         id: meta-rootless
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -589,7 +589,7 @@ jobs:
 
       - name: Docker ${{ matrix.container }} meta
         id: meta-standard
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           # list of Docker images to use as base name for tags
           images: |
