@@ -13,6 +13,7 @@ resolver = "2"
 authors = ["Valentin Tolmer <valentin@tolmer.fr>"]
 documentation = "https://github.com/lldap/lldap"
 edition = "2024"
+rust-version = "1.85"
 homepage = "https://github.com/lldap/lldap"
 license = "GPL-3.0-only"
 repository = "https://github.com/lldap/lldap"
