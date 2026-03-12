@@ -173,22 +173,31 @@ fn get_group_attribute_equality_filter(
     typ: AttributeType,
     is_list: bool,
     value: &str,
-) -> GroupRequestFilter {
+) -> LdapResult<GroupRequestFilter> {
+    if is_list {
+        return Err(LdapError {
+            code: LdapResultCode::UnwillingToPerform,
+            message: format!(
+                "Equality filter on list attribute \"{}\" is not supported",
+                field
+            ),
+        });
+    }
     let value_lc = value.to_ascii_lowercase();
-    let serialized_value = deserialize_attribute_value(&[value.to_owned()], typ, is_list);
-    let serialized_value_lc = deserialize_attribute_value(&[value_lc.to_owned()], typ, is_list);
+    let serialized_value = deserialize_attribute_value(&[value.to_owned()], typ, false);
+    let serialized_value_lc = deserialize_attribute_value(&[value_lc.to_owned()], typ, false);
     match (serialized_value, serialized_value_lc) {
-        (Ok(v), Ok(v_lc)) => GroupRequestFilter::Or(vec![
+        (Ok(v), Ok(v_lc)) => Ok(GroupRequestFilter::Or(vec![
             GroupRequestFilter::AttributeEquality(field.clone(), v),
             GroupRequestFilter::AttributeEquality(field.clone(), v_lc),
-        ]),
+        ])),
         (Ok(_), Err(e)) => {
             warn!("Invalid value for attribute {} (lowercased): {}", field, e);
-            GroupRequestFilter::False
+            Ok(GroupRequestFilter::False)
         }
         (Err(e), _) => {
             warn!("Invalid value for attribute {}: {}", field, e);
-            GroupRequestFilter::False
+            Ok(GroupRequestFilter::False)
         }
     }
 }
@@ -259,9 +268,9 @@ fn convert_group_filter(
                     }
                     Ok(GroupRequestFilter::False)
                 }
-                GroupFieldType::Attribute(field, typ, is_list) => Ok(
-                    get_group_attribute_equality_filter(&field, typ, is_list, value),
-                ),
+                GroupFieldType::Attribute(field, typ, is_list) => {
+                    get_group_attribute_equality_filter(&field, typ, is_list, value)
+                }
                 GroupFieldType::CreationDate => Err(LdapError {
                     code: LdapResultCode::UnwillingToPerform,
                     message: "Creation date filter for groups not supported".to_owned(),
@@ -672,6 +681,83 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_equality_filter_on_list_group_attribute_returns_error() {
+        use lldap_domain::schema::{AttributeList, AttributeSchema, Schema};
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().returning(|| {
+            Ok(Schema {
+                user_attributes: AttributeList {
+                    attributes: Vec::new(),
+                },
+                group_attributes: AttributeList {
+                    attributes: vec![AttributeSchema {
+                        name: "tags".into(),
+                        attribute_type: AttributeType::String,
+                        is_list: true,
+                        is_visible: true,
+                        is_editable: true,
+                        is_hardcoded: false,
+                        is_readonly: false,
+                    }],
+                },
+                extra_user_object_classes: Vec::new(),
+                extra_group_object_classes: Vec::new(),
+            })
+        });
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_group_search_request(
+            LdapFilter::Equality("tags".to_string(), "foo".to_string()),
+            vec!["dn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Err(LdapError {
+                code: LdapResultCode::UnwillingToPerform,
+                message: r#"Equality filter on list attribute "tags" is not supported"#
+                    .to_string(),
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_equality_filter_on_non_list_group_attribute() {
+        use lldap_domain::schema::{AttributeList, AttributeSchema, Schema};
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().returning(|| {
+            Ok(Schema {
+                user_attributes: AttributeList {
+                    attributes: Vec::new(),
+                },
+                group_attributes: AttributeList {
+                    attributes: vec![AttributeSchema {
+                        name: "club_name".into(),
+                        attribute_type: AttributeType::String,
+                        is_list: false,
+                        is_visible: true,
+                        is_editable: true,
+                        is_hardcoded: false,
+                        is_readonly: false,
+                    }],
+                },
+                extra_user_object_classes: Vec::new(),
+                extra_group_object_classes: Vec::new(),
+            })
+        });
+        mock.expect_list_groups()
+            .times(1)
+            .return_once(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_group_search_request(
+            LdapFilter::Equality("club_name".to_string(), "myclub".to_string()),
+            vec!["dn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
     async fn test_search_group_as_scope() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_groups()
@@ -690,3 +776,4 @@ mod tests {
         );
     }
 }
+
