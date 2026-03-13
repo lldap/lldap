@@ -713,8 +713,7 @@ mod tests {
             ldap_handler.do_search_or_dse(&request).await,
             Err(LdapError {
                 code: LdapResultCode::UnwillingToPerform,
-                message: r#"Equality filter on list attribute "tags" is not supported"#
-                    .to_string(),
+                message: r#"Equality filter on list attribute "tags" is not supported"#.to_string(),
             })
         );
     }
@@ -776,4 +775,3 @@ mod tests {
         );
     }
 }
-
