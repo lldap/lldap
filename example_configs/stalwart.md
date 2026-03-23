@@ -48,3 +48,12 @@ To integrate with LLDAP,
       allow-invalid-certs = true
       enable = false
 ```
+
+## Email alias
+If you want to enable [email aliases](https://stalw.art/docs/mta/inbound/rcpt/#catch-all-addresses) you have to create a new *User-defined attribute* under *User schema* of type string. Currently lldap doesnt support multivalue filters, if you want multiple aliases you will have to create multiple values (mailAlias1, mailAlias2, ..., mailAliasN) with N beeing the max aliases an account will have.
+
+You also need to change your ldap filter for emails.
+```toml
+[directory.ldap.filter]
+    email = "(&(objectclass=person)(|(mail=?)(mailAlias1=?)(mailAlias2=?)(mailAliasN=?)))"
+```
