@@ -16,6 +16,7 @@ use lldap_auth::opaque::{
     server::{ServerSetup, generate_random_private_key},
 };
 use lldap_domain::types::{AttributeName, UserId};
+use lldap_frontend_options::PasswordPolicyOptions;
 use lldap_sql_backend_handler::sql_tables::{
     ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation,
 };
@@ -149,6 +150,9 @@ pub struct Configuration {
     pub ldaps_options: LdapsOptions,
     #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
     pub http_url: HttpUrl,
+    #[serde(default)]
+    #[builder(default)]
+    pub password_policy: PasswordPolicyOptions,
     #[debug(skip)]
     #[serde(skip)]
     #[builder(field(private), default = "None")]
