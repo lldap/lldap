@@ -55,5 +55,6 @@ If you want to enable [email aliases](https://stalw.art/docs/mta/inbound/rcpt/#c
 You also need to change your ldap filter for emails.
 ```toml
 [directory.ldap.filter]
-    email = "(&(objectclass=person)(|(mail=?)(mailAlias1=?)(mailAlias2=?)(mailAliasN=?)))"
+# Add one clause per alias attribute you created (example: mailAlias1..mailAlias3)
+email = "(&(objectclass=person)(|(mail=?)(mailAlias1=?)(mailAlias2=?)(mailAlias3=?)))"
 ```
