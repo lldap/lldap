@@ -1,6 +1,7 @@
 use crate::types::UserId;
-use opaque_ke::ciphersuite::CipherSuite;
 use rand::{CryptoRng, RngCore};
+pub use opaque_ke::ServerLoginParameters;
+pub type KeyPair = opaque_ke::keypair::KeyPair<opaque_ke::Ristretto255>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum AuthenticationError {
@@ -10,53 +11,15 @@ pub enum AuthenticationError {
 
 pub type AuthenticationResult<T> = std::result::Result<T, AuthenticationError>;
 
-pub use opaque_ke::keypair::{PrivateKey, PublicKey};
-pub type KeyPair = opaque_ke::keypair::KeyPair<<DefaultSuite as CipherSuite>::Group>;
-
-/// A wrapper around argon2 to provide the [`opaque_ke::slow_hash::SlowHash`] trait.
-pub struct ArgonHasher;
-
-/// The Argon hasher used for bruteforce protection.
-///
-/// Note that it isn't used to "hash the passwords", so it doesn't need a variable salt. Instead,
-/// it's used as part of the OPAQUE protocol to add a slow hashing method, making bruteforce
-/// attacks prohibitively more expensive.
-impl ArgonHasher {
-    /// Fixed salt, doesn't affect the security. It is only used to make attacks more
-    /// computationally intensive, it doesn't serve any security purpose.
-    const SALT: &'static [u8] = b"lldap_opaque_salt";
-    /// Config for the argon hasher. Security enthusiasts may want to tweak this for their system.
-    const CONFIG: &'static argon2::Config<'static> = &argon2::Config {
-        ad: &[],
-        hash_length: 128,
-        lanes: 1,
-        mem_cost: 50 * 1024, // 50 MB, in KB
-        secret: &[],
-        time_cost: 1,
-        variant: argon2::Variant::Argon2id,
-        version: argon2::Version::Version13,
-    };
-}
-
-impl<D: opaque_ke::hash::Hash> opaque_ke::slow_hash::SlowHash<D> for ArgonHasher {
-    fn hash(
-        input: generic_array::GenericArray<u8, <D as digest::Digest>::OutputSize>,
-    ) -> Result<Vec<u8>, opaque_ke::errors::InternalPakeError> {
-        argon2::hash_raw(&input, Self::SALT, Self::CONFIG)
-            .map_err(|_| opaque_ke::errors::InternalPakeError::HashingFailure)
-    }
-}
-
 /// The ciphersuite trait allows to specify the underlying primitives
 /// that will be used in the OPAQUE protocol
 #[allow(dead_code)]
 pub struct DefaultSuite;
-impl CipherSuite for DefaultSuite {
-    type Group = curve25519_dalek::ristretto::RistrettoPoint;
-    type KeyExchange = opaque_ke::key_exchange::tripledh::TripleDH;
-    type Hash = sha2::Sha512;
-    /// Use argon2 as the slow hashing algorithm for our CipherSuite.
-    type SlowHash = ArgonHasher;
+impl opaque_ke::CipherSuite for DefaultSuite {
+    type OprfCs = opaque_ke::Ristretto255;
+    type KeyExchange =
+        opaque_ke::key_exchange::tripledh::TripleDh<opaque_ke::Ristretto255, sha2::Sha512>;
+    type Ksf = argon2::Argon2<'static>;
 }
 
 /// Client-side code for OPAQUE protocol handling, to register a new user and login.  All methods'
@@ -87,10 +50,12 @@ pub mod client {
         pub fn finish_registration<R: RngCore + CryptoRng>(
             registration_start: ClientRegistration,
             registration_response: RegistrationResponse,
+            password: &[u8],
             rng: &mut R,
         ) -> AuthenticationResult<ClientRegistrationFinishResult> {
             Ok(registration_start.finish(
                 rng,
+                password,
                 registration_response,
                 ClientRegistrationFinishParameters::default(),
             )?)
@@ -116,11 +81,18 @@ pub mod client {
         }
 
         /// Finalize the client login negotiation.
-        pub fn finish_login(
+        pub fn finish_login<R: RngCore + CryptoRng>(
             login_start: ClientLogin,
             login_response: CredentialResponse,
+            password: &str,
+            rng: &mut R,
         ) -> AuthenticationResult<ClientLoginFinishResult> {
-            Ok(login_start.finish(login_response, ClientLoginFinishParameters::default())?)
+            Ok(login_start.finish(
+                rng,
+                password.as_bytes(),
+                login_response,
+                ClientLoginFinishParameters::default(),
+            )?)
         }
     }
 }
@@ -174,7 +146,7 @@ pub mod server {
         pub type ServerLogin = opaque_ke::ServerLogin<DefaultSuite>;
         pub type ServerLoginStartResult = opaque_ke::ServerLoginStartResult<DefaultSuite>;
         pub type ServerLoginFinishResult = opaque_ke::ServerLoginFinishResult<DefaultSuite>;
-        pub use opaque_ke::ServerLoginStartParameters;
+        pub use opaque_ke::ServerLoginParameters;
 
         /// Start a login process, from a request sent by the client.
         ///
@@ -192,7 +164,7 @@ pub mod server {
                 password_file,
                 credential_request,
                 username.as_str().as_bytes(),
-                ServerLoginStartParameters::default(),
+                ServerLoginParameters::default(),
             )?)
         }
 
@@ -201,7 +173,7 @@ pub mod server {
             login_start: ServerLogin,
             credential_finalization: CredentialFinalization,
         ) -> AuthenticationResult<ServerLoginFinishResult> {
-            Ok(login_start.finish(credential_finalization)?)
+            Ok(login_start.finish(credential_finalization, ServerLoginParameters::default())?)
         }
     }
 }

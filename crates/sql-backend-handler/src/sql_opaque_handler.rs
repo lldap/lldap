@@ -38,6 +38,8 @@ fn passwords_match(
     client::login::finish_login(
         client_login_start_result.state,
         server_login_start_result.message,
+        clear_password,
+        &mut rng,
     )?;
     Ok(())
 }
@@ -45,7 +47,7 @@ fn passwords_match(
 impl SqlBackendHandler {
     fn get_orion_secret_key(&self) -> Result<orion::aead::SecretKey> {
         Ok(orion::aead::SecretKey::from_slice(
-            self.opaque_setup.keypair().private(),
+            self.opaque_setup.keypair().private().serialize().as_slice(),
         )?)
     }
 
@@ -200,7 +202,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         let now = chrono::Utc::now().naive_utc();
         let user_update = model::users::ActiveModel {
             user_id: ActiveValue::Set(username.clone()),
-            password_hash: ActiveValue::Set(Some(password_file.serialize())),
+            password_hash: ActiveValue::Set(Some(password_file.serialize().to_vec())),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -231,6 +233,7 @@ pub async fn register_password(
     let registration_finish = opaque::client::registration::finish_registration(
         registration_start.state,
         start_response.registration_response,
+        password.unsecure().as_bytes(),
         &mut rng,
     )?;
     opaque_handler
