@@ -403,6 +403,10 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
                     "WARNING: Key file `{file_path}` has an incompatible format (likely from a previous opaque-ke version). Generating a new server key. ALL EXISTING PASSWORDS WILL BE INVALIDATED."
                 );
                 let server_setup = generate_random_private_key();
+                // Remove the old read-only key file before writing the new one.
+                std::fs::remove_file(path).context(format!(
+                    "Could not remove old key file `{file_path}`",
+                ))?;
                 write_to_readonly_file(path, &server_setup.serialize()).context(format!(
                     "Could not write the regenerated server setup to file `{file_path}`",
                 ))?;
