@@ -33,6 +33,7 @@ juniper = "0.15"
 jwt = "0.16"
 ldap3_proto = "0.6.0"
 log = "*"
+base64 = "0.21"
 rand_chacha = "0.3"
 rustls-pemfile = "2"
 serde_json = "1"
@@ -125,9 +126,6 @@ path = "../crates/opaque-handler"
 
 [dependencies.lldap_validation]
 path = "../crates/validation"
-
-[dependencies.opaque-ke]
-version = "0.7"
 
 [dependencies.rand]
 features = ["small_rng", "getrandom"]

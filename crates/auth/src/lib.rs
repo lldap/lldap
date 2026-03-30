@@ -93,6 +93,38 @@ pub mod registration {
     }
 }
 
+/// Base64-encoded variants of the OPAQUE registration messages.
+/// These use raw `.serialize()` bytes encoded as base64 strings instead of
+/// serde JSON, enabling interop with external OPAQUE clients like
+/// `@serenity-kit/opaque` that use base64 wire format.
+pub mod registration_base64 {
+    use super::types::UserId;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientRegistrationStartRequest {
+        pub username: UserId,
+        /// Base64-encoded RegistrationRequest bytes.
+        pub registration_start_request: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerRegistrationStartResponse {
+        /// Base64-encoded encrypted ServerData.
+        pub server_data: String,
+        /// Base64-encoded RegistrationResponse bytes.
+        pub registration_response: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientRegistrationFinishRequest {
+        /// Encrypted ServerData from the previous step.
+        pub server_data: String,
+        /// Base64-encoded RegistrationUpload bytes.
+        pub registration_upload: String,
+    }
+}
+
 /// The messages for the 3-step OPAQUE registration process.
 /// It is used to reset a user's password.
 pub mod password_reset {

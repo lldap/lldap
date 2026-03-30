@@ -151,7 +151,7 @@ fn try_login(
         );
     }
     let login_start_response = response.json::<lldap_auth::login::ServerLoginStartResponse>()?;
-    let login_finish = finish_login(state, login_start_response.credential_response)?;
+    let login_finish = finish_login(state, login_start_response.credential_response, password, &mut rng)?;
     let req = ClientLoginFinishRequest {
         server_data: login_start_response.server_data,
         credential_finalization: login_finish.message,

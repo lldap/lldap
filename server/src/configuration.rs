@@ -196,7 +196,7 @@ impl Configuration {
 
     pub fn get_private_key_info(&self) -> PrivateKeyInfo {
         PrivateKeyInfo {
-            private_key_hash: PrivateKeyHash(stable_hash(self.get_server_keys().private())),
+            private_key_hash: PrivateKeyHash(stable_hash(self.get_server_keys().private().serialize().as_slice())),
             private_key_location: self
                 .server_setup
                 .as_ref()
@@ -391,12 +391,31 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
         })
     } else if path.exists() {
         let bytes = read(file_path).context(format!("Could not read key file `{file_path}`"))?;
-        Ok(ServerSetupConfig {
-            server_setup: ServerSetup::deserialize(&bytes).context(format!(
-                "while parsing the contents of the `{file_path}` file"
-            ))?,
-            private_key_location: private_key_location.for_key_file(file_path),
-        })
+        match ServerSetup::deserialize(&bytes) {
+            Ok(server_setup) => Ok(ServerSetupConfig {
+                server_setup,
+                private_key_location: private_key_location.for_key_file(file_path),
+            }),
+            Err(_) => {
+                // Key file format is incompatible (e.g. opaque-ke version upgrade).
+                // Generate a new key and overwrite the old file.
+                eprintln!(
+                    "WARNING: Key file `{file_path}` has an incompatible format (likely from a previous opaque-ke version). Generating a new server key. ALL EXISTING PASSWORDS WILL BE INVALIDATED."
+                );
+                let server_setup = generate_random_private_key();
+                // Remove the old read-only key file before writing the new one.
+                std::fs::remove_file(path).context(format!(
+                    "Could not remove old key file `{file_path}`",
+                ))?;
+                write_to_readonly_file(path, &server_setup.serialize()).context(format!(
+                    "Could not write the regenerated server setup to file `{file_path}`",
+                ))?;
+                Ok(ServerSetupConfig {
+                    server_setup,
+                    private_key_location: private_key_location.for_key_file(file_path),
+                })
+            }
+        }
     } else {
         let server_setup = generate_random_private_key();
         write_to_readonly_file(path, &server_setup.serialize()).context(format!(
