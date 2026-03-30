@@ -28,6 +28,7 @@ type SqlOpaqueHandler = SqlBackendHandler;
 // format detection in tests that document this behavior.
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
 mod legacy {
     use opaque_ke_legacy::ciphersuite::CipherSuite;
 
