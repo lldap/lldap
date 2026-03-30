@@ -126,9 +126,6 @@ path = "../crates/opaque-handler"
 [dependencies.lldap_validation]
 path = "../crates/validation"
 
-[dependencies.opaque-ke]
-version = "0.7"
-
 [dependencies.rand]
 features = ["small_rng", "getrandom"]
 version = "0.8"

@@ -44,6 +44,7 @@ pub enum Msg {
     AuthenticationStartResponse(
         (
             opaque::client::login::ClientLogin,
+            String, // password needed for finish_login
             Result<Box<login::ServerLoginStartResponse>>,
         ),
     ),
@@ -72,16 +73,18 @@ impl CommonComponent<LoginForm> for LoginForm {
                     username: username.into(),
                     login_start_request: message,
                 };
+                let password_clone = password.clone();
                 self.common
                     .call_backend(ctx, HostService::login_start(req), move |r| {
-                        Msg::AuthenticationStartResponse((state, r))
+                        Msg::AuthenticationStartResponse((state, password_clone, r))
                     });
                 Ok(true)
             }
-            Msg::AuthenticationStartResponse((login_start, res)) => {
+            Msg::AuthenticationStartResponse((login_start, password, res)) => {
                 let res = res.context("Could not log in (invalid response to login start)")?;
+                let mut rng = rand::rngs::OsRng;
                 let login_finish =
-                    match opaque::client::login::finish_login(login_start, res.credential_response)
+                    match opaque::client::login::finish_login(login_start, res.credential_response, &password, &mut rng)
                     {
                         Err(e) => {
                             // Common error, we want to print a full error to the console but only a

@@ -75,6 +75,7 @@ pub mod tests {
         let registration_upload = opaque::client::registration::finish_registration(
             client_registration_start.state,
             response.registration_response,
+            pass.as_bytes(),
             &mut rng,
         )
         .unwrap();

@@ -196,7 +196,7 @@ impl Configuration {
 
     pub fn get_private_key_info(&self) -> PrivateKeyInfo {
         PrivateKeyInfo {
-            private_key_hash: PrivateKeyHash(stable_hash(self.get_server_keys().private())),
+            private_key_hash: PrivateKeyHash(stable_hash(self.get_server_keys().private().serialize().as_slice())),
             private_key_location: self
                 .server_setup
                 .as_ref()
