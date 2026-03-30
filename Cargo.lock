@@ -2997,6 +2997,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "async-trait",
+ "base64 0.21.7",
  "bincode",
  "chrono",
  "clap",
