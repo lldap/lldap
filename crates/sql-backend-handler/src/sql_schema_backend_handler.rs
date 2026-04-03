@@ -29,6 +29,23 @@ impl ReadSchemaBackendHandler for SqlBackendHandler {
 #[async_trait]
 impl SchemaBackendHandler for SqlBackendHandler {
     async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()> {
+        // Check for conflicting group attribute with the same name but different type.
+        let schema = self.get_schema().await?;
+        if let Some(group_attr) = schema
+            .group_attributes
+            .attributes
+            .iter()
+            .find(|a| a.name == request.name)
+        {
+            if group_attr.attribute_type != request.attribute_type {
+                return Err(DomainError::InternalError(format!(
+                    "A group attribute '{}' already exists with type {:?}, \
+                     cannot create a user attribute with type {:?}. \
+                     LDAP requires each attribute name to have a single type.",
+                    request.name, group_attr.attribute_type, request.attribute_type
+                )));
+            }
+        }
         let new_attribute = model::user_attribute_schema::ActiveModel {
             attribute_name: Set(request.name),
             attribute_type: Set(request.attribute_type),
@@ -42,6 +59,23 @@ impl SchemaBackendHandler for SqlBackendHandler {
     }
 
     async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()> {
+        // Check for conflicting user attribute with the same name but different type.
+        let schema = self.get_schema().await?;
+        if let Some(user_attr) = schema
+            .user_attributes
+            .attributes
+            .iter()
+            .find(|a| a.name == request.name)
+        {
+            if user_attr.attribute_type != request.attribute_type {
+                return Err(DomainError::InternalError(format!(
+                    "A user attribute '{}' already exists with type {:?}, \
+                     cannot create a group attribute with type {:?}. \
+                     LDAP requires each attribute name to have a single type.",
+                    request.name, user_attr.attribute_type, request.attribute_type
+                )));
+            }
+        }
         let new_attribute = model::group_attribute_schema::ActiveModel {
             attribute_name: Set(request.name),
             attribute_type: Set(request.attribute_type),
