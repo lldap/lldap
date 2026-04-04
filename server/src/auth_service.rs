@@ -105,8 +105,25 @@ async fn get_refresh<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
+    if data.trusted_header_options.enabled
+        && request
+            .headers()
+            .contains_key(&data.trusted_header_options.header_name)
+    {
+        return get_trusted_header_refresh_response(&data, &request).await;
+    }
+    try_refresh_token(&data, &request).await
+}
+
+async fn try_refresh_token<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
     let jwt_key = &data.jwt_key;
-    let (refresh_token_hash, user) = get_refresh_token(request)?;
+    let (refresh_token_hash, user) = get_refresh_token(request.clone())?;
     let found = data
         .get_tcp_handler()
         .check_token(refresh_token_hash, &user)
@@ -131,10 +148,84 @@ where
                 .same_site(SameSite::Strict)
                 .finish(),
         )
-        .json(&login::ServerLoginResponse {
-            token: token.as_str().to_owned(),
-            refresh_token: None,
-        }))
+        .json(login::ServerAuthResponse::Token(
+            login::ServerLoginResponse {
+                token: token.as_str().to_owned(),
+                refresh_token: None,
+            },
+        )))
+}
+
+async fn validate_trusted_header<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+) -> TcpResult<(UserId, HashSet<GroupDetails>)>
+where
+    Backend: BackendHandler,
+{
+    // Validate client IP is in trusted CIDRs
+    let client_ip = request
+        .peer_addr()
+        .map(|peer_addr| peer_addr.ip())
+        .ok_or_else(|| TcpError::UnauthorizedError("Could not determine client IP".to_string()))?;
+
+    if !data
+        .trusted_header_options
+        .trusted_proxies
+        .iter()
+        .any(|cidr| cidr.contains(&client_ip))
+    {
+        return Err(TcpError::UnauthorizedError(format!(
+            "Client IP {} not in trusted proxies",
+            client_ip
+        )));
+    }
+
+    // Get the username from the trusted header
+    let header_name = &data.trusted_header_options.header_name;
+    let username = request
+        .headers()
+        .get(header_name)
+        .and_then(|h| h.to_str().ok())
+        .ok_or_else(|| {
+            TcpError::UnauthorizedError(format!("Missing trusted header: {}", header_name))
+        })?;
+
+    // Validate the username is not empty
+    if username.trim().is_empty() {
+        return Err(TcpError::UnauthorizedError(
+            "Empty username in trusted header".to_string(),
+        ));
+    }
+
+    let user_id = UserId::new(username);
+    let groups = data
+        .get_readonly_handler()
+        .get_user_groups(&user_id)
+        .await?;
+
+    Ok((user_id, groups))
+}
+
+async fn get_trusted_header_refresh_response<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+) -> TcpResult<HttpResponse>
+where
+    Backend: BackendHandler,
+{
+    let (user_id, groups) = validate_trusted_header(data, request).await?;
+    let is_admin = groups
+        .iter()
+        .any(|g| g.display_name == "lldap_admin".into());
+
+    Ok(gen_clear_session_cookies_response(&data.server_url).json(
+        login::ServerAuthResponse::TrustedHeader(login::ServerTrustedHeaderResponse {
+            user_id: user_id.to_string(),
+            is_admin,
+            logout_url: data.trusted_header_options.logout_url.clone(),
+        }),
+    ))
 }
 
 async fn get_refresh_handler<Backend>(
@@ -296,28 +387,7 @@ where
     for jwt_hash in new_blacklisted_jwt_hashes {
         jwt_blacklist.insert(jwt_hash);
     }
-    let mut path = data.server_url.path().to_string();
-    if !path.ends_with('/') {
-        path.push('/');
-    };
-    Ok(HttpResponse::Ok()
-        .cookie(
-            Cookie::build("token", "")
-                .max_age(0.days())
-                .path(&path)
-                .http_only(true)
-                .same_site(SameSite::Strict)
-                .finish(),
-        )
-        .cookie(
-            Cookie::build("refresh_token", "")
-                .max_age(0.days())
-                .path(format!("{path}auth"))
-                .http_only(true)
-                .same_site(SameSite::Strict)
-                .finish(),
-        )
-        .finish())
+    Ok(gen_clear_session_cookies_response(&data.server_url).finish())
 }
 
 async fn get_logout_handler<Backend>(
@@ -621,6 +691,55 @@ pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
             .iter()
             .map(|s| GroupName::from(s.as_str())),
     ))
+}
+
+#[instrument(skip_all, level = "debug", err, ret)]
+pub(crate) async fn check_if_trusted_header_is_valid<Backend: BackendHandler>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+) -> Result<ValidationResults, actix_web::Error> {
+    if !data.trusted_header_options.enabled {
+        return Err(ErrorUnauthorized(
+            "Trusted header authentication is disabled",
+        ));
+    }
+
+    let (user_id, groups) = validate_trusted_header(data, request)
+        .await
+        .map_err(|e| ErrorUnauthorized(e.to_string()))?;
+
+    Ok(data.backend_handler.get_permissions_from_groups(
+        user_id,
+        groups
+            .iter()
+            .map(|g| GroupName::from(g.display_name.as_str())),
+    ))
+}
+
+fn gen_clear_session_cookies_response(server_url: &url::Url) -> actix_web::HttpResponseBuilder {
+    let mut path = server_url.path().to_string();
+    if !path.ends_with('/') {
+        path.push('/');
+    };
+    let mut builder = HttpResponse::Ok();
+    builder
+        .cookie(
+            Cookie::build("token", "")
+                .max_age(0.days())
+                .path(&path)
+                .http_only(true)
+                .same_site(SameSite::Strict)
+                .finish(),
+        )
+        .cookie(
+            Cookie::build("refresh_token", "")
+                .max_age(0.days())
+                .path(format!("{path}auth"))
+                .http_only(true)
+                .same_site(SameSite::Strict)
+                .finish(),
+        );
+    builder
 }
 
 pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig, enable_password_reset: bool)

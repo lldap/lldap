@@ -29,6 +29,7 @@ futures = "*"
 futures-util = "*"
 hmac = "0.12"
 http = "*"
+ipnet = { version = "2.5", features = ["serde"] }
 juniper = "0.15"
 jwt = "0.16"
 ldap3_proto = "0.6.0"
