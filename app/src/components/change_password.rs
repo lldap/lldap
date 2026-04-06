@@ -21,8 +21,8 @@ use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 enum OpaqueData {
     #[default]
     None,
-    Login(opaque::client::login::ClientLogin),
-    Registration(opaque::client::registration::ClientRegistration),
+    Login(opaque::client::login::ClientLogin, String),
+    Registration(opaque::client::registration::ClientRegistration, String),
 }
 
 impl OpaqueData {
@@ -98,14 +98,21 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                     let login_start_request =
                         opaque::client::login::start_login(&old_password, &mut rng)
                             .context("Could not initialize login")?;
-                    self.opaque_data = OpaqueData::Login(login_start_request.state);
+                    self.opaque_data = OpaqueData::Login(login_start_request.state, old_password);
                     let req = login::ClientLoginStartRequest {
                         username: ctx.props().username.clone().into(),
                         login_start_request: login_start_request.message,
                     };
                     self.common.call_backend(
                         ctx,
-                        HostService::login_start(req),
+                        async move {
+                            HostService::login_start(req).await.map_err(|e| match e {
+                                crate::infra::api::LoginStartError::LegacyOpaqueVersion => anyhow!(
+                                    "Your password is still in the legacy format. Please log out and log in again first; this will automatically upgrade it."
+                                ),
+                                crate::infra::api::LoginStartError::Other(e) => e,
+                            })
+                        },
                         Msg::AuthenticationStartResponse,
                     );
                     Ok(true)
@@ -114,8 +121,9 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
             Msg::AuthenticationStartResponse(res) => {
                 let res = res.context("Could not initiate login")?;
                 match self.opaque_data.take() {
-                    OpaqueData::Login(l) => {
-                        opaque::client::login::finish_login(l, res.credential_response).map_err(
+                    OpaqueData::Login(l, password) => {
+                        let mut rng = rand::rngs::OsRng;
+                        opaque::client::login::finish_login(l, res.credential_response, &password, &mut rng).map_err(
                             |e| {
                                 // Common error, we want to print a full error to the console but only a
                                 // simple one to the user.
@@ -140,7 +148,8 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                     username: ctx.props().username.clone().into(),
                     registration_start_request: registration_start_request.message,
                 };
-                self.opaque_data = OpaqueData::Registration(registration_start_request.state);
+                self.opaque_data =
+                    OpaqueData::Registration(registration_start_request.state, new_password);
                 self.common.call_backend(
                     ctx,
                     HostService::register_start(req),
@@ -151,12 +160,13 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
             Msg::RegistrationStartResponse(res) => {
                 let res = res.context("Could not initiate password change")?;
                 match self.opaque_data.take() {
-                    OpaqueData::Registration(registration) => {
+                    OpaqueData::Registration(registration, password) => {
                         let mut rng = rand::rngs::OsRng;
                         let registration_finish =
                             opaque::client::registration::finish_registration(
                                 registration,
                                 res.registration_response,
+                                password.as_bytes(),
                                 &mut rng,
                             )
                             .context("Error during password change")?;

@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+ - **OPAQUE protocol upgraded from `opaque-ke` 0.7 to 4.0 (RFC 9807).** This is
+   a backward-compatible progressive migration: existing passwords keep working
+   and are automatically upgraded to the new format on the next successful
+   login (LDAP bind, simple HTTP login, or OPAQUE web login). No password reset
+   is required.
+ - As part of the upgrade, the way the server's private key hash is computed
+   in `Configuration::get_private_key_info()` changed: it now hashes the
+   serialized bytes of the private key (`stable_hash(private_key.serialize().as_slice())`)
+   instead of dereferencing the key as `&[u8]`. The old API does not exist on
+   `opaque-ke` 4.0. As a result, the `private_key_hash` stored in the database
+   will not match the one recomputed from the rotated key on first start of
+   the upgraded server.
+
+### Migration
+
+Operators upgrading from a previous LLDAP version with an existing
+`server_key` file on disk **must start the upgraded server once with**
+`--force-update-private-key=true` (or `LLDAP_FORCE_UPDATE_PRIVATE_KEY=true`).
+This is required because:
+
+ 1. The on-disk `server_key` file is in the `opaque-ke` 0.7 format and cannot
+    be deserialized by `opaque-ke` 4.0.
+ 2. The `private_key_hash` recorded in the database from the previous run will
+    not match the new hash format.
+
+When the flag is set, the server:
+
+ - Atomically rotates the on-disk key file to a fresh `opaque-ke` 4.0 key
+   (write to a sibling temporary file, then `rename`).
+ - Preserves the original key bytes in memory as a `legacy_server_key_bytes`
+   so legacy v0.7 password files can still be validated.
+ - Updates the stored `private_key_hash` to the new format.
+
+After this one-time startup, **no further admin action is needed**: as users
+log in (via LDAP bind, simple login, or OPAQUE web login), their passwords
+are silently re-registered in the v4.0 format. Failed re-registrations are
+logged but do not block the login — the upgrade is retried on the next
+successful login.
+
+If `--force-update-private-key=true` is **not** set on first startup after
+the upgrade, the server now refuses to start with a clear error message
+pointing at the flag, instead of silently rotating the key (which would have
+masked unrelated failures like a corrupted key file).
+
+### Added
+
+ - New `password_version` column on the `users` table (schema migration v12).
+   Value `0` means a legacy `opaque-ke` 0.7 password file, value `1` means
+   the current `opaque-ke` 4.0 format. Existing rows default to `0` and are
+   upgraded to `1` on first successful login.
+ - New legacy OPAQUE login HTTP endpoints for the WASM web UI:
+   `POST /auth/opaque/v0/login/start` and `POST /auth/opaque/v0/login/finish`.
+   The web UI tries the v4.0 endpoint first; if the server replies with
+   HTTP `409 {"error_code":"legacy_opaque_version"}`, the client falls back
+   to the legacy endpoints and silently re-registers the password in v4.0
+   format on success.
+ - Startup warning listing the count of users still on a legacy password
+   format.
+
 ## [0.6.2] 2025-07-21
 
 Small release, focused on LDAP improvements and ongoing maintenance.

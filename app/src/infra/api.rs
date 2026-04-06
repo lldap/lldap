@@ -2,7 +2,7 @@ use super::cookies::set_cookie;
 use anyhow::{Context, Result, anyhow};
 use gloo_net::http::{Method, RequestBuilder};
 use graphql_client::GraphQLQuery;
-use lldap_auth::{JWTClaims, login, registration};
+use lldap_auth::{JWTClaims, login, login_base64, registration};
 
 use lldap_frontend_options::Options;
 use serde::{Serialize, de::DeserializeOwned};
@@ -10,6 +10,35 @@ use web_sys::RequestCredentials;
 
 #[derive(Default)]
 pub struct HostService {}
+
+/// Error returned by `HostService::login_start`.
+///
+/// `LegacyOpaqueVersion` is a distinct variant (not an error message) so the
+/// caller can detect it reliably without string matching. The server emits
+/// HTTP 409 with body `{"error_code":"legacy_opaque_version"}` when a user's
+/// password is still stored in the opaque-ke 0.7 format.
+#[derive(Debug)]
+pub enum LoginStartError {
+    /// Server reported that the user has a legacy (v0.7) password. The
+    /// caller should retry login via the legacy endpoints
+    /// (`HostService::login_start_legacy` + `login_finish_legacy`).
+    LegacyOpaqueVersion,
+    /// Any other error (network, auth failure, bad request…).
+    Other(anyhow::Error),
+}
+
+impl std::fmt::Display for LoginStartError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoginStartError::LegacyOpaqueVersion => {
+                write!(f, "User has a legacy OPAQUE password")
+            }
+            LoginStartError::Other(e) => write!(f, "{}", e),
+        }
+    }
+}
+
+impl std::error::Error for LoginStartError {}
 
 fn get_claims_from_jwt(jwt: &str) -> Result<JWTClaims> {
     use jwt::*;
@@ -119,13 +148,54 @@ impl HostService {
 
     pub async fn login_start(
         request: login::ClientLoginStartRequest,
-    ) -> Result<Box<login::ServerLoginStartResponse>> {
-        call_server_json_with_error_message(
-            &(base_url() + "/auth/opaque/login/start"),
-            RequestType::Post(request),
-            "Could not start authentication: ",
-        )
-        .await
+    ) -> core::result::Result<Box<login::ServerLoginStartResponse>, LoginStartError> {
+        let url = base_url() + "/auth/opaque/login/start";
+        let http_request = RequestBuilder::new(&url)
+            .header("Content-Type", "application/json")
+            .credentials(RequestCredentials::SameOrigin)
+            .method(Method::POST)
+            .body(serde_json::to_string(&request).map_err(|e| {
+                LoginStartError::Other(anyhow!("Could not serialize login request: {}", e))
+            })?)
+            .map_err(|e| {
+                LoginStartError::Other(anyhow!("Could not build login request: {}", e))
+            })?;
+
+        let response = http_request.send().await.map_err(|e| {
+            LoginStartError::Other(anyhow!("Could not send login request: {}", e))
+        })?;
+
+        if response.ok() {
+            let text = response.text().await.map_err(|e| {
+                LoginStartError::Other(anyhow!("Could not read login response: {}", e))
+            })?;
+            let parsed: login::ServerLoginStartResponse = serde_json::from_str(&text)
+                .map_err(|e| {
+                    LoginStartError::Other(anyhow!("Could not parse login response: {}", e))
+                })?;
+            return Ok(Box::new(parsed));
+        }
+
+        // HTTP 409 with {"error_code":"legacy_opaque_version"} signals a
+        // legacy (opaque-ke 0.7) password. The caller should retry via
+        // /auth/opaque/v0/login/*.
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        if status == 409 {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&body) {
+                if parsed.get("error_code").and_then(|v| v.as_str())
+                    == Some("legacy_opaque_version")
+                {
+                    return Err(LoginStartError::LegacyOpaqueVersion);
+                }
+            }
+        }
+        Err(LoginStartError::Other(anyhow!(
+            "Could not start authentication: [{} {}]: {}",
+            status,
+            response.status_text(),
+            body
+        )))
     }
 
     pub async fn login_finish(request: login::ClientLoginFinishRequest) -> Result<(String, bool)> {
@@ -133,6 +203,33 @@ impl HostService {
             &(base_url() + "/auth/opaque/login/finish"),
             RequestType::Post(request),
             "Could not finish authentication",
+        )
+        .await
+        .and_then(set_cookies_from_jwt)
+    }
+
+    /// Legacy (opaque-ke 0.7) login start. Used when the v4.0 login_start
+    /// returns `LoginStartError::LegacyOpaqueVersion`.
+    pub async fn login_start_legacy(
+        request: login_base64::ClientLoginStartRequest,
+    ) -> Result<Box<login_base64::ServerLoginStartResponse>> {
+        call_server_json_with_error_message(
+            &(base_url() + "/auth/opaque/v0/login/start"),
+            RequestType::Post(request),
+            "Could not start legacy authentication: ",
+        )
+        .await
+    }
+
+    /// Legacy (opaque-ke 0.7) login finish. On success, returns the JWT
+    /// and sets the auth cookies exactly like the v4.0 finish.
+    pub async fn login_finish_legacy(
+        request: login_base64::ClientLoginFinishRequest,
+    ) -> Result<(String, bool)> {
+        call_server_json_with_error_message::<login::ServerLoginResponse, _>(
+            &(base_url() + "/auth/opaque/v0/login/finish"),
+            RequestType::Post(request),
+            "Could not finish legacy authentication",
         )
         .await
         .and_then(set_cookies_from_jwt)

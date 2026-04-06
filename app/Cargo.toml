@@ -65,6 +65,58 @@ version = "1"
 path = "../crates/auth"
 features = [ "opaque_client" ]
 
+# --- Legacy opaque-ke 0.7 deps (PROGRESSIVE MIGRATION SHIM) ----------------
+#
+# These aliased dependencies (`*-legacy`) exist solely so the WASM client can
+# generate and verify OPAQUE v0.7 protocol messages when the server reports a
+# legacy password via HTTP 409 on `/auth/opaque/login/start`. They are NOT
+# permanent.
+#
+# Removal conditions (whichever comes first):
+#   1. After two stable LLDAP releases following the upgrade (i.e. drop in
+#      v0.7.x or later) AND a startup-time deprecation warning has been live
+#      for at least one release. By that point, any user who logs in even
+#      once will have had their password re-registered in the v4.0 format.
+#   2. The next major version bump (v1.0), at which point the migration is
+#      considered complete and the v0.7 path is unconditionally removed.
+#
+# When removing, also delete:
+#   - `app/src/infra/opaque_legacy.rs`
+#   - The legacy login HTTP endpoints (`/auth/opaque/v0/login/{start,finish}`)
+#     in `server/src/auth_service.rs`
+#   - The `legacy` module + dual-path logic in
+#     `crates/sql-backend-handler/src/sql_opaque_handler.rs`
+#   - The `legacy_server_key_bytes` field on `SqlBackendHandler` and the
+#     corresponding loading code in `server/src/configuration.rs`
+#   - The `password_version == 0` branch in `bind()` and `login_start()`
+#   - These Cargo deps and their counterparts in
+#     `crates/sql-backend-handler/Cargo.toml`
+#
+# Tracked in CHANGELOG.md under [Unreleased]; add a "## Removed" entry when
+# this cleanup happens.
+# ---------------------------------------------------------------------------
+[dependencies.opaque-ke-legacy]
+package = "opaque-ke"
+version = "0.7"
+
+[dependencies.curve25519-dalek-legacy]
+package = "curve25519-dalek"
+version = "3"
+
+[dependencies.sha2-legacy]
+package = "sha2"
+version = "0.9"
+
+[dependencies.digest-legacy]
+package = "digest"
+version = "0.9"
+
+[dependencies.rust-argon2]
+version = "2"
+
+[dependencies.generic-array]
+version = "0.14"
+
 [dependencies.lldap_frontend_options]
 path = "../crates/frontend-options"
 

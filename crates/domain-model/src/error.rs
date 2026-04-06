@@ -5,6 +5,8 @@ use thiserror::Error;
 pub enum DomainError {
     #[error("Authentication error {0}")]
     AuthenticationError(String),
+    #[error("Legacy OPAQUE password for user {0} — client should retry with /auth/opaque/v0/login/*")]
+    LegacyOpaqueVersion(String),
     #[error("Database error: `{0}`")]
     DatabaseError(#[from] sea_orm::DbErr),
     #[error("Database transaction error: `{0}`")]

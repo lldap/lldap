@@ -18,7 +18,8 @@ use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
 use lldap_access_control::{ReadonlyBackendHandler, UserReadableBackendHandler};
 use lldap_auth::{
-    JWTClaims, access_control::ValidationResults, login, password_reset, registration,
+    JWTClaims, access_control::ValidationResults, login, login_base64, password_reset,
+    registration, registration_base64,
 };
 use lldap_domain::types::{GroupDetails, GroupName, UserId};
 use lldap_domain_handlers::handler::{
@@ -425,6 +426,51 @@ where
 }
 
 #[instrument(skip_all, level = "debug")]
+async fn opaque_login_start_legacy<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login_base64::ClientLoginStartRequest>,
+) -> ApiResult<login_base64::ServerLoginStartResponse>
+where
+    Backend: OpaqueHandler + 'static,
+{
+    data.get_opaque_handler()
+        .login_start_legacy(request.into_inner())
+        .await
+        .map(|res| ApiResult::Left(web::Json(res)))
+        .unwrap_or_else(error_to_api_response)
+}
+
+#[instrument(skip_all, level = "debug")]
+async fn opaque_login_finish_legacy<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login_base64::ClientLoginFinishRequest>,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    match data
+        .get_opaque_handler()
+        .login_finish_legacy(request.into_inner())
+        .await
+    {
+        Ok(name) => get_login_successful_response(&data, &name).await,
+        Err(e) => Err(e.into()),
+    }
+}
+
+async fn opaque_login_finish_legacy_handler<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login_base64::ClientLoginFinishRequest>,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    opaque_login_finish_legacy(data, request)
+        .await
+        .unwrap_or_else(error_to_http_response)
+}
+
+#[instrument(skip_all, level = "debug")]
 async fn simple_login<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<login::ClientSimpleLoginRequest>,
@@ -537,6 +583,134 @@ where
         .unwrap_or_else(error_to_http_response)
 }
 
+// ---------------------------------------------------------------------------
+// Base64-encoded OPAQUE registration endpoints.
+// These accept/return raw opaque-ke bytes as base64 strings, enabling
+// interop with external OPAQUE clients (e.g. @serenity-kit/opaque).
+// ---------------------------------------------------------------------------
+
+use base64::Engine;
+use lldap_auth::opaque;
+
+#[instrument(skip_all, level = "debug")]
+async fn opaque_register_start_base64<Backend>(
+    request: actix_web::HttpRequest,
+    payload: actix_web::web::Payload,
+    data: web::Data<AppState<Backend>>,
+) -> TcpResult<registration_base64::ServerRegistrationStartResponse>
+where
+    Backend: BackendHandler + OpaqueHandler + 'static,
+{
+    use actix_web::FromRequest;
+    let inner_payload = &mut payload.into_inner();
+    let validation_result = BearerAuth::from_request(&request, inner_payload)
+        .await
+        .ok()
+        .and_then(|bearer| check_if_token_is_valid(&data, bearer.token()).ok())
+        .ok_or_else(|| {
+            TcpError::UnauthorizedError("Not authorized to change the user's password".to_string())
+        })?;
+    let b64_request =
+        web::Json::<registration_base64::ClientRegistrationStartRequest>::from_request(
+            &request,
+            inner_payload,
+        )
+        .await
+        .map_err(|e| TcpError::BadRequest(format!("{e:#?}")))?
+        .into_inner();
+
+    // Decode base64 registration_start_request → RegistrationRequest
+    let raw_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(&b64_request.registration_start_request)
+        .map_err(|e| TcpError::BadRequest(format!("Invalid base64: {e}")))?;
+    let registration_request =
+        opaque::server::registration::RegistrationRequest::deserialize(&raw_bytes)
+            .map_err(|e| TcpError::BadRequest(format!("Invalid registration request: {e}")))?;
+
+    let user_id = &b64_request.username;
+    let user_is_admin = data
+        .get_readonly_handler()
+        .get_user_groups(user_id)
+        .await?
+        .iter()
+        .any(|g| g.display_name == "lldap_admin".into());
+    if !validation_result.can_change_password(user_id, user_is_admin) {
+        return Err(TcpError::UnauthorizedError(
+            "Not authorized to change the user's password".to_string(),
+        ));
+    }
+
+    let internal_request = registration::ClientRegistrationStartRequest {
+        username: b64_request.username,
+        registration_start_request: registration_request,
+    };
+    let response = data
+        .get_opaque_handler()
+        .registration_start(internal_request)
+        .await?;
+
+    // Encode registration_response → base64
+    Ok(registration_base64::ServerRegistrationStartResponse {
+        server_data: response.server_data,
+        registration_response: base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(response.registration_response.serialize()),
+    })
+}
+
+async fn opaque_register_start_base64_handler<Backend>(
+    request: actix_web::HttpRequest,
+    payload: actix_web::web::Payload,
+    data: web::Data<AppState<Backend>>,
+) -> ApiResult<registration_base64::ServerRegistrationStartResponse>
+where
+    Backend: BackendHandler + OpaqueHandler + 'static,
+{
+    opaque_register_start_base64(request, payload, data)
+        .await
+        .map(|res| ApiResult::Left(web::Json(res)))
+        .unwrap_or_else(error_to_api_response)
+}
+
+#[instrument(skip_all, level = "debug")]
+async fn opaque_register_finish_base64<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<registration_base64::ClientRegistrationFinishRequest>,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    let b64_request = request.into_inner();
+
+    // Decode base64 registration_upload → RegistrationUpload
+    let raw_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(&b64_request.registration_upload)
+        .map_err(|e| TcpError::BadRequest(format!("Invalid base64: {e}")))?;
+    let registration_upload =
+        opaque::server::registration::RegistrationUpload::deserialize(&raw_bytes)
+            .map_err(|e| TcpError::BadRequest(format!("Invalid registration upload: {e}")))?;
+
+    let internal_request = registration::ClientRegistrationFinishRequest {
+        server_data: b64_request.server_data,
+        registration_upload,
+    };
+    data.get_opaque_handler()
+        .registration_finish(internal_request)
+        .await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+async fn opaque_register_finish_base64_handler<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<registration_base64::ClientRegistrationFinishRequest>,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    opaque_register_finish_base64(data, request)
+        .await
+        .unwrap_or_else(error_to_http_response)
+}
+
 pub struct CookieToHeaderTranslatorFactory;
 
 impl<S> Transform<S, ServiceRequest> for CookieToHeaderTranslatorFactory
@@ -634,6 +808,18 @@ where
         web::resource("/opaque/login/finish")
             .route(web::post().to(opaque_login_finish_handler::<Backend>)),
     )
+    // Legacy (opaque-ke 0.7) login endpoints for progressive migration.
+    // Clients fall back here after receiving HTTP 409 "legacy_opaque_version"
+    // from the v4.0 login endpoint. On successful legacy login, the client
+    // should re-register the password via /opaque/register/{start,finish}.
+    .service(
+        web::resource("/opaque/v0/login/start")
+            .route(web::post().to(opaque_login_start_legacy::<Backend>)),
+    )
+    .service(
+        web::resource("/opaque/v0/login/finish")
+            .route(web::post().to(opaque_login_finish_legacy_handler::<Backend>)),
+    )
     .service(web::resource("/simple/login").route(web::post().to(simple_login_handler::<Backend>)))
     .service(web::resource("/refresh").route(web::get().to(get_refresh_handler::<Backend>)))
     .service(web::resource("/logout").route(web::get().to(get_logout_handler::<Backend>)))
@@ -647,6 +833,15 @@ where
             .service(
                 web::resource("/finish")
                     .route(web::post().to(opaque_register_finish_handler::<Backend>)),
+            )
+            // Base64-encoded endpoints for external OPAQUE clients.
+            .service(
+                web::resource("/start/base64")
+                    .route(web::post().to(opaque_register_start_base64_handler::<Backend>)),
+            )
+            .service(
+                web::resource("/finish/base64")
+                    .route(web::post().to(opaque_register_finish_base64_handler::<Backend>)),
             ),
     );
     if enable_password_reset {

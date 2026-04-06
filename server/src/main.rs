@@ -102,6 +102,18 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
     Ok(())
 }
 
+/// Count users whose password is still in the legacy opaque-ke v0.7 format.
+async fn count_legacy_passwords(sql_pool: &DatabaseConnection) -> Result<u64> {
+    use lldap_domain_model::model::users;
+    use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
+    let count = users::Entity::find()
+        .filter(ColumnTrait::eq(&users::Column::PasswordVersion, 0))
+        .filter(users::Column::PasswordHash.is_not_null())
+        .count(sql_pool)
+        .await?;
+    Ok(count)
+}
+
 async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnection> {
     let sql_pool = {
         let num_connections = if database_url.db_type() == "sqlite" {
@@ -152,8 +164,32 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
             return Err(anyhow!("The private key encoding the passwords has changed since last successful startup. Changing the private key will invalidate all existing passwords. If you want to proceed, restart the server with the CLI arg --force-update-private-key=true or the env variable LLDAP_FORCE_UPDATE_PRIVATE_KEY=true. You probably also want --force-ldap-user-pass-reset / LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password to the value in the configuration.").context(e));
         }
     }
-    let backend_handler =
-        SqlBackendHandler::new(config.get_server_setup().clone(), sql_pool.clone());
+    let backend_handler = SqlBackendHandler::new(
+        config.get_server_setup().clone(),
+        config.get_legacy_server_key_bytes().map(|b| b.to_vec()),
+        sql_pool.clone(),
+    );
+
+    // Warn about users still using legacy OPAQUE passwords.
+    if let Ok(legacy_count) = count_legacy_passwords(&sql_pool).await {
+        if legacy_count > 0 {
+            if config.get_legacy_server_key_bytes().is_some() {
+                warn!(
+                    "{} user(s) still have legacy OPAQUE v0.7 passwords. \
+                     They will be automatically upgraded to v4.0 on next login.",
+                    legacy_count
+                );
+            } else {
+                warn!(
+                    "{} user(s) have legacy OPAQUE v0.7 passwords but no legacy \
+                     server key is available. These users will NOT be able to log in \
+                     until they reset their passwords.",
+                    legacy_count
+                );
+            }
+        }
+    }
+
     ensure_group_exists(&backend_handler, "lldap_admin").await?;
     ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
     ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;
