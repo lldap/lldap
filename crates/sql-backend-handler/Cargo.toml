@@ -71,6 +71,10 @@ path = "../domain-model"
 [dependencies.lldap_opaque_handler]
 path = "../opaque-handler"
 
+[dev-dependencies.lldap_domain]
+path = "../domain"
+features = ["test"]
+
 [dev-dependencies.lldap_test_utils]
 path = "../test-utils"
 
