@@ -29,28 +29,80 @@ impl ReadSchemaBackendHandler for SqlBackendHandler {
 #[async_trait]
 impl SchemaBackendHandler for SqlBackendHandler {
     async fn add_user_attribute(&self, request: CreateAttributeRequest) -> Result<()> {
-        let new_attribute = model::user_attribute_schema::ActiveModel {
-            attribute_name: Set(request.name),
-            attribute_type: Set(request.attribute_type),
-            is_list: Set(request.is_list),
-            is_user_visible: Set(request.is_visible),
-            is_user_editable: Set(request.is_editable),
-            is_hardcoded: Set(false),
-        };
-        new_attribute.insert(&self.sql_pool).await?;
+        self.sql_pool
+            .transaction::<_, (), DomainError>(|transaction| {
+                Box::pin(async move {
+                    // Check for conflicting group attribute with the same name but different type.
+                    // Done inside the transaction to prevent TOCTOU races.
+                    let schema =
+                        Self::get_schema_with_transaction(transaction).await?;
+                    if let Some(group_attr) = schema
+                        .group_attributes
+                        .attributes
+                        .iter()
+                        .find(|a| a.name == request.name)
+                    {
+                        if group_attr.attribute_type != request.attribute_type {
+                            return Err(DomainError::InternalError(format!(
+                                "A group attribute '{}' already exists with type {:?}, \
+                                 cannot create a user attribute with type {:?}. \
+                                 LDAP requires each attribute name to have a single type.",
+                                request.name, group_attr.attribute_type, request.attribute_type
+                            )));
+                        }
+                    }
+                    let new_attribute = model::user_attribute_schema::ActiveModel {
+                        attribute_name: Set(request.name),
+                        attribute_type: Set(request.attribute_type),
+                        is_list: Set(request.is_list),
+                        is_user_visible: Set(request.is_visible),
+                        is_user_editable: Set(request.is_editable),
+                        is_hardcoded: Set(false),
+                    };
+                    new_attribute.insert(transaction).await?;
+                    Ok(())
+                })
+            })
+            .await?;
         Ok(())
     }
 
     async fn add_group_attribute(&self, request: CreateAttributeRequest) -> Result<()> {
-        let new_attribute = model::group_attribute_schema::ActiveModel {
-            attribute_name: Set(request.name),
-            attribute_type: Set(request.attribute_type),
-            is_list: Set(request.is_list),
-            is_group_visible: Set(request.is_visible),
-            is_group_editable: Set(request.is_editable),
-            is_hardcoded: Set(false),
-        };
-        new_attribute.insert(&self.sql_pool).await?;
+        self.sql_pool
+            .transaction::<_, (), DomainError>(|transaction| {
+                Box::pin(async move {
+                    // Check for conflicting user attribute with the same name but different type.
+                    // Done inside the transaction to prevent TOCTOU races.
+                    let schema =
+                        Self::get_schema_with_transaction(transaction).await?;
+                    if let Some(user_attr) = schema
+                        .user_attributes
+                        .attributes
+                        .iter()
+                        .find(|a| a.name == request.name)
+                    {
+                        if user_attr.attribute_type != request.attribute_type {
+                            return Err(DomainError::InternalError(format!(
+                                "A user attribute '{}' already exists with type {:?}, \
+                                 cannot create a group attribute with type {:?}. \
+                                 LDAP requires each attribute name to have a single type.",
+                                request.name, user_attr.attribute_type, request.attribute_type
+                            )));
+                        }
+                    }
+                    let new_attribute = model::group_attribute_schema::ActiveModel {
+                        attribute_name: Set(request.name),
+                        attribute_type: Set(request.attribute_type),
+                        is_list: Set(request.is_list),
+                        is_group_visible: Set(request.is_visible),
+                        is_group_editable: Set(request.is_editable),
+                        is_hardcoded: Set(false),
+                    };
+                    new_attribute.insert(transaction).await?;
+                    Ok(())
+                })
+            })
+            .await?;
         Ok(())
     }
 
