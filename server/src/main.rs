@@ -175,22 +175,27 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
     );
 
     // Warn about users still using legacy OPAQUE passwords.
-    if let Ok(legacy_count) = count_legacy_passwords(&sql_pool).await {
-        if legacy_count > 0 {
-            if config.get_legacy_server_key_bytes().is_some() {
-                warn!(
-                    "{} user(s) still have legacy OPAQUE v0.7 passwords. \
-                     They will be automatically upgraded to v4.0 on next login.",
-                    legacy_count
-                );
-            } else {
-                warn!(
-                    "{} user(s) have legacy OPAQUE v0.7 passwords but no legacy \
-                     server key is available. These users will NOT be able to log in \
-                     until they reset their passwords.",
-                    legacy_count
-                );
+    match count_legacy_passwords(&sql_pool).await {
+        Ok(legacy_count) => {
+            if legacy_count > 0 {
+                if config.get_legacy_server_key_bytes().is_some() {
+                    warn!(
+                        "{} user(s) still have legacy OPAQUE v0.7 passwords. \
+                         They will be automatically upgraded to v4.0 on next login.",
+                        legacy_count
+                    );
+                } else {
+                    warn!(
+                        "{} user(s) have legacy OPAQUE v0.7 passwords but no legacy \
+                         server key is available. These users will NOT be able to log in \
+                         until they reset their passwords.",
+                        legacy_count
+                    );
+                }
             }
+        }
+        Err(e) => {
+            warn!("Failed to count legacy OPAQUE passwords at startup: {:#}", e);
         }
     }
 

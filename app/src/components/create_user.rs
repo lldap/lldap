@@ -184,10 +184,9 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                         username: user_id.into(),
                         registration_start_request: message,
                     };
-                    let password_clone = password.clone();
                     self.common
                         .call_backend(ctx, HostService::register_start(req), move |r| {
-                            Msg::RegistrationStartResponse((state, password_clone, r))
+                            Msg::RegistrationStartResponse((state, password, r))
                         });
                 } else {
                     self.update(ctx, Msg::SuccessfulCreation);
