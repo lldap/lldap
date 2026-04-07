@@ -105,9 +105,13 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
 /// Count users whose password is still in the legacy opaque-ke v0.7 format.
 async fn count_legacy_passwords(sql_pool: &DatabaseConnection) -> Result<u64> {
     use lldap_domain_model::model::users;
+    use lldap_sql_backend_handler::OpaqueProtocolVersion;
     use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
     let count = users::Entity::find()
-        .filter(ColumnTrait::eq(&users::Column::PasswordVersion, 0))
+        .filter(ColumnTrait::eq(
+            &users::Column::PasswordVersion,
+            OpaqueProtocolVersion::Legacy.db_value(),
+        ))
         .filter(users::Column::PasswordHash.is_not_null())
         .count(sql_pool)
         .await?;

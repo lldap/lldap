@@ -295,6 +295,40 @@ fn write_to_readonly_file(path: &std::path::Path, buffer: &[u8]) -> Result<()> {
     Ok(file.write_all(buffer)?)
 }
 
+/// Replace `path` with `new_bytes` atomically.
+///
+/// Writes to a sibling temporary file first (`.{name}.tmp.{pid}`), then
+/// renames it over `path`. The temp file is cleaned up on rename failure
+/// so we never leak a partial file in the data directory.
+fn rotate_key_file_atomically(path: &std::path::Path, new_bytes: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("Key file path `{}` has no file name", path.display()))?;
+    let mut tmp_path = parent.to_path_buf();
+    tmp_path.push(format!(
+        ".{}.tmp.{}",
+        file_name.to_string_lossy(),
+        std::process::id()
+    ));
+
+    write_to_readonly_file(&tmp_path, new_bytes).context(format!(
+        "Could not write new server setup to temporary file `{}`",
+        tmp_path.display()
+    ))?;
+    if let Err(rename_err) = std::fs::rename(&tmp_path, path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(anyhow::anyhow!(rename_err)).context(format!(
+            "Could not atomically replace key file `{}` with new server setup",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub struct ServerSetupConfig {
     server_setup: ServerSetup,
@@ -442,37 +476,10 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
 
                 // Explicit rotation requested. Preserve the legacy bytes in
                 // memory for backward-compatible password validation, then
-                // atomically replace the on-disk key with a fresh v4.0 key
-                // (write to a temp file in the same directory, then rename).
+                // atomically replace the on-disk key with a fresh v4.0 key.
                 let legacy_bytes = bytes.clone();
                 let server_setup = generate_random_private_key();
-                let new_bytes = server_setup.serialize();
-
-                let parent = path
-                    .parent()
-                    .filter(|p| !p.as_os_str().is_empty())
-                    .unwrap_or_else(|| std::path::Path::new("."));
-                let file_name = path.file_name().ok_or_else(|| {
-                    anyhow::anyhow!("Key file path `{file_path}` has no file name")
-                })?;
-                let mut tmp_path = parent.to_path_buf();
-                tmp_path.push(format!(
-                    ".{}.tmp.{}",
-                    file_name.to_string_lossy(),
-                    std::process::id()
-                ));
-
-                write_to_readonly_file(&tmp_path, &new_bytes).context(format!(
-                    "Could not write new server setup to temporary file `{}`",
-                    tmp_path.display()
-                ))?;
-                if let Err(rename_err) = std::fs::rename(&tmp_path, path) {
-                    // Best-effort cleanup of the temp file.
-                    let _ = std::fs::remove_file(&tmp_path);
-                    return Err(anyhow::anyhow!(rename_err)).context(format!(
-                        "Could not atomically replace key file `{file_path}` with new server setup",
-                    ));
-                }
+                rotate_key_file_atomically(path, &server_setup.serialize())?;
 
                 eprintln!(
                     "WARNING: Key file `{file_path}` was rotated to a new opaque-ke \

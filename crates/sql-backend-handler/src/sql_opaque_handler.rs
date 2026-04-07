@@ -17,6 +17,50 @@ use tracing::{debug, info, instrument, warn};
 type SqlOpaqueHandler = SqlBackendHandler;
 
 // ---------------------------------------------------------------------------
+// Typed protocol version (replaces a raw `i32` magic number).
+//
+// The DB column stays `i32` for sea-orm compatibility, but every business
+// path goes through this enum. Adding a future v5 forces an exhaustive
+// `match` to be updated everywhere it matters.
+// ---------------------------------------------------------------------------
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum OpaqueProtocolVersion {
+    /// opaque-ke 0.7 password file (pre-RFC-9807). Validated only when a
+    /// legacy `ServerSetup` is preserved in memory; auto-upgraded to
+    /// `Current` on the next successful login.
+    Legacy,
+    /// opaque-ke 4.0 password file (RFC 9807-compliant). The current format.
+    Current,
+}
+
+impl OpaqueProtocolVersion {
+    pub const LEGACY_DB_VALUE: i32 = 0;
+    pub const CURRENT_DB_VALUE: i32 = 1;
+
+    pub fn from_db(value: i32) -> Self {
+        // Anything we don't recognise is conservatively treated as legacy
+        // so we don't accidentally let an unknown future format slip past
+        // the validator. The startup migration warning will surface this.
+        match value {
+            Self::CURRENT_DB_VALUE => Self::Current,
+            _ => Self::Legacy,
+        }
+    }
+
+    pub fn is_legacy(self) -> bool {
+        matches!(self, Self::Legacy)
+    }
+
+    pub fn db_value(self) -> i32 {
+        match self {
+            Self::Legacy => Self::LEGACY_DB_VALUE,
+            Self::Current => Self::CURRENT_DB_VALUE,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Legacy opaque-ke 0.7 support for progressive password migration.
 //
 // Existing passwords stored with opaque-ke 0.7 remain valid. On login,
@@ -149,6 +193,27 @@ fn passwords_match_legacy(
     Ok(())
 }
 
+/// In-process validator that runs both sides of an OPAQUE login handshake
+/// locally to verify a plaintext password against a stored password file.
+/// Used by `bind()` and `simple_login`, where the server has the cleartext
+/// password and just needs a yes/no answer (no session key escapes).
+enum Validator<'a> {
+    /// Current (opaque-ke 4.0) handshake using the v4.0 ServerSetup.
+    Current(&'a opaque::server::ServerSetup),
+    /// Legacy (opaque-ke 0.7) handshake using a deserialized legacy
+    /// ServerSetup. Owned because it's recovered from raw bytes on demand.
+    Legacy(Box<legacy::LegacyServerSetup>),
+}
+
+impl<'a> Validator<'a> {
+    fn validate(&self, password_file: &[u8], cleartext: &str, user: &UserId) -> Result<()> {
+        match self {
+            Validator::Current(setup) => passwords_match(password_file, cleartext, setup, user),
+            Validator::Legacy(setup) => passwords_match_legacy(password_file, cleartext, setup, user),
+        }
+    }
+}
+
 impl SqlBackendHandler {
     fn get_orion_secret_key(&self) -> Result<orion::aead::SecretKey> {
         Ok(orion::aead::SecretKey::from_slice(
@@ -156,11 +221,52 @@ impl SqlBackendHandler {
         )?)
     }
 
+    /// Encrypt a server-side state object for round-tripping through the
+    /// untrusted client between two halves of an OPAQUE handshake. The
+    /// orion key is derived from the v4.0 ServerSetup, but the encryption
+    /// itself is OPAQUE-version-agnostic (it's just AEAD over bincode).
+    fn seal_state<T: Serialize>(&self, state: &T) -> Result<String> {
+        let secret_key = self.get_orion_secret_key()?;
+        let encrypted = orion::aead::seal(&secret_key, &bincode::serialize(state)?)?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(encrypted))
+    }
+
+    /// Inverse of `seal_state`.
+    fn open_state<T: serde::de::DeserializeOwned>(&self, blob: &str) -> Result<T> {
+        let secret_key = self.get_orion_secret_key()?;
+        let encrypted = base64::engine::general_purpose::STANDARD.decode(blob)?;
+        Ok(bincode::deserialize(&orion::aead::open(&secret_key, &encrypted)?)?)
+    }
+
+    /// Construct the in-process validator appropriate for the given
+    /// password version. Returns an error when a user has a legacy
+    /// password but no legacy ServerSetup is available (e.g. seed-based
+    /// deployments cannot recover the v0.7 key).
+    fn validator_for(&self, version: OpaqueProtocolVersion) -> Result<Validator<'_>> {
+        match version {
+            OpaqueProtocolVersion::Current => Ok(Validator::Current(&self.opaque_setup)),
+            OpaqueProtocolVersion::Legacy => {
+                let bytes = self.legacy_server_key_bytes.as_deref().ok_or_else(|| {
+                    DomainError::InternalError(
+                        "legacy password validation requested but no legacy server key is loaded"
+                            .to_string(),
+                    )
+                })?;
+                let setup = legacy::deserialize_legacy_setup(bytes).ok_or_else(|| {
+                    DomainError::InternalError(
+                        "failed to deserialize the legacy server setup".to_string(),
+                    )
+                })?;
+                Ok(Validator::Legacy(Box::new(setup)))
+            }
+        }
+    }
+
     #[instrument(skip(self), level = "debug", err)]
     async fn get_password_file_for_user(
         &self,
         user_id: UserId,
-    ) -> Result<Option<(Vec<u8>, i32)>> {
+    ) -> Result<Option<(Vec<u8>, OpaqueProtocolVersion)>> {
         // Fetch the previously registered password file and version from the DB.
         Ok(model::User::find_by_id(user_id)
             .select_only()
@@ -169,15 +275,18 @@ impl SqlBackendHandler {
             .into_tuple::<(Option<Vec<u8>>, i32)>()
             .one(&self.sql_pool)
             .await?
-            .and_then(|(hash, version)| hash.map(|h| (h, version))))
+            .and_then(|(hash, version)| {
+                hash.map(|h| (h, OpaqueProtocolVersion::from_db(version)))
+            }))
     }
 
-    /// Upgrade a legacy password to v4.0 format after successful validation.
+    /// Upgrade a legacy password to the current format after successful
+    /// validation. The caller must have already verified the password
+    /// against the legacy `Validator` — this re-runs the full v4.0
+    /// registration flow and updates `password_version` in the DB.
     async fn upgrade_password(&self, username: &UserId, password: &str) -> Result<()> {
-        info!(r#"Upgrading password for "{}" from legacy to v4.0"#, username);
-        register_password(self, username.clone(), &SecUtf8::from(password)).await?;
-        // register_password already sets password_version = 1 via registration_finish
-        Ok(())
+        info!(r#"Upgrading password for "{}" from legacy to current format"#, username);
+        register_password(self, username.clone(), &SecUtf8::from(password)).await
     }
 }
 
@@ -185,63 +294,49 @@ impl SqlBackendHandler {
 impl LoginHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn bind(&self, request: BindRequest) -> Result<()> {
-        if let Some((password_hash, password_version)) = self
+        let auth_error = || {
+            DomainError::AuthenticationError(format!(r#"for user "{}""#, &request.name))
+        };
+
+        let Some((password_hash, version)) = self
             .get_password_file_for_user(request.name.clone())
             .await?
-        {
-            info!(r#"Login attempt for "{}" (password_version={})"#, &request.name, password_version);
+        else {
+            debug!(r#"User "{}" doesn't exist or has no password"#, &request.name);
+            return Err(auth_error());
+        };
 
-            if password_version >= 1 {
-                // Current v4.0 password — validate directly.
-                if passwords_match(
-                    &password_hash,
-                    &request.password,
-                    &self.opaque_setup,
-                    &request.name,
-                )
-                .is_ok()
-                {
-                    return Ok(());
-                }
-            } else {
-                // Legacy v0.7 password — validate with legacy setup, then auto-upgrade.
-                if let Some(ref legacy_bytes) = self.legacy_server_key_bytes {
-                    if let Some(legacy_setup) = legacy::deserialize_legacy_setup(legacy_bytes) {
-                        if passwords_match_legacy(
-                            &password_hash,
-                            &request.password,
-                            &legacy_setup,
-                            &request.name,
-                        )
-                        .is_ok()
-                        {
-                            // Password validated with legacy format — upgrade to v4.0.
-                            if let Err(e) = self.upgrade_password(&request.name, &request.password).await {
-                                warn!(r#"Failed to upgrade password for "{}": {}"#, &request.name, e);
-                                // Still return Ok — the login succeeded even if upgrade failed.
-                            }
-                            return Ok(());
-                        }
-                    } else {
-                        warn!("Failed to deserialize legacy server setup");
-                    }
-                } else {
-                    debug!(
-                        r#"User "{}" has legacy password but no legacy server key available"#,
-                        &request.name
-                    );
-                }
+        info!(
+            r#"Login attempt for "{}" (version={:?})"#,
+            &request.name, version
+        );
+
+        // Look up the validator for this user's password format. If the user
+        // has a legacy password but we have no legacy server key (e.g. a
+        // seed-based deployment, or a fresh install where the v0.7 key was
+        // never preserved), the validator construction itself fails.
+        let validator = self.validator_for(version).map_err(|e| {
+            warn!(r#"No validator available for "{}": {}"#, &request.name, e);
+            auth_error()
+        })?;
+
+        // Run the OPAQUE handshake locally. A protocol-level failure (wrong
+        // password, corrupted file, …) is collapsed into a generic auth
+        // error so we don't leak which version the user has.
+        validator
+            .validate(&password_hash, &request.password, &request.name)
+            .map_err(|_| auth_error())?;
+
+        // On a successful legacy validation, opportunistically re-register
+        // the password in the current format. This is best-effort: a
+        // failed upgrade does NOT fail the login — the user is still
+        // authenticated, and the upgrade will be retried on the next bind.
+        if version.is_legacy() {
+            if let Err(e) = self.upgrade_password(&request.name, &request.password).await {
+                warn!(r#"Failed to upgrade password for "{}": {}"#, &request.name, e);
             }
-        } else {
-            debug!(
-                r#"User "{}" doesn't exist or has no password"#,
-                &request.name
-            );
         }
-        Err(DomainError::AuthenticationError(format!(
-            r#"for user "{}""#,
-            request.name
-        )))
+        Ok(())
     }
 }
 
@@ -258,10 +353,10 @@ impl OpaqueHandler for SqlOpaqueHandler {
 
         // If the user has a legacy (v0.7) password, reject v4.0 login attempts
         // with a structured error signal. The client detects this error code and
-        // retries via /auth/opaque/v0/login/*, which will re-register with v4.0
-        // on success.
-        if let Some((_, password_version)) = maybe_password_entry.as_ref() {
-            if *password_version == 0 {
+        // retries via /auth/opaque/v0/login/*, which re-registers with v4.0 on
+        // success.
+        if let Some((_, version)) = maybe_password_entry.as_ref() {
+            if version.is_legacy() {
                 info!(
                     r#"OPAQUE v4.0 login attempted for "{}" with legacy v0.7 password; client should retry via /auth/opaque/v0/login/*"#,
                     &user_id
@@ -287,29 +382,23 @@ impl OpaqueHandler for SqlOpaqueHandler {
             request.login_start_request,
             &user_id,
         )?;
-        let secret_key = self.get_orion_secret_key()?;
         let server_data = login::ServerData {
             username: user_id,
             server_login: start_response.state,
         };
-        let encrypted_state = orion::aead::seal(&secret_key, &bincode::serialize(&server_data)?)?;
 
         Ok(login::ServerLoginStartResponse {
-            server_data: base64::engine::general_purpose::STANDARD.encode(encrypted_state),
+            server_data: self.seal_state(&server_data)?,
             credential_response: start_response.message,
         })
     }
 
     #[instrument(skip_all, level = "debug", err)]
     async fn login_finish(&self, request: login::ClientLoginFinishRequest) -> Result<UserId> {
-        let secret_key = self.get_orion_secret_key()?;
         let login::ServerData {
             username,
             server_login,
-        } = bincode::deserialize(&orion::aead::open(
-            &secret_key,
-            &base64::engine::general_purpose::STANDARD.decode(&request.server_data)?,
-        )?)?;
+        } = self.open_state(&request.server_data)?;
         // Finish the login: this makes sure the client data is correct, and gives a session key we
         // don't need.
         match opaque::server::login::finish_login(server_login, request.credential_finalization) {
@@ -331,20 +420,17 @@ impl OpaqueHandler for SqlOpaqueHandler {
         &self,
         request: login_base64::ClientLoginStartRequest,
     ) -> Result<login_base64::ServerLoginStartResponse> {
-        use base64::Engine;
-
         let user_id = request.username;
         info!(r#"Legacy OPAQUE login attempt for "{}""#, &user_id);
 
-        // Verify the legacy ServerSetup is available.
-        let legacy_bytes = self.legacy_server_key_bytes.as_ref().ok_or_else(|| {
-            DomainError::InternalError(
-                "No legacy server key available for v0.7 OPAQUE login".to_string(),
-            )
-        })?;
-        let legacy_setup = legacy::deserialize_legacy_setup(legacy_bytes).ok_or_else(|| {
-            DomainError::InternalError("Failed to deserialize legacy server setup".to_string())
-        })?;
+        // Recover the legacy ServerSetup. This fails fast on seed-based or
+        // fresh deployments where no v0.7 key was preserved.
+        let legacy_setup = match self.validator_for(OpaqueProtocolVersion::Legacy)? {
+            Validator::Legacy(setup) => *setup,
+            // `validator_for(Legacy)` only returns Validator::Legacy, but
+            // matches must be exhaustive.
+            Validator::Current(_) => unreachable!("validator_for(Legacy) must return Legacy"),
+        };
 
         // Decode the client's CredentialRequest bytes.
         let credential_request_bytes = base64::engine::general_purpose::STANDARD
@@ -354,10 +440,10 @@ impl OpaqueHandler for SqlOpaqueHandler {
                 DomainError::InternalError(format!("Legacy CredentialRequest decode error: {e}"))
             })?;
 
-        // Fetch the user's password file. Only legacy (v0) passwords are handled here.
-        let maybe_password_entry = self.get_password_file_for_user(user_id.clone()).await?;
-        let maybe_password_file = match maybe_password_entry {
-            Some((bytes, 0)) => Some(
+        // Fetch the user's password file. Only legacy passwords are handled
+        // here — a current-version user routed to this endpoint is rejected.
+        let maybe_password_file = match self.get_password_file_for_user(user_id.clone()).await? {
+            Some((bytes, OpaqueProtocolVersion::Legacy)) => Some(
                 legacy::LegacyServerRegistration::deserialize(&bytes).map_err(|e| {
                     DomainError::InternalError(format!(
                         "Corrupted legacy password file for {}: {}",
@@ -365,8 +451,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
                     ))
                 })?,
             ),
-            Some((_, _)) => {
-                // User has a v4.0 password — reject the legacy request.
+            Some((_, OpaqueProtocolVersion::Current)) => {
                 return Err(DomainError::AuthenticationError(format!(
                     r#"user "{}" does not have a legacy password"#,
                     user_id
@@ -386,18 +471,16 @@ impl OpaqueHandler for SqlOpaqueHandler {
         )
         .map_err(|e| DomainError::InternalError(format!("Legacy server login start error: {e}")))?;
 
-        // Encrypt the server state using the v4.0 orion key. The encryption is
-        // just for state integrity across the client round-trip; it is not
-        // tied to the OPAQUE version.
-        let secret_key = self.get_orion_secret_key()?;
+        // Encrypt the server state. The orion key is derived from the v4.0
+        // ServerSetup but the encryption is OPAQUE-version-agnostic — it's
+        // just AEAD over bincode.
         let server_data = LegacyServerData {
             username: user_id,
             server_login: start_response.state,
         };
-        let encrypted_state = orion::aead::seal(&secret_key, &bincode::serialize(&server_data)?)?;
 
         Ok(login_base64::ServerLoginStartResponse {
-            server_data: base64::engine::general_purpose::STANDARD.encode(encrypted_state),
+            server_data: self.seal_state(&server_data)?,
             credential_response: base64::engine::general_purpose::STANDARD
                 .encode(start_response.message.serialize()),
         })
@@ -408,16 +491,10 @@ impl OpaqueHandler for SqlOpaqueHandler {
         &self,
         request: login_base64::ClientLoginFinishRequest,
     ) -> Result<UserId> {
-        use base64::Engine;
-
-        // Decrypt the server state.
-        let secret_key = self.get_orion_secret_key()?;
-        let encrypted_state =
-            base64::engine::general_purpose::STANDARD.decode(&request.server_data)?;
         let LegacyServerData {
             username,
             server_login,
-        } = bincode::deserialize(&orion::aead::open(&secret_key, &encrypted_state)?)?;
+        } = self.open_state(&request.server_data)?;
 
         // Decode the client's CredentialFinalization bytes.
         let credential_finalization_bytes = base64::engine::general_purpose::STANDARD
@@ -458,13 +535,11 @@ impl OpaqueHandler for SqlOpaqueHandler {
             request.registration_start_request,
             &request.username,
         )?;
-        let secret_key = self.get_orion_secret_key()?;
         let server_data = registration::ServerData {
             username: request.username,
         };
-        let encrypted_state = orion::aead::seal(&secret_key, &bincode::serialize(&server_data)?)?;
         Ok(registration::ServerRegistrationStartResponse {
-            server_data: base64::engine::general_purpose::STANDARD.encode(encrypted_state),
+            server_data: self.seal_state(&server_data)?,
             registration_response: start_response.message,
         })
     }
@@ -474,20 +549,16 @@ impl OpaqueHandler for SqlOpaqueHandler {
         &self,
         request: registration::ClientRegistrationFinishRequest,
     ) -> Result<()> {
-        let secret_key = self.get_orion_secret_key()?;
-        let registration::ServerData { username } = bincode::deserialize(&orion::aead::open(
-            &secret_key,
-            &base64::engine::general_purpose::STANDARD.decode(&request.server_data)?,
-        )?)?;
+        let registration::ServerData { username } = self.open_state(&request.server_data)?;
 
         let password_file =
             opaque::server::registration::get_password_file(request.registration_upload);
-        // Set the user password to the new password (always in new format).
+        // Set the user password to the new password — always in the current format.
         let now = chrono::Utc::now().naive_utc();
         let user_update = model::users::ActiveModel {
             user_id: ActiveValue::Set(username.clone()),
             password_hash: ActiveValue::Set(Some(password_file.serialize().to_vec())),
-            password_version: ActiveValue::Set(1),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::Current.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -827,7 +898,7 @@ mod tests {
         let user_update = model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_user")),
             password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(0),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -851,7 +922,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(
-            upgraded.1, 1,
+            upgraded.1, OpaqueProtocolVersion::Current,
             "Password should be auto-upgraded to version 1 after successful legacy bind"
         );
 
@@ -892,7 +963,7 @@ mod tests {
         let user_update = model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_user")),
             password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(0),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -913,7 +984,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(entry.1, 0, "Failed bind should not upgrade the password");
+        assert_eq!(entry.1, OpaqueProtocolVersion::Legacy, "Failed bind should not upgrade the password");
     }
 
     #[tokio::test]
@@ -939,7 +1010,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(
-            entry.1, 1,
+            entry.1, OpaqueProtocolVersion::Current,
             "Fresh registration should set password_version = 1"
         );
 
@@ -972,7 +1043,7 @@ mod tests {
         model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_alice")),
             password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(0),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -1031,7 +1102,7 @@ mod tests {
         model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_user")),
             password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(0),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -1077,7 +1148,7 @@ mod tests {
         model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_alice")),
             password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(0),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -1136,7 +1207,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(before.1, 0, "Should still be legacy before re-registration");
+        assert_eq!(before.1, OpaqueProtocolVersion::Legacy, "Should still be legacy before re-registration");
 
         // Re-register using the convenience function (mirrors what the
         // client does via /opaque/register/{start,finish}).
@@ -1154,7 +1225,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(after.1, 1, "Should be v4.0 after re-registration");
+        assert_eq!(after.1, OpaqueProtocolVersion::Current, "Should be v4.0 after re-registration");
 
         // Step 7: v4.0 login_start no longer returns LegacyOpaqueVersion.
         let client_v4 = opaque::client::login::start_login("alice_password", &mut rng).unwrap();
@@ -1187,7 +1258,7 @@ mod tests {
         model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_user")),
             password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(0),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -1246,7 +1317,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(entry.1, 0);
+        assert_eq!(entry.1, OpaqueProtocolVersion::Legacy);
     }
 
     #[tokio::test]

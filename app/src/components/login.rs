@@ -38,52 +38,68 @@ pub struct Props {
     pub password_reset_enabled: bool,
 }
 
+/// State carried into `Msg::AuthenticationStartResponse`. The username and
+/// password are kept around so we can fall back to the legacy login flow on
+/// HTTP 409 from the v4.0 endpoint.
+pub struct AuthStart {
+    pub state: opaque::client::login::ClientLogin,
+    pub username: String,
+    pub password: String,
+    pub response: core::result::Result<Box<login::ServerLoginStartResponse>, LoginStartError>,
+}
+
+/// State for the start of the legacy (opaque-ke 0.7) login fallback. The
+/// password is still required so it can be re-registered in the v4.0 format
+/// after a successful legacy login.
+pub struct LegacyAuthStart {
+    pub state: opaque_legacy::LegacyClientLogin,
+    pub username: String,
+    pub password: String,
+    pub response: Result<Box<login_base64::ServerLoginStartResponse>>,
+}
+
+/// State for the finish of the legacy login. The password is forwarded so
+/// the silent v4.0 re-registration can run with it once the JWT cookies
+/// are set.
+pub struct LegacyAuthFinish {
+    pub username: String,
+    pub password: String,
+    pub response: Result<(String, bool)>,
+}
+
+/// State for the silent password upgrade that runs immediately after a
+/// successful legacy login. `is_admin` is threaded through so the final
+/// `on_logged_in` callback receives the same auth state regardless of
+/// whether the upgrade succeeded.
+pub struct PasswordUpgradeStart {
+    pub state: opaque::client::registration::ClientRegistration,
+    pub username: String,
+    pub password: String,
+    pub is_admin: bool,
+    pub response: Result<Box<registration::ServerRegistrationStartResponse>>,
+}
+
+/// Final state of the upgrade flow. Even if the response is `Err`, the
+/// login itself already succeeded — the upgrade is best-effort and is
+/// retried on the next login.
+pub struct PasswordUpgradeFinish {
+    pub username: String,
+    pub is_admin: bool,
+    pub response: Result<()>,
+}
+
 pub enum Msg {
     Update,
     Submit,
     AuthenticationRefreshResponse(Result<(String, bool)>),
-    AuthenticationStartResponse(
-        (
-            opaque::client::login::ClientLogin,
-            String, // username (kept for possible legacy fallback)
-            String, // password (kept for legacy fallback + re-registration)
-            core::result::Result<Box<login::ServerLoginStartResponse>, LoginStartError>,
-        ),
-    ),
+    AuthenticationStartResponse(AuthStart),
     AuthenticationFinishResponse(Result<(String, bool)>),
-    // Legacy (opaque-ke 0.7) fallback flow triggered by HTTP 409 on v4.0 login.
-    LegacyAuthStartResponse(
-        (
-            opaque_legacy::LegacyClientLogin,
-            String, // username
-            String, // password (for re-registration after login succeeds)
-            Result<Box<login_base64::ServerLoginStartResponse>>,
-        ),
-    ),
-    LegacyAuthFinishResponse(
-        (
-            String, // username
-            String, // password
-            Result<(String, bool)>,
-        ),
-    ),
-    // After legacy login succeeds, silently upgrade the password to v4.0.
-    PasswordUpgradeStartResponse(
-        (
-            opaque::client::registration::ClientRegistration,
-            String, // username
-            String, // password
-            bool,   // is_admin (needed to propagate final on_logged_in)
-            Result<Box<registration::ServerRegistrationStartResponse>>,
-        ),
-    ),
-    PasswordUpgradeFinishResponse(
-        (
-            String, // username
-            bool,   // is_admin
-            Result<()>,
-        ),
-    ),
+    /// Legacy (opaque-ke 0.7) fallback flow triggered by HTTP 409 on v4.0 login.
+    LegacyAuthStartResponse(LegacyAuthStart),
+    LegacyAuthFinishResponse(LegacyAuthFinish),
+    /// After legacy login succeeds, silently upgrade the password to v4.0.
+    PasswordUpgradeStartResponse(PasswordUpgradeStart),
+    PasswordUpgradeFinishResponse(PasswordUpgradeFinish),
 }
 
 impl CommonComponent<LoginForm> for LoginForm {
@@ -112,16 +128,21 @@ impl CommonComponent<LoginForm> for LoginForm {
                 let username_clone = username.clone();
                 self.common
                     .call_backend(ctx, HostService::login_start(req), move |r| {
-                        Msg::AuthenticationStartResponse((
+                        Msg::AuthenticationStartResponse(AuthStart {
                             state,
-                            username_clone,
-                            password_clone,
-                            r,
-                        ))
+                            username: username_clone,
+                            password: password_clone,
+                            response: r,
+                        })
                     });
                 Ok(true)
             }
-            Msg::AuthenticationStartResponse((login_start, username, password, res)) => {
+            Msg::AuthenticationStartResponse(AuthStart {
+                state: login_start,
+                username,
+                password,
+                response: res,
+            }) => {
                 match res {
                     Ok(res) => {
                         let mut rng = rand::rngs::OsRng;
@@ -173,12 +194,12 @@ impl CommonComponent<LoginForm> for LoginForm {
                             ctx,
                             HostService::login_start_legacy(req),
                             move |r| {
-                                Msg::LegacyAuthStartResponse((
-                                    legacy_state,
+                                Msg::LegacyAuthStartResponse(LegacyAuthStart {
+                                    state: legacy_state,
                                     username,
-                                    password_clone,
-                                    r,
-                                ))
+                                    password: password_clone,
+                                    response: r,
+                                })
                             },
                         );
                         Ok(false)
@@ -194,7 +215,12 @@ impl CommonComponent<LoginForm> for LoginForm {
                     .emit(user_info.context("Could not log in")?);
                 Ok(true)
             }
-            Msg::LegacyAuthStartResponse((legacy_state, username, password, res)) => {
+            Msg::LegacyAuthStartResponse(LegacyAuthStart {
+                state: legacy_state,
+                username,
+                password,
+                response: res,
+            }) => {
                 let res = res.context("Could not start legacy login")?;
                 let server_response_bytes = match base64::decode(&res.credential_response) {
                     Ok(b) => b,
@@ -222,11 +248,21 @@ impl CommonComponent<LoginForm> for LoginForm {
                 self.common.call_backend(
                     ctx,
                     HostService::login_finish_legacy(req),
-                    move |r| Msg::LegacyAuthFinishResponse((username, password, r)),
+                    move |r| {
+                        Msg::LegacyAuthFinishResponse(LegacyAuthFinish {
+                            username,
+                            password,
+                            response: r,
+                        })
+                    },
                 );
                 Ok(false)
             }
-            Msg::LegacyAuthFinishResponse((username, password, res)) => {
+            Msg::LegacyAuthFinishResponse(LegacyAuthFinish {
+                username,
+                password,
+                response: res,
+            }) => {
                 let (_logged_in_user, is_admin) =
                     res.context("Could not finish legacy login")?;
                 // Legacy login succeeded — the JWT cookies are set and the
@@ -256,24 +292,24 @@ impl CommonComponent<LoginForm> for LoginForm {
                     ctx,
                     HostService::register_start(req),
                     move |r| {
-                        Msg::PasswordUpgradeStartResponse((
-                            registration_start.state,
+                        Msg::PasswordUpgradeStartResponse(PasswordUpgradeStart {
+                            state: registration_start.state,
                             username,
-                            password_clone,
+                            password: password_clone,
                             is_admin,
-                            r,
-                        ))
+                            response: r,
+                        })
                     },
                 );
                 Ok(false)
             }
-            Msg::PasswordUpgradeStartResponse((
-                reg_state,
+            Msg::PasswordUpgradeStartResponse(PasswordUpgradeStart {
+                state: reg_state,
                 username,
                 password,
                 is_admin,
-                res,
-            )) => {
+                response: res,
+            }) => {
                 match res {
                     Ok(res) => {
                         let mut rng = rand::rngs::OsRng;
@@ -300,7 +336,13 @@ impl CommonComponent<LoginForm> for LoginForm {
                         self.common.call_backend(
                             ctx,
                             HostService::register_finish(req),
-                            move |r| Msg::PasswordUpgradeFinishResponse((username, is_admin, r)),
+                            move |r| {
+                                Msg::PasswordUpgradeFinishResponse(PasswordUpgradeFinish {
+                                    username,
+                                    is_admin,
+                                    response: r,
+                                })
+                            },
                         );
                         Ok(false)
                     }
@@ -314,7 +356,11 @@ impl CommonComponent<LoginForm> for LoginForm {
                     }
                 }
             }
-            Msg::PasswordUpgradeFinishResponse((username, is_admin, res)) => {
+            Msg::PasswordUpgradeFinishResponse(PasswordUpgradeFinish {
+                username,
+                is_admin,
+                response: res,
+            }) => {
                 if let Err(e) = res {
                     warn!(&format!(
                         "Password upgrade register_finish failed (login still succeeded): {}",
