@@ -1165,8 +1165,11 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
 
 async fn migrate_to_v12(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
     let builder = transaction.get_database_backend();
-    // Add password_version to track OPAQUE protocol version (0 = legacy v0.7, 1 = current v4.0).
-    // Existing passwords default to 0 (legacy) and are auto-upgraded on next login.
+    // Add password_version (0 = legacy opaque-ke 0.7, 1 = current opaque-ke 4.0).
+    // Defaults to 0: pre-migration installs only ever wrote v0.7 password files.
+    // Caveat for developers: a build that wrote v4.0 password files *before* this
+    // column existed will need a one-shot `UPDATE users SET password_version = 1
+    // WHERE password_hash IS NOT NULL` after the migration runs.
     transaction
         .execute(
             builder.build(
