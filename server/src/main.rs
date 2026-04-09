@@ -174,24 +174,27 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
         sql_pool.clone(),
     );
 
-    // Warn about users still using legacy OPAQUE passwords.
+    // Warn about users still using legacy OPAQUE passwords. If all users
+    // have been upgraded, clean up the legacy key sidecar file so it doesn't
+    // linger with sensitive key material.
     match count_legacy_passwords(&sql_pool).await {
+        Ok(0) => {
+            configuration::cleanup_legacy_key_sidecar(&config);
+        }
         Ok(legacy_count) => {
-            if legacy_count > 0 {
-                if config.get_legacy_server_key_bytes().is_some() {
-                    warn!(
-                        "{} user(s) still have legacy OPAQUE v0.7 passwords. \
-                         They will be automatically upgraded to v4.0 on next login.",
-                        legacy_count
-                    );
-                } else {
-                    warn!(
-                        "{} user(s) have legacy OPAQUE v0.7 passwords but no legacy \
-                         server key is available. These users will NOT be able to log in \
-                         until they reset their passwords.",
-                        legacy_count
-                    );
-                }
+            if config.get_legacy_server_key_bytes().is_some() {
+                warn!(
+                    "{} user(s) still have legacy OPAQUE v0.7 passwords. \
+                     They will be automatically upgraded to v4.0 on next login.",
+                    legacy_count
+                );
+            } else {
+                warn!(
+                    "{} user(s) have legacy OPAQUE v0.7 passwords but no legacy \
+                     server key is available. These users will NOT be able to log in \
+                     until they reset their passwords.",
+                    legacy_count
+                );
             }
         }
         Err(e) => {

@@ -329,6 +329,62 @@ fn rotate_key_file_atomically(path: &std::path::Path, new_bytes: &[u8]) -> Resul
     Ok(())
 }
 
+/// Return the path of the legacy key sidecar file for a given key file path.
+fn legacy_sidecar_path(key_file: &std::path::Path) -> std::path::PathBuf {
+    let mut p = key_file.as_os_str().to_owned();
+    p.push(".legacy");
+    std::path::PathBuf::from(p)
+}
+
+/// Persist the pre-rotation key bytes to a sidecar file so they survive
+/// process restarts. The file is created with restrictive permissions
+/// (same as the main key file) because it contains sensitive key material.
+fn save_legacy_key_sidecar(key_file: &std::path::Path, legacy_bytes: &[u8]) -> Result<()> {
+    let sidecar = legacy_sidecar_path(key_file);
+    // Remove any stale sidecar first (write_to_readonly_file asserts !exists).
+    let _ = std::fs::remove_file(&sidecar);
+    write_to_readonly_file(&sidecar, legacy_bytes).context(format!(
+        "Could not write legacy key sidecar to `{}`",
+        sidecar.display()
+    ))
+}
+
+/// Load the legacy key sidecar if it exists. Returns `None` if there is no
+/// sidecar — the caller can still serve, just without legacy password support.
+fn load_legacy_key_sidecar(key_file: &std::path::Path) -> Option<Vec<u8>> {
+    let sidecar = legacy_sidecar_path(key_file);
+    match std::fs::read(&sidecar) {
+        Ok(bytes) => {
+            eprintln!(
+                "Loaded legacy server key from `{}` for backward-compatible \
+                 password validation.",
+                sidecar.display()
+            );
+            Some(bytes)
+        }
+        Err(_) => None,
+    }
+}
+
+/// Remove the legacy key sidecar once all users have been upgraded.
+/// Called from main.rs after confirming `count_legacy_passwords() == 0`.
+pub fn cleanup_legacy_key_sidecar(config: &Configuration) {
+    let sidecar = legacy_sidecar_path(std::path::Path::new(&config.key_file));
+    if sidecar.exists() {
+        match std::fs::remove_file(&sidecar) {
+            Ok(()) => eprintln!(
+                "All users upgraded to opaque-ke 4.0. Removed legacy key sidecar `{}`.",
+                sidecar.display()
+            ),
+            Err(e) => eprintln!(
+                "WARNING: Could not remove legacy key sidecar `{}`: {}",
+                sidecar.display(),
+                e
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ServerSetupConfig {
     server_setup: ServerSetup,
@@ -443,11 +499,17 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
     } else if path.exists() {
         let bytes = read(file_path).context(format!("Could not read key file `{file_path}`"))?;
         match ServerSetup::deserialize(&bytes) {
-            Ok(server_setup) => Ok(ServerSetupConfig {
-                server_setup,
-                private_key_location: private_key_location.for_key_file(file_path),
-                legacy_server_key_bytes: None,
-            }),
+            Ok(server_setup) => {
+                // If a previous rotation left a `<keyfile>.legacy` sidecar,
+                // load it so the legacy OPAQUE handshake can still validate
+                // users who haven't logged in since the key rotation.
+                let legacy_bytes = load_legacy_key_sidecar(path);
+                Ok(ServerSetupConfig {
+                    server_setup,
+                    private_key_location: private_key_location.for_key_file(file_path),
+                    legacy_server_key_bytes: legacy_bytes,
+                })
+            }
             Err(deserialize_err) => {
                 // The on-disk key file does not parse as the current opaque-ke
                 // version. This could be:
@@ -474,18 +536,26 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
                     ));
                 }
 
-                // Explicit rotation requested. Preserve the legacy bytes in
-                // memory for backward-compatible password validation, then
-                // atomically replace the on-disk key with a fresh v4.0 key.
+                // Explicit rotation requested. Preserve the legacy bytes both
+                // in memory (for this process run) AND in a sidecar file (for
+                // future restarts), then atomically replace the on-disk key
+                // with a fresh v4.0 key.
+                //
+                // The sidecar file (`<keyfile>.legacy`) is loaded automatically
+                // on subsequent startups so users who haven't logged in yet can
+                // still authenticate via the legacy OPAQUE handshake. It is
+                // cleaned up once all users have been upgraded (see main.rs).
                 let legacy_bytes = bytes.clone();
                 let server_setup = generate_random_private_key();
                 rotate_key_file_atomically(path, &server_setup.serialize())?;
+                save_legacy_key_sidecar(path, &legacy_bytes)?;
 
                 eprintln!(
                     "WARNING: Key file `{file_path}` was rotated to a new opaque-ke \
                      format on the admin's request (--force-update-private-key=true). \
-                     Existing passwords will be progressively upgraded on next login \
-                     via the legacy OPAQUE handshake."
+                     The previous key was saved to `{file_path}.legacy` for backward \
+                     compatibility. Existing passwords will be progressively upgraded \
+                     on next login via the legacy OPAQUE handshake."
                 );
                 Ok(ServerSetupConfig {
                     server_setup,
