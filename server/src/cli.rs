@@ -151,7 +151,7 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_HTTP_PORT")]
     pub http_port: Option<u16>,
 
-    /// URL of the server, for password reset links.
+    /// URL of the server, for password reset links. Default: "http://localhost"
     #[clap(long, env = "LLDAP_HTTP_URL")]
     pub http_url: Option<Url>,
 
