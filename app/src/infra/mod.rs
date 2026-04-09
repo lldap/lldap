@@ -6,6 +6,6 @@ pub mod form_utils;
 pub mod functional;
 pub mod graphql;
 pub mod modal;
-pub mod opaque_legacy;
+pub mod opaque_v07;
 pub mod schema;
 pub mod tooltip;

@@ -107,8 +107,8 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                         ctx,
                         async move {
                             HostService::login_start(req).await.map_err(|e| match e {
-                                crate::infra::api::LoginStartError::LegacyOpaqueVersion => anyhow!(
-                                    "Your password is still in the legacy format. Please log out and log in again first; this will automatically upgrade it."
+                                crate::infra::api::LoginStartError::OpaqueV07Version => anyhow!(
+                                    "Your password is still in the v0.7 format. Please log out and log in again first; this will automatically upgrade it."
                                 ),
                                 crate::infra::api::LoginStartError::Other(e) => e,
                             })

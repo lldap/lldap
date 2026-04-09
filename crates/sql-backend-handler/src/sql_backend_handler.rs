@@ -6,21 +6,21 @@ use lldap_domain_handlers::handler::BackendHandler;
 #[derive(Clone)]
 pub struct SqlBackendHandler {
     pub(crate) opaque_setup: ServerSetup,
-    /// Raw bytes of the legacy (opaque-ke 0.7) ServerSetup, if available.
+    /// Raw bytes of the v0.7 (opaque-ke 0.7) ServerSetup, if available.
     /// Used for backward-compatible password validation during progressive migration.
-    pub(crate) legacy_server_key_bytes: Option<Vec<u8>>,
+    pub(crate) v07_server_key_bytes: Option<Vec<u8>>,
     pub(crate) sql_pool: DbConnection,
 }
 
 impl SqlBackendHandler {
     pub fn new(
         opaque_setup: ServerSetup,
-        legacy_server_key_bytes: Option<Vec<u8>>,
+        v07_server_key_bytes: Option<Vec<u8>>,
         sql_pool: DbConnection,
     ) -> Self {
         SqlBackendHandler {
             opaque_setup,
-            legacy_server_key_bytes,
+            v07_server_key_bytes,
             sql_pool,
         }
     }

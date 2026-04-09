@@ -6,7 +6,7 @@ use crate::{
     infra::{
         api::{HostService, LoginStartError},
         common_component::{CommonComponent, CommonComponentParts},
-        opaque_legacy,
+        opaque_v07,
     },
 };
 use anyhow::{Result, anyhow, bail};
@@ -39,7 +39,7 @@ pub struct Props {
 }
 
 /// State carried into `Msg::AuthenticationStartResponse`. The username and
-/// password are kept around so we can fall back to the legacy login flow on
+/// password are kept around so we can fall back to the v0.7 login flow on
 /// HTTP 409 from the v4.0 endpoint.
 pub struct AuthStart {
     pub state: opaque::client::login::ClientLogin,
@@ -48,27 +48,27 @@ pub struct AuthStart {
     pub response: core::result::Result<Box<login::ServerLoginStartResponse>, LoginStartError>,
 }
 
-/// State for the start of the legacy (opaque-ke 0.7) login fallback. The
+/// State for the start of the v0.7 (opaque-ke 0.7) login fallback. The
 /// password is still required so it can be re-registered in the v4.0 format
-/// after a successful legacy login.
-pub struct LegacyAuthStart {
-    pub state: opaque_legacy::LegacyClientLogin,
+/// after a successful v0.7 login.
+pub struct V07AuthStart {
+    pub state: opaque_v07::V07ClientLogin,
     pub username: String,
     pub password: String,
     pub response: Result<Box<login_base64::ServerLoginStartResponse>>,
 }
 
-/// State for the finish of the legacy login. The password is forwarded so
+/// State for the finish of the v0.7 login. The password is forwarded so
 /// the silent v4.0 re-registration can run with it once the JWT cookies
 /// are set.
-pub struct LegacyAuthFinish {
+pub struct V07AuthFinish {
     pub username: String,
     pub password: String,
     pub response: Result<(String, bool)>,
 }
 
 /// State for the silent password upgrade that runs immediately after a
-/// successful legacy login. `is_admin` is threaded through so the final
+/// successful v0.7 login. `is_admin` is threaded through so the final
 /// `on_logged_in` callback receives the same auth state regardless of
 /// whether the upgrade succeeded.
 pub struct PasswordUpgradeStart {
@@ -94,10 +94,10 @@ pub enum Msg {
     AuthenticationRefreshResponse(Result<(String, bool)>),
     AuthenticationStartResponse(AuthStart),
     AuthenticationFinishResponse(Result<(String, bool)>),
-    /// Legacy (opaque-ke 0.7) fallback flow triggered by HTTP 409 on v4.0 login.
-    LegacyAuthStartResponse(LegacyAuthStart),
-    LegacyAuthFinishResponse(LegacyAuthFinish),
-    /// After legacy login succeeds, silently upgrade the password to v4.0.
+    /// Opaque-ke 0.7 fallback flow triggered by HTTP 409 on v4.0 login.
+    V07AuthStartResponse(V07AuthStart),
+    V07AuthFinishResponse(V07AuthFinish),
+    /// After v0.7 login succeeds, silently upgrade the password to v4.0.
     PasswordUpgradeStartResponse(PasswordUpgradeStart),
     PasswordUpgradeFinishResponse(PasswordUpgradeFinish),
 }
@@ -171,31 +171,31 @@ impl CommonComponent<LoginForm> for LoginForm {
                         );
                         Ok(false)
                     }
-                    Err(LoginStartError::LegacyOpaqueVersion) => {
-                        // User has a legacy (v0.7) password — fall back to the
-                        // legacy login flow, then silently re-register as v4.0.
+                    Err(LoginStartError::OpaqueV07Version) => {
+                        // User has a v0.7 password — fall back to the
+                        // v0.7 login flow, then silently re-register as v4.0.
                         let mut rng = rand::rngs::OsRng;
-                        let (legacy_state, legacy_bytes) =
-                            match opaque_legacy::start_login(&password, &mut rng) {
+                        let (v07_state, v07_bytes) =
+                            match opaque_v07::start_login(&password, &mut rng) {
                                 Ok(r) => r,
                                 Err(e) => {
-                                    error!(&format!("Legacy OPAQUE start failed: {}", e));
+                                    error!(&format!("v0.7 OPAQUE start failed: {}", e));
                                     self.common.error =
-                                        Some(anyhow!("Could not start legacy login"));
+                                        Some(anyhow!("Could not start v0.7 login"));
                                     return Ok(true);
                                 }
                             };
                         let req = login_base64::ClientLoginStartRequest {
                             username: username.clone().into(),
-                            login_start_request: base64::encode(&legacy_bytes),
+                            login_start_request: base64::encode(&v07_bytes),
                         };
                         let password_clone = password.clone();
                         self.common.call_backend(
                             ctx,
-                            HostService::login_start_legacy(req),
+                            HostService::login_start_v07(req),
                             move |r| {
-                                Msg::LegacyAuthStartResponse(LegacyAuthStart {
-                                    state: legacy_state,
+                                Msg::V07AuthStartResponse(V07AuthStart {
+                                    state: v07_state,
                                     username,
                                     password: password_clone,
                                     response: r,
@@ -215,24 +215,24 @@ impl CommonComponent<LoginForm> for LoginForm {
                     .emit(user_info.context("Could not log in")?);
                 Ok(true)
             }
-            Msg::LegacyAuthStartResponse(LegacyAuthStart {
-                state: legacy_state,
+            Msg::V07AuthStartResponse(V07AuthStart {
+                state: v07_state,
                 username,
                 password,
                 response: res,
             }) => {
-                let res = res.context("Could not start legacy login")?;
+                let res = res.context("Could not start v0.7 login")?;
                 let server_response_bytes = match base64::decode(&res.credential_response) {
                     Ok(b) => b,
                     Err(e) => {
-                        error!(&format!("Could not decode legacy server response: {}", e));
+                        error!(&format!("Could not decode v0.7 server response: {}", e));
                         self.common.error =
-                            Some(anyhow!("Invalid server response to legacy login"));
+                            Some(anyhow!("Invalid server response to v0.7 login"));
                         return Ok(true);
                     }
                 };
                 let finalization_bytes =
-                    match opaque_legacy::finish_login(legacy_state, &server_response_bytes) {
+                    match opaque_v07::finish_login(v07_state, &server_response_bytes) {
                         Ok(b) => b,
                         Err(e) => {
                             error!(&format!("Invalid username or password: {}", e));
@@ -247,9 +247,9 @@ impl CommonComponent<LoginForm> for LoginForm {
                 };
                 self.common.call_backend(
                     ctx,
-                    HostService::login_finish_legacy(req),
+                    HostService::login_finish_v07(req),
                     move |r| {
-                        Msg::LegacyAuthFinishResponse(LegacyAuthFinish {
+                        Msg::V07AuthFinishResponse(V07AuthFinish {
                             username,
                             password,
                             response: r,
@@ -258,14 +258,14 @@ impl CommonComponent<LoginForm> for LoginForm {
                 );
                 Ok(false)
             }
-            Msg::LegacyAuthFinishResponse(LegacyAuthFinish {
+            Msg::V07AuthFinishResponse(V07AuthFinish {
                 username,
                 password,
                 response: res,
             }) => {
                 let (_logged_in_user, is_admin) =
-                    res.context("Could not finish legacy login")?;
-                // Legacy login succeeded — the JWT cookies are set and the
+                    res.context("Could not finish v0.7 login")?;
+                // v0.7 login succeeded — the JWT cookies are set and the
                 // user is effectively logged in. Now silently upgrade the
                 // password to v4.0. If this fails, we still report success.
                 let mut rng = rand::rngs::OsRng;

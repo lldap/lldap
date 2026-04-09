@@ -102,15 +102,15 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
     Ok(())
 }
 
-/// Count users whose password is still in the legacy opaque-ke v0.7 format.
-async fn count_legacy_passwords(sql_pool: &DatabaseConnection) -> Result<u64> {
+/// Count users whose password is still in the opaque-ke v0.7 format.
+async fn count_v07_passwords(sql_pool: &DatabaseConnection) -> Result<u64> {
     use lldap_domain_model::model::users;
     use lldap_sql_backend_handler::OpaqueProtocolVersion;
     use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
     let count = users::Entity::find()
         .filter(ColumnTrait::eq(
             &users::Column::PasswordVersion,
-            OpaqueProtocolVersion::Legacy.db_value(),
+            OpaqueProtocolVersion::V07.db_value(),
         ))
         .filter(users::Column::PasswordHash.is_not_null())
         .count(sql_pool)
@@ -170,35 +170,35 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
     }
     let backend_handler = SqlBackendHandler::new(
         config.get_server_setup().clone(),
-        config.get_legacy_server_key_bytes().map(|b| b.to_vec()),
+        config.get_v07_server_key_bytes().map(|b| b.to_vec()),
         sql_pool.clone(),
     );
 
-    // Warn about users still using legacy OPAQUE passwords. If all users
-    // have been upgraded, clean up the legacy key sidecar file so it doesn't
+    // Warn about users still using OPAQUE v0.7 passwords. If all users
+    // have been upgraded, clean up the v0.7 key sidecar file so it doesn't
     // linger with sensitive key material.
-    match count_legacy_passwords(&sql_pool).await {
+    match count_v07_passwords(&sql_pool).await {
         Ok(0) => {
-            configuration::cleanup_legacy_key_sidecar(&config);
+            configuration::cleanup_v07_key_sidecar(&config);
         }
-        Ok(legacy_count) => {
-            if config.get_legacy_server_key_bytes().is_some() {
+        Ok(v07_count) => {
+            if config.get_v07_server_key_bytes().is_some() {
                 warn!(
-                    "{} user(s) still have legacy OPAQUE v0.7 passwords. \
+                    "{} user(s) still have OPAQUE v0.7 passwords. \
                      They will be automatically upgraded to v4.0 on next login.",
-                    legacy_count
+                    v07_count
                 );
             } else {
                 warn!(
-                    "{} user(s) have legacy OPAQUE v0.7 passwords but no legacy \
+                    "{} user(s) have OPAQUE v0.7 passwords but no v0.7 \
                      server key is available. These users will NOT be able to log in \
                      until they reset their passwords.",
-                    legacy_count
+                    v07_count
                 );
             }
         }
         Err(e) => {
-            warn!("Failed to count legacy OPAQUE passwords at startup: {:#}", e);
+            warn!("Failed to count OPAQUE v0.7 passwords at startup: {:#}", e);
         }
     }
 

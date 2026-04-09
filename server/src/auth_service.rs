@@ -426,7 +426,7 @@ where
 }
 
 #[instrument(skip_all, level = "debug")]
-async fn opaque_login_start_legacy<Backend>(
+async fn opaque_login_start_v07<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<login_base64::ClientLoginStartRequest>,
 ) -> ApiResult<login_base64::ServerLoginStartResponse>
@@ -434,14 +434,14 @@ where
     Backend: OpaqueHandler + 'static,
 {
     data.get_opaque_handler()
-        .login_start_legacy(request.into_inner())
+        .login_start_v07(request.into_inner())
         .await
         .map(|res| ApiResult::Left(web::Json(res)))
         .unwrap_or_else(error_to_api_response)
 }
 
 #[instrument(skip_all, level = "debug")]
-async fn opaque_login_finish_legacy<Backend>(
+async fn opaque_login_finish_v07<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<login_base64::ClientLoginFinishRequest>,
 ) -> TcpResult<HttpResponse>
@@ -450,7 +450,7 @@ where
 {
     match data
         .get_opaque_handler()
-        .login_finish_legacy(request.into_inner())
+        .login_finish_v07(request.into_inner())
         .await
     {
         Ok(name) => get_login_successful_response(&data, &name).await,
@@ -458,14 +458,14 @@ where
     }
 }
 
-async fn opaque_login_finish_legacy_handler<Backend>(
+async fn opaque_login_finish_v07_handler<Backend>(
     data: web::Data<AppState<Backend>>,
     request: web::Json<login_base64::ClientLoginFinishRequest>,
 ) -> HttpResponse
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    opaque_login_finish_legacy(data, request)
+    opaque_login_finish_v07(data, request)
         .await
         .unwrap_or_else(error_to_http_response)
 }
@@ -808,17 +808,17 @@ where
         web::resource("/opaque/login/finish")
             .route(web::post().to(opaque_login_finish_handler::<Backend>)),
     )
-    // Legacy (opaque-ke 0.7) login endpoints for progressive migration.
-    // Clients fall back here after receiving HTTP 409 "legacy_opaque_version"
-    // from the v4.0 login endpoint. On successful legacy login, the client
+    // Opaque-ke 0.7 login endpoints for progressive migration.
+    // Clients fall back here after receiving HTTP 409 "opaque_v07_version"
+    // from the v4.0 login endpoint. On successful v0.7 login, the client
     // should re-register the password via /opaque/register/{start,finish}.
     .service(
-        web::resource("/opaque/v0/login/start")
-            .route(web::post().to(opaque_login_start_legacy::<Backend>)),
+        web::resource("/opaque/v07/login/start")
+            .route(web::post().to(opaque_login_start_v07::<Backend>)),
     )
     .service(
-        web::resource("/opaque/v0/login/finish")
-            .route(web::post().to(opaque_login_finish_legacy_handler::<Backend>)),
+        web::resource("/opaque/v07/login/finish")
+            .route(web::post().to(opaque_login_finish_v07_handler::<Backend>)),
     )
     .service(web::resource("/simple/login").route(web::post().to(simple_login_handler::<Backend>)))
     .service(web::resource("/refresh").route(web::get().to(get_refresh_handler::<Backend>)))

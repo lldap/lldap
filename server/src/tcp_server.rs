@@ -53,12 +53,12 @@ pub enum TcpError {
 pub type TcpResult<T> = std::result::Result<T, TcpError>;
 
 pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
-    // Special case: legacy OPAQUE version mismatch gets a structured JSON body
+    // Special case: OPAQUE v0.7 version mismatch gets a structured JSON body
     // so clients can detect it reliably via error_code rather than string matching.
-    if let TcpError::DomainError(DomainError::LegacyOpaqueVersion(_)) = &error {
+    if let TcpError::DomainError(DomainError::OpaqueV07Version(_)) = &error {
         return HttpResponse::Conflict()
             .content_type("application/json")
-            .body(r#"{"error_code":"legacy_opaque_version"}"#);
+            .body(r#"{"error_code":"opaque_v07_version"}"#);
     }
     match error {
         TcpError::DomainError(ref de) => match de {
@@ -72,7 +72,7 @@ pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
             DomainError::Base64DecodeError(_)
             | DomainError::BinarySerializationError(_)
             | DomainError::EntityNotFound(_) => HttpResponse::BadRequest(),
-            DomainError::LegacyOpaqueVersion(_) => unreachable!(),
+            DomainError::OpaqueV07Version(_) => unreachable!(),
         },
         TcpError::BadRequest(_) => HttpResponse::BadRequest(),
         TcpError::NotFoundError(_) => HttpResponse::NotFound(),

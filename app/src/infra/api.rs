@@ -13,16 +13,16 @@ pub struct HostService {}
 
 /// Error returned by `HostService::login_start`.
 ///
-/// `LegacyOpaqueVersion` is a distinct variant (not an error message) so the
+/// `OpaqueV07Version` is a distinct variant (not an error message) so the
 /// caller can detect it reliably without string matching. The server emits
-/// HTTP 409 with body `{"error_code":"legacy_opaque_version"}` when a user's
+/// HTTP 409 with body `{"error_code":"opaque_v07_version"}` when a user's
 /// password is still stored in the opaque-ke 0.7 format.
 #[derive(Debug)]
 pub enum LoginStartError {
-    /// Server reported that the user has a legacy (v0.7) password. The
-    /// caller should retry login via the legacy endpoints
-    /// (`HostService::login_start_legacy` + `login_finish_legacy`).
-    LegacyOpaqueVersion,
+    /// Server reported that the user has a v0.7 password. The
+    /// caller should retry login via the v0.7 endpoints
+    /// (`HostService::login_start_v07` + `login_finish_v07`).
+    OpaqueV07Version,
     /// Any other error (network, auth failure, bad request…).
     Other(anyhow::Error),
 }
@@ -30,8 +30,8 @@ pub enum LoginStartError {
 impl std::fmt::Display for LoginStartError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoginStartError::LegacyOpaqueVersion => {
-                write!(f, "User has a legacy OPAQUE password")
+            LoginStartError::OpaqueV07Version => {
+                write!(f, "User has a v0.7 OPAQUE password")
             }
             LoginStartError::Other(e) => write!(f, "{}", e),
         }
@@ -176,17 +176,17 @@ impl HostService {
             return Ok(Box::new(parsed));
         }
 
-        // HTTP 409 with {"error_code":"legacy_opaque_version"} signals a
-        // legacy (opaque-ke 0.7) password. The caller should retry via
-        // /auth/opaque/v0/login/*.
+        // HTTP 409 with {"error_code":"opaque_v07_version"} signals an
+        // opaque-ke 0.7 password. The caller should retry via
+        // /auth/opaque/v07/login/*.
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
         if status == 409 {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&body) {
                 if parsed.get("error_code").and_then(|v| v.as_str())
-                    == Some("legacy_opaque_version")
+                    == Some("opaque_v07_version")
                 {
-                    return Err(LoginStartError::LegacyOpaqueVersion);
+                    return Err(LoginStartError::OpaqueV07Version);
                 }
             }
         }
@@ -208,28 +208,28 @@ impl HostService {
         .and_then(set_cookies_from_jwt)
     }
 
-    /// Legacy (opaque-ke 0.7) login start. Used when the v4.0 login_start
-    /// returns `LoginStartError::LegacyOpaqueVersion`.
-    pub async fn login_start_legacy(
+    /// Opaque-ke 0.7 login start. Used when the v4.0 login_start
+    /// returns `LoginStartError::OpaqueV07Version`.
+    pub async fn login_start_v07(
         request: login_base64::ClientLoginStartRequest,
     ) -> Result<Box<login_base64::ServerLoginStartResponse>> {
         call_server_json_with_error_message(
-            &(base_url() + "/auth/opaque/v0/login/start"),
+            &(base_url() + "/auth/opaque/v07/login/start"),
             RequestType::Post(request),
-            "Could not start legacy authentication: ",
+            "Could not start v0.7 authentication: ",
         )
         .await
     }
 
-    /// Legacy (opaque-ke 0.7) login finish. On success, returns the JWT
+    /// Opaque-ke 0.7 login finish. On success, returns the JWT
     /// and sets the auth cookies exactly like the v4.0 finish.
-    pub async fn login_finish_legacy(
+    pub async fn login_finish_v07(
         request: login_base64::ClientLoginFinishRequest,
     ) -> Result<(String, bool)> {
         call_server_json_with_error_message::<login::ServerLoginResponse, _>(
-            &(base_url() + "/auth/opaque/v0/login/finish"),
+            &(base_url() + "/auth/opaque/v07/login/finish"),
             RequestType::Post(request),
-            "Could not finish legacy authentication",
+            "Could not finish v0.7 authentication",
         )
         .await
         .and_then(set_cookies_from_jwt)

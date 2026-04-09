@@ -27,50 +27,50 @@ type SqlOpaqueHandler = SqlBackendHandler;
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum OpaqueProtocolVersion {
     /// opaque-ke 0.7 password file (pre-RFC-9807). Validated only when a
-    /// legacy `ServerSetup` is preserved in memory; auto-upgraded to
+    /// v0.7 `ServerSetup` is preserved in memory; auto-upgraded to
     /// `Current` on the next successful login.
-    Legacy,
+    V07,
     /// opaque-ke 4.0 password file (RFC 9807-compliant). The current format.
     Current,
 }
 
 impl OpaqueProtocolVersion {
-    pub const LEGACY_DB_VALUE: i32 = 0;
+    pub const V07_DB_VALUE: i32 = 0;
     pub const CURRENT_DB_VALUE: i32 = 1;
 
     pub fn from_db(value: i32) -> Self {
-        // Anything we don't recognise is conservatively treated as legacy
+        // Anything we don't recognise is conservatively treated as v0.7
         // so we don't accidentally let an unknown future format slip past
         // the validator. The startup migration warning will surface this.
         match value {
             Self::CURRENT_DB_VALUE => Self::Current,
-            _ => Self::Legacy,
+            _ => Self::V07,
         }
     }
 
-    pub fn is_legacy(self) -> bool {
-        matches!(self, Self::Legacy)
+    pub fn is_v07(self) -> bool {
+        matches!(self, Self::V07)
     }
 
     pub fn db_value(self) -> i32 {
         match self {
-            Self::Legacy => Self::LEGACY_DB_VALUE,
+            Self::V07 => Self::V07_DB_VALUE,
             Self::Current => Self::CURRENT_DB_VALUE,
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Legacy opaque-ke 0.7 support for progressive password migration.
+// Opaque-ke 0.7 support for progressive password migration.
 //
 // Existing passwords stored with opaque-ke 0.7 remain valid. On login,
-// if the password version is 0 (legacy), we validate using the legacy
+// if the password version is 0 (v0.7), we validate using the v0.7
 // OPAQUE types and then silently re-register the password with v4.0.
 // ---------------------------------------------------------------------------
 
 #[allow(dead_code)]
-mod legacy {
-    use opaque_ke_legacy::ciphersuite::CipherSuite;
+mod v07 {
+    use opaque_ke_v07::ciphersuite::CipherSuite;
 
     pub struct ArgonHasher;
     impl ArgonHasher {
@@ -87,48 +87,48 @@ mod legacy {
         };
     }
 
-    impl<D: opaque_ke_legacy::hash::Hash> opaque_ke_legacy::slow_hash::SlowHash<D> for ArgonHasher {
+    impl<D: opaque_ke_v07::hash::Hash> opaque_ke_v07::slow_hash::SlowHash<D> for ArgonHasher {
         fn hash(
-            input: generic_array::GenericArray<u8, <D as digest_legacy::Digest>::OutputSize>,
-        ) -> std::result::Result<Vec<u8>, opaque_ke_legacy::errors::InternalPakeError> {
+            input: generic_array::GenericArray<u8, <D as digest_v07::Digest>::OutputSize>,
+        ) -> std::result::Result<Vec<u8>, opaque_ke_v07::errors::InternalPakeError> {
             argon2::hash_raw(&input, Self::SALT, Self::CONFIG)
-                .map_err(|_| opaque_ke_legacy::errors::InternalPakeError::HashingFailure)
+                .map_err(|_| opaque_ke_v07::errors::InternalPakeError::HashingFailure)
         }
     }
 
-    pub struct LegacySuite;
-    impl CipherSuite for LegacySuite {
-        type Group = curve25519_dalek_legacy::ristretto::RistrettoPoint;
-        type KeyExchange = opaque_ke_legacy::key_exchange::tripledh::TripleDH;
-        type Hash = sha2_legacy::Sha512;
+    pub struct V07Suite;
+    impl CipherSuite for V07Suite {
+        type Group = curve25519_dalek_v07::ristretto::RistrettoPoint;
+        type KeyExchange = opaque_ke_v07::key_exchange::tripledh::TripleDH;
+        type Hash = sha2_v07::Sha512;
         type SlowHash = ArgonHasher;
     }
 
-    pub type LegacyServerRegistration = opaque_ke_legacy::ServerRegistration<LegacySuite>;
-    pub type LegacyServerSetup = opaque_ke_legacy::ServerSetup<LegacySuite>;
-    pub type LegacyClientLogin = opaque_ke_legacy::ClientLogin<LegacySuite>;
-    pub type LegacyServerLogin = opaque_ke_legacy::ServerLogin<LegacySuite>;
-    pub type LegacyCredentialRequest = opaque_ke_legacy::CredentialRequest<LegacySuite>;
-    pub type LegacyCredentialResponse = opaque_ke_legacy::CredentialResponse<LegacySuite>;
-    pub type LegacyCredentialFinalization = opaque_ke_legacy::CredentialFinalization<LegacySuite>;
+    pub type V07ServerRegistration = opaque_ke_v07::ServerRegistration<V07Suite>;
+    pub type V07ServerSetup = opaque_ke_v07::ServerSetup<V07Suite>;
+    pub type V07ClientLogin = opaque_ke_v07::ClientLogin<V07Suite>;
+    pub type V07ServerLogin = opaque_ke_v07::ServerLogin<V07Suite>;
+    pub type V07CredentialRequest = opaque_ke_v07::CredentialRequest<V07Suite>;
+    pub type V07CredentialResponse = opaque_ke_v07::CredentialResponse<V07Suite>;
+    pub type V07CredentialFinalization = opaque_ke_v07::CredentialFinalization<V07Suite>;
 
-    /// Check if bytes are a valid legacy opaque-ke 0.7 password file.
-    pub fn is_legacy_format(bytes: &[u8]) -> bool {
-        LegacyServerRegistration::deserialize(bytes).is_ok()
+    /// Check if bytes are a valid opaque-ke 0.7 password file.
+    pub fn is_v07_format(bytes: &[u8]) -> bool {
+        V07ServerRegistration::deserialize(bytes).is_ok()
     }
 
-    /// Deserialize legacy ServerSetup from raw bytes.
-    pub fn deserialize_legacy_setup(bytes: &[u8]) -> Option<LegacyServerSetup> {
-        LegacyServerSetup::deserialize(bytes).ok()
+    /// Deserialize v0.7 ServerSetup from raw bytes.
+    pub fn deserialize_v07_setup(bytes: &[u8]) -> Option<V07ServerSetup> {
+        V07ServerSetup::deserialize(bytes).ok()
     }
 }
 
-/// Encrypted server state carried across the two round-trips of the legacy
-/// (v0.7) OPAQUE login. Analogous to `login::ServerData` but with legacy types.
+/// Encrypted server state carried across the two round-trips of the v0.7
+/// OPAQUE login. Analogous to `login::ServerData` but with v0.7 types.
 #[derive(Serialize, Deserialize)]
-struct LegacyServerData {
+struct V07ServerData {
     username: UserId,
-    server_login: legacy::LegacyServerLogin,
+    server_login: v07::V07ServerLogin,
 }
 
 /// Validate a password against a v4.0 (current) password file.
@@ -161,35 +161,35 @@ fn passwords_match(
     Ok(())
 }
 
-/// Validate a password against a legacy (opaque-ke 0.7) password file.
+/// Validate a password against a v0.7 (opaque-ke 0.7) password file.
 #[instrument(skip_all, level = "debug", err, fields(username = %username.as_str()))]
-fn passwords_match_legacy(
+fn passwords_match_v07(
     password_file_bytes: &[u8],
     clear_password: &str,
-    legacy_setup: &legacy::LegacyServerSetup,
+    v07_setup: &v07::V07ServerSetup,
     username: &UserId,
 ) -> Result<()> {
-    use opaque_ke_legacy::{ClientLogin, ClientLoginFinishParameters, ServerLogin, ServerLoginStartParameters};
+    use opaque_ke_v07::{ClientLogin, ClientLoginFinishParameters, ServerLogin, ServerLoginStartParameters};
     let mut rng = rand::rngs::OsRng;
 
-    let password_file = legacy::LegacyServerRegistration::deserialize(password_file_bytes)
-        .map_err(|e| DomainError::InternalError(format!("Legacy password deserialization error: {e}")))?;
+    let password_file = v07::V07ServerRegistration::deserialize(password_file_bytes)
+        .map_err(|e| DomainError::InternalError(format!("v0.7 password deserialization error: {e}")))?;
     let client_login_start =
-        ClientLogin::<legacy::LegacySuite>::start(&mut rng, clear_password.as_bytes())
-            .map_err(|e| DomainError::InternalError(format!("Legacy login start error: {e}")))?;
-    let server_login_start = ServerLogin::<legacy::LegacySuite>::start(
+        ClientLogin::<v07::V07Suite>::start(&mut rng, clear_password.as_bytes())
+            .map_err(|e| DomainError::InternalError(format!("v0.7 login start error: {e}")))?;
+    let server_login_start = ServerLogin::<v07::V07Suite>::start(
         &mut rng,
-        legacy_setup,
+        v07_setup,
         Some(password_file),
         client_login_start.message,
         username.as_str().as_bytes(),
         ServerLoginStartParameters::default(),
     )
-    .map_err(|e| DomainError::InternalError(format!("Legacy server login error: {e}")))?;
+    .map_err(|e| DomainError::InternalError(format!("v0.7 server login error: {e}")))?;
     client_login_start
         .state
         .finish(server_login_start.message, ClientLoginFinishParameters::default())
-        .map_err(|e| DomainError::InternalError(format!("Legacy login finish error: {e}")))?;
+        .map_err(|e| DomainError::InternalError(format!("v0.7 login finish error: {e}")))?;
     Ok(())
 }
 
@@ -200,16 +200,16 @@ fn passwords_match_legacy(
 enum Validator<'a> {
     /// Current (opaque-ke 4.0) handshake using the v4.0 ServerSetup.
     Current(&'a opaque::server::ServerSetup),
-    /// Legacy (opaque-ke 0.7) handshake using a deserialized legacy
+    /// Opaque-ke 0.7 handshake using a deserialized v0.7
     /// ServerSetup. Owned because it's recovered from raw bytes on demand.
-    Legacy(Box<legacy::LegacyServerSetup>),
+    V07(Box<v07::V07ServerSetup>),
 }
 
 impl<'a> Validator<'a> {
     fn validate(&self, password_file: &[u8], cleartext: &str, user: &UserId) -> Result<()> {
         match self {
             Validator::Current(setup) => passwords_match(password_file, cleartext, setup, user),
-            Validator::Legacy(setup) => passwords_match_legacy(password_file, cleartext, setup, user),
+            Validator::V07(setup) => passwords_match_v07(password_file, cleartext, setup, user),
         }
     }
 }
@@ -239,25 +239,25 @@ impl SqlBackendHandler {
     }
 
     /// Construct the in-process validator appropriate for the given
-    /// password version. Returns an error when a user has a legacy
-    /// password but no legacy ServerSetup is available (e.g. seed-based
+    /// password version. Returns an error when a user has a v0.7
+    /// password but no v0.7 ServerSetup is available (e.g. seed-based
     /// deployments cannot recover the v0.7 key).
     fn validator_for(&self, version: OpaqueProtocolVersion) -> Result<Validator<'_>> {
         match version {
             OpaqueProtocolVersion::Current => Ok(Validator::Current(&self.opaque_setup)),
-            OpaqueProtocolVersion::Legacy => {
-                let bytes = self.legacy_server_key_bytes.as_deref().ok_or_else(|| {
+            OpaqueProtocolVersion::V07 => {
+                let bytes = self.v07_server_key_bytes.as_deref().ok_or_else(|| {
                     DomainError::InternalError(
-                        "legacy password validation requested but no legacy server key is loaded"
+                        "v0.7 password validation requested but no v0.7 server key is loaded"
                             .to_string(),
                     )
                 })?;
-                let setup = legacy::deserialize_legacy_setup(bytes).ok_or_else(|| {
+                let setup = v07::deserialize_v07_setup(bytes).ok_or_else(|| {
                     DomainError::InternalError(
-                        "failed to deserialize the legacy server setup".to_string(),
+                        "failed to deserialize the v0.7 server setup".to_string(),
                     )
                 })?;
-                Ok(Validator::Legacy(Box::new(setup)))
+                Ok(Validator::V07(Box::new(setup)))
             }
         }
     }
@@ -280,12 +280,12 @@ impl SqlBackendHandler {
             }))
     }
 
-    /// Upgrade a legacy password to the current format after successful
+    /// Upgrade a v0.7 password to the current format after successful
     /// validation. The caller must have already verified the password
-    /// against the legacy `Validator` — this re-runs the full v4.0
+    /// against the v0.7 `Validator` — this re-runs the full v4.0
     /// registration flow and updates `password_version` in the DB.
     async fn upgrade_password(&self, username: &UserId, password: &str) -> Result<()> {
-        info!(r#"Upgrading password for "{}" from legacy to current format"#, username);
+        info!(r#"Upgrading password for "{}" from v0.7 to current format"#, username);
         register_password(self, username.clone(), &SecUtf8::from(password)).await
     }
 }
@@ -312,7 +312,7 @@ impl LoginHandler for SqlBackendHandler {
         );
 
         // Look up the validator for this user's password format. If the user
-        // has a legacy password but we have no legacy server key (e.g. a
+        // has a v0.7 password but we have no v0.7 server key (e.g. a
         // seed-based deployment, or a fresh install where the v0.7 key was
         // never preserved), the validator construction itself fails.
         let validator = self.validator_for(version).map_err(|e| {
@@ -327,11 +327,11 @@ impl LoginHandler for SqlBackendHandler {
             .validate(&password_hash, &request.password, &request.name)
             .map_err(|_| auth_error())?;
 
-        // On a successful legacy validation, opportunistically re-register
+        // On a successful v0.7 validation, opportunistically re-register
         // the password in the current format. This is best-effort: a
         // failed upgrade does NOT fail the login — the user is still
         // authenticated, and the upgrade will be retried on the next bind.
-        if version.is_legacy() {
+        if version.is_v07() {
             if let Err(e) = self.upgrade_password(&request.name, &request.password).await {
                 warn!(r#"Failed to upgrade password for "{}": {}"#, &request.name, e);
             }
@@ -351,17 +351,17 @@ impl OpaqueHandler for SqlOpaqueHandler {
         info!(r#"OPAQUE login attempt for "{}""#, &user_id);
         let maybe_password_entry = self.get_password_file_for_user(user_id.clone()).await?;
 
-        // If the user has a legacy (v0.7) password, reject v4.0 login attempts
+        // If the user has a v0.7 password, reject v4.0 login attempts
         // with a structured error signal. The client detects this error code and
-        // retries via /auth/opaque/v0/login/*, which re-registers with v4.0 on
+        // retries via /auth/opaque/v07/login/*, which re-registers with v4.0 on
         // success.
         if let Some((_, version)) = maybe_password_entry.as_ref() {
-            if version.is_legacy() {
+            if version.is_v07() {
                 info!(
-                    r#"OPAQUE v4.0 login attempted for "{}" with legacy v0.7 password; client should retry via /auth/opaque/v0/login/*"#,
+                    r#"OPAQUE v4.0 login attempted for "{}" with v0.7 password; client should retry via /auth/opaque/v07/login/*"#,
                     &user_id
                 );
-                return Err(DomainError::LegacyOpaqueVersion(user_id.to_string()));
+                return Err(DomainError::OpaqueV07Version(user_id.to_string()));
             }
         }
 
@@ -416,44 +416,44 @@ impl OpaqueHandler for SqlOpaqueHandler {
     }
 
     #[instrument(skip_all, level = "debug", err)]
-    async fn login_start_legacy(
+    async fn login_start_v07(
         &self,
         request: login_base64::ClientLoginStartRequest,
     ) -> Result<login_base64::ServerLoginStartResponse> {
         let user_id = request.username;
-        info!(r#"Legacy OPAQUE login attempt for "{}""#, &user_id);
+        info!(r#"v0.7 OPAQUE login attempt for "{}""#, &user_id);
 
-        // Recover the legacy ServerSetup. This fails fast on seed-based or
+        // Recover the v0.7 ServerSetup. This fails fast on seed-based or
         // fresh deployments where no v0.7 key was preserved.
-        let legacy_setup = match self.validator_for(OpaqueProtocolVersion::Legacy)? {
-            Validator::Legacy(setup) => *setup,
-            // `validator_for(Legacy)` only returns Validator::Legacy, but
+        let v07_setup = match self.validator_for(OpaqueProtocolVersion::V07)? {
+            Validator::V07(setup) => *setup,
+            // `validator_for(V07)` only returns Validator::V07, but
             // matches must be exhaustive.
-            Validator::Current(_) => unreachable!("validator_for(Legacy) must return Legacy"),
+            Validator::Current(_) => unreachable!("validator_for(V07) must return V07"),
         };
 
         // Decode the client's CredentialRequest bytes.
         let credential_request_bytes = base64::engine::general_purpose::STANDARD
             .decode(&request.login_start_request)?;
         let credential_request =
-            legacy::LegacyCredentialRequest::deserialize(&credential_request_bytes).map_err(|e| {
-                DomainError::InternalError(format!("Legacy CredentialRequest decode error: {e}"))
+            v07::V07CredentialRequest::deserialize(&credential_request_bytes).map_err(|e| {
+                DomainError::InternalError(format!("v0.7 CredentialRequest decode error: {e}"))
             })?;
 
-        // Fetch the user's password file. Only legacy passwords are handled
+        // Fetch the user's password file. Only v0.7 passwords are handled
         // here — a current-version user routed to this endpoint is rejected.
         let maybe_password_file = match self.get_password_file_for_user(user_id.clone()).await? {
-            Some((bytes, OpaqueProtocolVersion::Legacy)) => Some(
-                legacy::LegacyServerRegistration::deserialize(&bytes).map_err(|e| {
+            Some((bytes, OpaqueProtocolVersion::V07)) => Some(
+                v07::V07ServerRegistration::deserialize(&bytes).map_err(|e| {
                     DomainError::InternalError(format!(
-                        "Corrupted legacy password file for {}: {}",
+                        "Corrupted v0.7 password file for {}: {}",
                         &user_id, e
                     ))
                 })?,
             ),
             Some((_, OpaqueProtocolVersion::Current)) => {
                 return Err(DomainError::AuthenticationError(format!(
-                    r#"user "{}" does not have a legacy password"#,
+                    r#"user "{}" does not have a v0.7 password"#,
                     user_id
                 )));
             }
@@ -461,20 +461,20 @@ impl OpaqueHandler for SqlOpaqueHandler {
         };
 
         let mut rng = rand::rngs::OsRng;
-        let start_response = legacy::LegacyServerLogin::start(
+        let start_response = v07::V07ServerLogin::start(
             &mut rng,
-            &legacy_setup,
+            &v07_setup,
             maybe_password_file,
             credential_request,
             user_id.as_str().as_bytes(),
-            opaque_ke_legacy::ServerLoginStartParameters::default(),
+            opaque_ke_v07::ServerLoginStartParameters::default(),
         )
-        .map_err(|e| DomainError::InternalError(format!("Legacy server login start error: {e}")))?;
+        .map_err(|e| DomainError::InternalError(format!("v0.7 server login start error: {e}")))?;
 
         // Encrypt the server state. The orion key is derived from the v4.0
         // ServerSetup but the encryption is OPAQUE-version-agnostic — it's
         // just AEAD over bincode.
-        let server_data = LegacyServerData {
+        let server_data = V07ServerData {
             username: user_id,
             server_login: start_response.state,
         };
@@ -487,11 +487,11 @@ impl OpaqueHandler for SqlOpaqueHandler {
     }
 
     #[instrument(skip_all, level = "debug", err)]
-    async fn login_finish_legacy(
+    async fn login_finish_v07(
         &self,
         request: login_base64::ClientLoginFinishRequest,
     ) -> Result<UserId> {
-        let LegacyServerData {
+        let V07ServerData {
             username,
             server_login,
         } = self.open_state(&request.server_data)?;
@@ -499,24 +499,24 @@ impl OpaqueHandler for SqlOpaqueHandler {
         // Decode the client's CredentialFinalization bytes.
         let credential_finalization_bytes = base64::engine::general_purpose::STANDARD
             .decode(&request.credential_finalization)?;
-        let credential_finalization = legacy::LegacyCredentialFinalization::deserialize(
+        let credential_finalization = v07::V07CredentialFinalization::deserialize(
             &credential_finalization_bytes,
         )
         .map_err(|e| {
-            DomainError::InternalError(format!("Legacy CredentialFinalization decode error: {e}"))
+            DomainError::InternalError(format!("v0.7 CredentialFinalization decode error: {e}"))
         })?;
 
         match server_login.finish(credential_finalization) {
             Ok(_session) => {
                 info!(
-                    r#"Legacy OPAQUE login successful for "{}" — client should now re-register the password"#,
+                    r#"v0.7 OPAQUE login successful for "{}" — client should now re-register the password"#,
                     &username
                 );
             }
             Err(e) => {
-                warn!(r#"Legacy OPAQUE login attempt failed for "{}""#, &username);
+                warn!(r#"v0.7 OPAQUE login attempt failed for "{}""#, &username);
                 return Err(DomainError::AuthenticationError(format!(
-                    "Legacy login validation failed: {e}"
+                    "v0.7 login validation failed: {e}"
                 )));
             }
         }
@@ -794,21 +794,21 @@ mod tests {
     }
 
     #[test]
-    fn test_legacy_format_compat() {
-        // Legacy password files deserialize with opaque-ke 4.0 (layout-compatible).
-        // However, the full handshake still fails — see test_legacy_password_full_handshake.
+    fn test_v07_format_compat() {
+        // v0.7 password files deserialize with opaque-ke 4.0 (layout-compatible).
+        // However, the full handshake still fails — see test_v07_password_full_handshake.
         let mut rng = rand::rngs::OsRng;
-        let legacy_setup = opaque_ke_legacy::ServerSetup::<legacy::LegacySuite>::new(&mut rng);
+        let v07_setup = opaque_ke_v07::ServerSetup::<v07::V07Suite>::new(&mut rng);
 
         let client_start =
-            opaque_ke_legacy::ClientRegistration::<legacy::LegacySuite>::start(
+            opaque_ke_v07::ClientRegistration::<v07::V07Suite>::start(
                 &mut rng,
                 b"legacy_password",
             )
             .unwrap();
         let server_start =
-            opaque_ke_legacy::ServerRegistration::<legacy::LegacySuite>::start(
-                &legacy_setup,
+            opaque_ke_v07::ServerRegistration::<v07::V07Suite>::start(
+                &v07_setup,
                 client_start.message,
                 b"legacyuser",
             )
@@ -818,11 +818,11 @@ mod tests {
             .finish(
                 &mut rng,
                 server_start.message,
-                opaque_ke_legacy::ClientRegistrationFinishParameters::default(),
+                opaque_ke_v07::ClientRegistrationFinishParameters::default(),
             )
             .unwrap();
         let password_file =
-            opaque_ke_legacy::ServerRegistration::<legacy::LegacySuite>::finish(
+            opaque_ke_v07::ServerRegistration::<v07::V07Suite>::finish(
                 client_finish.message,
             );
         let bytes = password_file.serialize();
@@ -831,31 +831,31 @@ mod tests {
         // group elements are serialized the same way in both versions.
         assert!(
             opaque::server::ServerRegistration::deserialize(&bytes).is_ok(),
-            "Legacy ServerRegistration should be parseable by opaque-ke 4.0"
+            "v0.7 ServerRegistration should be parseable by opaque-ke 4.0"
         );
-        // Also detected as legacy (both formats parse).
+        // Also detected as v0.7 (both formats parse).
         assert!(
-            legacy::is_legacy_format(&bytes),
-            "Should also be detectable as legacy format"
+            v07::is_v07_format(&bytes),
+            "Should also be detectable as v0.7 format"
         );
     }
 
-    /// Helper: create a legacy (opaque-ke 0.7) password file for the given user.
-    /// Returns the serialized bytes of the password file and the legacy ServerSetup bytes.
-    fn create_legacy_password_file(
+    /// Helper: create a v0.7 (opaque-ke 0.7) password file for the given user.
+    /// Returns the serialized bytes of the password file and the v0.7 ServerSetup bytes.
+    fn create_v07_password_file(
         username: &str,
         password: &str,
     ) -> (Vec<u8>, Vec<u8>) {
         let mut rng = rand::rngs::OsRng;
-        let legacy_setup = opaque_ke_legacy::ServerSetup::<legacy::LegacySuite>::new(&mut rng);
+        let v07_setup = opaque_ke_v07::ServerSetup::<v07::V07Suite>::new(&mut rng);
 
-        let client_start = opaque_ke_legacy::ClientRegistration::<legacy::LegacySuite>::start(
+        let client_start = opaque_ke_v07::ClientRegistration::<v07::V07Suite>::start(
             &mut rng,
             password.as_bytes(),
         )
         .unwrap();
-        let server_start = opaque_ke_legacy::ServerRegistration::<legacy::LegacySuite>::start(
-            &legacy_setup,
+        let server_start = opaque_ke_v07::ServerRegistration::<v07::V07Suite>::start(
+            &v07_setup,
             client_start.message,
             username.as_bytes(),
         )
@@ -865,55 +865,55 @@ mod tests {
             .finish(
                 &mut rng,
                 server_start.message,
-                opaque_ke_legacy::ClientRegistrationFinishParameters::default(),
+                opaque_ke_v07::ClientRegistrationFinishParameters::default(),
             )
             .unwrap();
-        let legacy_password_file =
-            opaque_ke_legacy::ServerRegistration::<legacy::LegacySuite>::finish(
+        let v07_password_file =
+            opaque_ke_v07::ServerRegistration::<v07::V07Suite>::finish(
                 client_finish.message,
             );
-        (legacy_password_file.serialize(), legacy_setup.serialize())
+        (v07_password_file.serialize(), v07_setup.serialize())
     }
 
     #[tokio::test]
-    async fn test_legacy_bind_auto_upgrade() {
-        // End-to-end test: legacy v0.7 password → LDAP bind succeeds
+    async fn test_v07_bind_auto_upgrade() {
+        // End-to-end test: v0.7 password → LDAP bind succeeds
         // → password is auto-upgraded to v4.0 → bind still works.
         let sql_pool = get_initialized_db().await;
         crate::logging::init_for_tests();
         let new_setup = generate_random_private_key();
 
-        // Create a legacy password file, simulating what opaque-ke 0.7 would have stored.
-        let (legacy_password_bytes, legacy_setup_bytes) =
-            create_legacy_password_file("legacy_user", "my_legacy_password");
+        // Create a v0.7 password file, simulating what opaque-ke 0.7 would have stored.
+        let (v07_password_bytes, v07_setup_bytes) =
+            create_v07_password_file("legacy_user", "my_legacy_password");
 
         let handler =
-            SqlBackendHandler::new(new_setup, Some(legacy_setup_bytes), sql_pool.clone());
+            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
 
         // Create user with no password.
         insert_user_no_password(&handler, "legacy_user").await;
 
-        // Write the legacy password file directly into the DB with version 0.
+        // Write the v0.7 password file directly into the DB with version 0.
         let now = chrono::Utc::now().naive_utc();
         let user_update = model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_user")),
-            password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
+            password_hash: ActiveValue::Set(Some(v07_password_bytes)),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::V07.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
         };
         user_update.update(&sql_pool).await.unwrap();
 
-        // LDAP bind with the correct legacy password.
-        // The handler should validate with legacy setup, then auto-upgrade to v4.0.
+        // LDAP bind with the correct v0.7 password.
+        // The handler should validate with v0.7 setup, then auto-upgrade to v4.0.
         handler
             .bind(BindRequest {
                 name: UserId::new("legacy_user"),
                 password: "my_legacy_password".to_string(),
             })
             .await
-            .expect("Legacy bind should succeed");
+            .expect("v0.7 bind should succeed");
 
         // Verify the password was auto-upgraded to v4.0 (password_version = 1).
         let upgraded = handler
@@ -923,7 +923,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             upgraded.1, OpaqueProtocolVersion::Current,
-            "Password should be auto-upgraded to version 1 after successful legacy bind"
+            "Password should be auto-upgraded to version 1 after successful v0.7 bind"
         );
 
         // Verify the new (v4.0) password file works via a second bind.
@@ -946,24 +946,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_legacy_bind_wrong_password() {
-        // Wrong password against a legacy file should fail without upgrading.
+    async fn test_v07_bind_wrong_password() {
+        // Wrong password against a v0.7 file should fail without upgrading.
         let sql_pool = get_initialized_db().await;
         crate::logging::init_for_tests();
         let new_setup = generate_random_private_key();
 
-        let (legacy_password_bytes, legacy_setup_bytes) =
-            create_legacy_password_file("legacy_user", "correct_password");
+        let (v07_password_bytes, v07_setup_bytes) =
+            create_v07_password_file("legacy_user", "correct_password");
 
         let handler =
-            SqlBackendHandler::new(new_setup, Some(legacy_setup_bytes), sql_pool.clone());
+            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
         insert_user_no_password(&handler, "legacy_user").await;
 
         let now = chrono::Utc::now().naive_utc();
         let user_update = model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_user")),
-            password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
+            password_hash: ActiveValue::Set(Some(v07_password_bytes)),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::V07.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -976,7 +976,7 @@ mod tests {
                 password: "wrong_password".to_string(),
             })
             .await
-            .expect_err("Wrong legacy password should fail");
+            .expect_err("Wrong v0.7 password should fail");
 
         // Version should still be 0 (no upgrade on failure).
         let entry = handler
@@ -984,7 +984,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(entry.1, OpaqueProtocolVersion::Legacy, "Failed bind should not upgrade the password");
+        assert_eq!(entry.1, OpaqueProtocolVersion::V07, "Failed bind should not upgrade the password");
     }
 
     #[tokio::test]
@@ -1031,19 +1031,19 @@ mod tests {
         crate::logging::init_for_tests();
         let new_setup = generate_random_private_key();
 
-        let (legacy_password_bytes, legacy_setup_bytes) =
-            create_legacy_password_file("legacy_alice", "alice_password");
+        let (v07_password_bytes, v07_setup_bytes) =
+            create_v07_password_file("legacy_alice", "alice_password");
 
         let handler =
-            SqlBackendHandler::new(new_setup, Some(legacy_setup_bytes), sql_pool.clone());
+            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
 
-        // Legacy user.
+        // v0.7 user.
         insert_user_no_password(&handler, "legacy_alice").await;
         let now = chrono::Utc::now().naive_utc();
         model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_alice")),
-            password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
+            password_hash: ActiveValue::Set(Some(v07_password_bytes)),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::V07.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -1069,7 +1069,7 @@ mod tests {
                 password: "alice_password".to_string(),
             })
             .await
-            .expect("Legacy user should bind");
+            .expect("v0.7 user should bind");
         handler
             .bind(BindRequest {
                 name: UserId::new("new_bob"),
@@ -1080,29 +1080,29 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------
-    // Legacy OPAQUE login flow tests (Phase 5 integration tests at the
+    // v0.7 OPAQUE login flow tests (Phase 5 integration tests at the
     // handler level — faster and more reliable than a full-server fixture).
     // ---------------------------------------------------------------------
 
     #[tokio::test]
-    async fn test_opaque_login_start_returns_legacy_version_error() {
-        // A user with password_version = 0 should get LegacyOpaqueVersion on v4.0 login_start.
+    async fn test_opaque_login_start_returns_v07_version_error() {
+        // A user with password_version = 0 should get OpaqueV07Version on v4.0 login_start.
         let sql_pool = get_initialized_db().await;
         crate::logging::init_for_tests();
         let new_setup = generate_random_private_key();
 
-        let (legacy_password_bytes, legacy_setup_bytes) =
-            create_legacy_password_file("legacy_user", "my_password");
+        let (v07_password_bytes, v07_setup_bytes) =
+            create_v07_password_file("legacy_user", "my_password");
 
         let handler =
-            SqlBackendHandler::new(new_setup, Some(legacy_setup_bytes), sql_pool.clone());
+            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
         insert_user_no_password(&handler, "legacy_user").await;
 
         let now = chrono::Utc::now().naive_utc();
         model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_user")),
-            password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
+            password_hash: ActiveValue::Set(Some(v07_password_bytes)),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::V07.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -1112,7 +1112,7 @@ mod tests {
         .unwrap();
 
         // Build a v4.0 login start request — the server should reject it with
-        // DomainError::LegacyOpaqueVersion before even attempting the handshake.
+        // DomainError::OpaqueV07Version before even attempting the handshake.
         let mut rng = rand::rngs::OsRng;
         let client_start =
             opaque::client::login::start_login("my_password", &mut rng).unwrap();
@@ -1122,33 +1122,33 @@ mod tests {
         };
         let result = handler.login_start(req).await;
         match result {
-            Ok(_) => panic!("Expected LegacyOpaqueVersion error, got Ok"),
-            Err(DomainError::LegacyOpaqueVersion(ref u)) => assert_eq!(u, "legacy_user"),
-            Err(other) => panic!("Expected LegacyOpaqueVersion error, got {:?}", other),
+            Ok(_) => panic!("Expected OpaqueV07Version error, got Ok"),
+            Err(DomainError::OpaqueV07Version(ref u)) => assert_eq!(u, "legacy_user"),
+            Err(other) => panic!("Expected OpaqueV07Version error, got {:?}", other),
         }
     }
 
     #[tokio::test]
-    async fn test_legacy_opaque_login_full_flow() {
-        // Full legacy login handshake: start -> finish -> returns username.
+    async fn test_v07_opaque_login_full_flow() {
+        // Full v0.7 login handshake: start -> finish -> returns username.
         // Then re-register via v4.0 -> password_version becomes 1.
         use base64::Engine;
         let sql_pool = get_initialized_db().await;
         crate::logging::init_for_tests();
         let new_setup = generate_random_private_key();
 
-        let (legacy_password_bytes, legacy_setup_bytes) =
-            create_legacy_password_file("legacy_alice", "alice_password");
+        let (v07_password_bytes, v07_setup_bytes) =
+            create_v07_password_file("legacy_alice", "alice_password");
 
         let handler =
-            SqlBackendHandler::new(new_setup, Some(legacy_setup_bytes), sql_pool.clone());
+            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
         insert_user_no_password(&handler, "legacy_alice").await;
 
         let now = chrono::Utc::now().naive_utc();
         model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_alice")),
-            password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
+            password_hash: ActiveValue::Set(Some(v07_password_bytes)),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::V07.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -1157,9 +1157,9 @@ mod tests {
         .await
         .unwrap();
 
-        // Step 1: client-side legacy start_login.
+        // Step 1: client-side v0.7 start_login.
         let mut rng = rand::rngs::OsRng;
-        let client_start = opaque_ke_legacy::ClientLogin::<legacy::LegacySuite>::start(
+        let client_start = opaque_ke_v07::ClientLogin::<v07::V07Suite>::start(
             &mut rng,
             b"alice_password",
         )
@@ -1170,15 +1170,15 @@ mod tests {
                 .encode(client_start.message.serialize()),
         };
 
-        // Step 2: server legacy login_start.
-        let start_response = handler.login_start_legacy(req).await.unwrap();
+        // Step 2: server v0.7 login_start.
+        let start_response = handler.login_start_v07(req).await.unwrap();
 
-        // Step 3: client-side legacy finish_login.
+        // Step 3: client-side v0.7 finish_login.
         let server_response_bytes = base64::engine::general_purpose::STANDARD
             .decode(&start_response.credential_response)
             .unwrap();
         let server_credential_response =
-            opaque_ke_legacy::CredentialResponse::<legacy::LegacySuite>::deserialize(
+            opaque_ke_v07::CredentialResponse::<v07::V07Suite>::deserialize(
                 &server_response_bytes,
             )
             .unwrap();
@@ -1186,7 +1186,7 @@ mod tests {
             .state
             .finish(
                 server_credential_response,
-                opaque_ke_legacy::ClientLoginFinishParameters::default(),
+                opaque_ke_v07::ClientLoginFinishParameters::default(),
             )
             .unwrap();
         let finish_req = login_base64::ClientLoginFinishRequest {
@@ -1195,19 +1195,19 @@ mod tests {
                 .encode(client_finish.message.serialize()),
         };
 
-        // Step 4: server legacy login_finish — validates the password.
-        let username = handler.login_finish_legacy(finish_req).await.unwrap();
+        // Step 4: server v0.7 login_finish — validates the password.
+        let username = handler.login_finish_v07(finish_req).await.unwrap();
         assert_eq!(username.as_str(), "legacy_alice");
 
         // Step 5: simulate the client's post-login re-registration (this is
-        // what the WASM client does after a successful legacy login).
+        // what the WASM client does after a successful v0.7 login).
         // password_version should still be 0 at this point.
         let before = handler
             .get_password_file_for_user(UserId::new("legacy_alice"))
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(before.1, OpaqueProtocolVersion::Legacy, "Should still be legacy before re-registration");
+        assert_eq!(before.1, OpaqueProtocolVersion::V07, "Should still be v0.7 before re-registration");
 
         // Re-register using the convenience function (mirrors what the
         // client does via /opaque/register/{start,finish}).
@@ -1227,7 +1227,7 @@ mod tests {
             .unwrap();
         assert_eq!(after.1, OpaqueProtocolVersion::Current, "Should be v4.0 after re-registration");
 
-        // Step 7: v4.0 login_start no longer returns LegacyOpaqueVersion.
+        // Step 7: v4.0 login_start no longer returns OpaqueV07Version.
         let client_v4 = opaque::client::login::start_login("alice_password", &mut rng).unwrap();
         let v4_req = login::ClientLoginStartRequest {
             username: UserId::new("legacy_alice"),
@@ -1240,25 +1240,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_legacy_login_wrong_password_fails() {
-        // A wrong password on the legacy endpoint should fail validation.
+    async fn test_v07_login_wrong_password_fails() {
+        // A wrong password on the v0.7 endpoint should fail validation.
         use base64::Engine;
         let sql_pool = get_initialized_db().await;
         crate::logging::init_for_tests();
         let new_setup = generate_random_private_key();
 
-        let (legacy_password_bytes, legacy_setup_bytes) =
-            create_legacy_password_file("legacy_user", "correct_password");
+        let (v07_password_bytes, v07_setup_bytes) =
+            create_v07_password_file("legacy_user", "correct_password");
 
         let handler =
-            SqlBackendHandler::new(new_setup, Some(legacy_setup_bytes), sql_pool.clone());
+            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
         insert_user_no_password(&handler, "legacy_user").await;
 
         let now = chrono::Utc::now().naive_utc();
         model::users::ActiveModel {
             user_id: ActiveValue::Set(UserId::new("legacy_user")),
-            password_hash: ActiveValue::Set(Some(legacy_password_bytes)),
-            password_version: ActiveValue::Set(OpaqueProtocolVersion::Legacy.db_value()),
+            password_hash: ActiveValue::Set(Some(v07_password_bytes)),
+            password_version: ActiveValue::Set(OpaqueProtocolVersion::V07.db_value()),
             password_modified_date: ActiveValue::Set(now),
             modified_date: ActiveValue::Set(now),
             ..Default::default()
@@ -1269,7 +1269,7 @@ mod tests {
 
         // Client uses the WRONG password.
         let mut rng = rand::rngs::OsRng;
-        let client_start = opaque_ke_legacy::ClientLogin::<legacy::LegacySuite>::start(
+        let client_start = opaque_ke_v07::ClientLogin::<v07::V07Suite>::start(
             &mut rng,
             b"wrong_password",
         )
@@ -1279,14 +1279,14 @@ mod tests {
             login_start_request: base64::engine::general_purpose::STANDARD
                 .encode(client_start.message.serialize()),
         };
-        let start_response = handler.login_start_legacy(req).await.unwrap();
+        let start_response = handler.login_start_v07(req).await.unwrap();
 
         // Client finishes with the wrong password — the server should reject it.
         let server_response_bytes = base64::engine::general_purpose::STANDARD
             .decode(&start_response.credential_response)
             .unwrap();
         let server_credential_response =
-            opaque_ke_legacy::CredentialResponse::<legacy::LegacySuite>::deserialize(
+            opaque_ke_v07::CredentialResponse::<v07::V07Suite>::deserialize(
                 &server_response_bytes,
             )
             .unwrap();
@@ -1294,7 +1294,7 @@ mod tests {
             .state
             .finish(
                 server_credential_response,
-                opaque_ke_legacy::ClientLoginFinishParameters::default(),
+                opaque_ke_v07::ClientLoginFinishParameters::default(),
             );
         // The client-side finish may fail (wrong password can't complete the
         // OPAQUE handshake), or it may succeed locally and then the server
@@ -1306,8 +1306,8 @@ mod tests {
                     .encode(client_finish.message.serialize()),
             };
             assert!(
-                handler.login_finish_legacy(finish_req).await.is_err(),
-                "Wrong password should not complete legacy login"
+                handler.login_finish_v07(finish_req).await.is_err(),
+                "Wrong password should not complete v0.7 login"
             );
         }
 
@@ -1317,22 +1317,22 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(entry.1, OpaqueProtocolVersion::Legacy);
+        assert_eq!(entry.1, OpaqueProtocolVersion::V07);
     }
 
     #[tokio::test]
-    async fn test_legacy_login_rejected_for_v4_user() {
-        // A user with password_version = 1 should be rejected by the legacy endpoint.
+    async fn test_v07_login_rejected_for_v4_user() {
+        // A user with password_version = 1 should be rejected by the v0.7 endpoint.
         use base64::Engine;
         let sql_pool = get_initialized_db().await;
         crate::logging::init_for_tests();
         let new_setup = generate_random_private_key();
 
-        // The legacy setup is not strictly needed for this test, but is
+        // The v0.7 setup is not strictly needed for this test, but is
         // provided to exercise the full code path.
-        let (_, legacy_setup_bytes) = create_legacy_password_file("unused", "unused");
+        let (_, v07_setup_bytes) = create_v07_password_file("unused", "unused");
         let handler =
-            SqlBackendHandler::new(new_setup, Some(legacy_setup_bytes), sql_pool.clone());
+            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
 
         // Register a fresh v4.0 user.
         insert_user_no_password(&handler, "new_user").await;
@@ -1344,10 +1344,10 @@ mod tests {
         .await
         .unwrap();
 
-        // Try to log in via the legacy endpoint — should fail because the
+        // Try to log in via the v0.7 endpoint — should fail because the
         // user has password_version = 1.
         let mut rng = rand::rngs::OsRng;
-        let client_start = opaque_ke_legacy::ClientLogin::<legacy::LegacySuite>::start(
+        let client_start = opaque_ke_v07::ClientLogin::<v07::V07Suite>::start(
             &mut rng,
             b"new_password",
         )
@@ -1358,8 +1358,8 @@ mod tests {
                 .encode(client_start.message.serialize()),
         };
         assert!(
-            handler.login_start_legacy(req).await.is_err(),
-            "Legacy login should reject v4.0 users"
+            handler.login_start_v07(req).await.is_err(),
+            "v0.7 login should reject v4.0 users"
         );
     }
 }

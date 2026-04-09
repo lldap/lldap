@@ -196,10 +196,10 @@ impl Configuration {
         &self.server_setup.as_ref().unwrap().server_setup
     }
 
-    /// Returns the raw bytes of the legacy (opaque-ke 0.7) ServerSetup, if available.
+    /// Returns the raw bytes of the v0.7 (opaque-ke 0.7) ServerSetup, if available.
     /// Used for backward-compatible password validation during progressive migration.
-    pub fn get_legacy_server_key_bytes(&self) -> Option<&[u8]> {
-        self.server_setup.as_ref()?.legacy_server_key_bytes.as_deref()
+    pub fn get_v07_server_key_bytes(&self) -> Option<&[u8]> {
+        self.server_setup.as_ref()?.v07_server_key_bytes.as_deref()
     }
 
     pub fn get_server_keys(&self) -> &KeyPair {
@@ -329,34 +329,34 @@ fn rotate_key_file_atomically(path: &std::path::Path, new_bytes: &[u8]) -> Resul
     Ok(())
 }
 
-/// Return the path of the legacy key sidecar file for a given key file path.
-fn legacy_sidecar_path(key_file: &std::path::Path) -> std::path::PathBuf {
+/// Return the path of the v0.7 key sidecar file for a given key file path.
+fn v07_sidecar_path(key_file: &std::path::Path) -> std::path::PathBuf {
     let mut p = key_file.as_os_str().to_owned();
-    p.push(".legacy");
+    p.push(".v07");
     std::path::PathBuf::from(p)
 }
 
 /// Persist the pre-rotation key bytes to a sidecar file so they survive
 /// process restarts. The file is created with restrictive permissions
 /// (same as the main key file) because it contains sensitive key material.
-fn save_legacy_key_sidecar(key_file: &std::path::Path, legacy_bytes: &[u8]) -> Result<()> {
-    let sidecar = legacy_sidecar_path(key_file);
+fn save_v07_key_sidecar(key_file: &std::path::Path, v07_bytes: &[u8]) -> Result<()> {
+    let sidecar = v07_sidecar_path(key_file);
     // Remove any stale sidecar first (write_to_readonly_file asserts !exists).
     let _ = std::fs::remove_file(&sidecar);
-    write_to_readonly_file(&sidecar, legacy_bytes).context(format!(
-        "Could not write legacy key sidecar to `{}`",
+    write_to_readonly_file(&sidecar, v07_bytes).context(format!(
+        "Could not write v0.7 key sidecar to `{}`",
         sidecar.display()
     ))
 }
 
-/// Load the legacy key sidecar if it exists. Returns `None` if there is no
-/// sidecar — the caller can still serve, just without legacy password support.
-fn load_legacy_key_sidecar(key_file: &std::path::Path) -> Option<Vec<u8>> {
-    let sidecar = legacy_sidecar_path(key_file);
+/// Load the v0.7 key sidecar if it exists. Returns `None` if there is no
+/// sidecar — the caller can still serve, just without v0.7 password support.
+fn load_v07_key_sidecar(key_file: &std::path::Path) -> Option<Vec<u8>> {
+    let sidecar = v07_sidecar_path(key_file);
     match std::fs::read(&sidecar) {
         Ok(bytes) => {
             eprintln!(
-                "Loaded legacy server key from `{}` for backward-compatible \
+                "Loaded v0.7 server key from `{}` for backward-compatible \
                  password validation.",
                 sidecar.display()
             );
@@ -366,18 +366,18 @@ fn load_legacy_key_sidecar(key_file: &std::path::Path) -> Option<Vec<u8>> {
     }
 }
 
-/// Remove the legacy key sidecar once all users have been upgraded.
-/// Called from main.rs after confirming `count_legacy_passwords() == 0`.
-pub fn cleanup_legacy_key_sidecar(config: &Configuration) {
-    let sidecar = legacy_sidecar_path(std::path::Path::new(&config.key_file));
+/// Remove the v0.7 key sidecar once all users have been upgraded.
+/// Called from main.rs after confirming `count_v07_passwords() == 0`.
+pub fn cleanup_v07_key_sidecar(config: &Configuration) {
+    let sidecar = v07_sidecar_path(std::path::Path::new(&config.key_file));
     if sidecar.exists() {
         match std::fs::remove_file(&sidecar) {
             Ok(()) => eprintln!(
-                "All users upgraded to opaque-ke 4.0. Removed legacy key sidecar `{}`.",
+                "All users upgraded to opaque-ke 4.0. Removed v0.7 key sidecar `{}`.",
                 sidecar.display()
             ),
             Err(e) => eprintln!(
-                "WARNING: Could not remove legacy key sidecar `{}`: {}",
+                "WARNING: Could not remove v0.7 key sidecar `{}`: {}",
                 sidecar.display(),
                 e
             ),
@@ -389,9 +389,9 @@ pub fn cleanup_legacy_key_sidecar(config: &Configuration) {
 pub struct ServerSetupConfig {
     server_setup: ServerSetup,
     private_key_location: PrivateKeyLocation,
-    /// Raw bytes of the legacy (opaque-ke 0.7) ServerSetup, if available.
+    /// Raw bytes of the v0.7 (opaque-ke 0.7) ServerSetup, if available.
     /// Preserved when upgrading from an older opaque-ke version.
-    legacy_server_key_bytes: Option<Vec<u8>>,
+    v07_server_key_bytes: Option<Vec<u8>>,
 }
 
 #[derive(derive_more::From)]
@@ -494,20 +494,20 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
         Ok(ServerSetupConfig {
             server_setup: ServerSetup::new(&mut rng),
             private_key_location: private_key_location.for_key_seed(),
-            legacy_server_key_bytes: None,
+            v07_server_key_bytes: None,
         })
     } else if path.exists() {
         let bytes = read(file_path).context(format!("Could not read key file `{file_path}`"))?;
         match ServerSetup::deserialize(&bytes) {
             Ok(server_setup) => {
-                // If a previous rotation left a `<keyfile>.legacy` sidecar,
-                // load it so the legacy OPAQUE handshake can still validate
+                // If a previous rotation left a `<keyfile>.v07` sidecar,
+                // load it so the v0.7 OPAQUE handshake can still validate
                 // users who haven't logged in since the key rotation.
-                let legacy_bytes = load_legacy_key_sidecar(path);
+                let v07_bytes = load_v07_key_sidecar(path);
                 Ok(ServerSetupConfig {
                     server_setup,
                     private_key_location: private_key_location.for_key_file(file_path),
-                    legacy_server_key_bytes: legacy_bytes,
+                    v07_server_key_bytes: v07_bytes,
                 })
             }
             Err(deserialize_err) => {
@@ -530,37 +530,37 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
                          restart the server with --force-update-private-key=true \
                          (or LLDAP_FORCE_UPDATE_PRIVATE_KEY=true) to migrate to a \
                          new server key. Existing passwords will be auto-upgraded \
-                         on next login via the legacy OPAQUE handshake — they are \
+                         on next login via the v0.7 OPAQUE handshake — they are \
                          NOT lost, as long as the original key file is preserved \
                          on disk until at least one successful login per user."
                     ));
                 }
 
-                // Explicit rotation requested. Preserve the legacy bytes both
+                // Explicit rotation requested. Preserve the v0.7 bytes both
                 // in memory (for this process run) AND in a sidecar file (for
                 // future restarts), then atomically replace the on-disk key
                 // with a fresh v4.0 key.
                 //
-                // The sidecar file (`<keyfile>.legacy`) is loaded automatically
+                // The sidecar file (`<keyfile>.v07`) is loaded automatically
                 // on subsequent startups so users who haven't logged in yet can
-                // still authenticate via the legacy OPAQUE handshake. It is
+                // still authenticate via the v0.7 OPAQUE handshake. It is
                 // cleaned up once all users have been upgraded (see main.rs).
-                let legacy_bytes = bytes.clone();
+                let v07_bytes = bytes.clone();
                 let server_setup = generate_random_private_key();
                 rotate_key_file_atomically(path, &server_setup.serialize())?;
-                save_legacy_key_sidecar(path, &legacy_bytes)?;
+                save_v07_key_sidecar(path, &v07_bytes)?;
 
                 eprintln!(
                     "WARNING: Key file `{file_path}` was rotated to a new opaque-ke \
                      format on the admin's request (--force-update-private-key=true). \
-                     The previous key was saved to `{file_path}.legacy` for backward \
+                     The previous key was saved to `{file_path}.v07` for backward \
                      compatibility. Existing passwords will be progressively upgraded \
-                     on next login via the legacy OPAQUE handshake."
+                     on next login via the v0.7 OPAQUE handshake."
                 );
                 Ok(ServerSetupConfig {
                     server_setup,
                     private_key_location: private_key_location.for_key_file(file_path),
-                    legacy_server_key_bytes: Some(legacy_bytes),
+                    v07_server_key_bytes: Some(v07_bytes),
                 })
             }
         }
@@ -572,7 +572,7 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
         Ok(ServerSetupConfig {
             server_setup,
             private_key_location: private_key_location.for_key_file(file_path),
-            legacy_server_key_bytes: None,
+            v07_server_key_bytes: None,
         })
     }
 }
@@ -916,7 +916,7 @@ mod tests {
     }
 
     /// When the admin explicitly opts in via `force_update_private_key=true`,
-    /// rotation is allowed and the legacy bytes are preserved in memory for
+    /// rotation is allowed and the v0.7 bytes are preserved in memory for
     /// progressive password migration.
     #[test]
     fn unparseable_key_file_is_rotated_when_forced() {
@@ -928,11 +928,11 @@ mod tests {
             let setup = get_server_setup(&path_str, "", PrivateKeyLocation::Tests, true)
                 .expect("Forced rotation should succeed");
 
-            // Legacy bytes preserved in memory.
+            // v0.7 bytes preserved in memory.
             assert_eq!(
-                setup.legacy_server_key_bytes.as_deref(),
+                setup.v07_server_key_bytes.as_deref(),
                 Some(original.as_slice()),
-                "Legacy bytes should be preserved for progressive migration"
+                "v0.7 bytes should be preserved for progressive migration"
             );
 
             // On-disk file replaced with the new key (different from original).

@@ -71,24 +71,24 @@ path = "../domain-model"
 [dependencies.lldap_opaque_handler]
 path = "../opaque-handler"
 
-# Legacy opaque-ke 0.7 for backward-compatible deserialization of existing password files.
+# opaque-ke 0.7 for backward-compatible deserialization of existing password files.
 # Only used for ServerRegistration::deserialize fallback — new passwords always use opaque-ke 4.
-[dependencies.opaque-ke-legacy]
+[dependencies.opaque-ke-v07]
 package = "opaque-ke"
 version = "0.7"
 
-[dependencies.curve25519-dalek-legacy]
+[dependencies.curve25519-dalek-v07]
 package = "curve25519-dalek"
 version = "3"
 
-[dependencies.sha2-legacy]
+[dependencies.sha2-v07]
 package = "sha2"
 version = "0.9"
 
 [dependencies.rust-argon2]
 version = "2"
 
-[dependencies.digest-legacy]
+[dependencies.digest-v07]
 package = "digest"
 version = "0.9"
 

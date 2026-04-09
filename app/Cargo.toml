@@ -65,11 +65,11 @@ version = "1"
 path = "../crates/auth"
 features = [ "opaque_client" ]
 
-# --- Legacy opaque-ke 0.7 deps (PROGRESSIVE MIGRATION SHIM) ----------------
+# --- opaque-ke 0.7 deps (PROGRESSIVE MIGRATION SHIM) -----------------------
 #
-# These aliased dependencies (`*-legacy`) exist solely so the WASM client can
+# These aliased dependencies (`*-v07`) exist solely so the WASM client can
 # generate and verify OPAQUE v0.7 protocol messages when the server reports a
-# legacy password via HTTP 409 on `/auth/opaque/login/start`. They are NOT
+# v0.7 password via HTTP 409 on `/auth/opaque/login/start`. They are NOT
 # permanent.
 #
 # Removal conditions (whichever comes first):
@@ -81,12 +81,12 @@ features = [ "opaque_client" ]
 #      considered complete and the v0.7 path is unconditionally removed.
 #
 # When removing, also delete:
-#   - `app/src/infra/opaque_legacy.rs`
-#   - The legacy login HTTP endpoints (`/auth/opaque/v0/login/{start,finish}`)
+#   - `app/src/infra/opaque_v07.rs`
+#   - The v0.7 login HTTP endpoints (`/auth/opaque/v07/login/{start,finish}`)
 #     in `server/src/auth_service.rs`
-#   - The `legacy` module + dual-path logic in
+#   - The `v07` module + dual-path logic in
 #     `crates/sql-backend-handler/src/sql_opaque_handler.rs`
-#   - The `legacy_server_key_bytes` field on `SqlBackendHandler` and the
+#   - The `v07_server_key_bytes` field on `SqlBackendHandler` and the
 #     corresponding loading code in `server/src/configuration.rs`
 #   - The `password_version == 0` branch in `bind()` and `login_start()`
 #   - These Cargo deps and their counterparts in
@@ -95,19 +95,19 @@ features = [ "opaque_client" ]
 # Tracked in CHANGELOG.md under [Unreleased]; add a "## Removed" entry when
 # this cleanup happens.
 # ---------------------------------------------------------------------------
-[dependencies.opaque-ke-legacy]
+[dependencies.opaque-ke-v07]
 package = "opaque-ke"
 version = "0.7"
 
-[dependencies.curve25519-dalek-legacy]
+[dependencies.curve25519-dalek-v07]
 package = "curve25519-dalek"
 version = "3"
 
-[dependencies.sha2-legacy]
+[dependencies.sha2-v07]
 package = "sha2"
 version = "0.9"
 
-[dependencies.digest-legacy]
+[dependencies.digest-v07]
 package = "digest"
 version = "0.9"
 

@@ -94,7 +94,7 @@ pub mod registration {
 }
 
 /// Base64-encoded OPAQUE login messages.
-/// Used for legacy (opaque-ke 0.7) login during progressive migration.
+/// Used for opaque-ke 0.7 login during progressive migration.
 /// Clients encode their protocol messages as base64 strings instead of
 /// serde JSON, keeping the wire format decoupled from the opaque-ke
 /// Rust types. This avoids forcing other crates to depend on a specific
