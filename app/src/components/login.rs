@@ -6,7 +6,6 @@ use crate::{
     infra::{
         api::{HostService, LoginStartError},
         common_component::{CommonComponent, CommonComponentParts},
-        opaque_v07,
     },
 };
 use anyhow::{Result, anyhow, bail};
@@ -52,7 +51,7 @@ pub struct AuthStart {
 /// password is still required so it can be re-registered in the v4.0 format
 /// after a successful v0.7 login.
 pub struct V07AuthStart {
-    pub state: opaque_v07::V07ClientLogin,
+    pub state: lldap_auth::v07::V07ClientLoginState,
     pub username: String,
     pub password: String,
     pub response: Result<Box<login_base64::ServerLoginStartResponse>>,
@@ -174,9 +173,8 @@ impl CommonComponent<LoginForm> for LoginForm {
                     Err(LoginStartError::OpaqueV07Version) => {
                         // User has a v0.7 password — fall back to the
                         // v0.7 login flow, then silently re-register as v4.0.
-                        let mut rng = rand::rngs::OsRng;
                         let (v07_state, v07_bytes) =
-                            match opaque_v07::start_login(&password, &mut rng) {
+                            match lldap_auth::v07::client_login_start(&password) {
                                 Ok(r) => r,
                                 Err(e) => {
                                     error!(&format!("v0.7 OPAQUE start failed: {}", e));
@@ -232,7 +230,7 @@ impl CommonComponent<LoginForm> for LoginForm {
                     }
                 };
                 let finalization_bytes =
-                    match opaque_v07::finish_login(v07_state, &server_response_bytes) {
+                    match lldap_auth::v07::client_login_finish(v07_state, &server_response_bytes) {
                         Ok(b) => b,
                         Err(e) => {
                             error!(&format!("Invalid username or password: {}", e));

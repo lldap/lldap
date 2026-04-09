@@ -45,6 +45,31 @@ optional = true
 [dependencies.serde]
 workspace = true
 
+# opaque-ke 0.7 for backward-compatible validation of existing password files.
+# Only used for progressive migration — new passwords always use opaque-ke 4.
+[dependencies.opaque-ke-v07]
+package = "opaque-ke"
+version = "0.7"
+
+[dependencies.curve25519-dalek-v07]
+package = "curve25519-dalek"
+version = "3"
+
+[dependencies.sha2-v07]
+package = "sha2"
+version = "0.9"
+
+[dependencies.digest-v07]
+package = "digest"
+version = "0.9"
+
+[dependencies.rust-argon2-v07]
+package = "rust-argon2"
+version = "2"
+
+[dependencies.generic-array]
+version = "0.14"
+
 # For WASM targets, use the JS getrandom.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]
 version = "0.2"

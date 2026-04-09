@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 pub mod access_control;
 pub mod opaque;
+pub mod v07;
 
 /// The messages for the 3-step OPAQUE and simple login process.
 pub mod login {

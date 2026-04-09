@@ -68,67 +68,12 @@ impl OpaqueProtocolVersion {
 // OPAQUE types and then silently re-register the password with v4.0.
 // ---------------------------------------------------------------------------
 
-#[allow(dead_code)]
-mod v07 {
-    use opaque_ke_v07::ciphersuite::CipherSuite;
-
-    pub struct ArgonHasher;
-    impl ArgonHasher {
-        const SALT: &'static [u8] = b"lldap_opaque_salt";
-        const CONFIG: &'static argon2::Config<'static> = &argon2::Config {
-            ad: &[],
-            hash_length: 128,
-            lanes: 1,
-            mem_cost: 50 * 1024,
-            secret: &[],
-            time_cost: 1,
-            variant: argon2::Variant::Argon2id,
-            version: argon2::Version::Version13,
-        };
-    }
-
-    impl<D: opaque_ke_v07::hash::Hash> opaque_ke_v07::slow_hash::SlowHash<D> for ArgonHasher {
-        fn hash(
-            input: generic_array::GenericArray<u8, <D as digest_v07::Digest>::OutputSize>,
-        ) -> std::result::Result<Vec<u8>, opaque_ke_v07::errors::InternalPakeError> {
-            argon2::hash_raw(&input, Self::SALT, Self::CONFIG)
-                .map_err(|_| opaque_ke_v07::errors::InternalPakeError::HashingFailure)
-        }
-    }
-
-    pub struct V07Suite;
-    impl CipherSuite for V07Suite {
-        type Group = curve25519_dalek_v07::ristretto::RistrettoPoint;
-        type KeyExchange = opaque_ke_v07::key_exchange::tripledh::TripleDH;
-        type Hash = sha2_v07::Sha512;
-        type SlowHash = ArgonHasher;
-    }
-
-    pub type V07ServerRegistration = opaque_ke_v07::ServerRegistration<V07Suite>;
-    pub type V07ServerSetup = opaque_ke_v07::ServerSetup<V07Suite>;
-    pub type V07ClientLogin = opaque_ke_v07::ClientLogin<V07Suite>;
-    pub type V07ServerLogin = opaque_ke_v07::ServerLogin<V07Suite>;
-    pub type V07CredentialRequest = opaque_ke_v07::CredentialRequest<V07Suite>;
-    pub type V07CredentialResponse = opaque_ke_v07::CredentialResponse<V07Suite>;
-    pub type V07CredentialFinalization = opaque_ke_v07::CredentialFinalization<V07Suite>;
-
-    /// Check if bytes are a valid opaque-ke 0.7 password file.
-    pub fn is_v07_format(bytes: &[u8]) -> bool {
-        V07ServerRegistration::deserialize(bytes).is_ok()
-    }
-
-    /// Deserialize v0.7 ServerSetup from raw bytes.
-    pub fn deserialize_v07_setup(bytes: &[u8]) -> Option<V07ServerSetup> {
-        V07ServerSetup::deserialize(bytes).ok()
-    }
-}
-
 /// Encrypted server state carried across the two round-trips of the v0.7
 /// OPAQUE login. Analogous to `login::ServerData` but with v0.7 types.
 #[derive(Serialize, Deserialize)]
 struct V07ServerData {
     username: UserId,
-    server_login: v07::V07ServerLogin,
+    server_login: lldap_auth::v07::V07ServerLoginState,
 }
 
 /// Validate a password against a v4.0 (current) password file.
@@ -166,31 +111,11 @@ fn passwords_match(
 fn passwords_match_v07(
     password_file_bytes: &[u8],
     clear_password: &str,
-    v07_setup: &v07::V07ServerSetup,
+    v07_setup: &lldap_auth::v07::V07ServerSetup,
     username: &UserId,
 ) -> Result<()> {
-    use opaque_ke_v07::{ClientLogin, ClientLoginFinishParameters, ServerLogin, ServerLoginStartParameters};
-    let mut rng = rand::rngs::OsRng;
-
-    let password_file = v07::V07ServerRegistration::deserialize(password_file_bytes)
-        .map_err(|e| DomainError::InternalError(format!("v0.7 password deserialization error: {e}")))?;
-    let client_login_start =
-        ClientLogin::<v07::V07Suite>::start(&mut rng, clear_password.as_bytes())
-            .map_err(|e| DomainError::InternalError(format!("v0.7 login start error: {e}")))?;
-    let server_login_start = ServerLogin::<v07::V07Suite>::start(
-        &mut rng,
-        v07_setup,
-        Some(password_file),
-        client_login_start.message,
-        username.as_str().as_bytes(),
-        ServerLoginStartParameters::default(),
-    )
-    .map_err(|e| DomainError::InternalError(format!("v0.7 server login error: {e}")))?;
-    client_login_start
-        .state
-        .finish(server_login_start.message, ClientLoginFinishParameters::default())
-        .map_err(|e| DomainError::InternalError(format!("v0.7 login finish error: {e}")))?;
-    Ok(())
+    lldap_auth::v07::validate_password(password_file_bytes, clear_password, v07_setup, username.as_str())
+        .map_err(DomainError::InternalError)
 }
 
 /// In-process validator that runs both sides of an OPAQUE login handshake
@@ -202,7 +127,7 @@ enum Validator<'a> {
     Current(&'a opaque::server::ServerSetup),
     /// Opaque-ke 0.7 handshake using a deserialized v0.7
     /// ServerSetup. Owned because it's recovered from raw bytes on demand.
-    V07(Box<v07::V07ServerSetup>),
+    V07(Box<lldap_auth::v07::V07ServerSetup>),
 }
 
 impl<'a> Validator<'a> {
@@ -252,7 +177,7 @@ impl SqlBackendHandler {
                             .to_string(),
                     )
                 })?;
-                let setup = v07::deserialize_v07_setup(bytes).ok_or_else(|| {
+                let setup = lldap_auth::v07::V07ServerSetup::deserialize(bytes).ok_or_else(|| {
                     DomainError::InternalError(
                         "failed to deserialize the v0.7 server setup".to_string(),
                     )
@@ -331,10 +256,10 @@ impl LoginHandler for SqlBackendHandler {
         // the password in the current format. This is best-effort: a
         // failed upgrade does NOT fail the login — the user is still
         // authenticated, and the upgrade will be retried on the next bind.
-        if version.is_v07() {
-            if let Err(e) = self.upgrade_password(&request.name, &request.password).await {
-                warn!(r#"Failed to upgrade password for "{}": {}"#, &request.name, e);
-            }
+        if version.is_v07()
+            && let Err(e) = self.upgrade_password(&request.name, &request.password).await
+        {
+            warn!(r#"Failed to upgrade password for "{}": {}"#, &request.name, e);
         }
         Ok(())
     }
@@ -355,14 +280,14 @@ impl OpaqueHandler for SqlOpaqueHandler {
         // with a structured error signal. The client detects this error code and
         // retries via /auth/opaque/v07/login/*, which re-registers with v4.0 on
         // success.
-        if let Some((_, version)) = maybe_password_entry.as_ref() {
-            if version.is_v07() {
-                info!(
-                    r#"OPAQUE v4.0 login attempted for "{}" with v0.7 password; client should retry via /auth/opaque/v07/login/*"#,
-                    &user_id
-                );
-                return Err(DomainError::OpaqueV07Version(user_id.to_string()));
-            }
+        if let Some((_, version)) = maybe_password_entry.as_ref()
+            && version.is_v07()
+        {
+            info!(
+                r#"OPAQUE v4.0 login attempted for "{}" with v0.7 password; client should retry via /auth/opaque/v07/login/*"#,
+                &user_id
+            );
+            return Err(DomainError::OpaqueV07Version(user_id.to_string()));
         }
 
         let maybe_password_file = maybe_password_entry
@@ -435,22 +360,11 @@ impl OpaqueHandler for SqlOpaqueHandler {
         // Decode the client's CredentialRequest bytes.
         let credential_request_bytes = base64::engine::general_purpose::STANDARD
             .decode(&request.login_start_request)?;
-        let credential_request =
-            v07::V07CredentialRequest::deserialize(&credential_request_bytes).map_err(|e| {
-                DomainError::InternalError(format!("v0.7 CredentialRequest decode error: {e}"))
-            })?;
 
         // Fetch the user's password file. Only v0.7 passwords are handled
         // here — a current-version user routed to this endpoint is rejected.
-        let maybe_password_file = match self.get_password_file_for_user(user_id.clone()).await? {
-            Some((bytes, OpaqueProtocolVersion::V07)) => Some(
-                v07::V07ServerRegistration::deserialize(&bytes).map_err(|e| {
-                    DomainError::InternalError(format!(
-                        "Corrupted v0.7 password file for {}: {}",
-                        &user_id, e
-                    ))
-                })?,
-            ),
+        let maybe_password_bytes = match self.get_password_file_for_user(user_id.clone()).await? {
+            Some((bytes, OpaqueProtocolVersion::V07)) => Some(bytes),
             Some((_, OpaqueProtocolVersion::Current)) => {
                 return Err(DomainError::AuthenticationError(format!(
                     r#"user "{}" does not have a v0.7 password"#,
@@ -460,29 +374,26 @@ impl OpaqueHandler for SqlOpaqueHandler {
             None => None, // Dummy handshake (user doesn't exist).
         };
 
-        let mut rng = rand::rngs::OsRng;
-        let start_response = v07::V07ServerLogin::start(
-            &mut rng,
+        let (server_login_state, response_bytes) = lldap_auth::v07::server_login_start(
             &v07_setup,
-            maybe_password_file,
-            credential_request,
-            user_id.as_str().as_bytes(),
-            opaque_ke_v07::ServerLoginStartParameters::default(),
+            &credential_request_bytes,
+            maybe_password_bytes.as_deref(),
+            user_id.as_str(),
         )
-        .map_err(|e| DomainError::InternalError(format!("v0.7 server login start error: {e}")))?;
+        .map_err(DomainError::InternalError)?;
 
         // Encrypt the server state. The orion key is derived from the v4.0
         // ServerSetup but the encryption is OPAQUE-version-agnostic — it's
         // just AEAD over bincode.
         let server_data = V07ServerData {
             username: user_id,
-            server_login: start_response.state,
+            server_login: server_login_state,
         };
 
         Ok(login_base64::ServerLoginStartResponse {
             server_data: self.seal_state(&server_data)?,
             credential_response: base64::engine::general_purpose::STANDARD
-                .encode(start_response.message.serialize()),
+                .encode(response_bytes),
         })
     }
 
@@ -499,15 +410,9 @@ impl OpaqueHandler for SqlOpaqueHandler {
         // Decode the client's CredentialFinalization bytes.
         let credential_finalization_bytes = base64::engine::general_purpose::STANDARD
             .decode(&request.credential_finalization)?;
-        let credential_finalization = v07::V07CredentialFinalization::deserialize(
-            &credential_finalization_bytes,
-        )
-        .map_err(|e| {
-            DomainError::InternalError(format!("v0.7 CredentialFinalization decode error: {e}"))
-        })?;
 
-        match server_login.finish(credential_finalization) {
-            Ok(_session) => {
+        match lldap_auth::v07::server_login_finish(server_login, &credential_finalization_bytes) {
+            Ok(()) => {
                 info!(
                     r#"v0.7 OPAQUE login successful for "{}" — client should now re-register the password"#,
                     &username
@@ -515,9 +420,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
             }
             Err(e) => {
                 warn!(r#"v0.7 OPAQUE login attempt failed for "{}""#, &username);
-                return Err(DomainError::AuthenticationError(format!(
-                    "v0.7 login validation failed: {e}"
-                )));
+                return Err(DomainError::AuthenticationError(e));
             }
         }
 
@@ -796,36 +699,7 @@ mod tests {
     #[test]
     fn test_v07_format_compat() {
         // v0.7 password files deserialize with opaque-ke 4.0 (layout-compatible).
-        // However, the full handshake still fails — see test_v07_password_full_handshake.
-        let mut rng = rand::rngs::OsRng;
-        let v07_setup = opaque_ke_v07::ServerSetup::<v07::V07Suite>::new(&mut rng);
-
-        let client_start =
-            opaque_ke_v07::ClientRegistration::<v07::V07Suite>::start(
-                &mut rng,
-                b"legacy_password",
-            )
-            .unwrap();
-        let server_start =
-            opaque_ke_v07::ServerRegistration::<v07::V07Suite>::start(
-                &v07_setup,
-                client_start.message,
-                b"legacyuser",
-            )
-            .unwrap();
-        let client_finish = client_start
-            .state
-            .finish(
-                &mut rng,
-                server_start.message,
-                opaque_ke_v07::ClientRegistrationFinishParameters::default(),
-            )
-            .unwrap();
-        let password_file =
-            opaque_ke_v07::ServerRegistration::<v07::V07Suite>::finish(
-                client_finish.message,
-            );
-        let bytes = password_file.serialize();
+        let (bytes, _) = lldap_auth::v07::create_test_password_file("legacyuser", "legacy_password");
 
         // The binary format of ServerRegistration is compatible: Ristretto255
         // group elements are serialized the same way in both versions.
@@ -835,44 +709,18 @@ mod tests {
         );
         // Also detected as v0.7 (both formats parse).
         assert!(
-            v07::is_v07_format(&bytes),
+            lldap_auth::v07::is_v07_format(&bytes),
             "Should also be detectable as v0.7 format"
         );
     }
 
     /// Helper: create a v0.7 (opaque-ke 0.7) password file for the given user.
-    /// Returns the serialized bytes of the password file and the v0.7 ServerSetup bytes.
+    /// Delegates to `lldap_auth::v07::create_test_password_file`.
     fn create_v07_password_file(
         username: &str,
         password: &str,
     ) -> (Vec<u8>, Vec<u8>) {
-        let mut rng = rand::rngs::OsRng;
-        let v07_setup = opaque_ke_v07::ServerSetup::<v07::V07Suite>::new(&mut rng);
-
-        let client_start = opaque_ke_v07::ClientRegistration::<v07::V07Suite>::start(
-            &mut rng,
-            password.as_bytes(),
-        )
-        .unwrap();
-        let server_start = opaque_ke_v07::ServerRegistration::<v07::V07Suite>::start(
-            &v07_setup,
-            client_start.message,
-            username.as_bytes(),
-        )
-        .unwrap();
-        let client_finish = client_start
-            .state
-            .finish(
-                &mut rng,
-                server_start.message,
-                opaque_ke_v07::ClientRegistrationFinishParameters::default(),
-            )
-            .unwrap();
-        let v07_password_file =
-            opaque_ke_v07::ServerRegistration::<v07::V07Suite>::finish(
-                client_finish.message,
-            );
-        (v07_password_file.serialize(), v07_setup.serialize())
+        lldap_auth::v07::create_test_password_file(username, password)
     }
 
     #[tokio::test]
@@ -1158,16 +1006,12 @@ mod tests {
         .unwrap();
 
         // Step 1: client-side v0.7 start_login.
-        let mut rng = rand::rngs::OsRng;
-        let client_start = opaque_ke_v07::ClientLogin::<v07::V07Suite>::start(
-            &mut rng,
-            b"alice_password",
-        )
-        .unwrap();
+        let (v07_client_state, v07_request_bytes) =
+            lldap_auth::v07::client_login_start("alice_password").unwrap();
         let req = login_base64::ClientLoginStartRequest {
             username: UserId::new("legacy_alice"),
             login_start_request: base64::engine::general_purpose::STANDARD
-                .encode(client_start.message.serialize()),
+                .encode(&v07_request_bytes),
         };
 
         // Step 2: server v0.7 login_start.
@@ -1177,22 +1021,13 @@ mod tests {
         let server_response_bytes = base64::engine::general_purpose::STANDARD
             .decode(&start_response.credential_response)
             .unwrap();
-        let server_credential_response =
-            opaque_ke_v07::CredentialResponse::<v07::V07Suite>::deserialize(
-                &server_response_bytes,
-            )
-            .unwrap();
-        let client_finish = client_start
-            .state
-            .finish(
-                server_credential_response,
-                opaque_ke_v07::ClientLoginFinishParameters::default(),
-            )
-            .unwrap();
+        let finalization_bytes =
+            lldap_auth::v07::client_login_finish(v07_client_state, &server_response_bytes)
+                .unwrap();
         let finish_req = login_base64::ClientLoginFinishRequest {
             server_data: start_response.server_data,
             credential_finalization: base64::engine::general_purpose::STANDARD
-                .encode(client_finish.message.serialize()),
+                .encode(&finalization_bytes),
         };
 
         // Step 4: server v0.7 login_finish — validates the password.
@@ -1228,6 +1063,7 @@ mod tests {
         assert_eq!(after.1, OpaqueProtocolVersion::Current, "Should be v4.0 after re-registration");
 
         // Step 7: v4.0 login_start no longer returns OpaqueV07Version.
+        let mut rng = rand::rngs::OsRng;
         let client_v4 = opaque::client::login::start_login("alice_password", &mut rng).unwrap();
         let v4_req = login::ClientLoginStartRequest {
             username: UserId::new("legacy_alice"),
@@ -1268,16 +1104,12 @@ mod tests {
         .unwrap();
 
         // Client uses the WRONG password.
-        let mut rng = rand::rngs::OsRng;
-        let client_start = opaque_ke_v07::ClientLogin::<v07::V07Suite>::start(
-            &mut rng,
-            b"wrong_password",
-        )
-        .unwrap();
+        let (v07_client_state, v07_request_bytes) =
+            lldap_auth::v07::client_login_start("wrong_password").unwrap();
         let req = login_base64::ClientLoginStartRequest {
             username: UserId::new("legacy_user"),
             login_start_request: base64::engine::general_purpose::STANDARD
-                .encode(client_start.message.serialize()),
+                .encode(&v07_request_bytes),
         };
         let start_response = handler.login_start_v07(req).await.unwrap();
 
@@ -1285,25 +1117,16 @@ mod tests {
         let server_response_bytes = base64::engine::general_purpose::STANDARD
             .decode(&start_response.credential_response)
             .unwrap();
-        let server_credential_response =
-            opaque_ke_v07::CredentialResponse::<v07::V07Suite>::deserialize(
-                &server_response_bytes,
-            )
-            .unwrap();
-        let client_finish = client_start
-            .state
-            .finish(
-                server_credential_response,
-                opaque_ke_v07::ClientLoginFinishParameters::default(),
-            );
         // The client-side finish may fail (wrong password can't complete the
         // OPAQUE handshake), or it may succeed locally and then the server
         // rejects it. Either outcome is a failure — i.e. no upgrade.
-        if let Ok(client_finish) = client_finish {
+        if let Ok(finalization_bytes) =
+            lldap_auth::v07::client_login_finish(v07_client_state, &server_response_bytes)
+        {
             let finish_req = login_base64::ClientLoginFinishRequest {
                 server_data: start_response.server_data,
                 credential_finalization: base64::engine::general_purpose::STANDARD
-                    .encode(client_finish.message.serialize()),
+                    .encode(&finalization_bytes),
             };
             assert!(
                 handler.login_finish_v07(finish_req).await.is_err(),
@@ -1346,16 +1169,12 @@ mod tests {
 
         // Try to log in via the v0.7 endpoint — should fail because the
         // user has password_version = 1.
-        let mut rng = rand::rngs::OsRng;
-        let client_start = opaque_ke_v07::ClientLogin::<v07::V07Suite>::start(
-            &mut rng,
-            b"new_password",
-        )
-        .unwrap();
+        let (_v07_client_state, v07_request_bytes) =
+            lldap_auth::v07::client_login_start("new_password").unwrap();
         let req = login_base64::ClientLoginStartRequest {
             username: UserId::new("new_user"),
             login_start_request: base64::engine::general_purpose::STANDARD
-                .encode(client_start.message.serialize()),
+                .encode(&v07_request_bytes),
         };
         assert!(
             handler.login_start_v07(req).await.is_err(),
