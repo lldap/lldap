@@ -641,8 +641,23 @@ where
     );
 
     let ignore_keys = ["key_file", "cert_file"];
-    let env_variable_provider =
-        || FileAdapter::wrap(Env::prefixed("LLDAP_").split("__")).ignore(&ignore_keys);
+    // Filter out Kubernetes service-discovery env vars injected when a Service
+    // shares the "LLDAP" prefix (e.g. LLDAP_PORT, LLDAP_SERVICE_HOST,
+    // LLDAP_PORT_3890_TCP_PROTO). These are not LLDAP config and cause
+    // Figment deserialization errors that silently corrupt other fields.
+    let env_variable_provider = || {
+        FileAdapter::wrap(
+            Env::prefixed("LLDAP_")
+                .filter(|key| {
+                    let k = key.as_str();
+                    !k.starts_with("LLDAP_PORT")
+                        && !k.starts_with("LLDAP_SERVICE_")
+                        && !k.contains("_TCP")
+                })
+                .split("__"),
+        )
+        .ignore(&ignore_keys)
+    };
     let figment_config = Figment::from(Serialized::defaults(
         ConfigurationBuilder::default().private_build().unwrap(),
     ))
