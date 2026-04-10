@@ -165,6 +165,11 @@ impl std::default::Default for Configuration {
 
 impl ConfigurationBuilder {
     pub fn build(self) -> Result<Configuration> {
+        // Builder-time setup (used by `Configuration::default` and a few
+        // tests) never opts into key rotation: it cannot, since the
+        // `force_update_private_key` flag is part of the runtime config
+        // and is only known after parsing TOML/env in `init()`.
+        let force_update_private_key = self.force_update_private_key.unwrap_or(false);
         let server_setup = get_server_setup(
             self.key_file.as_deref().unwrap_or("server_key"),
             self.key_seed
@@ -173,6 +178,7 @@ impl ConfigurationBuilder {
                 .map(SecUtf8::unsecure)
                 .unwrap_or_default(),
             PrivateKeyLocation::Default,
+            force_update_private_key,
         )?;
         Ok(self.server_setup(Some(server_setup)).private_build()?)
     }
@@ -190,13 +196,19 @@ impl Configuration {
         &self.server_setup.as_ref().unwrap().server_setup
     }
 
+    /// Returns the raw bytes of the v0.7 (opaque-ke 0.7) ServerSetup, if available.
+    /// Used for backward-compatible password validation during progressive migration.
+    pub fn get_v07_server_key_bytes(&self) -> Option<&[u8]> {
+        self.server_setup.as_ref()?.v07_server_key_bytes.as_deref()
+    }
+
     pub fn get_server_keys(&self) -> &KeyPair {
         self.get_server_setup().keypair()
     }
 
     pub fn get_private_key_info(&self) -> PrivateKeyInfo {
         PrivateKeyInfo {
-            private_key_hash: PrivateKeyHash(stable_hash(self.get_server_keys().private())),
+            private_key_hash: PrivateKeyHash(stable_hash(self.get_server_keys().private().serialize().as_slice())),
             private_key_location: self
                 .server_setup
                 .as_ref()
@@ -283,10 +295,103 @@ fn write_to_readonly_file(path: &std::path::Path, buffer: &[u8]) -> Result<()> {
     Ok(file.write_all(buffer)?)
 }
 
+/// Replace `path` with `new_bytes` atomically.
+///
+/// Writes to a sibling temporary file first (`.{name}.tmp.{pid}`), then
+/// renames it over `path`. The temp file is cleaned up on rename failure
+/// so we never leak a partial file in the data directory.
+fn rotate_key_file_atomically(path: &std::path::Path, new_bytes: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("Key file path `{}` has no file name", path.display()))?;
+    let mut tmp_path = parent.to_path_buf();
+    tmp_path.push(format!(
+        ".{}.tmp.{}",
+        file_name.to_string_lossy(),
+        std::process::id()
+    ));
+
+    write_to_readonly_file(&tmp_path, new_bytes).context(format!(
+        "Could not write new server setup to temporary file `{}`",
+        tmp_path.display()
+    ))?;
+    if let Err(rename_err) = std::fs::rename(&tmp_path, path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(anyhow::anyhow!(rename_err)).context(format!(
+            "Could not atomically replace key file `{}` with new server setup",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+/// Return the path of the v0.7 key sidecar file for a given key file path.
+fn v07_sidecar_path(key_file: &std::path::Path) -> std::path::PathBuf {
+    let mut p = key_file.as_os_str().to_owned();
+    p.push(".v07");
+    std::path::PathBuf::from(p)
+}
+
+/// Persist the pre-rotation key bytes to a sidecar file so they survive
+/// process restarts. The file is created with restrictive permissions
+/// (same as the main key file) because it contains sensitive key material.
+fn save_v07_key_sidecar(key_file: &std::path::Path, v07_bytes: &[u8]) -> Result<()> {
+    let sidecar = v07_sidecar_path(key_file);
+    // Remove any stale sidecar first (write_to_readonly_file asserts !exists).
+    let _ = std::fs::remove_file(&sidecar);
+    write_to_readonly_file(&sidecar, v07_bytes).context(format!(
+        "Could not write v0.7 key sidecar to `{}`",
+        sidecar.display()
+    ))
+}
+
+/// Load the v0.7 key sidecar if it exists. Returns `None` if there is no
+/// sidecar — the caller can still serve, just without v0.7 password support.
+fn load_v07_key_sidecar(key_file: &std::path::Path) -> Option<Vec<u8>> {
+    let sidecar = v07_sidecar_path(key_file);
+    match std::fs::read(&sidecar) {
+        Ok(bytes) => {
+            eprintln!(
+                "Loaded v0.7 server key from `{}` for backward-compatible \
+                 password validation.",
+                sidecar.display()
+            );
+            Some(bytes)
+        }
+        Err(_) => None,
+    }
+}
+
+/// Remove the v0.7 key sidecar once all users have been upgraded.
+/// Called from main.rs after confirming `count_v07_passwords() == 0`.
+pub fn cleanup_v07_key_sidecar(config: &Configuration) {
+    let sidecar = v07_sidecar_path(std::path::Path::new(&config.key_file));
+    if sidecar.exists() {
+        match std::fs::remove_file(&sidecar) {
+            Ok(()) => eprintln!(
+                "All users upgraded to opaque-ke 4.0. Removed v0.7 key sidecar `{}`.",
+                sidecar.display()
+            ),
+            Err(e) => eprintln!(
+                "WARNING: Could not remove v0.7 key sidecar `{}`: {}",
+                sidecar.display(),
+                e
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ServerSetupConfig {
     server_setup: ServerSetup,
     private_key_location: PrivateKeyLocation,
+    /// Raw bytes of the v0.7 (opaque-ke 0.7) ServerSetup, if available.
+    /// Preserved when upgrading from an older opaque-ke version.
+    v07_server_key_bytes: Option<Vec<u8>>,
 }
 
 #[derive(derive_more::From)]
@@ -366,6 +471,7 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
     file_path: &str,
     key_seed: &str,
     private_key_location: L,
+    force_update_private_key: bool,
 ) -> Result<ServerSetupConfig> {
     let private_key_location = private_key_location.into();
     use std::fs::read;
@@ -388,15 +494,76 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
         Ok(ServerSetupConfig {
             server_setup: ServerSetup::new(&mut rng),
             private_key_location: private_key_location.for_key_seed(),
+            v07_server_key_bytes: None,
         })
     } else if path.exists() {
         let bytes = read(file_path).context(format!("Could not read key file `{file_path}`"))?;
-        Ok(ServerSetupConfig {
-            server_setup: ServerSetup::deserialize(&bytes).context(format!(
-                "while parsing the contents of the `{file_path}` file"
-            ))?,
-            private_key_location: private_key_location.for_key_file(file_path),
-        })
+        match ServerSetup::deserialize(&bytes) {
+            Ok(server_setup) => {
+                // If a previous rotation left a `<keyfile>.v07` sidecar,
+                // load it so the v0.7 OPAQUE handshake can still validate
+                // users who haven't logged in since the key rotation.
+                let v07_bytes = load_v07_key_sidecar(path);
+                Ok(ServerSetupConfig {
+                    server_setup,
+                    private_key_location: private_key_location.for_key_file(file_path),
+                    v07_server_key_bytes: v07_bytes,
+                })
+            }
+            Err(deserialize_err) => {
+                // The on-disk key file does not parse as the current opaque-ke
+                // version. This could be:
+                //   a) a legitimate version upgrade (opaque-ke 0.7 → 4.0), or
+                //   b) corruption (bit-rot, partial write, wrong file).
+                //
+                // We never silently rotate the key here: doing so on case (b)
+                // would invalidate every password unrecoverably, and worse, it
+                // would happen for ANY command that loads the config (e.g.
+                // `lldap test-email`, `lldap healthcheck`). Instead the admin
+                // must explicitly opt in via `force_update_private_key`, which
+                // is the same flag the existing `compare_private_key_hashes`
+                // safety check uses for intentional key rotations.
+                if !force_update_private_key {
+                    return Err(anyhow::anyhow!(deserialize_err)).context(format!(
+                        "while parsing the contents of the `{file_path}` file. \
+                         If you are upgrading from a previous opaque-ke version, \
+                         restart the server with --force-update-private-key=true \
+                         (or LLDAP_FORCE_UPDATE_PRIVATE_KEY=true) to migrate to a \
+                         new server key. Existing passwords will be auto-upgraded \
+                         on next login via the v0.7 OPAQUE handshake — they are \
+                         NOT lost, as long as the original key file is preserved \
+                         on disk until at least one successful login per user."
+                    ));
+                }
+
+                // Explicit rotation requested. Preserve the v0.7 bytes both
+                // in memory (for this process run) AND in a sidecar file (for
+                // future restarts), then atomically replace the on-disk key
+                // with a fresh v4.0 key.
+                //
+                // The sidecar file (`<keyfile>.v07`) is loaded automatically
+                // on subsequent startups so users who haven't logged in yet can
+                // still authenticate via the v0.7 OPAQUE handshake. It is
+                // cleaned up once all users have been upgraded (see main.rs).
+                let v07_bytes = bytes.clone();
+                let server_setup = generate_random_private_key();
+                rotate_key_file_atomically(path, &server_setup.serialize())?;
+                save_v07_key_sidecar(path, &v07_bytes)?;
+
+                eprintln!(
+                    "WARNING: Key file `{file_path}` was rotated to a new opaque-ke \
+                     format on the admin's request (--force-update-private-key=true). \
+                     The previous key was saved to `{file_path}.v07` for backward \
+                     compatibility. Existing passwords will be progressively upgraded \
+                     on next login via the v0.7 OPAQUE handshake."
+                );
+                Ok(ServerSetupConfig {
+                    server_setup,
+                    private_key_location: private_key_location.for_key_file(file_path),
+                    v07_server_key_bytes: Some(v07_bytes),
+                })
+            }
+        }
     } else {
         let server_setup = generate_random_private_key();
         write_to_readonly_file(path, &server_setup.serialize()).context(format!(
@@ -405,6 +572,7 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
         Ok(ServerSetupConfig {
             server_setup,
             private_key_location: private_key_location.for_key_file(file_path),
+            v07_server_key_bytes: None,
         })
     }
 }
@@ -665,6 +833,10 @@ where
             .map(SecUtf8::unsecure)
             .unwrap_or_default(),
         figment_config,
+        // Only rotate the on-disk key file if the admin explicitly opted in.
+        // Without this gate, any deserialize failure (corruption, partial
+        // write, version mismatch) would silently invalidate every password.
+        config.force_update_private_key,
     )?);
     config
         .jwt_secret
@@ -687,32 +859,91 @@ mod tests {
 
     #[test]
     fn check_generated_server_key() {
+        // Verify that seed-based key generation is deterministic: same seed → same key.
+        // (The exact byte representation depends on the opaque-ke version and is not
+        // asserted here, since the upgrade changes the binary format.)
+        let setup1 =
+            get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests, false)
+                .unwrap()
+                .server_setup;
+        let setup2 =
+            get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests, false)
+                .unwrap()
+                .server_setup;
         assert_eq!(
-            bincode::serialize(
-                &get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests)
-                    .unwrap()
-                    .server_setup
-            )
-            .unwrap(),
-            [
-                255, 206, 202, 50, 247, 13, 59, 191, 69, 244, 148, 187, 150, 227, 12, 250, 20, 207,
-                211, 151, 147, 33, 107, 132, 2, 252, 121, 94, 97, 6, 97, 232, 163, 168, 86, 246,
-                249, 186, 31, 204, 59, 75, 65, 134, 108, 159, 15, 70, 246, 250, 150, 195, 54, 197,
-                195, 176, 150, 200, 157, 119, 13, 173, 119, 8, 32, 0, 0, 0, 0, 0, 0, 0, 248, 123,
-                35, 91, 194, 51, 52, 57, 191, 210, 68, 227, 107, 166, 232, 37, 195, 244, 100, 84,
-                88, 212, 190, 12, 195, 57, 83, 72, 127, 189, 179, 16, 32, 0, 0, 0, 0, 0, 0, 0, 128,
-                112, 60, 207, 205, 69, 67, 73, 24, 175, 187, 62, 16, 45, 59, 136, 78, 40, 187, 54,
-                159, 94, 116, 33, 133, 119, 231, 43, 199, 164, 141, 7, 32, 0, 0, 0, 0, 0, 0, 0,
-                212, 134, 53, 203, 131, 24, 138, 211, 162, 28, 23, 233, 251, 82, 34, 66, 98, 12,
-                249, 205, 35, 208, 241, 50, 128, 131, 46, 189, 211, 51, 56, 109, 32, 0, 0, 0, 0, 0,
-                0, 0, 84, 20, 147, 25, 50, 5, 243, 203, 216, 180, 175, 121, 159, 96, 123, 183, 146,
-                251, 22, 44, 98, 168, 67, 224, 255, 139, 159, 25, 24, 254, 88, 3
-            ]
+            bincode::serialize(&setup1).unwrap(),
+            bincode::serialize(&setup2).unwrap(),
+            "Seed-based key generation must be deterministic"
         );
     }
 
     fn default_run_opts() -> RunOpts {
         RunOpts::parse_from::<_, std::ffi::OsString>([])
+    }
+
+    /// Regression test for the silent-key-rotation issue.
+    ///
+    /// If `get_server_setup` encounters a key file it cannot deserialize
+    /// (corruption, version mismatch, partial write, …), it MUST NOT
+    /// silently rotate the key. The deserialize error has to be propagated
+    /// so the admin notices and decides whether to migrate. Rotation only
+    /// happens when the admin opts in via `force_update_private_key=true`.
+    #[test]
+    fn unparseable_key_file_is_not_silently_rotated() {
+        Jail::expect_with(|jail| {
+            // Drop a deliberately bogus blob in place of a server_key file.
+            std::fs::write(jail.directory().join("server_key"), b"not a real opaque-ke key")
+                .unwrap();
+            let path_str = jail.directory().join("server_key").to_string_lossy().into_owned();
+            let original_bytes = std::fs::read(jail.directory().join("server_key")).unwrap();
+
+            // Without the explicit flag, get_server_setup must fail.
+            let err = get_server_setup(&path_str, "", PrivateKeyLocation::Tests, false)
+                .expect_err("Unparseable key file must not silently rotate");
+            // Make sure the error message points the admin at the migration
+            // flag rather than just bubbling up an opaque deserialize error.
+            let msg = format!("{:#}", err);
+            assert!(
+                msg.contains("force-update-private-key"),
+                "Error message should mention --force-update-private-key. Got: {msg}"
+            );
+
+            // The on-disk file MUST be untouched.
+            let after = std::fs::read(jail.directory().join("server_key")).unwrap();
+            assert_eq!(after, original_bytes, "Key file must not be touched on failure");
+            Ok(())
+        });
+    }
+
+    /// When the admin explicitly opts in via `force_update_private_key=true`,
+    /// rotation is allowed and the v0.7 bytes are preserved in memory for
+    /// progressive password migration.
+    #[test]
+    fn unparseable_key_file_is_rotated_when_forced() {
+        Jail::expect_with(|jail| {
+            let original = b"not a real opaque-ke key".to_vec();
+            std::fs::write(jail.directory().join("server_key"), &original).unwrap();
+            let path_str = jail.directory().join("server_key").to_string_lossy().into_owned();
+
+            let setup = get_server_setup(&path_str, "", PrivateKeyLocation::Tests, true)
+                .expect("Forced rotation should succeed");
+
+            // v0.7 bytes preserved in memory.
+            assert_eq!(
+                setup.v07_server_key_bytes.as_deref(),
+                Some(original.as_slice()),
+                "v0.7 bytes should be preserved for progressive migration"
+            );
+
+            // On-disk file replaced with the new key (different from original).
+            let after = std::fs::read(jail.directory().join("server_key")).unwrap();
+            assert_ne!(after, original, "Key file should have been rotated");
+            assert!(
+                ServerSetup::deserialize(&after).is_ok(),
+                "New on-disk key must be a valid opaque-ke 4.0 ServerSetup"
+            );
+            Ok(())
+        });
     }
 
     fn write_random_key(jail: &Jail, file: &str) {

@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 pub mod access_control;
 pub mod opaque;
+pub mod v07;
 
 /// The messages for the 3-step OPAQUE and simple login process.
 pub mod login {
@@ -90,6 +91,72 @@ pub mod registration {
         /// Encrypted ServerData from the previous step.
         pub server_data: String,
         pub registration_upload: opaque::server::registration::RegistrationUpload,
+    }
+}
+
+/// Base64-encoded OPAQUE login messages.
+/// Used for opaque-ke 0.7 login during progressive migration.
+/// Clients encode their protocol messages as base64 strings instead of
+/// serde JSON, keeping the wire format decoupled from the opaque-ke
+/// Rust types. This avoids forcing other crates to depend on a specific
+/// opaque-ke version.
+pub mod login_base64 {
+    use super::types::UserId;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientLoginStartRequest {
+        pub username: UserId,
+        /// Base64-encoded CredentialRequest bytes.
+        pub login_start_request: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerLoginStartResponse {
+        /// Base64-encoded encrypted ServerData.
+        pub server_data: String,
+        /// Base64-encoded CredentialResponse bytes.
+        pub credential_response: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientLoginFinishRequest {
+        /// Encrypted ServerData from the previous step.
+        pub server_data: String,
+        /// Base64-encoded CredentialFinalization bytes.
+        pub credential_finalization: String,
+    }
+}
+
+/// Base64-encoded variants of the OPAQUE registration messages.
+/// These use raw `.serialize()` bytes encoded as base64 strings instead of
+/// serde JSON, enabling interop with external OPAQUE clients like
+/// `@serenity-kit/opaque` that use base64 wire format.
+pub mod registration_base64 {
+    use super::types::UserId;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientRegistrationStartRequest {
+        pub username: UserId,
+        /// Base64-encoded RegistrationRequest bytes.
+        pub registration_start_request: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerRegistrationStartResponse {
+        /// Base64-encoded encrypted ServerData.
+        pub server_data: String,
+        /// Base64-encoded RegistrationResponse bytes.
+        pub registration_response: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientRegistrationFinishRequest {
+        /// Encrypted ServerData from the previous step.
+        pub server_data: String,
+        /// Base64-encoded RegistrationUpload bytes.
+        pub registration_upload: String,
     }
 }
 
