@@ -8,8 +8,8 @@ For type, select "LDAP (Simple Auth)".
 Name your authentication source however you'd like. 
 It is up to you to select your security protocol, but the only two compatible options are "LDAPS" and "Unencrypted". 
 As your host, put in the IP or FQDN (if you have DNS).
-As your port, it is suggested to look into your config or docker compose file. It will generally be 389 (unencrypted), 3890 (unencrypted, in default docker compose), 636 (LDAPS), 6360 (LDAPS, in default docker compose).
-Your User DN **has** to be equal to `uid=%s,ou=people,dc=example,dc=com`, except if you changed your Base DN. In that case, remove the two last parts and add it at the end.
+As your port, check your configuration. It will generally be 389/3890 for unencrypted (once again check you config files), 636/6360 for LDAPS (once again check your config files).
+Your User DN should look like `uid=%s,ou=people,dc=example,dc=com` if you have `dc=example,dc=com`, except if you changed your Base DN. In that case, remove the two last parts and add it at the end.
 It is recommended to have your user filter to be `(&(objectClass=person)(uid=%s))`.
 Your username attribute should be `uid`.
 Your Given Name attribute should be `givenName`.
