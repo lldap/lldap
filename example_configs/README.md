@@ -24,6 +24,7 @@ configuration files:
 - [Gerrit](gerrit.md)
 - [Gitea](gitea.md)
 - [GitLab](gitlab.md)
+- [Gogs](gogs.md)
 - [Grafana](grafana_ldap_config.toml)
 - [Grocy](grocy.md)
 - [Harbor](harbor.md)
