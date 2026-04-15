@@ -3,7 +3,7 @@ use crate::{
     tcp_server::{AppState, TcpError, TcpResult, error_to_http_response},
 };
 use actix_web::{
-    HttpRequest, HttpResponse,
+    FromRequest, HttpRequest, HttpResponse,
     cookie::{Cookie, SameSite},
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
     error::{ErrorBadRequest, ErrorUnauthorized},
@@ -534,11 +534,9 @@ where
 {
     use actix_web::FromRequest;
     let inner_payload = &mut payload.into_inner();
-    let validation_result = BearerAuth::from_request(&request, inner_payload)
+    let validation_result = get_validation_results(&data, &request, inner_payload)
         .await
-        .ok()
-        .and_then(|bearer| check_if_token_is_valid(&data, bearer.token()).ok())
-        .ok_or_else(|| {
+        .map_err(|_| {
             TcpError::UnauthorizedError("Not authorized to change the user's password".to_string())
         })?;
     let registration_start_request =
@@ -660,6 +658,25 @@ where
         };
 
         Box::pin(self.service.call(req))
+    }
+}
+
+#[instrument(skip_all, level = "debug", err, ret)]
+pub(crate) async fn get_validation_results<Backend: BackendHandler>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+    payload: &mut actix_http::Payload,
+) -> Result<ValidationResults, actix_web::Error> {
+    if data.trusted_header_options.enabled
+        && request
+            .headers()
+            .contains_key(&data.trusted_header_options.header_name)
+    {
+        check_if_trusted_header_is_valid(data, request).await
+    } else {
+        BearerAuth::from_request(request, payload)
+            .await
+            .map(|bearer| check_if_token_is_valid(data.get_ref(), bearer.token()))?
     }
 }
 

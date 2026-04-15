@@ -1,11 +1,7 @@
-use crate::{
-    auth_service::{check_if_token_is_valid, check_if_trusted_header_is_valid},
-    tcp_server::AppState,
-};
+use crate::{auth_service::get_validation_results, tcp_server::AppState};
 use actix_web::FromRequest;
 use actix_web::HttpMessage;
 use actix_web::{Error, HttpRequest, HttpResponse, error::JsonPayloadError, web};
-use actix_web_httpauth::extractors::bearer::BearerAuth;
 use juniper::{
     ScalarValue,
     http::{
@@ -130,28 +126,12 @@ async fn graphql_route<Handler: BackendHandler + Clone>(
 ) -> Result<HttpResponse, Error> {
     let mut inner_payload = payload.into_inner();
 
-    let validation_result = if data.trusted_header_options.enabled
-        && req
-            .headers()
-            .contains_key(&data.trusted_header_options.header_name)
-    {
-        // Use trusted header authentication
-        check_if_trusted_header_is_valid(&data, &req)
-            .await
-            .map_err(|e| {
-                warn!("Trusted header authentication failed: {}", e);
-                e
-            })?
-    } else {
-        // Use JWT authentication
-        BearerAuth::from_request(&req, &mut inner_payload)
-            .await
-            .map(|bearer| check_if_token_is_valid(data.get_ref(), bearer.token()))?
-            .map_err(|e| {
-                warn!("JWT authentication failed: {}", e);
-                e
-            })?
-    };
+    let validation_result = get_validation_results(&data, &req, &mut inner_payload)
+        .await
+        .map_err(|e| {
+            warn!("Authentication failed: {}", e);
+            e
+        })?;
 
     let context = Context::<Handler> {
         handler: data.backend_handler.clone(),
