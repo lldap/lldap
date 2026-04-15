@@ -1,8 +1,7 @@
-use crate::{auth_service::check_if_token_is_valid, tcp_server::AppState};
+use crate::{auth_service::get_validation_results, tcp_server::AppState};
 use actix_web::FromRequest;
 use actix_web::HttpMessage;
 use actix_web::{Error, HttpRequest, HttpResponse, error::JsonPayloadError, web};
-use actix_web_httpauth::extractors::bearer::BearerAuth;
 use juniper::{
     ScalarValue,
     http::{
@@ -13,6 +12,7 @@ use juniper::{
 use lldap_domain_handlers::handler::BackendHandler;
 use lldap_graphql_server::api::Context;
 use lldap_graphql_server::api::schema;
+use tracing::warn;
 
 async fn graphiql_route() -> Result<HttpResponse, Error> {
     let html = graphiql_source("/api/graphql", None);
@@ -125,8 +125,14 @@ async fn graphql_route<Handler: BackendHandler + Clone>(
     data: web::Data<AppState<Handler>>,
 ) -> Result<HttpResponse, Error> {
     let mut inner_payload = payload.into_inner();
-    let bearer = BearerAuth::from_request(&req, &mut inner_payload).await?;
-    let validation_result = check_if_token_is_valid(&data, bearer.token())?;
+
+    let validation_result = get_validation_results(&data, &req, &mut inner_payload)
+        .await
+        .map_err(|e| {
+            warn!("Authentication failed: {}", e);
+            e
+        })?;
+
     let context = Context::<Handler> {
         handler: data.backend_handler.clone(),
         validation_result,
