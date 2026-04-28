@@ -192,12 +192,12 @@ user_in_group() {
 
   if ! group_exists "$group_name"; then
     printf '[WARNING] Group "%s" does not exist\n' "$group_name"
-    return
+    return 1
   fi
 
   if ! user_exists "$user_id"; then
-    printf 'User "%s" is not exists\n' "$user_id"
-    return
+    printf '[WARNING] User "%s" does not exist (cannot verify group membership)\n' "$user_id"
+    return 1
   fi
 
   if [[ "$(get_user_details "$user_id" | jq --raw-output --arg displayName "$group_name" '.data.user.groups | any(.[]; select(.displayName == $displayName))')" == 'true' ]]; then
@@ -716,6 +716,9 @@ main() {
     elif [[ "$password" != 'null' ]] && [[ "$password" != '""' ]]; then
       "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$password"
     fi
+
+    # Brief wait for LLDAP to synchronize user before group assignment
+    sleep 1
 
     # Process custom attributes
     printf -- '--- Processing custom attributes for user %s ---\n' "$id"
