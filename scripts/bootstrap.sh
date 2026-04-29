@@ -717,9 +717,6 @@ main() {
       "$LLDAP_SET_PASSWORD_PATH" --base-url "$LLDAP_URL" --token "$TOKEN" --username "$id" --password "$password"
     fi
 
-    # Brief wait for LLDAP to synchronize user before group assignment
-    sleep 1
-
     # Process custom attributes
     printf -- '--- Processing custom attributes for user %s ---\n' "$id"
     local attributes_json
