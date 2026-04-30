@@ -70,7 +70,7 @@ impl<Handler: BackendHandler> User<Handler> {
     fn first_name(&self) -> &str {
         self.attributes
             .iter()
-            .find(|a| a.name() == "first_name")
+            .find(|a| a.attribute_name() == "first_name")
             .map(|a| a.attribute.value.as_str().unwrap_or_default())
             .unwrap_or_default()
     }
@@ -78,7 +78,7 @@ impl<Handler: BackendHandler> User<Handler> {
     fn last_name(&self) -> &str {
         self.attributes
             .iter()
-            .find(|a| a.name() == "last_name")
+            .find(|a| a.attribute_name() == "last_name")
             .map(|a| a.attribute.value.as_str().unwrap_or_default())
             .unwrap_or_default()
     }
@@ -86,7 +86,7 @@ impl<Handler: BackendHandler> User<Handler> {
     fn avatar(&self) -> Option<String> {
         self.attributes
             .iter()
-            .find(|a| a.name() == "avatar")
+            .find(|a| a.attribute_name() == "avatar")
             .map(|a| {
                 String::from(
                     a.attribute

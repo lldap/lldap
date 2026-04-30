@@ -1,63 +1,33 @@
-type AttributeValue {
-  name: String!
-  value: [String!]!
-  schema: AttributeSchema!
+schema {
+  query: Query
+  mutation: Mutation
 }
 
-type Mutation {
-  createUser(user: CreateUserInput!): User!
-  createGroup(name: String!): Group!
-  createGroupWithDetails(request: CreateGroupInput!): Group!
-  updateUser(user: UpdateUserInput!): Success!
-  updateGroup(group: UpdateGroupInput!): Success!
-  addUserToGroup(userId: String!, groupId: Int!): Success!
-  removeUserFromGroup(userId: String!, groupId: Int!): Success!
-  deleteUser(userId: String!): Success!
-  deleteGroup(groupId: Int!): Success!
-  addUserAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
-  addGroupAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
-  deleteUserAttribute(name: String!): Success!
-  deleteGroupAttribute(name: String!): Success!
-  addUserObjectClass(name: String!): Success!
-  addGroupObjectClass(name: String!): Success!
-  deleteUserObjectClass(name: String!): Success!
-  deleteGroupObjectClass(name: String!): Success!
+enum AttributeType {
+  STRING
+  INTEGER
+  JPEG_PHOTO
+  DATE_TIME
 }
 
-type Group {
-  id: Int!
+input AttributeValueInput {
+  """
+    The name of the attribute. It must be present in the schema, and the type informs how
+    to interpret the values.
+  """ name: String!
+  """
+    The values of the attribute.
+    If the attribute is not a list, the vector must contain exactly one element.
+    Integers (signed 64 bits) are represented as strings.
+    Dates are represented as strings in RFC3339 format, e.g. "2019-10-12T07:20:50.52Z".
+    JpegPhotos are represented as base64 encoded strings. They must be valid JPEGs.
+  """ value: [String!]!
+}
+
+"The details required to create a group."
+input CreateGroupInput {
   displayName: String!
-  creationDate: DateTimeUtc!
-  uuid: String!
-  "User-defined attributes."
-  attributes: [AttributeValue!]!
-  "The groups to which this user belongs."
-  users: [User!]!
-}
-
-"""
-  A filter for requests, specifying a boolean expression based on field constraints. Only one of
-  the fields can be set at a time.
-"""
-input RequestFilter {
-  any: [RequestFilter!]
-  all: [RequestFilter!]
-  not: RequestFilter
-  eq: EqualityConstraint
-  memberOf: String
-  memberOfId: Int
-}
-
-"DateTime"
-scalar DateTimeUtc
-
-type Query {
-  apiVersion: String!
-  user(userId: String!): User!
-  users(filters: RequestFilter): [User!]!
-  groups: [Group!]!
-  group(groupId: Int!): Group!
-  schema: Schema!
+  "User-defined attributes." attributes: [AttributeValueInput!]
 }
 
 "The details required to create a user."
@@ -80,19 +50,36 @@ input CreateUserInput {
   "Attributes." attributes: [AttributeValueInput!]
 }
 
-type ObjectClassInfo {
-  objectClass: String!
-  isHardcoded: Boolean!
+input EqualityConstraint {
+  field: String!
+  value: String!
 }
 
-type AttributeSchema {
-  name: String!
-  attributeType: AttributeType!
-  isList: Boolean!
-  isVisible: Boolean!
-  isEditable: Boolean!
-  isHardcoded: Boolean!
-  isReadonly: Boolean!
+"""
+  A filter for requests, specifying a boolean expression based on field constraints. Only one of
+  the fields can be set at a time.
+"""
+input RequestFilter {
+  any: [RequestFilter!]
+  all: [RequestFilter!]
+  not: RequestFilter
+  eq: EqualityConstraint
+  memberOf: String
+  memberOfId: Int
+}
+
+"The fields that can be updated for a group."
+input UpdateGroupInput {
+  "The group ID." id: Int!
+  "The new display name." displayName: String
+  """
+    Attribute names to remove.
+    They are processed before insertions.
+  """ removeAttributes: [String!]
+  """
+    Inserts or updates the given attributes.
+    For lists, the entire list must be provided.
+  """ insertAttributes: [AttributeValueInput!]
 }
 
 "The fields that can be updated for a user."
@@ -122,9 +109,87 @@ input UpdateUserInput {
   """ insertAttributes: [AttributeValueInput!]
 }
 
-input EqualityConstraint {
-  field: String!
-  value: String!
+"""
+  Combined date and time (with time zone) in [RFC 3339][0] format.
+
+  Represents a description of an exact instant on the time-line (such as the
+  instant that a user account was created).
+
+  [`DateTime` scalar][1] compliant.
+
+  See also [`chrono::DateTime`][2] for details.
+
+  [0]: https://datatracker.ietf.org/doc/html/rfc3339#section-5
+  [1]: https://graphql-scalars.dev/docs/scalars/date-time
+  [2]: https://docs.rs/chrono/latest/chrono/struct.DateTime.html
+"""
+scalar DateTime
+
+type AttributeList {
+  attributes: [AttributeSchema!]!
+  extraLdapObjectClasses: [String!]!
+  ldapObjectClasses: [ObjectClassInfo!]!
+}
+
+type AttributeSchema {
+  name: String!
+  attributeType: AttributeType!
+  isList: Boolean!
+  isVisible: Boolean!
+  isEditable: Boolean!
+  isHardcoded: Boolean!
+  isReadonly: Boolean!
+}
+
+type AttributeValue {
+  name: String!
+  value: [String!]!
+  schema: AttributeSchema!
+}
+
+type Group {
+  id: Int!
+  displayName: String!
+  creationDate: DateTime!
+  uuid: String!
+  "User-defined attributes."
+  attributes: [AttributeValue!]!
+  "The groups to which this user belongs."
+  users: [User!]!
+}
+
+type Mutation {
+  createUser(user: CreateUserInput!): User!
+  createGroup(name: String!): Group!
+  createGroupWithDetails(request: CreateGroupInput!): Group!
+  updateUser(user: UpdateUserInput!): Success!
+  updateGroup(group: UpdateGroupInput!): Success!
+  addUserToGroup(userId: String!, groupId: Int!): Success!
+  removeUserFromGroup(userId: String!, groupId: Int!): Success!
+  deleteUser(userId: String!): Success!
+  deleteGroup(groupId: Int!): Success!
+  addUserAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
+  addGroupAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
+  deleteUserAttribute(name: String!): Success!
+  deleteGroupAttribute(name: String!): Success!
+  addUserObjectClass(name: String!): Success!
+  addGroupObjectClass(name: String!): Success!
+  deleteUserObjectClass(name: String!): Success!
+  deleteGroupObjectClass(name: String!): Success!
+}
+
+type ObjectClassInfo {
+  objectClass: String!
+  isHardcoded: Boolean!
+}
+
+type Query {
+  apiVersion: String!
+  user(userId: String!): User!
+  users(filters: RequestFilter): [User!]!
+  groups: [Group!]!
+  group(groupId: Int!): Group!
+  schema: Schema!
 }
 
 type Schema {
@@ -132,38 +197,8 @@ type Schema {
   groupSchema: AttributeList!
 }
 
-"The fields that can be updated for a group."
-input UpdateGroupInput {
-  "The group ID." id: Int!
-  "The new display name." displayName: String
-  """
-    Attribute names to remove.
-    They are processed before insertions.
-  """ removeAttributes: [String!]
-  """
-    Inserts or updates the given attributes.
-    For lists, the entire list must be provided.
-  """ insertAttributes: [AttributeValueInput!]
-}
-
-input AttributeValueInput {
-  """
-    The name of the attribute. It must be present in the schema, and the type informs how
-    to interpret the values.
-  """ name: String!
-  """
-    The values of the attribute.
-    If the attribute is not a list, the vector must contain exactly one element.
-    Integers (signed 64 bits) are represented as strings.
-    Dates are represented as strings in RFC3339 format, e.g. "2019-10-12T07:20:50.52Z".
-    JpegPhotos are represented as base64 encoded strings. They must be valid JPEGs.
-  """ value: [String!]!
-}
-
-"The details required to create a group."
-input CreateGroupInput {
-  displayName: String!
-  "User-defined attributes." attributes: [AttributeValueInput!]
+type Success {
+  ok: Boolean!
 }
 
 type User {
@@ -173,32 +208,10 @@ type User {
   firstName: String!
   lastName: String!
   avatar: String
-  creationDate: DateTimeUtc!
+  creationDate: DateTime!
   uuid: String!
   "User-defined attributes."
   attributes: [AttributeValue!]!
   "The groups to which this user belongs."
   groups: [Group!]!
-}
-
-enum AttributeType {
-  STRING
-  INTEGER
-  JPEG_PHOTO
-  DATE_TIME
-}
-
-type AttributeList {
-  attributes: [AttributeSchema!]!
-  extraLdapObjectClasses: [String!]!
-  ldapObjectClasses: [ObjectClassInfo!]!
-}
-
-type Success {
-  ok: Boolean!
-}
-
-schema {
-  query: Query
-  mutation: Mutation
 }
