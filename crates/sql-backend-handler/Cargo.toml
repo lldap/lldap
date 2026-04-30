@@ -13,44 +13,30 @@ rust-version.workspace = true
 test = []
 
 [dependencies]
-anyhow = "*"
-async-trait = "0.1"
-base64 = "0.21"
-bincode = "1.3"
-itertools = "0.10"
-ldap3_proto = "0.6.0"
-orion = "0.17"
-serde_json = "1"
-tracing = "*"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+itertools = { workspace = true }
+orion = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
 
-[dependencies.chrono]
-features = ["serde"]
-version = "*"
+bincode = { workspace = true }
 
-[dependencies.rand]
-features = ["small_rng", "getrandom"]
-version = "0.8"
+base64 = { workspace = true }
 
-[dependencies.sea-orm]
-workspace = true
-features = [
-    "macros",
-    "with-chrono",
-    "with-uuid",
-    "sqlx-all",
-    "runtime-actix-rustls",
-]
+chrono = { workspace = true }
 
-[dependencies.secstr]
-features = ["serde"]
-version = "*"
+rand = { workspace = true }
 
-[dependencies.serde]
-workspace = true
+sea-orm = { workspace = true }
 
-[dependencies.uuid]
-version = "1"
-features = ["v1", "v3"]
+secstr = { workspace = true }
+
+serde = { workspace = true }
+
+uuid = { workspace = true }
+
+ldap3_proto = { workspace = true }
 
 [dependencies.lldap_access_control]
 path = "../access-control"
@@ -79,14 +65,10 @@ features = ["test"]
 path = "../test-utils"
 
 [dev-dependencies]
-log = "*"
-mockall = "0.11.4"
-pretty_assertions = "1"
+log = { workspace = true }
+mockall = { workspace = true }
+pretty_assertions = { workspace = true }
 
-[dev-dependencies.tokio]
-features = ["full"]
-version = "1.25"
+tokio = { workspace = true }
 
-[dev-dependencies.tracing-subscriber]
-version = "0.3"
-features = ["env-filter", "tracing-log"]
+tracing-subscriber = { workspace = true }

@@ -112,7 +112,7 @@ impl CommonComponent<CreateGroupForm> for CreateGroupForm {
                 let model = self.form.model();
                 let req = create_group::Variables {
                     group: create_group::CreateGroupInput {
-                        displayName: model.groupname,
+                        display_name: model.groupname,
                         attributes,
                     },
                 };

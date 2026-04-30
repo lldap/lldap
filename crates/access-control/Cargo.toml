@@ -10,8 +10,8 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-tracing = "*"
-async-trait = "0.1"
+tracing = { workspace = true }
+async-trait = { workspace = true }
 
 [dependencies.lldap_auth]
 path = "../auth"

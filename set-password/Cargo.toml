@@ -12,22 +12,17 @@ rust-version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "*"
-rand = "0.8"
-serde_json = "1"
+anyhow = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
-[dependencies.clap]
-features = ["std", "color", "suggestions", "derive", "env"]
-version = "4"
+clap = { workspace = true }
 
 [dependencies.lldap_auth]
 path = "../crates/auth"
 features = ["opaque_client"]
 
 [dependencies.reqwest]
-version = "*"
-default-features = false
-features = ["json", "blocking", "rustls-tls", "rustls-tls-native-roots"]
-
-[dependencies.serde]
 workspace = true
+features = ["json", "blocking", "rustls-tls", "rustls-tls-native-roots"]

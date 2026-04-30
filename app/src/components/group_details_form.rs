@@ -248,13 +248,13 @@ impl GroupDetailsForm {
             };
         let mut group_input = update_group::UpdateGroupInput {
             id: self.group.id,
-            displayName: None,
-            removeAttributes: None,
-            insertAttributes: None,
+            display_name: None,
+            remove_attributes: None,
+            insert_attributes: None,
         };
         let default_group_input = group_input.clone();
-        group_input.removeAttributes = remove_attributes;
-        group_input.insertAttributes = insert_attributes;
+        group_input.remove_attributes = remove_attributes;
+        group_input.insert_attributes = insert_attributes;
         // Nothing changed.
         if group_input == default_group_input {
             return Ok(false);

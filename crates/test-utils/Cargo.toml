@@ -9,14 +9,13 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-async-trait = "0.1"
-ldap3_proto = "0.6.0"
-mockall = "0.11.4"
-tracing = "*"
+async-trait = { workspace = true }
+mockall = { workspace = true }
+tracing = { workspace = true }
 
-[dependencies.uuid]
-version = "1"
-features = ["v1", "v3"]
+uuid = { workspace = true }
+
+ldap3_proto = { workspace = true }
 
 [dependencies.lldap_access_control]
 path = "../access-control"

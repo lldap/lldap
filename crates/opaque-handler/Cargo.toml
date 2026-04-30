@@ -13,7 +13,7 @@ rust-version.workspace = true
 test = []
 
 [dependencies]
-async-trait = "0.1"
+async-trait = { workspace = true }
 
 [dependencies.lldap_auth]
 path = "../auth"
@@ -26,4 +26,4 @@ path = "../domain"
 path = "../domain-model"
 
 [dev-dependencies]
-mockall = "0.11.4"
+mockall = { workspace = true }

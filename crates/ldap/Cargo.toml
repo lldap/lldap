@@ -10,27 +10,19 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-anyhow = "*"
-ldap3_proto = "0.6.0"
-tracing = "*"
-itertools = "0.10"
+anyhow = { workspace = true }
+tracing = { workspace = true }
+itertools = { workspace = true }
 
-[dependencies.derive_more]
-features = ["from"]
-default-features = false
-version = "1"
+derive_more = { workspace = true }
 
-[dependencies.chrono]
-features = ["serde"]
-version = "*"
+chrono = { workspace = true }
 
-[dependencies.rand]
-features = ["small_rng", "getrandom"]
-version = "0.8"
+rand = { workspace = true }
 
-[dependencies.uuid]
-version = "1"
-features = ["v1", "v3"]
+uuid = { workspace = true }
+
+ldap3_proto = { workspace = true }
 
 [dependencies.lldap_access_control]
 path = "../access-control"
@@ -55,12 +47,10 @@ path = "../opaque-handler"
 path = "../test-utils"
 
 [dev-dependencies]
-mockall = "0.11.4"
-pretty_assertions = "1"
+mockall = { workspace = true }
+pretty_assertions = { workspace = true }
 
-[dev-dependencies.tokio]
-features = ["full"]
-version = "1.25"
+tokio = { workspace = true }
 
 [dev-dependencies.lldap_domain]
 path = "../domain"

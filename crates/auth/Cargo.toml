@@ -18,34 +18,22 @@ sea_orm = ["dep:sea-orm"]
 test = []
 
 [dependencies]
+chrono = { workspace = true }
+derive_more = { workspace = true }
+opaque-ke = { workspace = true }
+serde = { workspace = true }
 rust-argon2 = "2"
 curve25519-dalek = "3"
 digest = "0.9"
 generic-array = "0.14"
-rand = "0.8"
+rand = { workspace = true }
 sha2 = "0.9"
-thiserror = "2"
-uuid = { version = "1.18.1", features = ["serde"] }
-
-[dependencies.derive_more]
-features = ["debug", "display"]
-default-features = false
-version = "1"
-
-[dependencies.opaque-ke]
-version = "0.7"
-
-[dependencies.chrono]
-version = "*"
-features = ["serde"]
+thiserror = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }
 
 [dependencies.sea-orm]
 workspace = true
-features = ["macros"]
 optional = true
-
-[dependencies.serde]
-workspace = true
 
 # For WASM targets, use the JS getrandom.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]
