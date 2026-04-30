@@ -11,26 +11,32 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-anyhow = "1"
-base64 = "0.13"
-gloo-console = "0.2.3"
-gloo-file = "0.2.3"
-gloo-net = "*"
-graphql_client = "0.10"
-http = "0.2"
-jwt = "0.13"
-rand = "0.8"
-serde_json = "1"
+anyhow = { workspace = true }
+chrono = { workspace = true }
+derive_more = { workspace = true }
+gloo-console = "0.4"
+gloo-file = "0.4"
+gloo-net = "0.7"
+graphql_client = { workspace = true }
+image = { workspace = true }
+jwt = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
 url-escape = "0.1.1"
 validator = "0.14"
 validator_derive = "0.14"
 wasm-bindgen = "0.2.100"
-wasm-bindgen-futures = "*"
+wasm-bindgen-futures = "0"
 yew = "0.19.3"
 yew-router = "0.16"
 
 # Needed because of https://github.com/tkaitchuck/aHash/issues/95
 indexmap = "=1.6.2"
+
+base64 = { workspace = true }
+
 
 [dependencies.web-sys]
 version = "0.3"
@@ -50,17 +56,6 @@ features = [
   "console",
 ]
 
-[dependencies.chrono]
-version = "*"
-features = [
-  "wasmbind"
-]
-
-[dependencies.derive_more]
-features = ["debug", "display", "from", "from_str"]
-default-features = false
-version = "1"
-
 [dependencies.lldap_auth]
 path = "../crates/auth"
 features = [ "opaque_client" ]
@@ -70,18 +65,6 @@ path = "../crates/frontend-options"
 
 [dependencies.lldap_validation]
 path = "../crates/validation"
-
-[dependencies.image]
-features = ["jpeg"]
-default-features = false
-version = "0.24"
-
-[dependencies.serde]
-workspace = true
-
-[dependencies.strum]
-features = ["derive"]
-version = "0.25"
 
 [dependencies.yew_form]
 git = "https://github.com/jfbilodeau/yew_form"

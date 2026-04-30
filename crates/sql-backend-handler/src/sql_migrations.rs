@@ -536,7 +536,7 @@ See https://github.com/lldap/lldap/blob/main/docs/migration_guides/v0.5.md for d
 Conflicting emails:
 "#,
         );
-        for (email, users) in &transaction
+        let duplicate_users = transaction
             .query_all(
                 builder.build(
                     Query::select()
@@ -568,9 +568,8 @@ Conflicting emails:
                     row.try_get::<String>("", &Users::Email.to_string())
                         .unwrap(),
                 )
-            })
-            .group_by(|(_user, email)| email.to_owned())
-        {
+            });
+        for (email, users) in &duplicate_users.chunk_by(|(_user, email)| email.to_owned()) {
             warn!("Email: {email}");
             for (user, _email) in users {
                 warn!("    User: {}", user.as_str());

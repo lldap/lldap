@@ -10,31 +10,24 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-anyhow = "*"
-base64 = "0.13"
-rand = "0.8"
-requestty = "0.4.1"
-serde_json = "1"
-smallvec = "*"
+anyhow = { workspace = true }
+base64 = { workspace = true }
+ldap3 = { workspace = true }
+rand = { workspace = true }
+requestty = "0.6"
+serde = { workspace = true }
+serde_json = { workspace = true }
+smallvec = "1"
 
 [dependencies.lldap_auth]
 path = "../crates/auth"
 features = ["opaque_client"]
 
 [dependencies.graphql_client]
+workspace = true
 features = ["graphql_query_derive", "reqwest-rustls"]
-default-features = false
-version = "0.11"
 
 [dependencies.reqwest]
-version = "*"
+workspace = true
 default-features = false
 features = ["json", "blocking", "rustls-tls"]
-
-[dependencies.ldap3]
-version = "*"
-default-features = false
-features = ["sync", "tls-rustls-ring"]
-
-[dependencies.serde]
-workspace = true

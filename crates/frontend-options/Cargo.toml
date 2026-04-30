@@ -9,5 +9,5 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-[dependencies.serde]
-workspace = true
+[dependencies]
+serde = { workspace = true }
