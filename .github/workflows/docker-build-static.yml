@@ -106,7 +106,7 @@ jobs:
           restore-keys: |
             lldap-ui-
       - name: Install wasm-pack with cargo
-        run: cargo install wasm-pack || true
+        run: cargo install --locked wasm-pack || true
         env:
           RUSTFLAGS: ""
       - name: Build frontend
