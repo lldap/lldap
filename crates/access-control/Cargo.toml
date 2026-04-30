@@ -1,6 +1,6 @@
 [package]
 name = "lldap_access_control"
-version = "0.1.0"
+version = "0.1.1"
 description = "Access control wrappers for LLDAP"
 authors.workspace = true
 edition.workspace = true

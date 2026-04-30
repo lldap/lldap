@@ -1,6 +1,6 @@
 [package]
 name = "lldap_auth"
-version = "0.6.0"
+version = "0.6.3"
 description = "Authentication protocol for LLDAP"
 edition.workspace = true
 authors.workspace = true

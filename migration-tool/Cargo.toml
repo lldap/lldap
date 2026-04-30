@@ -1,6 +1,6 @@
 [package]
 name = "lldap_migration_tool"
-version = "0.4.2"
+version = "0.4.3"
 description = "CLI migration tool to go from OpenLDAP to LLDAP"
 edition.workspace = true
 authors.workspace = true

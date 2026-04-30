@@ -1,6 +1,6 @@
 [package]
 name = "lldap_set_password"
-version = "0.1.0"
+version = "0.1.1"
 description = "CLI tool to set a user password in LLDAP"
 edition.workspace = true
 authors.workspace = true
