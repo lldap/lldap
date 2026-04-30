@@ -2634,7 +2634,7 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "lldap"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "actix",
  "actix-files",
@@ -2715,7 +2715,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_access_control"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "lldap_auth",
@@ -2727,7 +2727,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_app"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2761,7 +2761,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_auth"
-version = "0.6.0"
+version = "0.6.3"
 dependencies = [
  "chrono",
  "curve25519-dalek",
@@ -2781,7 +2781,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_domain"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2802,7 +2802,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_domain_handlers"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2820,7 +2820,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_domain_model"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "bincode",
@@ -2839,14 +2839,14 @@ dependencies = [
 
 [[package]]
 name = "lldap_frontend_options"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "lldap_graphql_server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2872,7 +2872,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_ldap"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2896,7 +2896,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_migration_tool"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2913,7 +2913,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_opaque_handler"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "lldap_auth",
@@ -2924,7 +2924,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_set_password"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2937,7 +2937,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_sql_backend_handler"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2970,7 +2970,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_test_utils"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "ldap3_proto",
@@ -2986,7 +2986,7 @@ dependencies = [
 
 [[package]]
 name = "lldap_validation"
-version = "0.6.0"
+version = "0.6.3"
 
 [[package]]
 name = "local-channel"
