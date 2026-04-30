@@ -63,7 +63,7 @@ features = ["jpeg"]
 version = "0.14"
 
 [workspace.dependencies.juniper]
-version = "0.15"
+version = "0.17"
 default-features = false
 features = ["chrono", "schema-language", "url", "uuid"]
 

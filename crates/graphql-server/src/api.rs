@@ -60,7 +60,7 @@ impl<Handler: BackendHandler> Context<Handler> {
 impl<Handler: BackendHandler> juniper::Context for Context<Handler> {}
 
 type Schema<Handler> =
-    RootNode<'static, Query<Handler>, Mutation<Handler>, EmptySubscription<Context<Handler>>>;
+    RootNode<Query<Handler>, Mutation<Handler>, EmptySubscription<Context<Handler>>>;
 
 pub fn schema<Handler: BackendHandler>() -> Schema<Handler> {
     Schema::new(
@@ -73,7 +73,7 @@ pub fn schema<Handler: BackendHandler>() -> Schema<Handler> {
 pub fn export_schema(output_file: Option<String>) -> anyhow::Result<()> {
     use anyhow::Context;
     use lldap_sql_backend_handler::SqlBackendHandler;
-    let output = schema::<SqlBackendHandler>().as_schema_language();
+    let output = schema::<SqlBackendHandler>().as_sdl();
     match output_file {
         None => println!("{output}"),
         Some(path) => {
