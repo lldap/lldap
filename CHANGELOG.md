@@ -34,7 +34,7 @@ Small release, focused on LDAP compatibility, TLS maintenance, dependency upgrad
  - Updated the LDAP dependency stack, including `ldap3_proto`, in response to
    security advisory
    [`GHSA-qcxq-75wr-5cm8`](https://github.com/kanidm/ldap3/security/advisories/GHSA-qcxq-75wr-5cm8),
-   where a specially crafted LDAP query could make the server use unbounded RAM
+   where a specially crafted LDAP query could make the server crash
 
 ### Cleanups
 
