@@ -798,8 +798,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_details() {
-        let handler =
-            SqlBackendHandler::new(generate_random_private_key(), get_initialized_db().await);
+        let handler = SqlBackendHandler::new(
+            generate_random_private_key(),
+            None,
+            get_initialized_db().await,
+        );
         insert_user_no_password(&handler, "bob").await;
         {
             let user = handler.get_user_details(&UserId::new("bob")).await.unwrap();
@@ -815,8 +818,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_user_lowercase() {
-        let handler =
-            SqlBackendHandler::new(generate_random_private_key(), get_initialized_db().await);
+        let handler = SqlBackendHandler::new(
+            generate_random_private_key(),
+            None,
+            get_initialized_db().await,
+        );
         insert_user_no_password(&handler, "Bob").await;
         {
             let user = handler.get_user_details(&UserId::new("bOb")).await.unwrap();
