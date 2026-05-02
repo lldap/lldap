@@ -1,6 +1,21 @@
 # Gogs LDAP configuration
 
-Gogs can make use of LDAP and therefore lldap.
+## Via Simple Auth (easier)
+
+Go to the Administration settings, then go to Authentication. There, you have to add an authentication source.
+
+For type, select "LDAP (Simple Auth)".
+Name your authentication source however you'd like. 
+It is up to you to select your security protocol, but the only two compatible options are "LDAPS" and "Unencrypted". 
+As your host, put in the IP or FQDN (if you have DNS).
+As your port, check your configuration. It will generally be 3890 for unencrypted (once again check your config/docker compose files), and 6360 for LDAPS (once again check your config/docker compose files).
+Your User DN should follow this pattern: `uid=%s,ou=people,<your_base_dn>` (for example, `uid=%s,ou=people,dc=example,dc=com`). Replace `<your_base_dn>` with your actual base DN.
+It is recommended to have your user filter to be `(&(objectClass=person)(uid=%s))`.
+Set username attribute to `uid`, Given Name to `givenName`, surname to `sn`, and email to `mail`
+
+You can (and should if you don't know LDAP) leave the rest empty.
+
+## Via Bind DN (more complicated)
 
 The following configuration is adapted from the example configuration at [their repository](https://github.com/gogs/gogs/blob/main/conf/auth.d/ldap_bind_dn.conf.example).
 The example is a container configuration - the file should live within `conf/auth.d/some_name.conf`:
