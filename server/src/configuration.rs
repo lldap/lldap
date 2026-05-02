@@ -208,7 +208,9 @@ impl Configuration {
 
     pub fn get_private_key_info(&self) -> PrivateKeyInfo {
         PrivateKeyInfo {
-            private_key_hash: PrivateKeyHash(stable_hash(self.get_server_keys().private().serialize().as_slice())),
+            private_key_hash: PrivateKeyHash(stable_hash(
+                self.get_server_keys().private().serialize().as_slice(),
+            )),
             private_key_location: self
                 .server_setup
                 .as_ref()
@@ -862,14 +864,22 @@ mod tests {
         // Verify that seed-based key generation is deterministic: same seed → same key.
         // (The exact byte representation depends on the opaque-ke version and is not
         // asserted here, since the upgrade changes the binary format.)
-        let setup1 =
-            get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests, false)
-                .unwrap()
-                .server_setup;
-        let setup2 =
-            get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests, false)
-                .unwrap()
-                .server_setup;
+        let setup1 = get_server_setup(
+            "/doesnt/exist",
+            "key seed",
+            PrivateKeyLocation::Tests,
+            false,
+        )
+        .unwrap()
+        .server_setup;
+        let setup2 = get_server_setup(
+            "/doesnt/exist",
+            "key seed",
+            PrivateKeyLocation::Tests,
+            false,
+        )
+        .unwrap()
+        .server_setup;
         assert_eq!(
             bincode::serialize(&setup1).unwrap(),
             bincode::serialize(&setup2).unwrap(),
@@ -892,9 +902,16 @@ mod tests {
     fn unparseable_key_file_is_not_silently_rotated() {
         Jail::expect_with(|jail| {
             // Drop a deliberately bogus blob in place of a server_key file.
-            std::fs::write(jail.directory().join("server_key"), b"not a real opaque-ke key")
-                .unwrap();
-            let path_str = jail.directory().join("server_key").to_string_lossy().into_owned();
+            std::fs::write(
+                jail.directory().join("server_key"),
+                b"not a real opaque-ke key",
+            )
+            .unwrap();
+            let path_str = jail
+                .directory()
+                .join("server_key")
+                .to_string_lossy()
+                .into_owned();
             let original_bytes = std::fs::read(jail.directory().join("server_key")).unwrap();
 
             // Without the explicit flag, get_server_setup must fail.
@@ -910,7 +927,10 @@ mod tests {
 
             // The on-disk file MUST be untouched.
             let after = std::fs::read(jail.directory().join("server_key")).unwrap();
-            assert_eq!(after, original_bytes, "Key file must not be touched on failure");
+            assert_eq!(
+                after, original_bytes,
+                "Key file must not be touched on failure"
+            );
             Ok(())
         });
     }
@@ -923,7 +943,11 @@ mod tests {
         Jail::expect_with(|jail| {
             let original = b"not a real opaque-ke key".to_vec();
             std::fs::write(jail.directory().join("server_key"), &original).unwrap();
-            let path_str = jail.directory().join("server_key").to_string_lossy().into_owned();
+            let path_str = jail
+                .directory()
+                .join("server_key")
+                .to_string_lossy()
+                .into_owned();
 
             let setup = get_server_setup(&path_str, "", PrivateKeyLocation::Tests, true)
                 .expect("Forced rotation should succeed");

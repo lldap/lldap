@@ -9,6 +9,7 @@ use crate::{
     },
 };
 use anyhow::{Result, anyhow, bail};
+use base64::Engine;
 use gloo_console::{error, warn};
 use lldap_auth::*;
 use validator_derive::Validate;
@@ -91,7 +92,7 @@ pub enum Msg {
     Update,
     Submit,
     AuthenticationRefreshResponse(Result<(String, bool)>),
-    AuthenticationStartResponse(AuthStart),
+    AuthenticationStartResponse(Box<AuthStart>),
     AuthenticationFinishResponse(Result<(String, bool)>),
     /// Opaque-ke 0.7 fallback flow triggered by HTTP 409 on v4.0 login.
     V07AuthStartResponse(V07AuthStart),
@@ -127,21 +128,22 @@ impl CommonComponent<LoginForm> for LoginForm {
                 let username_clone = username.clone();
                 self.common
                     .call_backend(ctx, HostService::login_start(req), move |r| {
-                        Msg::AuthenticationStartResponse(AuthStart {
+                        Msg::AuthenticationStartResponse(Box::new(AuthStart {
                             state,
                             username: username_clone,
                             password: password_clone,
                             response: r,
-                        })
+                        }))
                     });
                 Ok(true)
             }
-            Msg::AuthenticationStartResponse(AuthStart {
-                state: login_start,
-                username,
-                password,
-                response: res,
-            }) => {
+            Msg::AuthenticationStartResponse(boxed) => {
+                let AuthStart {
+                    state: login_start,
+                    username,
+                    password,
+                    response: res,
+                } = *boxed;
                 match res {
                     Ok(res) => {
                         let mut rng = rand::rngs::OsRng;
@@ -153,8 +155,7 @@ impl CommonComponent<LoginForm> for LoginForm {
                         ) {
                             Err(e) => {
                                 error!(&format!("Invalid username or password: {}", e));
-                                self.common.error =
-                                    Some(anyhow!("Invalid username or password"));
+                                self.common.error = Some(anyhow!("Invalid username or password"));
                                 return Ok(true);
                             }
                             Ok(l) => l,
@@ -178,14 +179,14 @@ impl CommonComponent<LoginForm> for LoginForm {
                                 Ok(r) => r,
                                 Err(e) => {
                                     error!(&format!("v0.7 OPAQUE start failed: {}", e));
-                                    self.common.error =
-                                        Some(anyhow!("Could not start v0.7 login"));
+                                    self.common.error = Some(anyhow!("Could not start v0.7 login"));
                                     return Ok(true);
                                 }
                             };
                         let req = login_base64::ClientLoginStartRequest {
                             username: username.clone().into(),
-                            login_start_request: base64::encode(&v07_bytes),
+                            login_start_request: base64::engine::general_purpose::STANDARD
+                                .encode(&v07_bytes),
                         };
                         let password_clone = password.clone();
                         self.common.call_backend(
@@ -220,12 +221,13 @@ impl CommonComponent<LoginForm> for LoginForm {
                 response: res,
             }) => {
                 let res = res.context("Could not start v0.7 login")?;
-                let server_response_bytes = match base64::decode(&res.credential_response) {
+                let server_response_bytes = match base64::engine::general_purpose::STANDARD
+                    .decode(&res.credential_response)
+                {
                     Ok(b) => b,
                     Err(e) => {
                         error!(&format!("Could not decode v0.7 server response: {}", e));
-                        self.common.error =
-                            Some(anyhow!("Invalid server response to v0.7 login"));
+                        self.common.error = Some(anyhow!("Invalid server response to v0.7 login"));
                         return Ok(true);
                     }
                 };
@@ -234,26 +236,23 @@ impl CommonComponent<LoginForm> for LoginForm {
                         Ok(b) => b,
                         Err(e) => {
                             error!(&format!("Invalid username or password: {}", e));
-                            self.common.error =
-                                Some(anyhow!("Invalid username or password"));
+                            self.common.error = Some(anyhow!("Invalid username or password"));
                             return Ok(true);
                         }
                     };
                 let req = login_base64::ClientLoginFinishRequest {
                     server_data: res.server_data,
-                    credential_finalization: base64::encode(&finalization_bytes),
+                    credential_finalization: base64::engine::general_purpose::STANDARD
+                        .encode(&finalization_bytes),
                 };
-                self.common.call_backend(
-                    ctx,
-                    HostService::login_finish_v07(req),
-                    move |r| {
+                self.common
+                    .call_backend(ctx, HostService::login_finish_v07(req), move |r| {
                         Msg::V07AuthFinishResponse(V07AuthFinish {
                             username,
                             password,
                             response: r,
                         })
-                    },
-                );
+                    });
                 Ok(false)
             }
             Msg::V07AuthFinishResponse(V07AuthFinish {
@@ -261,8 +260,7 @@ impl CommonComponent<LoginForm> for LoginForm {
                 password,
                 response: res,
             }) => {
-                let (_logged_in_user, is_admin) =
-                    res.context("Could not finish v0.7 login")?;
+                let (_logged_in_user, is_admin) = res.context("Could not finish v0.7 login")?;
                 // v0.7 login succeeded — the JWT cookies are set and the
                 // user is effectively logged in. Now silently upgrade the
                 // password to v4.0. If this fails, we still report success.
@@ -286,10 +284,8 @@ impl CommonComponent<LoginForm> for LoginForm {
                     registration_start_request: registration_start.message,
                 };
                 let password_clone = password.clone();
-                self.common.call_backend(
-                    ctx,
-                    HostService::register_start(req),
-                    move |r| {
+                self.common
+                    .call_backend(ctx, HostService::register_start(req), move |r| {
                         Msg::PasswordUpgradeStartResponse(PasswordUpgradeStart {
                             state: registration_start.state,
                             username,
@@ -297,8 +293,7 @@ impl CommonComponent<LoginForm> for LoginForm {
                             is_admin,
                             response: r,
                         })
-                    },
-                );
+                    });
                 Ok(false)
             }
             Msg::PasswordUpgradeStartResponse(PasswordUpgradeStart {
@@ -307,53 +302,48 @@ impl CommonComponent<LoginForm> for LoginForm {
                 password,
                 is_admin,
                 response: res,
-            }) => {
-                match res {
-                    Ok(res) => {
-                        let mut rng = rand::rngs::OsRng;
-                        let reg_finish = match opaque::client::registration::finish_registration(
-                            reg_state,
-                            res.registration_response,
-                            password.as_bytes(),
-                            &mut rng,
-                        ) {
-                            Ok(r) => r,
-                            Err(e) => {
-                                warn!(&format!(
-                                    "Password upgrade finish failed (login still succeeded): {}",
-                                    e
-                                ));
-                                ctx.props().on_logged_in.emit((username, is_admin));
-                                return Ok(true);
-                            }
-                        };
-                        let req = registration::ClientRegistrationFinishRequest {
-                            server_data: res.server_data,
-                            registration_upload: reg_finish.message,
-                        };
-                        self.common.call_backend(
-                            ctx,
-                            HostService::register_finish(req),
-                            move |r| {
-                                Msg::PasswordUpgradeFinishResponse(PasswordUpgradeFinish {
-                                    username,
-                                    is_admin,
-                                    response: r,
-                                })
-                            },
-                        );
-                        Ok(false)
-                    }
-                    Err(e) => {
-                        warn!(&format!(
-                            "Password upgrade register_start failed (login still succeeded): {}",
-                            e
-                        ));
-                        ctx.props().on_logged_in.emit((username, is_admin));
-                        Ok(true)
-                    }
+            }) => match res {
+                Ok(res) => {
+                    let mut rng = rand::rngs::OsRng;
+                    let reg_finish = match opaque::client::registration::finish_registration(
+                        reg_state,
+                        res.registration_response,
+                        password.as_bytes(),
+                        &mut rng,
+                    ) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            warn!(&format!(
+                                "Password upgrade finish failed (login still succeeded): {}",
+                                e
+                            ));
+                            ctx.props().on_logged_in.emit((username, is_admin));
+                            return Ok(true);
+                        }
+                    };
+                    let req = registration::ClientRegistrationFinishRequest {
+                        server_data: res.server_data,
+                        registration_upload: reg_finish.message,
+                    };
+                    self.common
+                        .call_backend(ctx, HostService::register_finish(req), move |r| {
+                            Msg::PasswordUpgradeFinishResponse(PasswordUpgradeFinish {
+                                username,
+                                is_admin,
+                                response: r,
+                            })
+                        });
+                    Ok(false)
                 }
-            }
+                Err(e) => {
+                    warn!(&format!(
+                        "Password upgrade register_start failed (login still succeeded): {}",
+                        e
+                    ));
+                    ctx.props().on_logged_in.emit((username, is_admin));
+                    Ok(true)
+                }
+            },
             Msg::PasswordUpgradeFinishResponse(PasswordUpgradeFinish {
                 username,
                 is_admin,

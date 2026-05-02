@@ -157,20 +157,19 @@ impl HostService {
             .body(serde_json::to_string(&request).map_err(|e| {
                 LoginStartError::Other(anyhow!("Could not serialize login request: {}", e))
             })?)
-            .map_err(|e| {
-                LoginStartError::Other(anyhow!("Could not build login request: {}", e))
-            })?;
+            .map_err(|e| LoginStartError::Other(anyhow!("Could not build login request: {}", e)))?;
 
-        let response = http_request.send().await.map_err(|e| {
-            LoginStartError::Other(anyhow!("Could not send login request: {}", e))
-        })?;
+        let response = http_request
+            .send()
+            .await
+            .map_err(|e| LoginStartError::Other(anyhow!("Could not send login request: {}", e)))?;
 
         if response.ok() {
             let text = response.text().await.map_err(|e| {
                 LoginStartError::Other(anyhow!("Could not read login response: {}", e))
             })?;
-            let parsed: login::ServerLoginStartResponse = serde_json::from_str(&text)
-                .map_err(|e| {
+            let parsed: login::ServerLoginStartResponse =
+                serde_json::from_str(&text).map_err(|e| {
                     LoginStartError::Other(anyhow!("Could not parse login response: {}", e))
                 })?;
             return Ok(Box::new(parsed));
@@ -181,14 +180,11 @@ impl HostService {
         // /auth/opaque/v07/login/*.
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        if status == 409 {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&body) {
-                if parsed.get("error_code").and_then(|v| v.as_str())
-                    == Some("opaque_v07_version")
-                {
-                    return Err(LoginStartError::OpaqueV07Version);
-                }
-            }
+        if status == 409
+            && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&body)
+            && parsed.get("error_code").and_then(|v| v.as_str()) == Some("opaque_v07_version")
+        {
+            return Err(LoginStartError::OpaqueV07Version);
         }
         Err(LoginStartError::Other(anyhow!(
             "Could not start authentication: [{} {}]: {}",

@@ -9,9 +9,9 @@ use lldap_domain_model::{
     model::{self, UserColumn},
 };
 use lldap_opaque_handler::{OpaqueHandler, login, login_base64, registration};
-use serde::{Deserialize, Serialize};
 use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait, QuerySelect};
 use secstr::SecUtf8;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, info, instrument, warn};
 
 type SqlOpaqueHandler = SqlBackendHandler;
@@ -114,8 +114,13 @@ fn passwords_match_v07(
     v07_setup: &lldap_auth::v07::V07ServerSetup,
     username: &UserId,
 ) -> Result<()> {
-    lldap_auth::v07::validate_password(password_file_bytes, clear_password, v07_setup, username.as_str())
-        .map_err(DomainError::InternalError)
+    lldap_auth::v07::validate_password(
+        password_file_bytes,
+        clear_password,
+        v07_setup,
+        username.as_str(),
+    )
+    .map_err(DomainError::InternalError)
 }
 
 /// In-process validator that runs both sides of an OPAQUE login handshake
@@ -160,7 +165,10 @@ impl SqlBackendHandler {
     fn open_state<T: serde::de::DeserializeOwned>(&self, blob: &str) -> Result<T> {
         let secret_key = self.get_orion_secret_key()?;
         let encrypted = base64::engine::general_purpose::STANDARD.decode(blob)?;
-        Ok(bincode::deserialize(&orion::aead::open(&secret_key, &encrypted)?)?)
+        Ok(bincode::deserialize(&orion::aead::open(
+            &secret_key,
+            &encrypted,
+        )?)?)
     }
 
     /// Construct the in-process validator appropriate for the given
@@ -177,11 +185,12 @@ impl SqlBackendHandler {
                             .to_string(),
                     )
                 })?;
-                let setup = lldap_auth::v07::V07ServerSetup::deserialize(bytes).ok_or_else(|| {
-                    DomainError::InternalError(
-                        "failed to deserialize the v0.7 server setup".to_string(),
-                    )
-                })?;
+                let setup =
+                    lldap_auth::v07::V07ServerSetup::deserialize(bytes).ok_or_else(|| {
+                        DomainError::InternalError(
+                            "failed to deserialize the v0.7 server setup".to_string(),
+                        )
+                    })?;
                 Ok(Validator::V07(Box::new(setup)))
             }
         }
@@ -200,9 +209,7 @@ impl SqlBackendHandler {
             .into_tuple::<(Option<Vec<u8>>, i32)>()
             .one(&self.sql_pool)
             .await?
-            .and_then(|(hash, version)| {
-                hash.map(|h| (h, OpaqueProtocolVersion::from_db(version)))
-            }))
+            .and_then(|(hash, version)| hash.map(|h| (h, OpaqueProtocolVersion::from_db(version)))))
     }
 
     /// Upgrade a v0.7 password to the current format after successful
@@ -210,7 +217,10 @@ impl SqlBackendHandler {
     /// against the v0.7 `Validator` — this re-runs the full v4.0
     /// registration flow and updates `password_version` in the DB.
     async fn upgrade_password(&self, username: &UserId, password: &str) -> Result<()> {
-        info!(r#"Upgrading password for "{}" from v0.7 to current format"#, username);
+        info!(
+            r#"Upgrading password for "{}" from v0.7 to current format"#,
+            username
+        );
         register_password(self, username.clone(), &SecUtf8::from(password)).await
     }
 }
@@ -219,15 +229,17 @@ impl SqlBackendHandler {
 impl LoginHandler for SqlBackendHandler {
     #[instrument(skip_all, level = "debug", err)]
     async fn bind(&self, request: BindRequest) -> Result<()> {
-        let auth_error = || {
-            DomainError::AuthenticationError(format!(r#"for user "{}""#, &request.name))
-        };
+        let auth_error =
+            || DomainError::AuthenticationError(format!(r#"for user "{}""#, &request.name));
 
         let Some((password_hash, version)) = self
             .get_password_file_for_user(request.name.clone())
             .await?
         else {
-            debug!(r#"User "{}" doesn't exist or has no password"#, &request.name);
+            debug!(
+                r#"User "{}" doesn't exist or has no password"#,
+                &request.name
+            );
             return Err(auth_error());
         };
 
@@ -257,9 +269,14 @@ impl LoginHandler for SqlBackendHandler {
         // failed upgrade does NOT fail the login — the user is still
         // authenticated, and the upgrade will be retried on the next bind.
         if version.is_v07()
-            && let Err(e) = self.upgrade_password(&request.name, &request.password).await
+            && let Err(e) = self
+                .upgrade_password(&request.name, &request.password)
+                .await
         {
-            warn!(r#"Failed to upgrade password for "{}": {}"#, &request.name, e);
+            warn!(
+                r#"Failed to upgrade password for "{}": {}"#,
+                &request.name, e
+            );
         }
         Ok(())
     }
@@ -358,8 +375,8 @@ impl OpaqueHandler for SqlOpaqueHandler {
         };
 
         // Decode the client's CredentialRequest bytes.
-        let credential_request_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&request.login_start_request)?;
+        let credential_request_bytes =
+            base64::engine::general_purpose::STANDARD.decode(&request.login_start_request)?;
 
         // Fetch the user's password file. Only v0.7 passwords are handled
         // here — a current-version user routed to this endpoint is rejected.
@@ -392,8 +409,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
 
         Ok(login_base64::ServerLoginStartResponse {
             server_data: self.seal_state(&server_data)?,
-            credential_response: base64::engine::general_purpose::STANDARD
-                .encode(response_bytes),
+            credential_response: base64::engine::general_purpose::STANDARD.encode(response_bytes),
         })
     }
 
@@ -408,8 +424,8 @@ impl OpaqueHandler for SqlOpaqueHandler {
         } = self.open_state(&request.server_data)?;
 
         // Decode the client's CredentialFinalization bytes.
-        let credential_finalization_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&request.credential_finalization)?;
+        let credential_finalization_bytes =
+            base64::engine::general_purpose::STANDARD.decode(&request.credential_finalization)?;
 
         match lldap_auth::v07::server_login_finish(server_login, &credential_finalization_bytes) {
             Ok(()) => {
@@ -686,8 +702,7 @@ mod tests {
             &mut rng,
         )
         .unwrap();
-        let password_file =
-            opaque::server::registration::get_password_file(client_finish.message);
+        let password_file = opaque::server::registration::get_password_file(client_finish.message);
 
         let bytes = password_file.serialize().to_vec();
         assert!(
@@ -699,7 +714,8 @@ mod tests {
     #[test]
     fn test_v07_format_compat() {
         // v0.7 password files deserialize with opaque-ke 4.0 (layout-compatible).
-        let (bytes, _) = lldap_auth::v07::create_test_password_file("legacyuser", "legacy_password");
+        let (bytes, _) =
+            lldap_auth::v07::create_test_password_file("legacyuser", "legacy_password");
 
         // The binary format of ServerRegistration is compatible: Ristretto255
         // group elements are serialized the same way in both versions.
@@ -716,10 +732,7 @@ mod tests {
 
     /// Helper: create a v0.7 (opaque-ke 0.7) password file for the given user.
     /// Delegates to `lldap_auth::v07::create_test_password_file`.
-    fn create_v07_password_file(
-        username: &str,
-        password: &str,
-    ) -> (Vec<u8>, Vec<u8>) {
+    fn create_v07_password_file(username: &str, password: &str) -> (Vec<u8>, Vec<u8>) {
         lldap_auth::v07::create_test_password_file(username, password)
     }
 
@@ -735,8 +748,7 @@ mod tests {
         let (v07_password_bytes, v07_setup_bytes) =
             create_v07_password_file("legacy_user", "my_legacy_password");
 
-        let handler =
-            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
+        let handler = SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
 
         // Create user with no password.
         insert_user_no_password(&handler, "legacy_user").await;
@@ -770,7 +782,8 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(
-            upgraded.1, OpaqueProtocolVersion::Current,
+            upgraded.1,
+            OpaqueProtocolVersion::Current,
             "Password should be auto-upgraded to version 1 after successful v0.7 bind"
         );
 
@@ -803,8 +816,7 @@ mod tests {
         let (v07_password_bytes, v07_setup_bytes) =
             create_v07_password_file("legacy_user", "correct_password");
 
-        let handler =
-            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
+        let handler = SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
         insert_user_no_password(&handler, "legacy_user").await;
 
         let now = chrono::Utc::now().naive_utc();
@@ -832,7 +844,11 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(entry.1, OpaqueProtocolVersion::V07, "Failed bind should not upgrade the password");
+        assert_eq!(
+            entry.1,
+            OpaqueProtocolVersion::V07,
+            "Failed bind should not upgrade the password"
+        );
     }
 
     #[tokio::test]
@@ -840,8 +856,7 @@ mod tests {
         // A fresh registration via register_password should set password_version = 1.
         let sql_pool = get_initialized_db().await;
         crate::logging::init_for_tests();
-        let handler =
-            SqlBackendHandler::new(generate_random_private_key(), None, sql_pool.clone());
+        let handler = SqlBackendHandler::new(generate_random_private_key(), None, sql_pool.clone());
         insert_user_no_password(&handler, "fresh_user").await;
 
         register_password(
@@ -858,7 +873,8 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(
-            entry.1, OpaqueProtocolVersion::Current,
+            entry.1,
+            OpaqueProtocolVersion::Current,
             "Fresh registration should set password_version = 1"
         );
 
@@ -882,8 +898,7 @@ mod tests {
         let (v07_password_bytes, v07_setup_bytes) =
             create_v07_password_file("legacy_alice", "alice_password");
 
-        let handler =
-            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
+        let handler = SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
 
         // v0.7 user.
         insert_user_no_password(&handler, "legacy_alice").await;
@@ -942,8 +957,7 @@ mod tests {
         let (v07_password_bytes, v07_setup_bytes) =
             create_v07_password_file("legacy_user", "my_password");
 
-        let handler =
-            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
+        let handler = SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
         insert_user_no_password(&handler, "legacy_user").await;
 
         let now = chrono::Utc::now().naive_utc();
@@ -962,8 +976,7 @@ mod tests {
         // Build a v4.0 login start request — the server should reject it with
         // DomainError::OpaqueV07Version before even attempting the handshake.
         let mut rng = rand::rngs::OsRng;
-        let client_start =
-            opaque::client::login::start_login("my_password", &mut rng).unwrap();
+        let client_start = opaque::client::login::start_login("my_password", &mut rng).unwrap();
         let req = login::ClientLoginStartRequest {
             username: UserId::new("legacy_user"),
             login_start_request: client_start.message,
@@ -988,8 +1001,7 @@ mod tests {
         let (v07_password_bytes, v07_setup_bytes) =
             create_v07_password_file("legacy_alice", "alice_password");
 
-        let handler =
-            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
+        let handler = SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
         insert_user_no_password(&handler, "legacy_alice").await;
 
         let now = chrono::Utc::now().naive_utc();
@@ -1022,8 +1034,7 @@ mod tests {
             .decode(&start_response.credential_response)
             .unwrap();
         let finalization_bytes =
-            lldap_auth::v07::client_login_finish(v07_client_state, &server_response_bytes)
-                .unwrap();
+            lldap_auth::v07::client_login_finish(v07_client_state, &server_response_bytes).unwrap();
         let finish_req = login_base64::ClientLoginFinishRequest {
             server_data: start_response.server_data,
             credential_finalization: base64::engine::general_purpose::STANDARD
@@ -1042,7 +1053,11 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(before.1, OpaqueProtocolVersion::V07, "Should still be v0.7 before re-registration");
+        assert_eq!(
+            before.1,
+            OpaqueProtocolVersion::V07,
+            "Should still be v0.7 before re-registration"
+        );
 
         // Re-register using the convenience function (mirrors what the
         // client does via /opaque/register/{start,finish}).
@@ -1060,7 +1075,11 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(after.1, OpaqueProtocolVersion::Current, "Should be v4.0 after re-registration");
+        assert_eq!(
+            after.1,
+            OpaqueProtocolVersion::Current,
+            "Should be v4.0 after re-registration"
+        );
 
         // Step 7: v4.0 login_start no longer returns OpaqueV07Version.
         let mut rng = rand::rngs::OsRng;
@@ -1086,8 +1105,7 @@ mod tests {
         let (v07_password_bytes, v07_setup_bytes) =
             create_v07_password_file("legacy_user", "correct_password");
 
-        let handler =
-            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
+        let handler = SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
         insert_user_no_password(&handler, "legacy_user").await;
 
         let now = chrono::Utc::now().naive_utc();
@@ -1154,8 +1172,7 @@ mod tests {
         // The v0.7 setup is not strictly needed for this test, but is
         // provided to exercise the full code path.
         let (_, v07_setup_bytes) = create_v07_password_file("unused", "unused");
-        let handler =
-            SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
+        let handler = SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
 
         // Register a fresh v4.0 user.
         insert_user_no_password(&handler, "new_user").await;

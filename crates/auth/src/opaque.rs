@@ -1,6 +1,6 @@
 use crate::types::UserId;
-use rand::{CryptoRng, RngCore};
 pub use opaque_ke::ServerLoginParameters;
+use rand::{CryptoRng, RngCore};
 pub type KeyPair = opaque_ke::keypair::KeyPair<opaque_ke::Ristretto255>;
 
 #[derive(thiserror::Error, Debug)]

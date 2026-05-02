@@ -21,7 +21,7 @@ use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 enum OpaqueData {
     #[default]
     None,
-    Login(opaque::client::login::ClientLogin, String),
+    Login(Box<opaque::client::login::ClientLogin>, String),
     Registration(opaque::client::registration::ClientRegistration, String),
 }
 
@@ -98,7 +98,8 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                     let login_start_request =
                         opaque::client::login::start_login(&old_password, &mut rng)
                             .context("Could not initialize login")?;
-                    self.opaque_data = OpaqueData::Login(login_start_request.state, old_password);
+                    self.opaque_data =
+                        OpaqueData::Login(Box::new(login_start_request.state), old_password);
                     let req = login::ClientLoginStartRequest {
                         username: ctx.props().username.clone().into(),
                         login_start_request: login_start_request.message,
@@ -123,14 +124,18 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                 match self.opaque_data.take() {
                     OpaqueData::Login(l, password) => {
                         let mut rng = rand::rngs::OsRng;
-                        opaque::client::login::finish_login(l, res.credential_response, &password, &mut rng).map_err(
-                            |e| {
-                                // Common error, we want to print a full error to the console but only a
-                                // simple one to the user.
-                                error!(&format!("Invalid username or password: {}", e));
-                                anyhow!("Invalid username or password")
-                            },
-                        )?;
+                        opaque::client::login::finish_login(
+                            *l,
+                            res.credential_response,
+                            &password,
+                            &mut rng,
+                        )
+                        .map_err(|e| {
+                            // Common error, we want to print a full error to the console but only a
+                            // simple one to the user.
+                            error!(&format!("Invalid username or password: {}", e));
+                            anyhow!("Invalid username or password")
+                        })?;
                     }
                     _ => panic!("Unexpected data in opaque_data field"),
                 };

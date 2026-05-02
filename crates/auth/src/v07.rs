@@ -156,9 +156,10 @@ pub fn server_login_finish(
     state: V07ServerLoginState,
     credential_finalization_bytes: &[u8],
 ) -> Result<(), String> {
-    let credential_finalization =
-        opaque_ke_v07::CredentialFinalization::<V07Suite>::deserialize(credential_finalization_bytes)
-            .map_err(|e| format!("v0.7 CredentialFinalization decode error: {e}"))?;
+    let credential_finalization = opaque_ke_v07::CredentialFinalization::<V07Suite>::deserialize(
+        credential_finalization_bytes,
+    )
+    .map_err(|e| format!("v0.7 CredentialFinalization decode error: {e}"))?;
     state
         .0
         .finish(credential_finalization)
@@ -195,7 +196,10 @@ pub fn client_login_finish(
             .map_err(|e| format!("v0.7 CredentialResponse decode error: {e}"))?;
     let result = state
         .0
-        .finish(response, opaque_ke_v07::ClientLoginFinishParameters::default())
+        .finish(
+            response,
+            opaque_ke_v07::ClientLoginFinishParameters::default(),
+        )
         .map_err(|e| format!("v0.7 OPAQUE finish_login failed: {e}"))?;
     Ok(result.message.serialize())
 }

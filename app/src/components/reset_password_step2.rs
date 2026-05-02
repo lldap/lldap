@@ -84,7 +84,8 @@ impl CommonComponent<ResetPasswordStep2Form> for ResetPasswordStep2Form {
             }
             Msg::RegistrationStartResponse(res) => {
                 let res = res.context("Could not initiate password change")?;
-                let (registration, password) = self.opaque_data.take().expect("Missing registration data");
+                let (registration, password) =
+                    self.opaque_data.take().expect("Missing registration data");
                 let mut rng = rand::rngs::OsRng;
                 let registration_finish = opaque_registration::finish_registration(
                     registration,
