@@ -123,7 +123,7 @@ impl HostService {
     where
         QueryType: GraphQLQuery + 'static,
     {
-        let unwrap_graphql_response = |graphql_client::Response { data, errors }| {
+        let unwrap_graphql_response = |graphql_client::Response { data, errors, .. }| {
             data.ok_or_else(|| {
                 anyhow!(
                     "Errors: [{}]",

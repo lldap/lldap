@@ -1,6 +1,6 @@
 [package]
 name = "lldap_auth"
-version = "0.6.0"
+version = "0.6.3"
 description = "Authentication protocol for LLDAP"
 edition.workspace = true
 authors.workspace = true
@@ -18,32 +18,19 @@ sea_orm = ["dep:sea-orm"]
 test = []
 
 [dependencies]
+chrono = { workspace = true }
+derive_more = { workspace = true }
+opaque-ke = { workspace = true }
+serde = { workspace = true }
 argon2 = "0.5"
-rand = "0.8"
+rand = { workspace = true }
 sha2 = "0.10"
-thiserror = "2"
-uuid = { version = "1.18.1", features = ["serde"] }
-
-[dependencies.derive_more]
-features = ["debug", "display"]
-default-features = false
-version = "1"
-
-[dependencies.opaque-ke]
-version = "4"
-features = ["argon2"]
-
-[dependencies.chrono]
-version = "*"
-features = ["serde"]
+thiserror = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }
 
 [dependencies.sea-orm]
 workspace = true
-features = ["macros"]
 optional = true
-
-[dependencies.serde]
-workspace = true
 
 # opaque-ke 0.7 for backward-compatible validation of existing password files.
 # Only used for progressive migration — new passwords always use opaque-ke 4.

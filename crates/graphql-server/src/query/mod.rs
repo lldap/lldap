@@ -47,7 +47,11 @@ impl<Handler: BackendHandler> Query<Handler> {
         "1.0"
     }
 
-    pub async fn user(context: &Context<Handler>, user_id: String) -> FieldResult<User<Handler>> {
+    pub async fn user(
+        &self,
+        context: &Context<Handler>,
+        user_id: String,
+    ) -> FieldResult<User<Handler>> {
         use anyhow::Context;
         let span = debug_span!("[GraphQL query] user");
         span.in_scope(|| {
@@ -61,14 +65,15 @@ impl<Handler: BackendHandler> Query<Handler> {
                 &span,
                 "Unauthorized access to user data",
             ))?;
-        let schema = Arc::new(self.get_schema(context, span.clone()).await?);
+        let schema: Arc<PublicSchema> = Arc::new(self.get_schema(context, span.clone()).await?);
         let user = handler.get_user_details(&user_id).instrument(span).await?;
         User::<Handler>::from_user(user, schema)
     }
 
     async fn users(
+        &self,
         context: &Context<Handler>,
-        #[graphql(name = "where")] filters: Option<RequestFilter>,
+        filters: Option<RequestFilter>,
     ) -> FieldResult<Vec<User<Handler>>> {
         let span = debug_span!("[GraphQL query] users");
         span.in_scope(|| {
@@ -80,7 +85,7 @@ impl<Handler: BackendHandler> Query<Handler> {
                 &span,
                 "Unauthorized access to user list",
             ))?;
-        let schema = Arc::new(self.get_schema(context, span.clone()).await?);
+        let schema: Arc<PublicSchema> = Arc::new(self.get_schema(context, span.clone()).await?);
         let users = handler
             .list_users(
                 filters
@@ -96,7 +101,7 @@ impl<Handler: BackendHandler> Query<Handler> {
             .collect()
     }
 
-    async fn groups(context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
+    async fn groups(&self, context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
         let span = debug_span!("[GraphQL query] groups");
         let handler = context
             .get_readonly_handler()
@@ -104,7 +109,7 @@ impl<Handler: BackendHandler> Query<Handler> {
                 &span,
                 "Unauthorized access to group list",
             ))?;
-        let schema = Arc::new(self.get_schema(context, span.clone()).await?);
+        let schema: Arc<PublicSchema> = Arc::new(self.get_schema(context, span.clone()).await?);
         let domain_groups = handler.list_groups(None).instrument(span).await?;
         domain_groups
             .into_iter()
@@ -112,7 +117,11 @@ impl<Handler: BackendHandler> Query<Handler> {
             .collect()
     }
 
-    async fn group(context: &Context<Handler>, group_id: i32) -> FieldResult<Group<Handler>> {
+    async fn group(
+        &self,
+        context: &Context<Handler>,
+        group_id: i32,
+    ) -> FieldResult<Group<Handler>> {
         let span = debug_span!("[GraphQL query] group");
         span.in_scope(|| {
             debug!(?group_id);
@@ -123,7 +132,7 @@ impl<Handler: BackendHandler> Query<Handler> {
                 &span,
                 "Unauthorized access to group data",
             ))?;
-        let schema = Arc::new(self.get_schema(context, span.clone()).await?);
+        let schema: Arc<PublicSchema> = Arc::new(self.get_schema(context, span.clone()).await?);
         let group_details = handler
             .get_group_details(GroupId(group_id))
             .instrument(span)
@@ -131,7 +140,7 @@ impl<Handler: BackendHandler> Query<Handler> {
         Group::<Handler>::from_group_details(group_details, schema.clone())
     }
 
-    async fn schema(context: &Context<Handler>) -> FieldResult<Schema<Handler>> {
+    async fn schema(&self, context: &Context<Handler>) -> FieldResult<Schema<Handler>> {
         let span = debug_span!("[GraphQL query] get_schema");
         self.get_schema(context, span).await.map(Into::into)
     }
@@ -175,9 +184,9 @@ mod tests {
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
 
-    fn schema<'q, C, Q>(query_root: Q) -> RootNode<'q, Q, EmptyMutation<C>, EmptySubscription<C>>
+    fn schema<C, Q>(query_root: Q) -> RootNode<Q, EmptyMutation<C>, EmptySubscription<C>>
     where
-        Q: GraphQLType<DefaultScalarValue, Context = C, TypeInfo = ()> + 'q,
+        Q: GraphQLType<DefaultScalarValue, Context = C, TypeInfo = ()>,
     {
         RootNode::new(
             query_root,

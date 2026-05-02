@@ -24,9 +24,123 @@ lto = true
 [profile.release.package.lldap_app]
 opt-level = 's'
 
+[workspace.dependencies.anyhow]
+version = "1"
+
+[workspace.dependencies.async-trait]
+version = "0.1"
+
+[workspace.dependencies.base64]
+version = "0.22"
+
+[workspace.dependencies.bincode]
+version = "1"
+
+[workspace.dependencies.chrono]
+version = "0.4"
+features = ["serde", "wasmbind"]
+
+[workspace.dependencies.clap]
+version = "4"
+features = ["std", "color", "suggestions", "derive", "env"]
+
+[workspace.dependencies.derive_more]
+version = "2"
+default-features = false
+features = ["debug", "display", "from", "from_str"]
+
+[workspace.dependencies.graphql_client]
+version = "0.11"
+default-features = false
+features = ["graphql_query_derive"]
+
+[workspace.dependencies.image]
+version = "0.25"
+default-features = false
+features = ["jpeg"]
+
+[workspace.dependencies.itertools]
+version = "0.14"
+
+[workspace.dependencies.juniper]
+version = "0.17"
+default-features = false
+features = ["chrono", "schema-language", "url", "uuid"]
+
+[workspace.dependencies.ldap3]
+version = "0"
+default-features = false
+features = ["sync", "tls-rustls-ring"]
+
+[workspace.dependencies.ldap3_proto]
+version = "0.7"
+
+[workspace.dependencies.jwt]
+version = "0.16"
+
+[workspace.dependencies.log]
+version = "0"
+
+[workspace.dependencies.mockall]
+version = "0.14"
+
+[workspace.dependencies.opaque-ke]
+version = "4"
+features = ["argon2"]
+
+[workspace.dependencies.orion]
+version = "0.17"
+
+[workspace.dependencies.pretty_assertions]
+version = "1"
+
+[workspace.dependencies.rand]
+version = "0.8"
+features = ["small_rng", "getrandom"]
+
+[workspace.dependencies.reqwest]
+version = "0.11"
+default-features = false
+
 [workspace.dependencies.sea-orm]
 version = "1.1.8"
 default-features = false
+features = ["macros", "with-chrono", "with-uuid", "sqlx-all", "runtime-actix-rustls"]
+
+[workspace.dependencies.secstr]
+version = "0"
+features = ["serde"]
 
 [workspace.dependencies.serde]
 version = "1"
+
+[workspace.dependencies.serde_bytes]
+version = "0.11"
+
+[workspace.dependencies.serde_json]
+version = "1"
+
+[workspace.dependencies.strum]
+version = "0.28"
+features = ["derive"]
+
+[workspace.dependencies.thiserror]
+version = "2"
+
+[workspace.dependencies.tokio]
+version = "1"
+features = ["full"]
+
+[workspace.dependencies.tracing]
+version = "0"
+
+[workspace.dependencies.tracing-subscriber]
+version = "0.3"
+features = ["env-filter", "tracing-log"]
+
+[workspace.dependencies.urlencoding]
+version = "2"
+
+[workspace.dependencies.uuid]
+version = "1.18.1"
+features = ["js", "serde", "v1", "v3", "v4"]

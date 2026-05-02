@@ -68,6 +68,55 @@ masked unrelated failures like a corrupted key file).
  - Startup warning listing the count of users still on a legacy password
    format.
 
+## [0.6.3] 2026-05-01
+
+Small release, focused on LDAP compatibility, TLS maintenance, dependency upgrades and documentation/examples.
+
+### Added
+
+ - LDAP schema definitions for `memberOf`, `modifyTimestamp` and `pwdChangedTime`
+ - Support for configuring the healthcheck listen addresses
+ - Usernames are now included in password recovery emails
+
+### Changed
+
+ - JWT `exp` and `iat` claims are now serialized as NumericDate values to comply with RFC7519
+ - Migrated to `rustls` 0.23 and centralized TLS handling
+ - The login form no longer enforces a password length limit
+
+### Fixed
+
+ - `pwdChangedTime` is now emitted as LDAP GeneralizedTime instead of RFC3339
+ - LDAP base-scope searches for non-existent entries now return `NoSuchObject`
+ - `cn` equality filters are now case insensitive
+ - The server now shuts down the database connection pool gracefully
+ - The bootstrap script now handles empty globs correctly
+
+### Security
+
+ - Updated the LDAP dependency stack, including `ldap3_proto`, in response to
+   security advisory
+   [`GHSA-qcxq-75wr-5cm8`](https://github.com/kanidm/ldap3/security/advisories/GHSA-qcxq-75wr-5cm8),
+   where a specially crafted LDAP query could make the server crash
+
+### Cleanups
+
+ - Split GraphQL queries and mutations into smaller modules
+ - Refactored configuration and user update logic
+ - Upgraded the Rust toolchain and shared dependencies
+
+### New services
+
+ - Apache WebDAV
+ - Continuwuity
+ - Gerrit
+ - Gogs
+ - Open WebUI
+ - OpenCloud
+ - Pocket ID
+ - Semaphore
+ - TrueNAS
+
 ## [0.6.2] 2025-07-21
 
 Small release, focused on LDAP improvements and ongoing maintenance.

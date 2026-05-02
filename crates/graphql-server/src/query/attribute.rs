@@ -93,7 +93,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
         }
     }
 
-    pub(super) fn name(&self) -> &str {
+    pub(super) fn attribute_name(&self) -> &str {
         self.attribute.name.as_str()
     }
 }
