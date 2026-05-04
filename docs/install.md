@@ -86,6 +86,7 @@ services:
       # - LLDAP_SMTP_OPTIONS__PASSWORD=PasswordGoesHere # The SMTP password
       # - LLDAP_SMTP_OPTIONS__FROM=no-reply <no-reply@example.com> # The header field, optional: how the sender appears in the email. The first is a free-form name, followed by an email between <>.
       # - LLDAP_SMTP_OPTIONS__TO=admin <admin@example.com> # Same for reply-to, optional.
+      # - LLDAP_HTTP_URL=https://lldap.example.com # URL used in the email template to compose the reset link
 ```
 
 Then the service will listen on two ports, one for LDAP and one for the web
