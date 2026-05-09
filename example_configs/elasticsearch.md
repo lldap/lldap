@@ -1,6 +1,6 @@
 # Elasticsearch configuration
 
-> ⚠️ Configuring Elasticsearch to use LDAP auth requires a paid licence. Only the `default` and `file` realms are enabled on a Basic licence.
+> ⚠️ Configuring Elasticsearch to use LDAP auth requires a paid licence. Only the `default` and `file` realms are enabled on a Basic licence. Using the trial licence on cluster init will allow LDAP auth to be configured.
 
 This basic configuration example is for LLDAP auth on [Elastic Cloud on Kubernetes (ECK)](https://www.elastic.co/docs/deploy-manage/deploy/cloud-on-k8s). Advanced configuration can be found in the [Elastic docs](https://www.elastic.co/docs/deploy-manage/users-roles/cluster-or-deployment-auth/ldap).
 
