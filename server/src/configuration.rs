@@ -105,11 +105,11 @@ pub struct HttpUrl(pub Url);
 #[derive(Clone, Deserialize, Serialize, derive_builder::Builder, derive_more::Debug)]
 #[builder(pattern = "owned", build_fn(name = "private_build"))]
 pub struct Configuration {
-    #[builder(default = r#"String::from("0.0.0.0")"#)]
+    #[builder(default = r#"String::from("::")"#)]
     pub ldap_host: String,
     #[builder(default = "3890")]
     pub ldap_port: u16,
-    #[builder(default = r#"String::from("0.0.0.0")"#)]
+    #[builder(default = r#"String::from("::")"#)]
     pub http_host: String,
     #[builder(default = "17170")]
     pub http_port: u16,
