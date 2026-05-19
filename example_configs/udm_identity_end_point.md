@@ -30,7 +30,7 @@ Unique Identifier Attribute - entryUUID
 - Group Object Filter - objectClass=groupOfUniqueNames 
 
 Member Attribute   
-member 
+uniqueMember 
 
 Validate Attribute   
 enter a user e-mail address who has been added in LLDAP , and click test configuration, test show be successful 
