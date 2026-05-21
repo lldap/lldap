@@ -2743,6 +2743,7 @@ dependencies = [
  "lldap_auth",
  "lldap_frontend_options",
  "lldap_validation",
+ "percent-encoding",
  "rand 0.8.6",
  "serde",
  "serde_json",

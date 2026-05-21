@@ -183,6 +183,16 @@ impl App {
         }
     }
 
+    /// Percent-decode a URL path segment into a user ID string.
+    /// Returns `None` if the decoded bytes are not valid UTF-8, so the caller
+    /// can redirect to a safe page rather than silently mangling the ID.
+    fn decode_user_id(raw: &str) -> Option<String> {
+        percent_encoding::percent_decode_str(raw)
+            .decode_utf8()
+            .ok()
+            .map(|s| s.into_owned())
+    }
+
     fn dispatch_route(
         switch: &AppRoute,
         link: &Scope<Self>,
@@ -248,11 +258,17 @@ impl App {
             AppRoute::GroupDetails { group_id } => html! {
                 <GroupDetails group_id={*group_id} is_admin={is_admin} />
             },
-            AppRoute::UserDetails { user_id } => html! {
-                <UserDetails username={user_id.clone()} is_admin={is_admin} />
+            AppRoute::UserDetails { user_id } => match Self::decode_user_id(user_id) {
+                Some(decoded_id) => html! {
+                    <UserDetails username={decoded_id} is_admin={is_admin} />
+                },
+                None => html! { <Redirect to={AppRoute::Login} /> },
             },
-            AppRoute::ChangePassword { user_id } => html! {
-                <ChangePasswordForm username={user_id.clone()} is_admin={is_admin} />
+            AppRoute::ChangePassword { user_id } => match Self::decode_user_id(user_id) {
+                Some(decoded_id) => html! {
+                    <ChangePasswordForm username={decoded_id} is_admin={is_admin} />
+                },
+                None => html! { <Redirect to={AppRoute::Login} /> },
             },
             AppRoute::StartResetPassword => match password_reset_enabled {
                 Some(true) => html! { <ResetPasswordStep1Form /> },
