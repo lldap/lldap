@@ -52,7 +52,7 @@ where
 
 /// Actix GraphQL Handler for GET requests
 pub async fn get_graphql_handler<Query, Mutation, Subscription, CtxT, S>(
-    schema: &juniper::RootNode<'static, Query, Mutation, Subscription, S>,
+    schema: &juniper::RootNode<Query, Mutation, Subscription, S>,
     context: &CtxT,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error>
@@ -81,7 +81,7 @@ where
 
 /// Actix GraphQL Handler for POST requests
 pub async fn post_graphql_handler<Query, Mutation, Subscription, CtxT, S>(
-    schema: &juniper::RootNode<'static, Query, Mutation, Subscription, S>,
+    schema: &juniper::RootNode<Query, Mutation, Subscription, S>,
     context: &CtxT,
     req: HttpRequest,
     mut payload: actix_http::Payload,

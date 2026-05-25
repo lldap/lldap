@@ -333,7 +333,7 @@ impl TryFrom<&[u8]> for JpegPhoto {
             return Ok(JpegPhoto::null());
         }
         // Confirm that it's a valid Jpeg, then store only the bytes.
-        image::io::Reader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Jpeg)
+        image::ImageReader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Jpeg)
             .decode()?;
         Ok(JpegPhoto(bytes.to_vec()))
     }
@@ -346,7 +346,7 @@ impl TryFrom<Vec<u8>> for JpegPhoto {
             return Ok(JpegPhoto::null());
         }
         // Confirm that it's a valid Jpeg, then store only the bytes.
-        image::io::Reader::with_format(
+        image::ImageReader::with_format(
             std::io::Cursor::new(bytes.as_slice()),
             image::ImageFormat::Jpeg,
         )
@@ -397,7 +397,7 @@ impl JpegPhoto {
 
     #[cfg(any(feature = "test", test))]
     pub fn for_tests() -> Self {
-        use image::{ImageOutputFormat, Rgb, RgbImage};
+        use image::{ImageFormat, Rgb, RgbImage};
         let img = RgbImage::from_fn(32, 32, |x, y| {
             if (x + y) % 2 == 0 {
                 Rgb([0, 0, 0])
@@ -406,11 +406,8 @@ impl JpegPhoto {
             }
         });
         let mut bytes: Vec<u8> = Vec::new();
-        img.write_to(
-            &mut std::io::Cursor::new(&mut bytes),
-            ImageOutputFormat::Jpeg(0),
-        )
-        .unwrap();
+        img.write_to(&mut std::io::Cursor::new(&mut bytes), ImageFormat::Jpeg)
+            .unwrap();
         Self(bytes)
     }
 }
@@ -688,7 +685,7 @@ mod tests {
         );
         assert_eq!(
             &format!("{:?}", Serialized::from(&JpegPhoto::for_tests())),
-            "Serialized(\"hash: 0xB947C77A16F3C3BD\")"
+            "Serialized(\"hash: 0xBB3017828B2F3DEF\")"
         );
     }
 

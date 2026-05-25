@@ -4,7 +4,8 @@ use anyhow::{Context, Result, anyhow};
 use graphql_client::GraphQLQuery;
 use reqwest::blocking::Client;
 
-pub type DateTimeUtc = chrono::DateTime<chrono::Utc>;
+pub type DateTime = chrono::DateTime<chrono::Utc>;
+pub type DateTimeUtc = DateTime;
 
 #[derive(GraphQLQuery)]
 #[graphql(

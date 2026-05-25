@@ -1,6 +1,6 @@
 [package]
 name = "lldap_graphql_server"
-version = "0.1.0"
+version = "0.1.1"
 description = "GraphQL server for LLDAP"
 edition.workspace = true
 authors.workspace = true
@@ -10,15 +10,14 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-anyhow = "*"
-juniper = "0.15"
-serde_json = "1"
-tracing = "*"
-urlencoding = "2"
-
-[dependencies.chrono]
-features = ["serde"]
-version = "*"
+anyhow = { workspace = true }
+chrono = { workspace = true }
+juniper = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+urlencoding = { workspace = true }
+uuid = { workspace = true }
 
 [dependencies.lldap_access_control]
 path = "../access-control"
@@ -45,16 +44,10 @@ path = "../sql-backend-handler"
 [dependencies.lldap_validation]
 path = "../validation"
 
-[dependencies.serde]
-workspace = true
-
-[dependencies.uuid]
-features = ["v1", "v3"]
-version = "1"
-
 [dev-dependencies]
-mockall = "0.11.4"
-pretty_assertions = "1"
+mockall = { workspace = true }
+pretty_assertions = { workspace = true }
+tokio = { workspace = true }
 
 #[dev-dependencies.lldap_auth]
 #path = "../auth"
@@ -70,7 +63,3 @@ path = "../test-utils"
 #[dev-dependencies.lldap_sql_backend_handler]
 #path = "../sql-backend-handler"
 #features = ["test"]
-
-[dev-dependencies.tokio]
-features = ["full"]
-version = "1.25"

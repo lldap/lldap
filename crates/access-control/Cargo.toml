@@ -1,6 +1,6 @@
 [package]
 name = "lldap_access_control"
-version = "0.1.0"
+version = "0.1.1"
 description = "Access control wrappers for LLDAP"
 authors.workspace = true
 edition.workspace = true
@@ -10,8 +10,8 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-tracing = "*"
-async-trait = "0.1"
+tracing = { workspace = true }
+async-trait = { workspace = true }
 
 [dependencies.lldap_auth]
 path = "../auth"

@@ -1,6 +1,7 @@
 use std::{fmt::Display, str::FromStr};
 
 use anyhow::{Error, Ok, Result, bail};
+use base64::Engine;
 use gloo_file::{
     File,
     callbacks::{FileReader, read_as_bytes},
@@ -54,12 +55,12 @@ fn to_base64(file: &JsFile) -> Result<String> {
             if !is_valid_jpeg(data.as_slice()) {
                 bail!("Chosen image is not a valid JPEG");
             }
-            Ok(base64::encode(data))
+            Ok(base64::engine::general_purpose::STANDARD.encode(data))
         }
         JsFile {
             file: None,
             contents: Some(data),
-        } => Ok(base64::encode(data)),
+        } => Ok(base64::engine::general_purpose::STANDARD.encode(data)),
     }
 }
 
@@ -98,7 +99,7 @@ impl Component for JpegFileInput {
                     .props()
                     .value
                     .as_ref()
-                    .and_then(|x| base64::decode(x).ok()),
+                    .and_then(|x| base64::engine::general_purpose::STANDARD.decode(x).ok()),
             }),
             reader: None,
         }
@@ -111,7 +112,7 @@ impl Component for JpegFileInput {
                 .props()
                 .value
                 .as_ref()
-                .and_then(|x| base64::decode(x).ok()),
+                .and_then(|x| base64::engine::general_purpose::STANDARD.decode(x).ok()),
         });
         self.reader = None;
         true
@@ -230,7 +231,7 @@ impl JpegFileInput {
 }
 
 fn is_valid_jpeg(bytes: &[u8]) -> bool {
-    image::io::Reader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Jpeg)
+    image::ImageReader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Jpeg)
         .decode()
         .is_ok()
 }

@@ -561,13 +561,13 @@ mod tests {
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
 
-    fn mutation_schema<'q, C, Q, M>(
+    fn mutation_schema<C, Q, M>(
         query_root: Q,
         mutation_root: M,
-    ) -> RootNode<'q, Q, M, EmptySubscription<C>>
+    ) -> RootNode<Q, M, EmptySubscription<C>>
     where
-        Q: GraphQLType<DefaultScalarValue, Context = C, TypeInfo = ()> + 'q,
-        M: GraphQLType<DefaultScalarValue, Context = C, TypeInfo = ()> + 'q,
+        Q: GraphQLType<DefaultScalarValue, Context = C, TypeInfo = ()>,
+        M: GraphQLType<DefaultScalarValue, Context = C, TypeInfo = ()>,
     {
         RootNode::new(query_root, mutation_root, EmptySubscription::<C>::new())
     }

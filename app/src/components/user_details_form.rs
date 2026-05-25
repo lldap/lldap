@@ -260,16 +260,16 @@ impl UserDetailsForm {
         let mut user_input = update_user::UpdateUserInput {
             id: self.user.id.clone(),
             email: None,
-            displayName: None,
-            firstName: None,
-            lastName: None,
+            display_name: None,
+            first_name: None,
+            last_name: None,
             avatar: None,
-            removeAttributes: None,
-            insertAttributes: None,
+            remove_attributes: None,
+            insert_attributes: None,
         };
         let default_user_input = user_input.clone();
-        user_input.removeAttributes = remove_attributes;
-        user_input.insertAttributes = insert_attributes;
+        user_input.remove_attributes = remove_attributes;
+        user_input.insert_attributes = insert_attributes;
         // Nothing changed.
         if user_input == default_user_input {
             return Ok(false);

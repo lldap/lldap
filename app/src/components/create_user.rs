@@ -143,9 +143,9 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                     user: create_user::CreateUserInput {
                         id: model.username,
                         email: None,
-                        displayName: None,
-                        firstName: None,
-                        lastName: None,
+                        display_name: None,
+                        first_name: None,
+                        last_name: None,
                         avatar: None,
                         attributes,
                     },

@@ -19,6 +19,7 @@ configuration files:
 - [Dolibarr](dolibarr.md)
 - [Duo Auth Proxy](duo_auth_proxy.md)
 - [Ejabberd](ejabberd.md)
+- [Elasticsearch](elasticsearch.md)
 - [Emby](emby.md)
 - [Ergo IRCd](ergo.md)
 - [Gerrit](gerrit.md)

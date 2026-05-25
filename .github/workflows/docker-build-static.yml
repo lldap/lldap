@@ -24,7 +24,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  MSRV: "1.89.0"
+  MSRV: "1.91.0"
 
 ### CI Docs
 
@@ -106,7 +106,7 @@ jobs:
           restore-keys: |
             lldap-ui-
       - name: Install wasm-pack with cargo
-        run: cargo install wasm-pack || true
+        run: cargo install --locked wasm-pack || true
         env:
           RUSTFLAGS: ""
       - name: Build frontend
