@@ -14,6 +14,7 @@ use lldap_domain::{
     requests::{CreateGroupRequest, CreateUserRequest},
     types::{Attribute, AttributeName, AttributeType, Email, GroupName, UserId},
 };
+use lldap_domain_handlers::handler::ReadSchemaBackendHandler;
 use std::collections::HashMap;
 use tracing::instrument;
 
@@ -44,28 +45,15 @@ async fn create_user(
     user_id: UserId,
     attributes: Vec<LdapAttribute>,
 ) -> LdapResult<Vec<LdapOp>> {
-    fn parse_attribute(mut attr: LdapPartialAttribute) -> LdapResult<(String, Vec<u8>)> {
-        if attr.vals.len() > 1 {
-            Err(LdapError {
-                code: LdapResultCode::ConstraintViolation,
-                message: format!("Expected a single value for attribute {}", attr.atype),
-            })
-        } else {
-            attr.atype.make_ascii_lowercase();
-            match attr.vals.pop() {
-                Some(val) => Ok((attr.atype, val)),
-                None => Err(LdapError {
-                    code: LdapResultCode::ConstraintViolation,
-                    message: format!("Missing value for attribute {}", attr.atype),
-                }),
-            }
-        }
+    fn parse_attribute(mut attr: LdapPartialAttribute) -> (String, Vec<Vec<u8>>) {
+        attr.atype.make_ascii_lowercase();
+        (attr.atype, attr.vals)
     }
-    let attributes: HashMap<String, Vec<u8>> = attributes
+    let attributes: HashMap<String, Vec<Vec<u8>>> = attributes
         .into_iter()
         .filter(|a| !a.atype.eq_ignore_ascii_case("objectclass"))
         .map(parse_attribute)
-        .collect::<LdapResult<_>>()?;
+        .collect();
     fn decode_attribute_value(val: &[u8]) -> LdapResult<String> {
         std::str::from_utf8(val)
             .map_err(|e| LdapError {
@@ -74,13 +62,43 @@ async fn create_user(
             })
             .map(str::to_owned)
     }
-    let get_attribute = |name| {
-        attributes
-            .get(name)
+    fn decode_attribute_values(vals: &[Vec<u8>]) -> LdapResult<Vec<String>> {
+        vals.iter()
             .map(Vec::as_slice)
             .map(decode_attribute_value)
+            .collect()
+    }
+    let get_attribute = |name| {
+        attributes.get(name).map(|vals| {
+            if vals.len() > 1 {
+                Err(LdapError {
+                    code: LdapResultCode::ConstraintViolation,
+                    message: format!("Expected a single value for attribute {name}"),
+                })
+            } else {
+                vals.first()
+                    .map(Vec::as_slice)
+                    .ok_or_else(|| LdapError {
+                        code: LdapResultCode::ConstraintViolation,
+                        message: format!("Missing value for attribute {name}"),
+                    })
+                    .and_then(decode_attribute_value)
+            }
+        })
     };
-    let make_encoded_attribute = |name: &str, typ: AttributeType, value: String| {
+    let make_encoded_attribute =
+        |name: &str, typ: AttributeType, is_list: bool, value: Vec<String>| {
+            Ok(Attribute {
+                name: AttributeName::from(name),
+                value: deserialize::deserialize_attribute_value(&value, typ, is_list).map_err(
+                    |e| LdapError {
+                        code: LdapResultCode::ConstraintViolation,
+                        message: format!("Invalid attribute value: {e}"),
+                    },
+                )?,
+            })
+        };
+    let make_single_encoded_attribute = |name: &str, typ: AttributeType, value: String| {
         Ok(Attribute {
             name: AttributeName::from(name),
             value: deserialize::deserialize_attribute_value(&[value], typ, false).map_err(|e| {
@@ -93,24 +111,55 @@ async fn create_user(
     };
     let mut new_user_attributes: Vec<Attribute> = Vec::new();
     if let Some(first_name) = get_attribute("givenname").transpose()? {
-        new_user_attributes.push(make_encoded_attribute(
+        new_user_attributes.push(make_single_encoded_attribute(
             "first_name",
             AttributeType::String,
             first_name,
         )?);
     }
     if let Some(last_name) = get_attribute("sn").transpose()? {
-        new_user_attributes.push(make_encoded_attribute(
+        new_user_attributes.push(make_single_encoded_attribute(
             "last_name",
             AttributeType::String,
             last_name,
         )?);
     }
     if let Some(avatar) = get_attribute("avatar").transpose()? {
-        new_user_attributes.push(make_encoded_attribute(
+        new_user_attributes.push(make_single_encoded_attribute(
             "avatar",
             AttributeType::JpegPhoto,
             avatar,
+        )?);
+    }
+    let schema = ReadSchemaBackendHandler::get_schema(backend_handler)
+        .await
+        .map_err(|e| LdapError {
+            code: LdapResultCode::OperationsError,
+            message: format!("Unable to get schema: {e:#}"),
+        })?;
+    let consumed_attribute_names = ["givenname", "sn", "avatar", "cn", "mail", "email"];
+    for attribute_schema in schema
+        .user_attributes
+        .attributes
+        .iter()
+        .filter(|attribute_schema| !attribute_schema.is_hardcoded)
+    {
+        let Some((_, values)) = attributes.iter().find(|(attribute_name, _)| {
+            !consumed_attribute_names
+                .iter()
+                .any(|consumed| attribute_name.eq_ignore_ascii_case(consumed))
+                && attribute_schema
+                    .name
+                    .as_str()
+                    .eq_ignore_ascii_case(attribute_name)
+        }) else {
+            continue;
+        };
+        new_user_attributes.push(make_encoded_attribute(
+            attribute_schema.name.as_str(),
+            attribute_schema.attribute_type,
+            attribute_schema.is_list,
+            decode_attribute_values(values)?,
         )?);
     }
     backend_handler
@@ -162,10 +211,40 @@ async fn create_group(
 mod tests {
     use super::*;
     use crate::handler::tests::setup_bound_admin_handler;
-    use lldap_domain::types::*;
+    use lldap_domain::{
+        schema::{AttributeList, AttributeSchema, Schema},
+        types::*,
+    };
     use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
+
+    fn custom_user_attribute(
+        name: &str,
+        attribute_type: AttributeType,
+        is_list: bool,
+    ) -> AttributeSchema {
+        AttributeSchema {
+            name: name.into(),
+            attribute_type,
+            is_list,
+            is_visible: true,
+            is_editable: true,
+            is_hardcoded: false,
+            is_readonly: false,
+        }
+    }
+
+    fn schema_with_user_attributes(attributes: Vec<AttributeSchema>) -> Schema {
+        Schema {
+            user_attributes: AttributeList { attributes },
+            group_attributes: AttributeList {
+                attributes: Vec::new(),
+            },
+            extra_user_object_classes: Vec::new(),
+            extra_group_object_classes: Vec::new(),
+        }
+    }
 
     #[tokio::test]
     async fn test_create_user() {
@@ -189,6 +268,227 @@ mod tests {
         };
         assert_eq!(
             ldap_handler.create_user_or_group(request).await,
+            Ok(vec![make_add_response(
+                LdapResultCode::Success,
+                String::new()
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_with_custom_attribute() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().times(1).return_once(|| {
+            Ok(schema_with_user_attributes(vec![
+                custom_user_attribute("entitlement", AttributeType::String, false),
+                custom_user_attribute("employee_number", AttributeType::Integer, false),
+            ]))
+        });
+        mock.expect_create_user()
+            .with(eq(CreateUserRequest {
+                user_id: UserId::new("bob"),
+                email: "".into(),
+                display_name: Some("Bob".to_string()),
+                attributes: vec![
+                    Attribute {
+                        name: "entitlement".into(),
+                        value: "admin".to_string().into(),
+                    },
+                    Attribute {
+                        name: "employee_number".into(),
+                        value: 42_i64.into(),
+                    },
+                ],
+            }))
+            .times(1)
+            .return_once(|_| Ok(()));
+        assert_eq!(
+            create_user(
+                &mock,
+                UserId::new("bob"),
+                vec![
+                    LdapPartialAttribute {
+                        atype: "cn".to_owned(),
+                        vals: vec![b"Bob".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "Entitlement".to_owned(),
+                        vals: vec![b"admin".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "Employee_Number".to_owned(),
+                        vals: vec![b"42".to_vec()],
+                    },
+                ],
+            )
+            .await,
+            Ok(vec![make_add_response(
+                LdapResultCode::Success,
+                String::new()
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_with_list_custom_attribute() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().times(1).return_once(|| {
+            Ok(schema_with_user_attributes(vec![custom_user_attribute(
+                "projects",
+                AttributeType::String,
+                true,
+            )]))
+        });
+        mock.expect_create_user()
+            .with(eq(CreateUserRequest {
+                user_id: UserId::new("bob"),
+                email: "".into(),
+                display_name: None,
+                attributes: vec![Attribute {
+                    name: "projects".into(),
+                    value: vec!["alpha".to_string(), "beta".to_string()].into(),
+                }],
+            }))
+            .times(1)
+            .return_once(|_| Ok(()));
+        assert_eq!(
+            create_user(
+                &mock,
+                UserId::new("bob"),
+                vec![LdapPartialAttribute {
+                    atype: "projects".to_owned(),
+                    vals: vec![b"alpha".to_vec(), b"beta".to_vec()],
+                }],
+            )
+            .await,
+            Ok(vec![make_add_response(
+                LdapResultCode::Success,
+                String::new()
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_rejects_invalid_typed_custom_attribute() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().times(1).return_once(|| {
+            Ok(schema_with_user_attributes(vec![custom_user_attribute(
+                "employee_number",
+                AttributeType::Integer,
+                false,
+            )]))
+        });
+        let err = create_user(
+            &mock,
+            UserId::new("bob"),
+            vec![LdapPartialAttribute {
+                atype: "employee_number".to_owned(),
+                vals: vec![b"not-a-number".to_vec()],
+            }],
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.code, LdapResultCode::ConstraintViolation);
+        assert!(err.message.contains("Invalid attribute value"));
+    }
+
+    #[tokio::test]
+    async fn test_create_user_ignores_unknown_attribute() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema()
+            .times(1)
+            .return_once(|| Ok(schema_with_user_attributes(Vec::new())));
+        mock.expect_create_user()
+            .with(eq(CreateUserRequest {
+                user_id: UserId::new("bob"),
+                email: "".into(),
+                display_name: None,
+                attributes: Vec::new(),
+            }))
+            .times(1)
+            .return_once(|_| Ok(()));
+        assert_eq!(
+            create_user(
+                &mock,
+                UserId::new("bob"),
+                vec![LdapPartialAttribute {
+                    atype: "unknown".to_owned(),
+                    vals: vec![b"ignored".to_vec(), b"also ignored".to_vec()],
+                }],
+            )
+            .await,
+            Ok(vec![make_add_response(
+                LdapResultCode::Success,
+                String::new()
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_builtin_attributes_are_not_custom_attributes() {
+        let avatar = JpegPhoto::for_tests();
+        let avatar_value = String::from(&avatar);
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().times(1).return_once(|| {
+            Ok(schema_with_user_attributes(vec![
+                custom_user_attribute("givenname", AttributeType::String, false),
+                custom_user_attribute("sn", AttributeType::String, false),
+                custom_user_attribute("avatar", AttributeType::String, false),
+                custom_user_attribute("cn", AttributeType::String, false),
+                custom_user_attribute("mail", AttributeType::String, false),
+                custom_user_attribute("email", AttributeType::String, false),
+            ]))
+        });
+        mock.expect_create_user()
+            .with(eq(CreateUserRequest {
+                user_id: UserId::new("bob"),
+                email: "bob@example.com".into(),
+                display_name: Some("Bob".to_string()),
+                attributes: vec![
+                    Attribute {
+                        name: "first_name".into(),
+                        value: "Bob".to_string().into(),
+                    },
+                    Attribute {
+                        name: "last_name".into(),
+                        value: "Roberts".to_string().into(),
+                    },
+                    Attribute {
+                        name: "avatar".into(),
+                        value: avatar.into(),
+                    },
+                ],
+            }))
+            .times(1)
+            .return_once(|_| Ok(()));
+        assert_eq!(
+            create_user(
+                &mock,
+                UserId::new("bob"),
+                vec![
+                    LdapPartialAttribute {
+                        atype: "givenname".to_owned(),
+                        vals: vec![b"Bob".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "sn".to_owned(),
+                        vals: vec![b"Roberts".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "avatar".to_owned(),
+                        vals: vec![avatar_value.into_bytes()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "cn".to_owned(),
+                        vals: vec![b"Bob".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "mail".to_owned(),
+                        vals: vec![b"bob@example.com".to_vec()],
+                    },
+                ],
+            )
+            .await,
             Ok(vec![make_add_response(
                 LdapResultCode::Success,
                 String::new()
