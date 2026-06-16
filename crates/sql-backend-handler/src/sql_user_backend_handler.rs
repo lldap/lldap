@@ -260,7 +260,9 @@ fn user_matches_filter(user_and_groups: &UserAndGroups, filter: &UserRequestFilt
         MemberOf(group) => user_and_groups.groups.as_ref().is_some_and(|groups| {
             groups
                 .iter()
-                .any(|group_details| group_details.display_name == *group)
+                .any(|group_details| {
+                    group_details.display_name.as_str().eq_ignore_ascii_case(group.as_str())
+                })
         }),
         MemberOfId(group_id) => user_and_groups.groups.as_ref().is_some_and(|groups| {
             groups
