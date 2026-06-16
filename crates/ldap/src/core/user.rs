@@ -183,23 +183,21 @@ fn get_user_attribute_equality_filter(
     is_list: bool,
     value: &str,
 ) -> LdapResult<UserRequestFilter> {
-    if is_list {
-        return Err(LdapError {
-            code: LdapResultCode::UnwillingToPerform,
-            message: format!(
-                "Equality filter on list attribute \"{}\" is not supported",
-                field
-            ),
-        });
-    }
     let value_lc = value.to_ascii_lowercase();
-    let serialized_value = deserialize_attribute_value(&[value.to_owned()], typ, false);
-    let serialized_value_lc = deserialize_attribute_value(&[value_lc.to_owned()], typ, false);
+    let serialized_value = deserialize_attribute_value(&[value.to_owned()], typ, is_list);
+    let serialized_value_lc = deserialize_attribute_value(&[value_lc.to_owned()], typ, is_list);
     match (serialized_value, serialized_value_lc) {
-        (Ok(v), Ok(v_lc)) => Ok(UserRequestFilter::Or(vec![
-            UserRequestFilter::AttributeEquality(field.clone(), v),
-            UserRequestFilter::AttributeEquality(field.clone(), v_lc),
-        ])),
+        (Ok(v), Ok(v_lc)) => {
+            let make_filter = if is_list {
+                UserRequestFilter::AttributeListContains
+            } else {
+                UserRequestFilter::AttributeEquality
+            };
+            Ok(UserRequestFilter::Or(vec![
+                make_filter(field.clone(), v),
+                make_filter(field.clone(), v_lc),
+            ]))
+        }
         (Ok(_), Err(e)) => {
             warn!("Invalid value for attribute {} (lowercased): {}", field, e);
             Ok(UserRequestFilter::False)
@@ -796,7 +794,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_equality_filter_on_list_user_attribute_returns_error() {
+    async fn test_equality_filter_on_list_user_attribute() {
         use lldap_domain::schema::{AttributeList, AttributeSchema, Schema};
         let mut mock = MockTestBackendHandler::new();
         mock.expect_get_schema().returning(|| {
@@ -819,6 +817,22 @@ mod tests {
                 extra_group_object_classes: Vec::new(),
             })
         });
+        mock.expect_list_users()
+            .with(
+                eq(Some(UserRequestFilter::Or(vec![
+                    UserRequestFilter::AttributeListContains(
+                        AttributeName::from("mailalias"),
+                        vec!["alias@example.com".to_string()].into(),
+                    ),
+                    UserRequestFilter::AttributeListContains(
+                        AttributeName::from("mailalias"),
+                        vec!["alias@example.com".to_string()].into(),
+                    ),
+                ]))),
+                eq(false),
+            )
+            .times(1)
+            .return_once(|_, _| Ok(vec![]));
         let ldap_handler = setup_bound_admin_handler(mock).await;
         let request = make_user_search_request(
             LdapFilter::Equality("mailalias".to_string(), "alias@example.com".to_string()),
@@ -826,11 +840,7 @@ mod tests {
         );
         assert_eq!(
             ldap_handler.do_search_or_dse(&request).await,
-            Err(LdapError {
-                code: LdapResultCode::UnwillingToPerform,
-                message: r#"Equality filter on list attribute "mailalias" is not supported"#
-                    .to_string(),
-            })
+            Ok(vec![make_search_success()])
         );
     }
 

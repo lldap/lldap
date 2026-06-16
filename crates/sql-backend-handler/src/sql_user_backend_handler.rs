@@ -4,8 +4,8 @@ use lldap_domain::{
     requests::{CreateUserRequest, UpdateUserRequest},
     schema::Schema,
     types::{
-        Attribute, AttributeName, GroupDetails, GroupId, Serialized, User, UserAndGroups, UserId,
-        Uuid,
+        Attribute, AttributeName, AttributeValue, Cardinality, GroupDetails, GroupId, Serialized,
+        User, UserAndGroups, UserId, Uuid,
     },
 };
 use lldap_domain_handlers::handler::{
@@ -92,6 +92,7 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
             }
         }
         AttributeEquality(column, value) => attribute_condition(column, Some(value.into())),
+        AttributeListContains(_, _) => bool_to_expr(true),
         MemberOf(group) => user_id_subcondition(
             Expr::col((group_table, GroupColumn::LowercaseDisplayName))
                 .eq(group.as_str().to_lowercase())
@@ -111,6 +112,165 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
                 .into_condition()
         }
         CustomAttributePresent(name) => attribute_condition(name, None),
+    }
+}
+
+fn filter_has_attribute_list_contains(filter: &UserRequestFilter) -> bool {
+    use UserRequestFilter::*;
+    match filter {
+        And(filters) | Or(filters) => filters.iter().any(filter_has_attribute_list_contains),
+        Not(filter) => filter_has_attribute_list_contains(filter),
+        AttributeListContains(_, _) => true,
+        True
+        | False
+        | UserId(_)
+        | UserIdSubString(_)
+        | Equality(_, _)
+        | AttributeEquality(_, _)
+        | SubString(_, _)
+        | MemberOf(_)
+        | MemberOfId(_)
+        | CustomAttributePresent(_) => false,
+    }
+}
+
+fn get_user_prefilter_expr(filter: UserRequestFilter) -> Cond {
+    use UserRequestFilter::*;
+    match filter {
+        Not(filter) if filter_has_attribute_list_contains(&filter) => {
+            SimpleExpr::Value(true.into()).into_condition()
+        }
+        And(filters) => filters
+            .into_iter()
+            .map(get_user_prefilter_expr)
+            .fold(Cond::all(), Cond::add),
+        Or(filters) => filters
+            .into_iter()
+            .map(get_user_prefilter_expr)
+            .fold(Cond::any(), Cond::add),
+        filter => get_user_filter_expr(filter),
+    }
+}
+
+fn substring_matches(
+    value: &str,
+    filter: &lldap_domain_handlers::handler::SubStringFilter,
+) -> bool {
+    let value = value.to_ascii_lowercase();
+    let initial = filter.initial.as_ref().map(|s| s.to_ascii_lowercase());
+    let any = filter
+        .any
+        .iter()
+        .map(|s| s.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    let final_ = filter.final_.as_ref().map(|s| s.to_ascii_lowercase());
+
+    let mut offset = 0;
+    if let Some(initial) = initial {
+        if !value.starts_with(&initial) {
+            return false;
+        }
+        offset = initial.len();
+    }
+    for part in any {
+        let Some(index) = value[offset..].find(&part) else {
+            return false;
+        };
+        offset += index + part.len();
+    }
+    final_
+        .map(|final_| value.ends_with(&final_))
+        .unwrap_or(true)
+}
+
+fn attribute_value_contains(attribute_value: &AttributeValue, needle: &AttributeValue) -> bool {
+    match (attribute_value, needle) {
+        (
+            AttributeValue::String(Cardinality::Unbounded(values)),
+            AttributeValue::String(Cardinality::Unbounded(needles)),
+        ) => needles.iter().any(|needle| values.contains(needle)),
+        (
+            AttributeValue::Integer(Cardinality::Unbounded(values)),
+            AttributeValue::Integer(Cardinality::Unbounded(needles)),
+        ) => needles.iter().any(|needle| values.contains(needle)),
+        (
+            AttributeValue::JpegPhoto(Cardinality::Unbounded(values)),
+            AttributeValue::JpegPhoto(Cardinality::Unbounded(needles)),
+        ) => needles.iter().any(|needle| values.contains(needle)),
+        (
+            AttributeValue::DateTime(Cardinality::Unbounded(values)),
+            AttributeValue::DateTime(Cardinality::Unbounded(needles)),
+        ) => needles.iter().any(|needle| values.contains(needle)),
+        _ => false,
+    }
+}
+
+fn user_matches_filter(user_and_groups: &UserAndGroups, filter: &UserRequestFilter) -> bool {
+    use UserRequestFilter::*;
+    let user = &user_and_groups.user;
+    match filter {
+        True => true,
+        False => false,
+        And(filters) => filters
+            .iter()
+            .all(|filter| user_matches_filter(user_and_groups, filter)),
+        Or(filters) => filters
+            .iter()
+            .any(|filter| user_matches_filter(user_and_groups, filter)),
+        Not(filter) => !user_matches_filter(user_and_groups, filter),
+        UserId(user_id) => &user.user_id == user_id,
+        UserIdSubString(filter) => substring_matches(user.user_id.as_str(), filter),
+        Equality(column, value) => match column {
+            UserColumn::UserId => user.user_id.as_str() == value,
+            UserColumn::Email | UserColumn::LowercaseEmail => {
+                user.email.as_str().to_ascii_lowercase() == value.to_ascii_lowercase()
+            }
+            UserColumn::DisplayName => user.display_name.as_deref() == Some(value.as_str()),
+            UserColumn::Uuid => user.uuid.to_string() == *value,
+            UserColumn::CreationDate => user.creation_date.to_string() == *value,
+            UserColumn::ModifiedDate => user.modified_date.to_string() == *value,
+            UserColumn::PasswordModifiedDate => user.password_modified_date.to_string() == *value,
+            UserColumn::PasswordHash | UserColumn::TotpSecret | UserColumn::MfaType => false,
+        },
+        AttributeEquality(name, value) => user
+            .attributes
+            .iter()
+            .any(|attribute| attribute.name == *name && attribute.value == *value),
+        AttributeListContains(name, value) => user.attributes.iter().any(|attribute| {
+            attribute.name == *name && attribute_value_contains(&attribute.value, value)
+        }),
+        SubString(column, filter) => match column {
+            UserColumn::UserId => substring_matches(user.user_id.as_str(), filter),
+            UserColumn::Email | UserColumn::LowercaseEmail => {
+                substring_matches(user.email.as_str(), filter)
+            }
+            UserColumn::DisplayName => user
+                .display_name
+                .as_deref()
+                .map(|value| substring_matches(value, filter))
+                .unwrap_or(false),
+            UserColumn::Uuid => substring_matches(&user.uuid.to_string(), filter),
+            UserColumn::CreationDate => substring_matches(&user.creation_date.to_string(), filter),
+            UserColumn::ModifiedDate => substring_matches(&user.modified_date.to_string(), filter),
+            UserColumn::PasswordModifiedDate => {
+                substring_matches(&user.password_modified_date.to_string(), filter)
+            }
+            UserColumn::PasswordHash | UserColumn::TotpSecret | UserColumn::MfaType => false,
+        },
+        MemberOf(group) => user_and_groups.groups.as_ref().is_some_and(|groups| {
+            groups
+                .iter()
+                .any(|group_details| group_details.display_name == *group)
+        }),
+        MemberOfId(group_id) => user_and_groups.groups.as_ref().is_some_and(|groups| {
+            groups
+                .iter()
+                .any(|group_details| group_details.group_id == *group_id)
+        }),
+        CustomAttributePresent(name) => user
+            .attributes
+            .iter()
+            .any(|attribute| attribute.name == *name),
     }
 }
 
@@ -134,8 +294,19 @@ impl UserListerBackendHandler for SqlBackendHandler {
         // To simplify the query, we always fetch groups. TODO: cleanup.
         _get_groups: bool,
     ) -> Result<Vec<UserAndGroups>> {
+        let needs_attribute_list_filter = filters
+            .as_ref()
+            .map(filter_has_attribute_list_contains)
+            .unwrap_or(false);
+        let original_filters = filters.clone();
         let filters = filters
-            .map(get_user_filter_expr)
+            .map(|filter| {
+                if needs_attribute_list_filter {
+                    get_user_prefilter_expr(filter)
+                } else {
+                    get_user_filter_expr(filter)
+                }
+            })
             .unwrap_or_else(|| SimpleExpr::Value(true.into()).into_condition());
         let mut users: Vec<_> = model::User::find()
             .filter(filters.clone())
@@ -183,6 +354,11 @@ impl UserListerBackendHandler for SqlBackendHandler {
                     )
                 })
                 .collect::<Result<Vec<_>>>()?;
+        }
+        if needs_attribute_list_filter {
+            if let Some(filters) = original_filters {
+                users.retain(|user| user_matches_filter(user, &filters));
+            }
         }
         Ok(users)
     }
@@ -534,6 +710,69 @@ mod tests {
         )
         .await;
         assert_eq!(users, vec!["bob"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_users_attribute_list_contains_filter() {
+        use lldap_domain::{
+            requests::{CreateAttributeRequest, UpdateUserRequest},
+            types::AttributeType,
+        };
+        use lldap_domain_handlers::handler::{SchemaBackendHandler, UserBackendHandler};
+
+        let fixture = TestFixture::new().await;
+        fixture
+            .handler
+            .add_user_attribute(CreateAttributeRequest {
+                name: "mailalias".into(),
+                attribute_type: AttributeType::String,
+                is_list: true,
+                is_visible: true,
+                is_editable: true,
+            })
+            .await
+            .unwrap();
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                email: None,
+                display_name: None,
+                delete_attributes: Vec::new(),
+                insert_attributes: vec![Attribute {
+                    name: "mailalias".into(),
+                    value: vec![
+                        "alexa@rowland.net.au".to_string(),
+                        "bob.alias@example.com".to_string(),
+                    ]
+                    .into(),
+                }],
+            })
+            .await
+            .unwrap();
+
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::AttributeListContains(
+                AttributeName::from("mailalias"),
+                vec!["alexa@rowland.net.au".to_string()].into(),
+            )),
+        )
+        .await;
+        assert_eq!(users, vec!["bob"]);
+
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::Or(vec![
+                UserRequestFilter::AttributeListContains(
+                    AttributeName::from("mailalias"),
+                    vec!["missing@example.com".to_string()].into(),
+                ),
+                UserRequestFilter::UserId(UserId::new("patrick")),
+            ])),
+        )
+        .await;
+        assert_eq!(users, vec!["patrick"]);
     }
 
     #[tokio::test]

@@ -79,6 +79,7 @@ pub enum UserRequestFilter {
     UserIdSubString(SubStringFilter),
     Equality(UserColumn, String),
     AttributeEquality(AttributeName, AttributeValue),
+    AttributeListContains(AttributeName, AttributeValue),
     SubString(UserColumn, SubStringFilter),
     // Check if a user belongs to a group identified by name.
     MemberOf(GroupName),
