@@ -65,6 +65,13 @@ if [[ ! -z "$2" ]] && ! jq -e '.groups|map(.displayName)|index("'"$2"'")' <<< $U
 fi
 
 DISPLAY_NAME=$(jq -r '.displayName // .id' <<< $USER_JSON)
+if [[ $? -ne 0 ]]; then
+    log "Failed to parse display name."
+    exit 1
+elif [[ -z "$DISPLAY_NAME" ]]; then
+    log "Empty display name not supporter."
+    exit 1
+fi
 
 IS_ADMIN=false
 if [[ ! -z "$3" ]] && jq -e '.groups|map(.displayName)|index("'"$3"'")' <<< "$USER_JSON" > /dev/null 2>&1; then
