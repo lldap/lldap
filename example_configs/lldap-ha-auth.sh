@@ -36,6 +36,16 @@ elif [ ! -z "$USERNAME_PATTERN" ]; then
 	fi
 fi
 
+if [[ -z "$2" ]]; then
+	log "No user group given"
+	exit 1
+fi
+
+if [[ -z "$3" ]]; then
+	log "No admin group given"
+	exit 1
+fi
+
 RESPONSE=$(curl -f -s -X POST -m "$TIMEOUT" -H "Content-type: application/json" -d '{"username":"'"$username"'","password":"'"$password"'"}' "$SERVER_URL/auth/simple/login")
 if [[ $? -ne 0 ]]; then
     log "Auth failed"
@@ -59,9 +69,19 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-if [[ ! -z "$2" ]] && ! jq -e '.groups|map(.displayName)|index("'"$2"'")' <<< $USER_JSON > /dev/null 2>&1; then
-	log "User is not in group '$2'"
-	exit 1
+jq -e '.groups|map(.displayName)|index("'"$2"'")' <<< "$USER_JSON" > /dev/null 2>&1
+IS_USER_CODE=$?
+jq -e '.groups|map(.displayName)|index("'"$3"'")' <<< "$USER_JSON" > /dev/null 2>&1
+IS_ADMIN_CODE=$?
+
+if [ $IS_USER_CODE = 1 ] && [ $IS_ADMIN_CODE = 1 ]; then
+    log "User is neither part of user group and admin group"
+    exit 1
+fi
+
+IS_ADMIN=false
+if [ $IS_ADMIN_CODE = 0 ]; then
+    IS_ADMIN=true
 fi
 
 DISPLAY_NAME=$(jq -r '.displayName // .id' <<< $USER_JSON)
@@ -71,11 +91,6 @@ if [[ $? -ne 0 ]]; then
 elif [[ -z "$DISPLAY_NAME" ]]; then
     log "Empty display name not supporter."
     exit 1
-fi
-
-IS_ADMIN=false
-if [[ ! -z "$3" ]] && jq -e '.groups|map(.displayName)|index("'"$3"'")' <<< "$USER_JSON" > /dev/null 2>&1; then
-    IS_ADMIN=true
 fi
 
 IS_LOCAL=false
