@@ -144,6 +144,19 @@ fn try_login(
         .json(&req)
         .send()
         .context("while trying to login to LLDAP")?;
+    if response.status().as_u16() == 409 {
+        // The server signals an opaque-ke 0.7 password via a structured body
+        // (`{"error_code":"opaque_v07_version"}`), not just the status code.
+        // Match on it so an unrelated future 409 isn't mistaken for a legacy
+        // password. This is the common state right after an LLDAP upgrade,
+        // before the account's first interactive login.
+        let body = response.text().unwrap_or_default();
+        if body.contains("opaque_v07_version") {
+            // Fall back to the v0.7 OPAQUE login flow, mirroring the web client.
+            return try_login_v07(lldap_server, username, password, client);
+        }
+        bail!("Failed to start logging in to LLDAP: 409 ({body})");
+    }
     if !response.status().is_success() {
         bail!(
             "Failed to start logging in to LLDAP: {}",
@@ -173,6 +186,61 @@ fn try_login(
     }
     let json = serde_json::from_str::<lldap_auth::login::ServerLoginResponse>(&response.text()?)
         .context("Could not parse response")?;
+    Ok(json.token)
+}
+
+/// Backward-compatible login for accounts whose password is still in the
+/// opaque-ke 0.7 format. Mirrors the web client's `/auth/opaque/v07/login/*`
+/// fallback: validate via the v0.7 handshake (the server re-registers the
+/// password as v4.0 on success).
+fn try_login_v07(
+    lldap_server: &str,
+    username: &str,
+    password: &str,
+    client: &Client,
+) -> Result<String> {
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD;
+
+    let (state, message) = lldap_auth::v07::client_login_start(password)
+        .map_err(|e| anyhow::anyhow!("Could not initialize v0.7 login: {e}"))?;
+    let req = lldap_auth::login_base64::ClientLoginStartRequest {
+        username: username.into(),
+        login_start_request: b64.encode(&message),
+    };
+    let response = client
+        .post(format!("{}/auth/opaque/v07/login/start", lldap_server))
+        .json(&req)
+        .send()
+        .context("while trying to start v0.7 login to LLDAP")?;
+    if !response.status().is_success() {
+        bail!(
+            "Failed to start v0.7 login to LLDAP: {}",
+            response.status().as_str()
+        );
+    }
+    let start_response = response.json::<lldap_auth::login_base64::ServerLoginStartResponse>()?;
+    let server_response_bytes = b64
+        .decode(&start_response.credential_response)
+        .context("Could not decode v0.7 server response")?;
+    let finalization = lldap_auth::v07::client_login_finish(state, &server_response_bytes)
+        .map_err(|e| anyhow::anyhow!("Invalid username or password: {e}"))?;
+    let req = lldap_auth::login_base64::ClientLoginFinishRequest {
+        server_data: start_response.server_data,
+        credential_finalization: b64.encode(&finalization),
+    };
+    let response = client
+        .post(format!("{}/auth/opaque/v07/login/finish", lldap_server))
+        .json(&req)
+        .send()?;
+    if !response.status().is_success() {
+        bail!(
+            "Failed to finish v0.7 login to LLDAP: {}",
+            response.status().as_str()
+        );
+    }
+    let json = serde_json::from_str::<lldap_auth::login::ServerLoginResponse>(&response.text()?)
+        .context("Could not parse v0.7 login response")?;
     Ok(json.token)
 }
 
