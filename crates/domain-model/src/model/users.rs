@@ -23,6 +23,7 @@ pub struct Model {
     pub uuid: Uuid,
     pub modified_date: chrono::NaiveDateTime,
     pub password_modified_date: chrono::NaiveDateTime,
+    pub password_version: i32,
 }
 
 impl EntityName for Entity {
@@ -44,6 +45,7 @@ pub enum Column {
     Uuid,
     ModifiedDate,
     PasswordModifiedDate,
+    PasswordVersion,
 }
 
 impl ColumnTrait for Column {
@@ -62,6 +64,7 @@ impl ColumnTrait for Column {
             Column::Uuid => ColumnType::String(StringLen::N(36)),
             Column::ModifiedDate => ColumnType::DateTime,
             Column::PasswordModifiedDate => ColumnType::DateTime,
+            Column::PasswordVersion => ColumnType::Integer,
         }
         .def()
     }

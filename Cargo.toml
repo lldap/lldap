@@ -85,7 +85,8 @@ version = "0"
 version = "0.14"
 
 [workspace.dependencies.opaque-ke]
-version = "0.7"
+version = "4"
+features = ["argon2"]
 
 [workspace.dependencies.orion]
 version = "0.17"

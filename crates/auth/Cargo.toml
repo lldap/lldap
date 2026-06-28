@@ -22,18 +22,40 @@ chrono = { workspace = true }
 derive_more = { workspace = true }
 opaque-ke = { workspace = true }
 serde = { workspace = true }
-rust-argon2 = "2"
-curve25519-dalek = "3"
-digest = "0.9"
-generic-array = "0.14"
+argon2 = "0.5"
 rand = { workspace = true }
-sha2 = "0.9"
+sha2 = "0.10"
 thiserror = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
 
 [dependencies.sea-orm]
 workspace = true
 optional = true
+
+# opaque-ke 0.7 for backward-compatible validation of existing password files.
+# Only used for progressive migration — new passwords always use opaque-ke 4.
+[dependencies.opaque-ke-v07]
+package = "opaque-ke"
+version = "0.7"
+
+[dependencies.curve25519-dalek-v07]
+package = "curve25519-dalek"
+version = "3"
+
+[dependencies.sha2-v07]
+package = "sha2"
+version = "0.9"
+
+[dependencies.digest-v07]
+package = "digest"
+version = "0.9"
+
+[dependencies.rust-argon2-v07]
+package = "rust-argon2"
+version = "2"
+
+[dependencies.generic-array]
+version = "0.14"
 
 # For WASM targets, use the JS getrandom.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.getrandom]
