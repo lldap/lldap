@@ -79,6 +79,7 @@ pub(crate) async fn change_password<B: OpaqueHandler>(
     let registration_finish = opaque::client::registration::finish_registration(
         registration_start_request.state,
         registration_start_response.registration_response,
+        password,
         &mut rng,
     )?;
     let req = registration::ClientRegistrationFinishRequest {
