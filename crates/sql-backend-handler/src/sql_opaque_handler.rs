@@ -378,17 +378,18 @@ impl OpaqueHandler for SqlOpaqueHandler {
         let credential_request_bytes =
             base64::engine::general_purpose::STANDARD.decode(&request.login_start_request)?;
 
-        // Fetch the user's password file. Only v0.7 passwords are handled
-        // here — a current-version user routed to this endpoint is rejected.
+        // Fetch the user's password file. Only a v0.7 password produces a real
+        // handshake here. A current-version user (already on v4.0) and a
+        // non-existent user both fall through to a dummy handshake: returning a
+        // distinguishable error/status for the current-version case would leak
+        // account existence and version, defeating OPAQUE's enumeration
+        // resistance. The dummy handshake still cannot be completed, so a v4.0
+        // user is rejected at `login_finish_v07` like any wrong password — the
+        // downgrade guard is preserved without the information leak.
         let maybe_password_bytes = match self.get_password_file_for_user(user_id.clone()).await? {
             Some((bytes, OpaqueProtocolVersion::V07)) => Some(bytes),
-            Some((_, OpaqueProtocolVersion::Current)) => {
-                return Err(DomainError::AuthenticationError(format!(
-                    r#"user "{}" does not have a v0.7 password"#,
-                    user_id
-                )));
-            }
-            None => None, // Dummy handshake (user doesn't exist).
+            // Current-version user or no such user → indistinguishable dummy handshake.
+            Some((_, OpaqueProtocolVersion::Current)) | None => None,
         };
 
         let (server_login_state, response_bytes) = lldap_auth::v07::server_login_start(
@@ -943,8 +944,8 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------
-    // v0.7 OPAQUE login flow tests (Phase 5 integration tests at the
-    // handler level — faster and more reliable than a full-server fixture).
+    // v0.7 OPAQUE login flow tests, exercised at the handler level — faster
+    // and more reliable than a full-server fixture.
     // ---------------------------------------------------------------------
 
     #[tokio::test]
@@ -1163,14 +1164,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_v07_login_rejected_for_v4_user() {
-        // A user with password_version = 1 should be rejected by the v0.7 endpoint.
+        // A user already on v4.0 (password_version = 1) must NOT be able to
+        // authenticate through the v0.7 endpoint (downgrade guard). To avoid
+        // leaking that the account exists and is on v4.0, `login_start_v07`
+        // returns a normal dummy-handshake response (no error); the rejection
+        // happens at `login_finish_v07`, exactly like a wrong password.
         use base64::Engine;
         let sql_pool = get_initialized_db().await;
         crate::logging::init_for_tests();
         let new_setup = generate_random_private_key();
 
-        // The v0.7 setup is not strictly needed for this test, but is
-        // provided to exercise the full code path.
         let (_, v07_setup_bytes) = create_v07_password_file("unused", "unused");
         let handler = SqlBackendHandler::new(new_setup, Some(v07_setup_bytes), sql_pool.clone());
 
@@ -1184,18 +1187,47 @@ mod tests {
         .await
         .unwrap();
 
-        // Try to log in via the v0.7 endpoint — should fail because the
-        // user has password_version = 1.
-        let (_v07_client_state, v07_request_bytes) =
+        // Starting a v0.7 login for the v4.0 user must SUCCEED with a dummy
+        // handshake — indistinguishable from a non-existent user — rather than
+        // erroring, otherwise the response would leak the account's existence
+        // and version (OPAQUE enumeration resistance).
+        let (v07_client_state, v07_request_bytes) =
             lldap_auth::v07::client_login_start("new_password").unwrap();
         let req = login_base64::ClientLoginStartRequest {
             username: UserId::new("new_user"),
             login_start_request: base64::engine::general_purpose::STANDARD
                 .encode(&v07_request_bytes),
         };
-        assert!(
-            handler.login_start_v07(req).await.is_err(),
-            "v0.7 login should reject v4.0 users"
-        );
+        let start_response = handler
+            .login_start_v07(req)
+            .await
+            .expect("v0.7 login start must not leak that the user is on v4.0");
+
+        // ...but the handshake cannot be completed: the v4.0 user is rejected
+        // just like a wrong password (downgrade guard preserved).
+        let server_response_bytes = base64::engine::general_purpose::STANDARD
+            .decode(&start_response.credential_response)
+            .unwrap();
+        if let Ok(finalization_bytes) =
+            lldap_auth::v07::client_login_finish(v07_client_state, &server_response_bytes)
+        {
+            let finish_req = login_base64::ClientLoginFinishRequest {
+                server_data: start_response.server_data,
+                credential_finalization: base64::engine::general_purpose::STANDARD
+                    .encode(&finalization_bytes),
+            };
+            assert!(
+                handler.login_finish_v07(finish_req).await.is_err(),
+                "v4.0 user must not be able to authenticate via the v0.7 endpoint"
+            );
+        }
+
+        // The user must remain on v4.0 — no downgrade, no version change.
+        let entry = handler
+            .get_password_file_for_user(UserId::new("new_user"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(entry.1, OpaqueProtocolVersion::Current);
     }
 }
