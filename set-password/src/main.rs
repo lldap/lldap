@@ -137,6 +137,7 @@ fn main() -> Result<()> {
     let registration_finish = opaque::client::registration::finish_registration(
         registration_start_request.state,
         res.registration_response,
+        password.as_bytes(),
         &mut rng,
     )
     .context("Error during password change")?;

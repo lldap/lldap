@@ -67,11 +67,43 @@ impl V07ServerSetup {
             .ok()
             .map(Self)
     }
+
+    /// Raw private key bytes of the v0.7 server keypair.
+    ///
+    /// Pre-4.0 servers recorded `stable_hash(<these bytes>)` in the database
+    /// (`Configuration::get_private_key_info`), so this is the value to hash
+    /// when checking whether a v0.7 key is the one the server was using at
+    /// its last successful startup.
+    pub fn private_key_bytes(&self) -> &[u8] {
+        self.0.keypair().private()
+    }
 }
 
 /// Check if raw bytes are a valid opaque-ke 0.7 password file.
 pub fn is_v07_format(bytes: &[u8]) -> bool {
     opaque_ke_v07::ServerRegistration::<V07Suite>::deserialize(bytes).is_ok()
+}
+
+/// Reconstruct the raw bytes of the v0.7 `ServerSetup` that a pre-4.0 server
+/// derived from a `key_seed`.
+///
+/// The original (opaque-ke 0.7) server generated its key with
+/// `ChaCha20Rng::from_seed(stable_hash(seed))` followed by
+/// `ServerSetup::new(rng)`. We reproduce that exactly here — same RNG
+/// algorithm (rand_chacha 0.3) and the same `CipherSuite` (`V07Suite`, which
+/// is byte-identical to the pre-4.0 `DefaultSuite`) — so seed-based
+/// deployments can still validate and progressively upgrade passwords that
+/// were registered under opaque-ke 0.7. `seed` is the already-hashed
+/// 32-byte seed (i.e. `stable_hash(key_seed)`).
+pub fn v07_server_setup_bytes_from_seed(seed: [u8; 32]) -> Vec<u8> {
+    // Use rand_chacha's own re-exported `rand_core` so the `SeedableRng` trait
+    // matches the version `ChaCha20Rng` implements, regardless of which `rand`
+    // the rest of the workspace resolves to. Byte-for-byte reproduction of the
+    // pre-4.0 seed-derived key is guarded end-to-end by test_opaque_upgrade.sh
+    // (seed variant) and the unit tests below.
+    use rand_chacha::rand_core::SeedableRng;
+    let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
+    opaque_ke_v07::ServerSetup::<V07Suite>::new(&mut rng).serialize()
 }
 
 /// Full in-process password validation (both sides of the OPAQUE handshake,
@@ -238,4 +270,77 @@ pub fn create_test_password_file(username: &str, password: &str) -> (Vec<u8>, Ve
     let v07_password_file =
         opaque_ke_v07::ServerRegistration::<V07Suite>::finish(client_finish.message);
     (v07_password_file.serialize(), v07_setup.serialize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Register a v0.7 password file under a *specific* ServerSetup, mirroring
+    /// the registration the pre-4.0 server performed.
+    fn register_under(
+        setup: &opaque_ke_v07::ServerSetup<V07Suite>,
+        username: &str,
+        password: &str,
+    ) -> Vec<u8> {
+        let mut rng = rand::rngs::OsRng;
+        let client_start =
+            opaque_ke_v07::ClientRegistration::<V07Suite>::start(&mut rng, password.as_bytes())
+                .unwrap();
+        let server_start = opaque_ke_v07::ServerRegistration::<V07Suite>::start(
+            setup,
+            client_start.message,
+            username.as_bytes(),
+        )
+        .unwrap();
+        let client_finish = client_start
+            .state
+            .finish(
+                &mut rng,
+                server_start.message,
+                opaque_ke_v07::ClientRegistrationFinishParameters::default(),
+            )
+            .unwrap();
+        opaque_ke_v07::ServerRegistration::<V07Suite>::finish(client_finish.message).serialize()
+    }
+
+    #[test]
+    fn seed_derivation_is_deterministic() {
+        let seed = [42u8; 32];
+        assert_eq!(
+            v07_server_setup_bytes_from_seed(seed),
+            v07_server_setup_bytes_from_seed(seed),
+            "v0.7 seed-derived key must be reproducible across restarts"
+        );
+        assert_ne!(
+            v07_server_setup_bytes_from_seed([1u8; 32]),
+            v07_server_setup_bytes_from_seed([2u8; 32]),
+            "different seeds must derive different v0.7 keys"
+        );
+    }
+
+    /// The crux of the seed-based migration: a password registered under the
+    /// seed-derived v0.7 key must still validate after the key is re-derived
+    /// from the same seed on a later startup (no key file, no sidecar).
+    #[test]
+    fn password_registered_under_seed_key_validates_after_rederivation() {
+        let seed = [7u8; 32];
+        let setup_bytes = v07_server_setup_bytes_from_seed(seed);
+        let setup = opaque_ke_v07::ServerSetup::<V07Suite>::deserialize(&setup_bytes).unwrap();
+        let pw_file = register_under(&setup, "alice", "correct horse battery staple");
+
+        // Simulate a restart: key reconstructed purely from the seed.
+        let rederived = V07ServerSetup::deserialize(&v07_server_setup_bytes_from_seed(seed))
+            .expect("re-derived v0.7 key must deserialize");
+
+        validate_password(
+            &pw_file,
+            "correct horse battery staple",
+            &rederived,
+            "alice",
+        )
+        .expect("seed-rederived key must validate the v0.7 password");
+        validate_password(&pw_file, "wrong", &rederived, "alice")
+            .expect_err("wrong password must be rejected");
+    }
 }

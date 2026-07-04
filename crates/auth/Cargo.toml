@@ -24,6 +24,9 @@ opaque-ke = { workspace = true }
 serde = { workspace = true }
 argon2 = "0.5"
 rand = { workspace = true }
+# Pinned to 0.3 (rand_core 0.6) to match the pre-4.0 server, so the v0.7
+# seed-derived key can be reconstructed byte-for-byte during migration.
+rand_chacha = "0.3"
 sha2 = "0.10"
 thiserror = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
