@@ -95,7 +95,33 @@ impl Component for UserTable {
 impl UserTable {
     fn view_users(&self, ctx: &Context<Self>) -> Html {
         let make_table = |users: &Vec<User>| {
+            // Answers "how many are left?" at a glance for admins with many
+            // users; the count reaches zero as users log in, at which point
+            // it is safe to upgrade to a version without legacy-password
+            // support. Non-admins never receive the field, so they never see
+            // the banner.
+            let legacy_count = users
+                .iter()
+                .filter(|u| u.has_legacy_password == Some(true))
+                .count();
             html! {
+              <>
+                {
+                  if legacy_count > 0 {
+                    html! {
+                      <div class="alert alert-info" role="alert">
+                        {format!(
+                          "{} user{} still ha{} a pre-upgrade password. No action needed: passwords are upgraded automatically on each user's next login.",
+                          legacy_count,
+                          if legacy_count == 1 { "" } else { "s" },
+                          if legacy_count == 1 { "s" } else { "ve" },
+                        )}
+                      </div>
+                    }
+                  } else {
+                    html! {}
+                  }
+                }
                 <div class="table-responsive">
                   <table class="table table-hover">
                     <thead>
@@ -114,6 +140,7 @@ impl UserTable {
                     </tbody>
                   </table>
                 </div>
+              </>
             }
         };
         match &self.users {
@@ -126,7 +153,27 @@ impl UserTable {
         let link = &ctx.link();
         html! {
           <tr key={user.id.clone()}>
-              <td><Link to={AppRoute::UserDetails{user_id: user.id.clone()}}>{&user.id}</Link></td>
+              <td>
+                <Link to={AppRoute::UserDetails{user_id: user.id.clone()}}>{&user.id}</Link>
+                {
+                  // Only admins receive this field (null otherwise). A user
+                  // still on a legacy (opaque-ke 0.7) password hasn't logged
+                  // in since the OPAQUE upgrade; the badge disappears once
+                  // they do. The wording deliberately signals "no action
+                  // needed" so admins aren't tempted to reset passwords.
+                  if user.has_legacy_password == Some(true) {
+                    html! {
+                      <span
+                        class="badge bg-warning text-dark ms-2 text-nowrap"
+                        title="This user's password is in the pre-upgrade (opaque-ke 0.7) format. No action needed: it is upgraded automatically on their next login.">
+                        {"Password upgrade pending"}
+                      </span>
+                    }
+                  } else {
+                    html! {}
+                  }
+                }
+              </td>
               <td>{&user.email}</td>
               <td>{&user.display_name}</td>
               <td>{&user.first_name}</td>

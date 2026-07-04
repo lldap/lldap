@@ -74,6 +74,12 @@ invalidates all passwords; it is not needed for this upgrade.
    Both the WASM web UI and the migration tool implement this fallback.
  - Startup warning listing the count of users still on a legacy password
    format.
+ - Admins can see which users still have a legacy password: the user list in
+   the web UI shows a "Password upgrade pending" badge next to affected users
+   and a count of how many remain, backed by a new admin-only
+   `hasLegacyPassword` field on the GraphQL `User` type (`null` for
+   non-admins). This tells admins when it will be safe to upgrade to a future
+   version that drops legacy-password support.
 
 ## [0.6.3] 2026-05-01
 

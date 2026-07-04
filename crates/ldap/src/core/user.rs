@@ -639,6 +639,7 @@ mod tests {
                             .with_ymd_and_hms(2014, 7, 8, 9, 10, 11)
                             .unwrap()
                             .naive_utc(),
+                        has_legacy_password: false,
                     },
                     groups: None,
                 },

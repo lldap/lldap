@@ -4,7 +4,6 @@ use lldap_access_control::UserReadableBackendHandler;
 use lldap_domain::public_schema::PublicSchema;
 use lldap_domain::types::{User as DomainUser, UserAndGroups as DomainUserAndGroups};
 use lldap_domain_handlers::handler::BackendHandler;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{Instrument, debug, debug_span};
 
@@ -12,7 +11,10 @@ use super::attribute::AttributeValue;
 use super::group::Group;
 use crate::api::Context;
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+// No serde derives: this struct must only reach clients through the juniper
+// resolvers, which enforce per-field access control (see
+// `has_legacy_password`). Serializing it wholesale would bypass that.
+#[derive(PartialEq, Eq, Debug)]
 /// Represents a single user.
 pub struct User<Handler: BackendHandler> {
     user: DomainUser,
@@ -103,6 +105,23 @@ impl<Handler: BackendHandler> User<Handler> {
 
     fn uuid(&self) -> &str {
         self.user.uuid.as_str()
+    }
+
+    /// Whether the user's password is still stored in the legacy
+    /// (opaque-ke 0.7) format, i.e. the user hasn't logged in since the
+    /// OPAQUE protocol upgrade. Only visible to admins (`null` otherwise);
+    /// it tells them when it is safe to upgrade to a version that drops
+    /// legacy-password support.
+    fn has_legacy_password(&self, context: &Context<Handler>) -> Option<bool> {
+        // Deliberately gated per-field (unlike the rest of the API, which
+        // gates at the handler level): non-admins may list users, but must
+        // not learn anything about password ages. `None` rather than an
+        // error so that a password manager or readonly caller selecting the
+        // field still gets a working query.
+        context
+            .validation_result
+            .is_admin()
+            .then_some(self.user.has_legacy_password)
     }
 
     /// User-defined attributes.

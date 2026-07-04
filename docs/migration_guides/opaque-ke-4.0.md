@@ -37,7 +37,10 @@ genuinely unrecoverable.
 ## Verifying
 
 After the upgrade, the logs print how many users still hold a v0.7
-password. That count drops to zero as users log in. You can also check the
+password. As an admin, the user list in the web UI shows how many users still
+have a pre-upgrade password and a "Password upgrade pending" badge next to
+each of them (also available as the admin-only `hasLegacyPassword` GraphQL
+field). The count drops to zero as users log in. You can also check the
 `users.password_version` column: `0` = legacy v0.7, `1` = current v4.0.
 
 ## Rolling back

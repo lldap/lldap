@@ -24,41 +24,7 @@ type SqlOpaqueHandler = SqlBackendHandler;
 // `match` to be updated everywhere it matters.
 // ---------------------------------------------------------------------------
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum OpaqueProtocolVersion {
-    /// opaque-ke 0.7 password file (pre-RFC-9807). Validated only when a
-    /// v0.7 `ServerSetup` is preserved in memory; auto-upgraded to
-    /// `Current` on the next successful login.
-    V07,
-    /// opaque-ke 4.0 password file (RFC 9807-compliant). The current format.
-    Current,
-}
-
-impl OpaqueProtocolVersion {
-    pub const V07_DB_VALUE: i32 = 0;
-    pub const CURRENT_DB_VALUE: i32 = 1;
-
-    pub fn from_db(value: i32) -> Self {
-        // Anything we don't recognise is conservatively treated as v0.7
-        // so we don't accidentally let an unknown future format slip past
-        // the validator. The startup migration warning will surface this.
-        match value {
-            Self::CURRENT_DB_VALUE => Self::Current,
-            _ => Self::V07,
-        }
-    }
-
-    pub fn is_v07(self) -> bool {
-        matches!(self, Self::V07)
-    }
-
-    pub fn db_value(self) -> i32 {
-        match self {
-            Self::V07 => Self::V07_DB_VALUE,
-            Self::Current => Self::CURRENT_DB_VALUE,
-        }
-    }
-}
+pub use lldap_domain_model::model::users::OpaqueProtocolVersion;
 
 // ---------------------------------------------------------------------------
 // Opaque-ke 0.7 support for progressive password migration.

@@ -147,6 +147,16 @@ pv_value() {
   sqlite3 -noheader -csv "$1" \
     "SELECT password_version FROM users WHERE user_id='$TEST_USER'"
 }
+# The admin-only GraphQL field backing the web UI's "password upgrade
+# pending" badge. Prints "true"/"false" for the test user.
+legacy_flag() {
+  local http_port="$1" token="$2"
+  curl -fsS "http://localhost:$http_port/api/graphql" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $token" \
+    --data-binary "{\"query\":\"query{users(filters:{eq:{field:\\\"id\\\",value:\\\"$TEST_USER\\\"}}){id hasLegacyPassword}}\"}" \
+    | jq -r '.data.users[0].hasLegacyPassword'
+}
 
 # Run the complete baseline -> HEAD upgrade for one key-storage mode.
 #   $1 mode: "file" or "seed"
@@ -265,6 +275,20 @@ run_variant() {
   [ "$pre_version" = "0" ] || die "[$mode] expected pre-bind password_version=0, got '$pre_version'"
   log "[$mode] Pre-bind password_version = 0 (legacy) ✓"
 
+  # Admin login (which also auto-upgrades the ADMIN's own password — the
+  # test user's stays legacy) to check the hasLegacyPassword GraphQL field.
+  log "[$mode] Logging in as admin on HEAD to check hasLegacyPassword"
+  local head_token
+  head_token=$(curl -fsS -X POST -H "Content-Type: application/json" \
+    -d "{\"username\":\"admin\",\"password\":\"$ADMIN_PASSWORD\"}" \
+    "http://localhost:$http_port/auth/simple/login" | jq -r .token)
+  [ -n "$head_token" ] && [ "$head_token" != "null" ] || \
+    die "[$mode] admin login on HEAD returned empty token"
+
+  [ "$(legacy_flag "$http_port" "$head_token")" = "true" ] || \
+    die "[$mode] hasLegacyPassword should be true before the user's first bind"
+  log "[$mode] Pre-bind hasLegacyPassword = true ✓"
+
   log "[$mode] First bind against HEAD — should succeed AND auto-upgrade to v4.0"
   ldapsearch -LLL -H "ldap://localhost:$ldap_port" \
     -D "uid=$TEST_USER,ou=people,$LDAP_BASE_DN" -w "$TEST_PASSWORD" \
@@ -282,6 +306,10 @@ run_variant() {
   [ "$post_version" = "1" ] || \
     die "[$mode] expected post-bind password_version=1, got '$post_version'"
   log "[$mode] Post-bind password_version = 1 (v4.0) ✓ — credential upgraded"
+
+  [ "$(legacy_flag "$http_port" "$head_token")" = "false" ] || \
+    die "[$mode] hasLegacyPassword should be false after the credential upgrade"
+  log "[$mode] Post-bind hasLegacyPassword = false ✓"
 
   log "[$mode] Second bind against the upgraded credential"
   ldapsearch -LLL -H "ldap://localhost:$ldap_port" \
