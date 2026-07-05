@@ -2869,6 +2869,7 @@ name = "lldap_auth"
 version = "0.6.3"
 dependencies = [
  "argon2",
+ "base64 0.22.1",
  "chrono",
  "curve25519-dalek 3.2.0",
  "derive_more",
@@ -2882,6 +2883,7 @@ dependencies = [
  "rust-argon2",
  "sea-orm",
  "serde",
+ "serde_json",
  "sha2 0.10.9",
  "sha2 0.9.9",
  "thiserror 2.0.17",

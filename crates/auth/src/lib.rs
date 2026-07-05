@@ -23,6 +23,8 @@ pub mod login {
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ClientLoginStartRequest {
         pub username: UserId,
+        /// Base64-encoded OPAQUE CredentialRequest bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub login_start_request: opaque::server::login::CredentialRequest,
     }
 
@@ -30,6 +32,8 @@ pub mod login {
     pub struct ServerLoginStartResponse {
         /// Base64, encrypted ServerData to be passed back to the server.
         pub server_data: String,
+        /// Base64-encoded OPAQUE CredentialResponse bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub credential_response: opaque::client::login::CredentialResponse,
     }
 
@@ -37,6 +41,8 @@ pub mod login {
     pub struct ClientLoginFinishRequest {
         /// Encrypted ServerData from the previous step.
         pub server_data: String,
+        /// Base64-encoded OPAQUE CredentialFinalization bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub credential_finalization: opaque::client::login::CredentialFinalization,
     }
 
@@ -76,6 +82,8 @@ pub mod registration {
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ClientRegistrationStartRequest {
         pub username: UserId,
+        /// Base64-encoded OPAQUE RegistrationRequest bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub registration_start_request: opaque::server::registration::RegistrationRequest,
     }
 
@@ -83,6 +91,8 @@ pub mod registration {
     pub struct ServerRegistrationStartResponse {
         /// Base64, encrypted ServerData to be passed back to the server.
         pub server_data: String,
+        /// Base64-encoded OPAQUE RegistrationResponse bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub registration_response: opaque::client::registration::RegistrationResponse,
     }
 
@@ -90,6 +100,8 @@ pub mod registration {
     pub struct ClientRegistrationFinishRequest {
         /// Encrypted ServerData from the previous step.
         pub server_data: String,
+        /// Base64-encoded OPAQUE RegistrationUpload bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub registration_upload: opaque::server::registration::RegistrationUpload,
     }
 }

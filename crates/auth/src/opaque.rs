@@ -22,6 +22,69 @@ impl opaque_ke::CipherSuite for DefaultSuite {
     type Ksf = argon2::Argon2<'static>;
 }
 
+/// JSON wire encoding for OPAQUE protocol messages: the message's protocol
+/// bytes (RFC 9807 serialization) as a base64 string. This matches the
+/// pre-4.0 wire format and keeps the HTTP API decoupled from opaque-ke's
+/// internal struct layout — opaque-ke 4.0's derived serde impls would
+/// otherwise write nested integer arrays in JSON (see issue #111). It also
+/// lets non-Rust clients produce messages from raw protocol bytes.
+///
+/// Use with `#[serde(with = "crate::opaque::base64_wire")]` on message
+/// fields of the wire structs.
+pub mod base64_wire {
+    use base64::Engine;
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    /// Bridge between serde and opaque-ke's own protocol serialization.
+    pub trait WireMessage: Sized {
+        fn to_wire_bytes(&self) -> Vec<u8>;
+        fn from_wire_bytes(bytes: &[u8]) -> Result<Self, opaque_ke::errors::ProtocolError>;
+    }
+
+    macro_rules! impl_wire_message {
+        ($($type:ident),*) => {$(
+            impl WireMessage for opaque_ke::$type<super::DefaultSuite> {
+                fn to_wire_bytes(&self) -> Vec<u8> {
+                    self.serialize().to_vec()
+                }
+                fn from_wire_bytes(
+                    bytes: &[u8],
+                ) -> Result<Self, opaque_ke::errors::ProtocolError> {
+                    Self::deserialize(bytes)
+                }
+            }
+        )*};
+    }
+    impl_wire_message!(
+        RegistrationRequest,
+        RegistrationResponse,
+        RegistrationUpload,
+        CredentialRequest,
+        CredentialResponse,
+        CredentialFinalization
+    );
+
+    pub fn serialize<T: WireMessage, S: Serializer>(
+        message: &T,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(
+            &base64::engine::general_purpose::STANDARD.encode(message.to_wire_bytes()),
+        )
+    }
+
+    pub fn deserialize<'de, T: WireMessage, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<T, D::Error> {
+        let encoded = String::deserialize(deserializer)?;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&encoded)
+            .map_err(D::Error::custom)?;
+        T::from_wire_bytes(&bytes)
+            .map_err(|e| D::Error::custom(format!("Invalid OPAQUE message: {e:?}")))
+    }
+}
+
 /// Client-side code for OPAQUE protocol handling, to register a new user and login.  All methods'
 /// results must be sent to the server using the serialized `.message`. Incoming messages can be
 /// deserialized using the type's `deserialize` method.
@@ -175,5 +238,55 @@ pub mod server {
         ) -> AuthenticationResult<ServerLoginFinishResult> {
             Ok(login_start.finish(credential_finalization, ServerLoginParameters::default())?)
         }
+    }
+}
+
+#[cfg(test)]
+mod wire_format_tests {
+    /// The public JSON API must carry OPAQUE messages as base64 strings
+    /// (the pre-4.0 wire format, and issue #111's requirement) — not as
+    /// opaque-ke's derived struct serialization (nested integer arrays).
+    #[test]
+    fn v4_messages_are_base64_strings_in_json() {
+        use base64::Engine;
+        let mut rng = rand::rngs::OsRng;
+        let start = super::client::login::start_login("password", &mut rng).unwrap();
+        let request = crate::login::ClientLoginStartRequest {
+            username: crate::types::UserId::new("bob"),
+            login_start_request: start.message,
+        };
+        let json = serde_json::to_value(&request).unwrap();
+        let encoded = json["login_start_request"]
+            .as_str()
+            .expect("OPAQUE message must serialize to a JSON string");
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .expect("OPAQUE message string must be valid base64");
+        // The base64 payload is the RFC 9807 message serialization, so it
+        // must round-trip through the protocol-level deserializer.
+        opaque_ke::CredentialRequest::<super::DefaultSuite>::deserialize(&bytes)
+            .expect("base64 payload must be the protocol serialization");
+        let roundtrip: crate::login::ClientLoginStartRequest =
+            serde_json::from_value(json).unwrap();
+        assert_eq!(
+            roundtrip.login_start_request.serialize(),
+            request.login_start_request.serialize(),
+        );
+    }
+
+    /// Parity check: the v0.7 (pre-upgrade) wire format also carried the
+    /// message as a single base64 string. Documents that the JSON *shape*
+    /// of the API is unchanged across the opaque-ke upgrade.
+    #[test]
+    fn v07_messages_were_base64_strings_in_json() {
+        let mut rng = rand::rngs::OsRng;
+        let start =
+            opaque_ke_v07::ClientLogin::<crate::v07::V07Suite>::start(&mut rng, b"password")
+                .unwrap();
+        let json = serde_json::to_value(&start.message).unwrap();
+        assert!(
+            json.is_string(),
+            "v0.7 messages serialize as base64 strings"
+        );
     }
 }
