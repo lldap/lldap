@@ -402,8 +402,16 @@ impl OpaqueHandler for SqlOpaqueHandler {
                 );
             }
             Err(e) => {
-                warn!(r#"v0.7 OPAQUE login attempt failed for "{}""#, &username);
-                return Err(DomainError::AuthenticationError(e));
+                // Log the detail server-side only; the client gets a generic
+                // failure, matching `bind()`'s convention of never surfacing
+                // internal validation details.
+                warn!(
+                    r#"v0.7 OPAQUE login attempt failed for "{}": {}"#,
+                    &username, e
+                );
+                return Err(DomainError::AuthenticationError(format!(
+                    r#"for user "{username}""#
+                )));
             }
         }
 

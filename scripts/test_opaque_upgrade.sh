@@ -248,7 +248,17 @@ run_variant() {
   wait_for_http "head($mode)" "$RUNNING_PID" "$WORKDIR/$mode-head.log" "$http_port"
   log "[$mode] HEAD is ready"
 
-  grep -q "Detected the opaque-ke 0.7 -> 4.0 upgrade" "$WORKDIR/$mode-head.log" || {
+  # Retry the grep briefly: /health readiness doesn't strictly guarantee the
+  # startup log line has been flushed to the file yet.
+  local i grep_ok=""
+  for i in $(seq 1 10); do
+    if grep -q "Detected the opaque-ke 0.7 -> 4.0 upgrade" "$WORKDIR/$mode-head.log"; then
+      grep_ok=1
+      break
+    fi
+    sleep 1
+  done
+  [ -n "$grep_ok" ] || {
     tail -40 "$WORKDIR/$mode-head.log" >&2
     die "[$mode] HEAD did not report the automatic opaque-ke upgrade"
   }

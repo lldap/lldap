@@ -377,7 +377,19 @@ fn load_v07_key_sidecar(key_file: &std::path::Path) -> Option<Vec<u8>> {
             );
             Some(bytes)
         }
-        Err(_) => None,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            // Don't silently degrade to "no v0.7 support" on a real IO
+            // error: the startup warning would misdiagnose it as a missing
+            // key when the file is there but unreadable.
+            eprintln!(
+                "WARNING: v0.7 key sidecar `{}` exists but could not be read: {e}. \
+                 Users still on v0.7 passwords will not be able to log in \
+                 until it is readable.",
+                sidecar.display()
+            );
+            None
+        }
     }
 }
 

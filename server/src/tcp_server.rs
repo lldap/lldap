@@ -72,7 +72,9 @@ pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
             DomainError::Base64DecodeError(_)
             | DomainError::BinarySerializationError(_)
             | DomainError::EntityNotFound(_) => HttpResponse::BadRequest(),
-            DomainError::OpaqueV07Version(_) => unreachable!(),
+            // Normally intercepted above with a structured JSON body; kept
+            // as a graceful (non-panicking) fallback if that guard moves.
+            DomainError::OpaqueV07Version(_) => HttpResponse::Conflict(),
         },
         TcpError::BadRequest(_) => HttpResponse::BadRequest(),
         TcpError::NotFoundError(_) => HttpResponse::NotFound(),
