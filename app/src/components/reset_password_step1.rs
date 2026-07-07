@@ -85,13 +85,12 @@ impl Component for ResetPasswordStep1Form {
         let link = &ctx.link();
         html! {
             <form
-              class="form center-block col-sm-4 col-offset-4">
+              class="auth-card">
+                <h1 class="form-title h4">{"Reset your password"}</h1>
                 <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">
-                      <i class="bi-person-fill"/>
-                    </span>
-                  </div>
+                  <span class="input-group-text">
+                    <i class="bi-person-fill"/>
+                  </span>
                   <Field
                     class="form-control"
                     class_invalid="is-invalid has-error"

@@ -90,8 +90,8 @@ impl GroupTable {
     fn view_groups(&self, ctx: &Context<Self>) -> Html {
         let make_table = |groups: &Vec<Group>| {
             html! {
-                <div class="table-responsive">
-                  <table class="table table-hover">
+                <div class="app-panel table-responsive">
+                  <table class="table table-hover align-middle">
                     <thead>
                       <tr>
                         <th>{"Group name"}</th>

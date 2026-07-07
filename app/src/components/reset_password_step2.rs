@@ -168,10 +168,9 @@ impl Component for ResetPasswordStep2Form {
             _ => (),
         };
         html! {
-          <>
-            <h2>{"Reset your password"}</h2>
-            <form class="form">
-              <Field<FormModel>
+          <form class="auth-card">
+            <h1 class="form-title h4">{"Reset your password"}</h1>
+            <Field<FormModel>
                 label="New password"
                 required=true
                 form={&self.form}
@@ -190,16 +189,15 @@ impl Component for ResetPasswordStep2Form {
               <Submit
                 disabled={self.common.is_task_running()}
                 onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})} />
-            </form>
             { if let Some(e) = &self.common.error {
                 html! {
-                  <div class="alert alert-danger">
+                  <div class="alert alert-danger mt-2">
                     {e.to_string() }
                   </div>
                 }
               } else { html! {} }
             }
-          </>
+          </form>
         }
     }
 }

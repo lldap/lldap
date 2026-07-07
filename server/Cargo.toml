@@ -19,6 +19,7 @@ actix-rt = "2"
 actix-server = "2"
 actix-service = "2"
 actix-web-httpauth = "0.8"
+actix-multipart = "0.7"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }

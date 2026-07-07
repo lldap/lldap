@@ -20,6 +20,8 @@ fn get_claims_from_jwt(jwt: &str) -> Result<JWTClaims> {
 enum RequestType<Body: Serialize> {
     Get,
     Post(Body),
+    Put(Body),
+    Delete,
 }
 
 const GET_REQUEST: RequestType<()> = RequestType::Get;
@@ -40,6 +42,12 @@ async fn call_server<Body: Serialize>(
         request_builder
             .method(Method::POST)
             .body(serde_json::to_string(&b)?)?
+    } else if let RequestType::Put(b) = body {
+        request_builder
+            .method(Method::PUT)
+            .body(serde_json::to_string(&b)?)?
+    } else if matches!(body, RequestType::Delete) {
+        request_builder.method(Method::DELETE).build()?
     } else {
         request_builder.build()?
     };
@@ -209,6 +217,64 @@ impl HostService {
             &format!("{}/auth/reset/step2/{}", base_url(), token),
             GET_REQUEST,
             "Could not validate token",
+        )
+        .await
+    }
+
+    /// Persists updated branding settings via PUT /settings (admin-only).
+    pub async fn update_settings(
+        branding: lldap_frontend_options::BrandingOptions,
+    ) -> Result<lldap_frontend_options::Options> {
+        call_server_json_with_error_message::<lldap_frontend_options::Options, _>(
+            &(base_url() + "/settings"),
+            RequestType::Put(branding),
+            "Could not update branding settings",
+        )
+        .await
+    }
+
+    /// Uploads a logo image file via PUT /settings/logo (admin-only).
+    /// The server expects a multipart form field named "logo".
+    pub async fn upload_logo(
+        file_bytes: Vec<u8>,
+        file_name: String,
+        content_type: String,
+    ) -> Result<lldap_frontend_options::BrandingOptions> {
+        // Build a multipart form-data body manually.
+        let boundary = format!("lldap-logo-{}", js_sys::Date::now() as u64);
+        let mut body_bytes = Vec::new();
+        body_bytes.extend_from_slice(
+            format!("--{boundary}\r\nContent-Disposition: form-data; name=\"logo\"; filename=\"{file_name}\"\r\nContent-Type: {content_type}\r\n\r\n").as_bytes(),
+        );
+        body_bytes.extend_from_slice(&file_bytes);
+        body_bytes.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+        let multipart_content_type = format!("multipart/form-data; boundary={boundary}");
+        let request = RequestBuilder::new(&(base_url() + "/settings/logo"))
+            .method(Method::PUT)
+            .header("Content-Type", &multipart_content_type)
+            .credentials(RequestCredentials::SameOrigin)
+            .body(body_bytes)?;
+        let response = request.send().await?;
+        if response.ok() {
+            let text = response.text().await?;
+            Ok(serde_json::from_str(&text).context("Could not parse logo upload response")?)
+        } else {
+            Err(anyhow!(
+                "Could not upload logo[{} {}]: {}",
+                response.status(),
+                response.status_text(),
+                response.text().await?
+            ))
+        }
+    }
+
+    /// Removes the uploaded logo via DELETE /settings/logo (admin-only).
+    pub async fn delete_logo() -> Result<lldap_frontend_options::BrandingOptions> {
+        call_server_json_with_error_message::<lldap_frontend_options::BrandingOptions, ()>(
+            &(base_url() + "/settings/logo"),
+            RequestType::Delete,
+            "Could not delete logo",
         )
         .await
     }

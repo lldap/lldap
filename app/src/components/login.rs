@@ -35,6 +35,8 @@ pub struct FormModel {
 pub struct Props {
     pub on_logged_in: Callback<(String, bool)>,
     pub password_reset_enabled: bool,
+    #[prop_or_else(|| "LLDAP".to_string())]
+    pub app_name: String,
 }
 
 pub enum Msg {
@@ -152,19 +154,20 @@ impl Component for LoginForm {
         let link = &ctx.link();
         if self.refreshing {
             html! {
-              <div>
-                <img src={"spinner.gif"} alt={"Loading"} />
+              <div class="d-flex justify-content-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">{"Loading"}</span>
+                </div>
               </div>
             }
         } else {
             html! {
-              <form class="form center-block col-sm-4 col-offset-4">
+              <form class="auth-card">
+                <h1 class="form-title h4">{format!("Sign in to {}", ctx.props().app_name)}</h1>
                 <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">
-                      <i class="bi-person-fill"/>
-                    </span>
-                  </div>
+                  <span class="input-group-text">
+                    <i class="bi-person-fill"/>
+                  </span>
                   <Field
                     class="form-control"
                     class_invalid="is-invalid has-error"
@@ -176,11 +179,9 @@ impl Component for LoginForm {
                     oninput={link.callback(|_| Msg::Update)} />
                 </div>
                 <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">
-                      <i class="bi-lock-fill"/>
-                    </span>
-                  </div>
+                  <span class="input-group-text">
+                    <i class="bi-lock-fill"/>
+                  </span>
                   <Field
                     class="form-control"
                     class_invalid="is-invalid has-error"
@@ -210,7 +211,7 @@ impl Component for LoginForm {
                 </Submit>
                 <div class="form-group">
                 { if let Some(e) = &self.common.error {
-                    html! { e.to_string() }
+                    html! { <div class="text-danger mt-2">{e.to_string()}</div> }
                   } else { html! {} }
                 }
                 </div>

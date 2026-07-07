@@ -21,7 +21,8 @@ use crate::{
 };
 
 use gloo_console::error;
-use lldap_frontend_options::Options;
+use lldap_frontend_options::{BrandingOptions, Options, ThemeMode};
+use wasm_bindgen::prelude::wasm_bindgen;
 use yew::{
     Context, function_component,
     html::Scope,
@@ -46,6 +47,7 @@ pub struct App {
     user_info: Option<(String, bool)>,
     redirect_to: Option<AppRoute>,
     password_reset_enabled: Option<bool>,
+    branding: Option<BrandingOptions>,
 }
 
 pub enum Msg {
@@ -75,6 +77,7 @@ impl Component for App {
                 }),
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
+            branding: None,
         };
         ctx.link()
             .send_future(async move { Msg::SettingsReceived(HostService::get_settings().await) });
@@ -104,6 +107,32 @@ impl Component for App {
             }
             Msg::SettingsReceived(Ok(settings)) => {
                 self.password_reset_enabled = Some(settings.password_reset_enabled);
+                let branding = settings.branding;
+                // Apply document title.
+                if let Some(window) = web_sys::window()
+                    && let Some(document) = window.document()
+                {
+                    document.set_title(&branding.app_name);
+                }
+                // Set accent CSS custom property via JS shim in index.html.
+                if let Some(ref color) = branding.accent_color {
+                    set_theme_accent(color);
+                }
+                // Apply server-configured default theme only when the user has no
+                // explicit stored preference.
+                let has_stored_theme = web_sys::window()
+                    .and_then(|w| w.local_storage().ok().flatten())
+                    .and_then(|storage| storage.get_item("theme").ok().flatten())
+                    .is_some();
+                if !has_stored_theme {
+                    match branding.default_theme {
+                        ThemeMode::Light => apply_theme("light"),
+                        ThemeMode::Dark => apply_theme("dark"),
+                        ThemeMode::Auto => { /* let the inline script's media-query fallback stand */
+                        }
+                    }
+                }
+                self.branding = Some(branding);
             }
             Msg::SettingsReceived(Err(err)) => {
                 error!(err.to_string());
@@ -117,19 +146,20 @@ impl Component for App {
         let is_admin = self.is_admin();
         let username = self.user_info.clone().map(|(username, _)| username);
         let password_reset_enabled = self.password_reset_enabled;
+        let app_name = self
+            .branding
+            .as_ref()
+            .map_or_else(|| "LLDAP".to_string(), |b| b.app_name.clone());
+        let branding = self.branding.clone();
         html! {
-          <div>
-            <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
-            <div class="container py-3 bg-kug">
-              <div class="row justify-content-center" style="padding-bottom: 80px;">
-                <main class="py-3">
-                  <Switch<AppRoute>
-                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled))}
-                  />
-                </main>
-              </div>
-              {self.view_footer()}
-            </div>
+          <div class="d-flex flex-column min-vh-100">
+            <Banner is_admin={is_admin} username={username} branding={branding.clone()} on_logged_out={link.callback(|_| Msg::Logout)} />
+            <main class="container app-content flex-grow-1">
+              <Switch<AppRoute>
+                render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled, app_name.clone()))}
+              />
+            </main>
+            {self.view_footer()}
           </div>
         }
     }
@@ -198,28 +228,32 @@ impl App {
         link: &Scope<Self>,
         is_admin: bool,
         password_reset_enabled: Option<bool>,
+        app_name: String,
     ) -> Html {
         match switch {
-            AppRoute::Login => html! {
-                <LoginForm on_logged_in={link.callback(Msg::Login)} password_reset_enabled={password_reset_enabled.unwrap_or(false)}/>
+            AppRoute::Login => {
+                html! {
+                    <LoginForm
+                        on_logged_in={link.callback(Msg::Login)}
+                        password_reset_enabled={password_reset_enabled.unwrap_or(false)}
+                        app_name={app_name.clone()}
+                    />
+                }
             },
             AppRoute::CreateUser => html! {
                 <CreateUserForm/>
             },
             AppRoute::Index | AppRoute::ListUsers => {
-                let user_button = |key| {
-                    html! {
-                      <Link classes="btn btn-primary" key={key} to={AppRoute::CreateUser}>
+                html! {
+                  <div>
+                    <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+                      <h1 class="h3 mb-0">{"Users"}</h1>
+                      <Link classes="btn btn-primary" to={AppRoute::CreateUser}>
                         <i class="bi-person-plus me-2"></i>
                         {"Create a user"}
                       </Link>
-                    }
-                };
-                html! {
-                  <div>
-                    { user_button("top-create-user") }
+                    </div>
                     <UserTable />
-                    { user_button("bottom-create-user") }
                   </div>
                 }
             }
@@ -232,20 +266,20 @@ impl App {
             AppRoute::CreateGroupAttribute => html! {
                 <CreateGroupAttributeForm/>
             },
+            AppRoute::AdminSettings => html! {
+                <crate::components::admin_settings::AdminSettingsForm />
+            },
             AppRoute::ListGroups => {
-                let group_button = |key| {
-                    html! {
-                      <Link classes="btn btn-primary" key={key} to={AppRoute::CreateGroup}>
+                html! {
+                  <div>
+                    <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+                      <h1 class="h3 mb-0">{"Groups"}</h1>
+                      <Link classes="btn btn-primary" to={AppRoute::CreateGroup}>
                         <i class="bi-plus-circle me-2"></i>
                         {"Create a group"}
                       </Link>
-                    }
-                };
-                html! {
-                  <div>
-                    { group_button("top-create-group") }
+                    </div>
                     <GroupTable />
-                    { group_button("bottom-create-group") }
                   </div>
                 }
             }
@@ -290,23 +324,23 @@ impl App {
 
     fn view_footer(&self) -> Html {
         html! {
-          <footer class="text-center fixed-bottom text-muted bg-light py-2">
+          <footer class="app-footer text-center mt-4">
             <div>
               <span>{format!("LLDAP version {}", env!("CARGO_PKG_VERSION"))}</span>
             </div>
             <div>
-              <a href="https://github.com/lldap/lldap" class="me-4 text-reset">
+              <a href="https://github.com/lldap/lldap" aria-label="GitHub">
                 <i class="bi-github"></i>
               </a>
-              <a href="https://discord.gg/h5PEdRMNyP" class="me-4 text-reset">
+              <a href="https://discord.gg/h5PEdRMNyP" aria-label="Discord">
                 <i class="bi-discord"></i>
               </a>
-              <a href="https://twitter.com/nitnelave1?ref_src=twsrc%5Etfw" class="me-4 text-reset">
+              <a href="https://twitter.com/nitnelave1?ref_src=twsrc%5Etfw" aria-label="Twitter">
                 <i class="bi-twitter"></i>
               </a>
             </div>
             <div>
-              <span>{"License "}<a href="https://github.com/lldap/lldap/blob/main/LICENSE" class="link-secondary">{"GNU GPL"}</a></span>
+              <span>{"License "}<a href="https://github.com/lldap/lldap/blob/main/LICENSE">{"GNU GPL"}</a></span>
             </div>
           </footer>
         }
@@ -317,5 +351,31 @@ impl App {
             None => false,
             Some((_, is_admin)) => *is_admin,
         }
+    }
+}
+
+/// Called by the server-provided branding options to set the
+/// `--lldap-accent` CSS custom property on `<html>`.
+#[wasm_bindgen]
+extern "C" {
+    fn setThemeAccent(color: &str);
+}
+
+fn set_theme_accent(color: &str) {
+    setThemeAccent(color);
+}
+
+/// Set `data-bs-theme` on `<html>` and persist it to localStorage.
+fn apply_theme(theme: &str) {
+    if let Some(window) = web_sys::window()
+        && let Some(document) = window.document()
+        && let Some(html) = document.document_element()
+    {
+        let _ = html.set_attribute("data-bs-theme", theme);
+    }
+    if let Some(window) = web_sys::window()
+        && let Ok(Some(storage)) = window.local_storage()
+    {
+        let _ = storage.set_item("theme", theme);
     }
 }

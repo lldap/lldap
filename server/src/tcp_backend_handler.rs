@@ -26,4 +26,16 @@ pub trait TcpBackendHandler: Sync {
     async fn get_user_id_for_password_reset_token(&self, token: &str) -> Result<UserId>;
 
     async fn delete_password_reset_token(&self, token: &str) -> Result<()>;
+
+    /// Reads the singleton branding row from the database.
+    /// Returns `Ok(None)` if the table hasn't been populated yet.
+    async fn get_branding_settings(
+        &self,
+    ) -> anyhow::Result<Option<lldap_frontend_options::BrandingOptions>>;
+
+    /// Persists updated branding to the database.
+    async fn set_branding_settings(
+        &self,
+        options: &lldap_frontend_options::BrandingOptions,
+    ) -> anyhow::Result<()>;
 }
