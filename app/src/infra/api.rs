@@ -240,11 +240,20 @@ impl HostService {
         file_name: String,
         content_type: String,
     ) -> Result<lldap_frontend_options::BrandingOptions> {
-        // Build a multipart form-data body manually.
+        // Sanitize multipart-field inputs by stripping any characters that
+        // could break the MIME framing or inject additional headers.
+        let safe_file_name = file_name.replace(['\r', '\n', '"', '\\'], "");
+        let safe_content_type = content_type.replace(['\r', '\n'], "");
+        // Build a multipart form-data body. The boundary is derived from the
+        // current timestamp — predictable, but uploaded logos are admin-only
+        // and the boundary serves only to delimit form parts.
         let boundary = format!("lldap-logo-{}", js_sys::Date::now() as u64);
         let mut body_bytes = Vec::new();
         body_bytes.extend_from_slice(
-            format!("--{boundary}\r\nContent-Disposition: form-data; name=\"logo\"; filename=\"{file_name}\"\r\nContent-Type: {content_type}\r\n\r\n").as_bytes(),
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"logo\"; filename=\"{safe_file_name}\"\r\nContent-Type: {safe_content_type}\r\n\r\n",
+            )
+            .as_bytes(),
         );
         body_bytes.extend_from_slice(&file_bytes);
         body_bytes.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
@@ -261,7 +270,7 @@ impl HostService {
             Ok(serde_json::from_str(&text).context("Could not parse logo upload response")?)
         } else {
             Err(anyhow!(
-                "Could not upload logo[{} {}]: {}",
+                "Could not upload logo [{} {}]: {}",
                 response.status(),
                 response.status_text(),
                 response.text().await?

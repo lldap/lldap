@@ -172,15 +172,20 @@ const SWITCH_TO_DARK_LABEL: &str = "Switch to dark mode";
 
 #[function_component(DarkModeToggle)]
 fn dark_mode_toggle() -> Html {
-    let is_dark = use_state(inDarkMode);
+    let dark_state = use_state(inDarkMode);
     let onclick = {
-        let is_dark = is_dark.clone();
+        let dark_state = dark_state.clone();
         Callback::from(move |_| {
             toggleDarkMode();
-            is_dark.set(inDarkMode());
+            dark_state.set(inDarkMode());
         })
     };
-    let (icon, label) = if *is_dark {
+    // Read the actual DOM state on every render instead of relying
+    // solely on the stored state so that external theme changes
+    // (e.g. from the Settings page applying a new default_theme) are
+    // reflected immediately in the toggle icon and label.
+    let current_is_dark = inDarkMode();
+    let (icon, label) = if current_is_dark {
         (LIGHT_MODE_ICON, SWITCH_TO_LIGHT_LABEL)
     } else {
         (DARK_MODE_ICON, SWITCH_TO_DARK_LABEL)

@@ -27,9 +27,9 @@ pub struct AdminSettingsForm {
 }
 
 #[derive(Properties, PartialEq, Clone)]
-pub struct AdminSettingsFormProps {}
+pub struct Props {}
 
-pub enum AdminSettingsFormMessage {
+pub enum Msg {
     SettingsFetched(Result<lldap_frontend_options::Options>),
     UpdateApplicationName(String),
     UpdateAccentColor(String),
@@ -48,7 +48,7 @@ impl CommonComponent<AdminSettingsForm> for AdminSettingsForm {
         msg: <Self as Component>::Message,
     ) -> Result<bool> {
         match msg {
-            AdminSettingsFormMessage::SettingsFetched(Ok(settings)) => {
+            Msg::SettingsFetched(Ok(settings)) => {
                 let branding = settings.branding;
                 self.form_model = SettingsFormModel {
                     application_name: branding.app_name,
@@ -60,49 +60,43 @@ impl CommonComponent<AdminSettingsForm> for AdminSettingsForm {
                 };
                 Ok(true)
             }
-            AdminSettingsFormMessage::SettingsFetched(Err(error_message)) => {
+            Msg::SettingsFetched(Err(error_message)) => {
                 self.common.error = Some(error_message);
                 Ok(true)
             }
-            AdminSettingsFormMessage::UpdateApplicationName(value) => {
+            Msg::UpdateApplicationName(value) => {
                 self.form_model.application_name = value;
                 Ok(true)
             }
-            AdminSettingsFormMessage::UpdateAccentColor(value) => {
+            Msg::UpdateAccentColor(value) => {
                 self.form_model.accent_color_hex = value;
                 Ok(true)
             }
-            AdminSettingsFormMessage::UpdateLogoUrl(value) => {
+            Msg::UpdateLogoUrl(value) => {
                 self.form_model.logo_url = value;
                 Ok(true)
             }
-            AdminSettingsFormMessage::UpdateDefaultTheme(value) => {
-                self.form_model.default_theme = match value.as_str() {
-                    "light" => ThemeMode::Light,
-                    "dark" => ThemeMode::Dark,
-                    _ => ThemeMode::Auto,
-                };
+            Msg::UpdateDefaultTheme(value) => {
+                self.form_model.default_theme = value.parse().unwrap_or_default();
                 Ok(true)
             }
-            AdminSettingsFormMessage::FileSelected(file_option) => {
+            Msg::FileSelected(file_option) => {
                 self.form_model.pending_logo_file = file_option;
                 Ok(true)
             }
-            AdminSettingsFormMessage::RemoveLogo => {
+            Msg::RemoveLogo => {
                 self.form_model.logo_file_has_been_uploaded = false;
                 self.form_model.pending_logo_file = None;
                 self.common
                     .call_backend(ctx, HostService::delete_logo(), |result| {
-                        AdminSettingsFormMessage::SettingsSaved(result.map(|branding| {
-                            lldap_frontend_options::Options {
-                                password_reset_enabled: false,
-                                branding,
-                            }
+                        Msg::SettingsSaved(result.map(|branding| lldap_frontend_options::Options {
+                            password_reset_enabled: false,
+                            branding,
                         }))
                     });
                 Ok(true)
             }
-            AdminSettingsFormMessage::SaveSettings => {
+            Msg::SaveSettings => {
                 if self.is_saving {
                     return Ok(false);
                 }
@@ -110,7 +104,7 @@ impl CommonComponent<AdminSettingsForm> for AdminSettingsForm {
                 self.success_message = None;
                 self.common.error = None;
 
-                let has_pending_file = self.form_model.pending_logo_file.is_some();
+                let pending_logo_file = self.form_model.pending_logo_file.clone();
 
                 let accent_color = if self.form_model.accent_color_hex.is_empty() {
                     None
@@ -132,8 +126,7 @@ impl CommonComponent<AdminSettingsForm> for AdminSettingsForm {
                     default_theme: self.form_model.default_theme,
                 };
 
-                if has_pending_file {
-                    let file = self.form_model.pending_logo_file.clone().unwrap();
+                if let Some(file) = pending_logo_file {
                     let file_name = file.name();
                     let content_type = file.type_();
                     self.common.call_backend(
@@ -157,18 +150,18 @@ impl CommonComponent<AdminSettingsForm> for AdminSettingsForm {
                             };
                             HostService::update_settings(combined).await
                         },
-                        AdminSettingsFormMessage::SettingsSaved,
+                        Msg::SettingsSaved,
                     );
                 } else {
                     self.common.call_backend(
                         ctx,
                         HostService::update_settings(branding_payload),
-                        AdminSettingsFormMessage::SettingsSaved,
+                        Msg::SettingsSaved,
                     );
                 }
                 Ok(true)
             }
-            AdminSettingsFormMessage::SettingsSaved(Ok(options)) => {
+            Msg::SettingsSaved(Ok(options)) => {
                 self.is_saving = false;
                 self.success_message = Some("Branding settings saved successfully.".to_string());
                 let branding = options.branding;
@@ -184,7 +177,7 @@ impl CommonComponent<AdminSettingsForm> for AdminSettingsForm {
                 }
                 Ok(true)
             }
-            AdminSettingsFormMessage::SettingsSaved(Err(error_message)) => {
+            Msg::SettingsSaved(Err(error_message)) => {
                 self.is_saving = false;
                 self.common.error = Some(error_message);
                 Ok(true)
@@ -198,8 +191,8 @@ impl CommonComponent<AdminSettingsForm> for AdminSettingsForm {
 }
 
 impl Component for AdminSettingsForm {
-    type Message = AdminSettingsFormMessage;
-    type Properties = AdminSettingsFormProps;
+    type Message = Msg;
+    type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
         let mut form = AdminSettingsForm {
@@ -208,11 +201,8 @@ impl Component for AdminSettingsForm {
             is_saving: false,
             success_message: None,
         };
-        form.common.call_backend(
-            ctx,
-            HostService::get_settings(),
-            AdminSettingsFormMessage::SettingsFetched,
-        );
+        form.common
+            .call_backend(ctx, HostService::get_settings(), Msg::SettingsFetched);
         form
     }
 
@@ -251,14 +241,14 @@ impl Component for AdminSettingsForm {
                             disabled={is_disabled}
                             onchange={link.callback(|event: Event| {
                                 let value = event.target_unchecked_into::<HtmlInputElement>().value();
-                                AdminSettingsFormMessage::UpdateApplicationName(value)
+                                Msg::UpdateApplicationName(value)
                             })}
                         />
                         <div class="form-text">{"Shown in the browser tab and the top-left corner of every page."}</div>
                     </div>
 
                     <div class="mb-3">
-                        <label for="settings-accent-color" class="form-label">{"Accent color"}</label>
+                        <label for="settings-accent-color-picker" class="form-label">{"Accent color"}</label>
                         <div class="d-flex gap-2">
                             <input
                                 type="color"
@@ -268,7 +258,7 @@ impl Component for AdminSettingsForm {
                                 disabled={is_disabled}
                                 onchange={link.callback(|event: Event| {
                                     let value = event.target_unchecked_into::<HtmlInputElement>().value();
-                                    AdminSettingsFormMessage::UpdateAccentColor(value)
+                                    Msg::UpdateAccentColor(value)
                                 })}
                             />
                             <input
@@ -276,11 +266,14 @@ impl Component for AdminSettingsForm {
                                 id="settings-accent-color"
                                 class="form-control"
                                 placeholder="#4f46e5"
+                                aria-label="Accent color hex value"
+                                pattern="^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+                                title="A valid CSS hex colour, for example #4f46e5 or #f00"
                                 value={self.form_model.accent_color_hex.clone()}
                                 disabled={is_disabled}
                                 onchange={link.callback(|event: Event| {
                                     let value = event.target_unchecked_into::<HtmlInputElement>().value();
-                                    AdminSettingsFormMessage::UpdateAccentColor(value)
+                                    Msg::UpdateAccentColor(value)
                                 })}
                             />
                         </div>
@@ -295,7 +288,7 @@ impl Component for AdminSettingsForm {
                             disabled={is_disabled}
                             onchange={link.callback(|event: Event| {
                                 let value = event.target_unchecked_into::<HtmlInputElement>().value();
-                                AdminSettingsFormMessage::UpdateDefaultTheme(value)
+                                Msg::UpdateDefaultTheme(value)
                             })}
                         >
                             <option value="auto" selected={theme_selected(ThemeMode::Auto)}>{"Auto (follows system preference)"}</option>
@@ -315,7 +308,7 @@ impl Component for AdminSettingsForm {
                                         type="button"
                                         class="btn btn-outline-danger btn-sm ms-2"
                                         disabled={is_disabled}
-                                        onclick={link.callback(|_| AdminSettingsFormMessage::RemoveLogo)}
+                                        onclick={link.callback(|_| Msg::RemoveLogo)}
                                     >
                                         {"Remove uploaded logo"}
                                     </button>
@@ -329,13 +322,24 @@ impl Component for AdminSettingsForm {
                             type="file"
                             id="settings-logo-file"
                             class="form-control mb-2"
-                            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                            accept="image/png,image/jpeg,image/webp"
                             disabled={is_disabled}
                             onchange={link.callback(|event: Event| {
                                 let input = event.target_unchecked_into::<HtmlInputElement>();
                                 let files = input.files();
                                 let selected_file = files.and_then(|file_list| file_list.get(0));
-                                AdminSettingsFormMessage::FileSelected(selected_file)
+                                // Reject files over 1 MB on the client side before uploading.
+                                const MAXIMUM_LOGO_BYTES: f64 = 1_048_576.0;
+                                let exceeds_limit = selected_file
+                                    .as_ref()
+                                    .is_some_and(|file| file.size() > MAXIMUM_LOGO_BYTES);
+                                if exceeds_limit {
+                                    // The file is too large — do not attach it.
+                                    // The server would reject it with a 400 anyway.
+                                    Msg::FileSelected(None)
+                                } else {
+                                    Msg::FileSelected(selected_file)
+                                }
                             })}
                         />
 
@@ -349,7 +353,7 @@ impl Component for AdminSettingsForm {
                             disabled={is_disabled}
                             onchange={link.callback(|event: Event| {
                                 let value = event.target_unchecked_into::<HtmlInputElement>().value();
-                                AdminSettingsFormMessage::UpdateLogoUrl(value)
+                                Msg::UpdateLogoUrl(value)
                             })}
                         />
                         <div class="form-text">{"If both an uploaded file and a URL are set, the uploaded file takes priority."}</div>
@@ -359,7 +363,7 @@ impl Component for AdminSettingsForm {
                         type="button"
                         class="btn btn-primary"
                         disabled={is_disabled}
-                        onclick={link.callback(|_| AdminSettingsFormMessage::SaveSettings)}
+                        onclick={link.callback(|_| Msg::SaveSettings)}
                     >
                         {if self.is_saving {
                             html! { <><span class="spinner-border spinner-border-sm me-2"></span>{"Saving..."}</> }

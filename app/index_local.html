@@ -27,6 +27,10 @@
           document.documentElement.style.setProperty("--lldap-accent", color);
         }
       }
+      function setTheme(theme) {
+        document.documentElement.setAttribute("data-bs-theme", theme);
+        try { localStorage.setItem("theme", theme); } catch (e) {}
+      }
     </script>
     <script src="/static/main.js" type="module" defer></script>
     <link
@@ -35,6 +39,7 @@
       integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" />
     <script
       src="/static/bootstrap.bundle.min.js"
+      defer
       integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"></script>
     <link
       rel="stylesheet"

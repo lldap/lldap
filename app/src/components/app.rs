@@ -153,7 +153,7 @@ impl Component for App {
         let branding = self.branding.clone();
         html! {
           <div class="d-flex flex-column min-vh-100">
-            <Banner is_admin={is_admin} username={username} branding={branding.clone()} on_logged_out={link.callback(|_| Msg::Logout)} />
+            <Banner is_admin={is_admin} username={username} branding={branding} on_logged_out={link.callback(|_| Msg::Logout)} />
             <main class="container app-content flex-grow-1">
               <Switch<AppRoute>
                 render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled, app_name.clone()))}
@@ -239,7 +239,7 @@ impl App {
                         app_name={app_name.clone()}
                     />
                 }
-            },
+            }
             AppRoute::CreateUser => html! {
                 <CreateUserForm/>
             },
@@ -359,23 +359,16 @@ impl App {
 #[wasm_bindgen]
 extern "C" {
     fn setThemeAccent(color: &str);
+    /// Delegates to the `setTheme(theme)` JS function in `index.html`
+    /// to both set `data-bs-theme` on `<html>` and persist to
+    /// `localStorage`, keeping the theme contract in a single place.
+    fn setTheme(theme: &str);
 }
 
 fn set_theme_accent(color: &str) {
     setThemeAccent(color);
 }
 
-/// Set `data-bs-theme` on `<html>` and persist it to localStorage.
 fn apply_theme(theme: &str) {
-    if let Some(window) = web_sys::window()
-        && let Some(document) = window.document()
-        && let Some(html) = document.document_element()
-    {
-        let _ = html.set_attribute("data-bs-theme", theme);
-    }
-    if let Some(window) = web_sys::window()
-        && let Ok(Some(storage)) = window.local_storage()
-    {
-        let _ = storage.set_item("theme", theme);
-    }
+    setTheme(theme);
 }

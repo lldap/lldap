@@ -1,6 +1,7 @@
 use crate::sql_migrations::{Metadata, get_schema_version, migrate_from_version, upgrade_to_v1};
 use sea_orm::{
-    ConnectionTrait, DeriveValueType, Iden, QueryResult, TryGetable, Value, sea_query::Query,
+    ConnectionTrait, DeriveValueType, Iden, QueryResult, TryGetable, Value,
+    sea_query::{Expr, Query},
 };
 use serde::{Deserialize, Serialize};
 
@@ -119,9 +120,10 @@ pub async fn set_private_key_info(pool: &DbConnection, info: PrivateKeyInfo) -> 
 }
 
 /// Reads the singleton branding row from the database.
-/// Returns `None` when the table has not been populated yet (e.g. before the
-/// v12 migration runs). Callers should fall back to `BrandingOptions::default()`
-/// in that case.
+/// Returns `None` when the table exists but is empty (no row matched).
+/// Returns `Err(...)` on a genuine database failure (connectivity, missing
+/// table, etc.). Callers should handle the `Err` case explicitly — typically
+/// by logging a warning and falling back to `BrandingOptions::default()`.
 pub async fn get_branding_settings(
     pool: &DbConnection,
 ) -> anyhow::Result<Option<lldap_frontend_options::BrandingOptions>> {
@@ -160,11 +162,7 @@ pub async fn get_branding_settings(
         default_theme: {
             let theme_string: String =
                 get_column::<String>(&query_result, &BrandingSettings::DefaultTheme)?;
-            match theme_string.as_str() {
-                "light" => lldap_frontend_options::ThemeMode::Light,
-                "dark" => lldap_frontend_options::ThemeMode::Dark,
-                _ => lldap_frontend_options::ThemeMode::Auto,
-            }
+            theme_string.parse().unwrap_or_default()
         },
     }))
 }
@@ -176,15 +174,12 @@ pub async fn set_branding_settings(
     options: &lldap_frontend_options::BrandingOptions,
 ) -> anyhow::Result<()> {
     use crate::sql_migrations::BrandingSettings;
-    let default_theme_text = match options.default_theme {
-        lldap_frontend_options::ThemeMode::Light => "light",
-        lldap_frontend_options::ThemeMode::Dark => "dark",
-        lldap_frontend_options::ThemeMode::Auto => "auto",
-    };
+    let default_theme_text = options.default_theme.to_string();
     pool.execute(
         pool.get_database_backend().build(
             Query::update()
                 .table(BrandingSettings::Table)
+                .and_where(Expr::col(BrandingSettings::Id).eq(1))
                 .value(
                     BrandingSettings::AppName,
                     Value::from(options.app_name.clone()),

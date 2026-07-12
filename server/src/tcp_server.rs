@@ -127,10 +127,12 @@ async fn get_settings<Backend>(data: web::Data<AppState<Backend>>) -> HttpRespon
 const MAXIMUM_LOGO_FILE_SIZE_IN_BYTES: usize = 1_048_576;
 
 /// Allowed MIME types for logo uploads.
-const PERMITTED_LOGO_CONTENT_TYPES: &[&str] =
-    &["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+/// SVG is intentionally excluded because it can carry executable JavaScript
+/// and would be served unsanitized from the public `/branding/logo` endpoint.
+const PERMITTED_LOGO_CONTENT_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp"];
 
-/// Checks admin group membership from a validated JWT token.
+/// Validates that the caller is an administrator by checking that the
+/// provided JWT token belongs to a member of the `lldap_admin` group.
 async fn verify_admin_access<Backend>(
     data: &web::Data<AppState<Backend>>,
     token: &str,
@@ -147,6 +149,26 @@ where
     Ok(())
 }
 
+/// Extracts the Bearer token from the request payload and verifies that
+/// the caller is an administrator. Used by all admin-only /settings routes
+/// to avoid duplicating the extraction + verification boilerplate.
+async fn require_admin_from_request<Backend>(
+    request: &actix_web::HttpRequest,
+    inner_payload: &mut actix_web::dev::Payload,
+    data: &web::Data<AppState<Backend>>,
+) -> Result<(), HttpResponse>
+where
+    Backend: BackendHandler + 'static,
+{
+    let bearer = BearerAuth::from_request(request, inner_payload)
+        .await
+        .map_err(|_| {
+            HttpResponse::Unauthorized().body("Missing or invalid Authorization header")
+        })?;
+    verify_admin_access::<Backend>(data, bearer.token()).await
+}
+
+#[allow(clippy::await_holding_lock)]
 async fn put_settings<Backend>(
     request: actix_web::HttpRequest,
     payload: actix_web::web::Payload,
@@ -156,14 +178,9 @@ where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
     let mut inner_payload = payload.into_inner();
-    // Extract and validate the Bearer token.
-    let bearer = match BearerAuth::from_request(&request, &mut inner_payload).await {
-        Ok(bearer) => bearer,
-        Err(_) => {
-            return HttpResponse::Unauthorized().body("Missing or invalid Authorization header");
-        }
-    };
-    if let Err(response) = verify_admin_access::<Backend>(&data, bearer.token()).await {
+    if let Err(response) =
+        require_admin_from_request::<Backend>(&request, &mut inner_payload, &data).await
+    {
         return response;
     }
 
@@ -192,6 +209,7 @@ where
     })
 }
 
+#[allow(clippy::await_holding_lock)]
 async fn put_settings_logo<Backend>(
     request: actix_web::HttpRequest,
     payload: actix_web::web::Payload,
@@ -201,18 +219,13 @@ where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
     let mut inner_payload = payload.into_inner();
-    // Extract and validate the Bearer token.
-    let bearer = match BearerAuth::from_request(&request, &mut inner_payload).await {
-        Ok(bearer) => bearer,
-        Err(_) => {
-            return HttpResponse::Unauthorized().body("Missing or invalid Authorization header");
-        }
-    };
-    if let Err(response) = verify_admin_access::<Backend>(&data, bearer.token()).await {
+    if let Err(response) =
+        require_admin_from_request::<Backend>(&request, &mut inner_payload, &data).await
+    {
         return response;
     }
 
-    let mut multipart_stream = Multipart::new(&request.headers(), inner_payload);
+    let mut multipart_stream = Multipart::new(request.headers(), inner_payload);
     let mut field = match multipart_stream.next().await {
         Some(Ok(field)) => field,
         Some(Err(error)) => {
@@ -220,8 +233,10 @@ where
                 .body(format!("Error reading multipart field: {error:#?}"));
         }
         None => {
-            return HttpResponse::BadRequest()
-                .body("No file was provided in the request. Include a field named 'logo' with the image file.");
+            return HttpResponse::BadRequest().body(
+                "No file was provided in the request. Include a field \
+                       named 'logo' with the image file.",
+            );
         }
     };
 
@@ -250,22 +265,32 @@ where
         if file_bytes.len() + chunk.len() > MAXIMUM_LOGO_FILE_SIZE_IN_BYTES {
             return HttpResponse::BadRequest().body(format!(
                 "Logo file size exceeds the maximum allowed size of \
-                 {MAXIMUM_LOGO_FILE_SIZE_IN_BYTES} bytes. Please resize the \
-                 image and try again.",
+                 {MAXIMUM_LOGO_FILE_SIZE_IN_BYTES} bytes. Please resize \
+                 the image and try again.",
             ));
         }
         file_bytes.extend_from_slice(&chunk);
     }
 
     let branding_directory = data.assets_path.join("branding");
-    if std::fs::create_dir_all(&branding_directory).is_err() {
-        return HttpResponse::InternalServerError()
-            .body("Could not create the branding directory on disk.");
+    if let Err(error) = tokio::fs::create_dir_all(&branding_directory).await {
+        return HttpResponse::InternalServerError().body(format!(
+            "Could not create the branding directory on disk: {error:#?}"
+        ));
     }
     let logo_file_path = branding_directory.join("logo");
-    if let Err(error) = std::fs::write(&logo_file_path, &file_bytes) {
+    if let Err(error) = tokio::fs::write(&logo_file_path, &file_bytes).await {
         return HttpResponse::InternalServerError()
             .body(format!("Could not save the logo file to disk: {error:#?}"));
+    }
+    // Store the content type alongside the logo so get_branding_logo can
+    // return the correct MIME header instead of application/octet-stream.
+    let content_type_path = branding_directory.join("logo.content_type");
+    if let Err(error) = tokio::fs::write(&content_type_path, content_type.as_bytes()).await {
+        warn!(
+            "Could not save the logo content-type sidecar file, \
+             using fallback MIME type 'image/png' for serving: {error:#?}"
+        );
     }
 
     let mut branding_guard = data
@@ -284,6 +309,7 @@ where
     HttpResponse::Ok().json(updated_branding)
 }
 
+#[allow(clippy::await_holding_lock)]
 async fn delete_settings_logo<Backend>(
     request: actix_web::HttpRequest,
     payload: actix_web::web::Payload,
@@ -293,19 +319,16 @@ where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
     let mut inner_payload = payload.into_inner();
-    // Extract and validate the Bearer token.
-    let bearer = match BearerAuth::from_request(&request, &mut inner_payload).await {
-        Ok(bearer) => bearer,
-        Err(_) => {
-            return HttpResponse::Unauthorized().body("Missing or invalid Authorization header");
-        }
-    };
-    if let Err(response) = verify_admin_access::<Backend>(&data, bearer.token()).await {
+    if let Err(response) =
+        require_admin_from_request::<Backend>(&request, &mut inner_payload, &data).await
+    {
         return response;
     }
 
     let logo_file_path = data.assets_path.join("branding").join("logo");
-    let _ = std::fs::remove_file(&logo_file_path);
+    let content_type_path = data.assets_path.join("branding").join("logo.content_type");
+    let _ = tokio::fs::remove_file(&logo_file_path).await;
+    let _ = tokio::fs::remove_file(&content_type_path).await;
 
     let mut branding_guard = data
         .branding
@@ -327,7 +350,14 @@ async fn get_branding_logo<Backend>(
     data: web::Data<AppState<Backend>>,
 ) -> actix_web::Result<impl Responder> {
     let logo_file_path = data.assets_path.join("branding").join("logo");
-    Ok(actix_files::NamedFile::open_async(&logo_file_path).await?)
+    let content_type_path = data.assets_path.join("branding").join("logo.content_type");
+    let content_type = tokio::fs::read_to_string(&content_type_path)
+        .await
+        .unwrap_or_else(|_| "image/png".to_string());
+    let file = actix_files::NamedFile::open_async(&logo_file_path).await?;
+    Ok(file
+        .customize()
+        .insert_header((header::CONTENT_TYPE, content_type)))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -369,7 +399,6 @@ fn http_config<Backend>(
         web::scope("/auth")
             .configure(|cfg| auth_service::configure_server::<Backend>(cfg, enable_password_reset)),
     )
-    // API endpoint.
     .service(
         web::scope("/api")
             .wrap(auth_service::CookieToHeaderTranslatorFactory)
@@ -383,21 +412,16 @@ fn http_config<Backend>(
         web::resource("/pkg/lldap_app_bg.wasm").route(web::route().to(wasm_handler::<Backend>)),
     )
     .service(web::resource("/static/main.js").route(web::route().to(main_js_handler::<Backend>)))
-    // Serve uploaded branding assets (logo file).
     .route(
         "/branding/logo",
         web::get().to(get_branding_logo::<Backend>),
     )
-    // Serve the /pkg path with the compiled WASM app.
     .service(Files::new("/pkg", assets_path.join("pkg")))
-    // Serve static files
     .service(Files::new("/static", assets_path.join("static")))
-    // Serve static fonts
     .service(Files::new(
         "/static/fonts",
         assets_path.join("static/fonts"),
     ))
-    // Default to serve index.html for unknown routes, to support routing.
     .default_service(web::route().guard(guard::Get()).to(index::<Backend>));
 }
 
@@ -455,16 +479,22 @@ where
 
     // Load branding from the database at startup and store it in a
     // RwLock so the PUT /settings endpoint can update it live.
-    let branding_from_database = backend_handler
+    let startup_branding = backend_handler
         .get_branding_settings()
         .await
-        .unwrap_or_default()
+        .unwrap_or_else(|error| {
+            warn!(
+                "Could not load branding settings from the database, \
+                 falling back to defaults: {error:#?}"
+            );
+            None
+        })
         .unwrap_or_default();
-    let startup_branding = branding_from_database;
 
     if !assets_path.join("index.html").exists() {
         warn!(
-            "Cannot find {}, please ensure that assets_path is set correctly and that the front-end files exist.",
+            "Cannot find {}, please ensure that assets_path is set \
+             correctly and that the front-end files exist.",
             assets_path.to_string_lossy()
         )
     }

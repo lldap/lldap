@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::str::FromStr;
 
 /// Theme mode for the web UI.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
@@ -8,6 +10,28 @@ pub enum ThemeMode {
     Auto,
     Light,
     Dark,
+}
+
+impl fmt::Display for ThemeMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ThemeMode::Auto => write!(f, "auto"),
+            ThemeMode::Light => write!(f, "light"),
+            ThemeMode::Dark => write!(f, "dark"),
+        }
+    }
+}
+
+impl FromStr for ThemeMode {
+    type Err = ();
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "auto" => Ok(ThemeMode::Auto),
+            "light" => Ok(ThemeMode::Light),
+            "dark" => Ok(ThemeMode::Dark),
+            _ => Err(()),
+        }
+    }
 }
 
 /// Branding customization passed from server to frontend via REST settings endpoint.
@@ -35,8 +59,8 @@ impl Default for BrandingOptions {
 }
 
 /// Top-level settings sent from the server to the web UI at startup.
-/// Gated behind a login-free `/api/...` endpoint so the frontend can read
-/// it before authenticating (e.g. to apply branding on the login screen).
+/// Served at `GET /settings` (login-free) so the frontend can read
+/// branding and password-reset configuration before authenticating.
 #[derive(Serialize, Deserialize)]
 pub struct Options {
     pub password_reset_enabled: bool,

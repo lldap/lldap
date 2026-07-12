@@ -1229,7 +1229,7 @@ async fn migrate_to_v12(transaction: DatabaseTransaction) -> Result<DatabaseTran
                     .values_panic([1.into(), "LLDAP".into(), "auto".into(), false.into()])
                     .on_conflict(
                         sea_orm::sea_query::OnConflict::column(BrandingSettings::Id)
-                            .do_nothing()
+                            .do_nothing_on([BrandingSettings::Id])
                             .to_owned(),
                     ),
             ),
