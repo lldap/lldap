@@ -2896,6 +2896,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "lldap_mfa"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "data-encoding",
+ "hmac 0.12.1",
+ "orion",
+ "pretty_assertions",
+ "rand 0.8.6",
+ "sha1 0.10.6",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lldap_migration_tool"
 version = "0.4.3"
 dependencies = [
