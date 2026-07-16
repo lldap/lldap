@@ -94,7 +94,7 @@ mod tests {
         let t = 1_111_111_111u64;
         let code = format_code(totp_code(RFC_SEED, t).unwrap());
         assert!(totp_verify(RFC_SEED, &code, t).unwrap());
-        // Same step window via skew at t ± 15s still same counter for ±1 step at boundaries.
+        // Adjacent steps (t ± 30s) are accepted via the ±1 skew window.
         assert!(totp_verify(RFC_SEED, &code, t + TOTP_STEP_SECS).unwrap());
         assert!(totp_verify(RFC_SEED, &code, t - TOTP_STEP_SECS).unwrap());
     }

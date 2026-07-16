@@ -14,7 +14,7 @@ use crate::types::{
 /// Generate a 160-bit TOTP seed.
 pub fn generate_seed() -> [u8; TOTP_SEED_LEN] {
     let mut seed = [0u8; TOTP_SEED_LEN];
-    rand::thread_rng().fill_bytes(&mut seed);
+    rand::rngs::OsRng.fill_bytes(&mut seed);
     seed
 }
 
@@ -78,7 +78,7 @@ pub fn seal_totp_secret(ikm: &[u8], user_uuid: &str, seed: &[u8]) -> Result<Stri
     }
     let storage_key = derive_storage_key(ikm)?;
     let mut salt = [0u8; SEAL_SALT_LEN];
-    rand::thread_rng().fill_bytes(&mut salt);
+    rand::rngs::OsRng.fill_bytes(&mut salt);
     let nonce = derive_nonce(ikm, user_uuid, &salt)?;
     let ad = aad(user_uuid, &salt);
 
@@ -102,7 +102,7 @@ pub fn open_totp_secret(ikm: &[u8], user_uuid: &str, sealed: &str) -> Result<Vec
     let packed = URL_SAFE_NO_PAD
         .decode(rest.as_bytes())
         .map_err(|_| MfaError::InvalidSealedFormat)?;
-    if packed.len() < SEAL_SALT_LEN + SEAL_TAG_LEN + 1 {
+    if packed.len() != SEAL_SALT_LEN + TOTP_SEED_LEN + SEAL_TAG_LEN {
         return Err(MfaError::InvalidSealedFormat);
     }
     let (salt, ct_and_tag) = packed.split_at(SEAL_SALT_LEN);
@@ -232,6 +232,15 @@ mod tests {
         ));
         assert!(matches!(
             open_totp_secret(IKM, UUID, "not-sealed"),
+            Err(MfaError::InvalidSealedFormat)
+        ));
+    }
+
+    #[test]
+    fn wrong_packed_length_fails() {
+        let short = format!("{SEALED_PREFIX}{}", URL_SAFE_NO_PAD.encode([0u8; 30]));
+        assert!(matches!(
+            open_totp_secret(IKM, UUID, &short),
             Err(MfaError::InvalidSealedFormat)
         ));
     }
