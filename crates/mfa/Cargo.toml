@@ -1,0 +1,22 @@
+[package]
+name = "lldap_mfa"
+version = "0.1.0"
+description = "TOTP MFA helpers for LLDAP"
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+data-encoding = "2"
+hmac = "0.12"
+orion = { workspace = true }
+rand = { workspace = true }
+sha1 = "0.10"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
