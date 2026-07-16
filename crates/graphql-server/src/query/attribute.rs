@@ -155,7 +155,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                     "mail" => Some(user.email.clone().into_string().into()),
                     "uuid" => Some(user.uuid.clone().into_string().into()),
                     "display_name" => user.display_name.as_ref().map(|d| d.clone().into()),
-                    "avatar" | "first_name" | "last_name" => None,
+                    "avatar" | "first_name" | "last_name" | "totp_secret" | "mfa_type" => None,
                     _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
                 };
                 value.map(|v| (attribute_schema, v))

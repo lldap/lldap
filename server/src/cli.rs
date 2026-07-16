@@ -165,6 +165,11 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_FORCE_LDAP_USER_PASS_RESET")]
     pub force_ldap_user_pass_reset: Option<TrueFalseAlways>,
 
+    /// MFA policy. false = disabled; true = enabled (default; only enrolled users);
+    /// "always" = force all users.
+    #[clap(long, env = "LLDAP_REQUIRE_MFA")]
+    pub require_mfa: Option<TrueFalseAlways>,
+
     /// Force update of the private key after a key change.
     #[clap(long, env = "LLDAP_FORCE_UPDATE_PRIVATE_KEY")]
     pub force_update_private_key: Option<bool>,

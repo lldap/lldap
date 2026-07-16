@@ -637,11 +637,15 @@ mod tests {
                     b"( 10.5 NAME 'first_name' DESC 'LLDAP: builtin attribute' SUP String )"
                         .to_vec(),
                     b"( 10.6 NAME 'mail' DESC 'LLDAP: builtin attribute' SUP String )".to_vec(),
-                    b"( 10.7 NAME 'modified_date' DESC 'LLDAP: builtin attribute' SUP DateTime )".to_vec(),
-                    b"( 10.8 NAME 'password_modified_date' DESC 'LLDAP: builtin attribute' SUP DateTime )".to_vec(),
-                    b"( 10.9 NAME 'group_id' DESC 'LLDAP: builtin attribute' SUP Integer )"
+                    b"( 10.7 NAME 'mfa_type' DESC 'LLDAP: builtin attribute' SUP String )"
                         .to_vec(),
-                    b"( 10.10 NAME 'modified_date' DESC 'LLDAP: builtin attribute' SUP DateTime )".to_vec(),
+                    b"( 10.8 NAME 'modified_date' DESC 'LLDAP: builtin attribute' SUP DateTime )".to_vec(),
+                    b"( 10.9 NAME 'password_modified_date' DESC 'LLDAP: builtin attribute' SUP DateTime )".to_vec(),
+                    b"( 10.10 NAME 'totp_secret' DESC 'LLDAP: builtin attribute' SUP String )"
+                        .to_vec(),
+                    b"( 10.11 NAME 'group_id' DESC 'LLDAP: builtin attribute' SUP Integer )"
+                        .to_vec(),
+                    b"( 10.12 NAME 'modified_date' DESC 'LLDAP: builtin attribute' SUP DateTime )".to_vec(),
                 ]
             }
         );
@@ -650,7 +654,7 @@ mod tests {
             LdapPartialAttribute {
                 atype: "objectClasses".to_owned(),
                 vals: vec![
-                    b"( 3.0 NAME ( 'inetOrgPerson' 'posixAccount' 'mailAccount' 'person' 'customUserClass' ) DESC 'LLDAP builtin: a person' STRUCTURAL MUST ( mail $ user_id ) MAY ( avatar $ creation_date $ display_name $ first_name $ last_name $ modified_date $ password_modified_date $ uuid ) )".to_vec(),
+                    b"( 3.0 NAME ( 'inetOrgPerson' 'posixAccount' 'mailAccount' 'person' 'customUserClass' ) DESC 'LLDAP builtin: a person' STRUCTURAL MUST ( mail $ user_id ) MAY ( avatar $ creation_date $ display_name $ first_name $ last_name $ mfa_type $ modified_date $ password_modified_date $ totp_secret $ uuid ) )".to_vec(),
                     b"( 3.1 NAME ( 'groupOfUniqueNames' 'groupOfNames' ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( display_name ) MAY ( creation_date $ group_id $ modified_date $ uuid ) )".to_vec(),
                 ]
             }

@@ -88,6 +88,10 @@
 ## Alternatively, you can set it to "always" to reset every time the server starts.
 # force_ldap_user_pass_reset = false
 
+## MFA policy (TOTP). false = disabled; true = enabled (default; only users who
+## have enrolled); "always" = require MFA for all users. Env: LLDAP_REQUIRE_MFA
+# require_mfa = true
+
 ## Database URL.
 ## This encodes the type of database (SQlite, MySQL, or PostgreSQL)
 ## , the path, the user, password, and sometimes the mode (when

@@ -125,6 +125,9 @@ pub struct Configuration {
     pub ldap_user_pass: Option<SecUtf8>,
     #[builder(default)]
     pub force_ldap_user_pass_reset: TrueFalseAlways,
+    // MFA policy: false = disabled, true = only enrolled users, "always" = all users.
+    #[builder(default = "TrueFalseAlways::True")]
+    pub require_mfa: TrueFalseAlways,
     #[builder(default = "false")]
     pub force_update_private_key: bool,
     #[builder(default = r#"DatabaseUrl::from("sqlite://users.db?mode=rwc")"#)]
@@ -457,6 +460,9 @@ impl ConfigOverrider for RunOpts {
             .inspect(|&force_ldap_user_pass_reset| {
                 config.force_ldap_user_pass_reset = force_ldap_user_pass_reset;
             });
+
+        self.require_mfa
+            .inspect(|&require_mfa| config.require_mfa = require_mfa);
 
         self.force_update_private_key
             .inspect(|&force_update_private_key| {
@@ -872,6 +878,28 @@ mod tests {
                 error_message.contains("but it used to come from default key file",),
                 "{error_message}"
             );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn require_mfa_defaults_to_true() {
+        assert!(matches!(
+            Configuration::default().require_mfa,
+            TrueFalseAlways::True
+        ));
+    }
+
+    #[test]
+    fn require_mfa_from_env() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
+            jail.set_env("LLDAP_REQUIRE_MFA", "always");
+            jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
+            write_random_key(jail, "test");
+            let config = init(default_run_opts()).unwrap();
+            assert!(matches!(config.require_mfa, TrueFalseAlways::Always));
             Ok(())
         });
     }
