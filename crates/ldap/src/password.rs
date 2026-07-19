@@ -106,7 +106,13 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
                 Ok(uid) => {
                     let user_is_admin = backend_handler
                         .get_readable_handler(credentials, &uid)
-                        .expect("Unexpected permission error")
+                        .ok_or_else(|| LdapError {
+                            code: LdapResultCode::InsufficentAccessRights,
+                            message: format!(
+                                "User `{}` cannot modify the password of user `{}`",
+                                &credentials.user, &uid
+                            ),
+                        })?
                         .get_user_groups(&uid)
                         .await
                         .map_err(|e| LdapError {
@@ -158,8 +164,8 @@ pub mod tests {
     use crate::handler::{
         LdapHandler, make_modify_response,
         tests::{
-            setup_bound_admin_handler, setup_bound_password_manager_handler,
-            setup_bound_readonly_handler,
+            setup_bound_admin_handler, setup_bound_handler_with_group,
+            setup_bound_password_manager_handler, setup_bound_readonly_handler,
         },
     };
     use chrono::TimeZone;
@@ -558,6 +564,27 @@ pub mod tests {
                 user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
                 old_password: Some("pass".to_string()),
                 new_password: Some("password".to_string()),
+            }
+            .into(),
+        );
+        assert_eq!(
+            ldap_handler.handle_ldap_message(request).await,
+            Some(vec![make_extended_response(
+                LdapResultCode::InsufficentAccessRights,
+                "User `test` cannot modify the password of user `bob`".to_string(),
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_password_change_unauthorized_regular() {
+        let mut ldap_handler =
+            setup_bound_handler_with_group(MockTestBackendHandler::new(), "regular").await;
+        let request = LdapOp::ExtendedRequest(
+            LdapPasswordModifyRequest {
+                user_identity: Some("uid=bob,ou=people,dc=example,dc=com".to_string()),
+                old_password: None,
+                new_password: Some("newpass".to_string()),
             }
             .into(),
         );

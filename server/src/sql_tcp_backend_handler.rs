@@ -15,8 +15,8 @@ use std::collections::HashSet;
 use tracing::{debug, instrument};
 
 fn gen_random_string(len: usize) -> String {
-    use rand::{Rng, SeedableRng, distributions::Alphanumeric, rngs::SmallRng};
-    let mut rng = SmallRng::from_entropy();
+    use rand::{Rng, distributions::Alphanumeric, rngs::OsRng};
+    let mut rng = OsRng;
     std::iter::repeat(())
         .map(|()| rng.sample(Alphanumeric))
         .map(char::from)
