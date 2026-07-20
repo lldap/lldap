@@ -46,6 +46,10 @@ if [[ -z "$3" ]]; then
 	exit 1
 fi
 
+if [[ "$4" = "-v" ]]; then
+	set -x
+fi
+
 RESPONSE=$(curl -f -s -X POST -m "$TIMEOUT" -H "Content-type: application/json" -d '{"username":"'"$username"'","password":"'"$password"'"}' "$SERVER_URL/auth/simple/login")
 if [[ $? -ne 0 ]]; then
     log "Auth failed"
