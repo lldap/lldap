@@ -5,7 +5,7 @@ use lldap_access_control::{
     UserReadableBackendHandler, UserWriteableBackendHandler,
 };
 use lldap_auth::{access_control::ValidationResults, types::UserId};
-use lldap_domain_handlers::handler::BackendHandler;
+use lldap_domain_handlers::handler::{BackendHandler, MfaBackendHandler};
 use tracing::debug;
 
 pub struct Context<Handler: BackendHandler> {
@@ -54,6 +54,15 @@ impl<Handler: BackendHandler> Context<Handler> {
     ) -> Option<&(impl UserReadableBackendHandler + use<Handler>)> {
         self.handler
             .get_readable_handler(&self.validation_result, user_id)
+    }
+
+    pub fn get_mfa_reset_handler(
+        &self,
+        target: &UserId,
+        user_is_admin: bool,
+    ) -> Option<&(impl MfaBackendHandler + use<Handler>)> {
+        self.handler
+            .get_mfa_reset_handler(&self.validation_result, target, user_is_admin)
     }
 }
 

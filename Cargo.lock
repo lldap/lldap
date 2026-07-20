@@ -2966,6 +2966,7 @@ dependencies = [
  "lldap_domain",
  "lldap_domain_handlers",
  "lldap_domain_model",
+ "lldap_mfa",
  "lldap_opaque_handler",
  "lldap_test_utils",
  "log",

@@ -23,8 +23,13 @@ pub struct User<Handler: BackendHandler> {
 }
 
 impl<Handler: BackendHandler> User<Handler> {
-    pub fn from_user(mut user: DomainUser, schema: Arc<PublicSchema>) -> FieldResult<Self> {
-        let attributes = AttributeValue::<Handler>::user_attributes_from_schema(&mut user, &schema);
+    pub fn from_user(
+        mut user: DomainUser,
+        schema: Arc<PublicSchema>,
+        is_admin: bool,
+    ) -> FieldResult<Self> {
+        let attributes =
+            AttributeValue::<Handler>::user_attributes_from_schema(&mut user, &schema, is_admin);
         Ok(Self {
             user,
             attributes,
@@ -39,8 +44,9 @@ impl<Handler: BackendHandler> User<Handler> {
     pub fn from_user_and_groups(
         DomainUserAndGroups { user, groups }: DomainUserAndGroups,
         schema: Arc<PublicSchema>,
+        is_admin: bool,
     ) -> FieldResult<Self> {
-        let mut user = Self::from_user(user, schema.clone())?;
+        let mut user = Self::from_user(user, schema.clone(), is_admin)?;
         if let Some(groups) = groups {
             user.groups = Some(
                 groups

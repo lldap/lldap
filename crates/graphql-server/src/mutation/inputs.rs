@@ -97,3 +97,24 @@ impl Default for Success {
         Self::new()
     }
 }
+
+#[derive(PartialEq, Eq, Debug, GraphQLObject)]
+/// A pending TOTP enrollment, to be completed with `finishMfaEnrollment`.
+pub struct MfaEnrollmentStart {
+    /// The otpauth:// URI to display as a QR code.
+    pub otpauth_uri: String,
+    /// The TOTP secret in base32, for manual entry.
+    pub secret_base32: String,
+    /// Opaque server-sealed state to echo back on finish.
+    pub state: String,
+}
+
+impl From<lldap_domain::types::TotpEnrollmentStart> for MfaEnrollmentStart {
+    fn from(start: lldap_domain::types::TotpEnrollmentStart) -> Self {
+        Self {
+            otpauth_uri: start.otpauth_uri,
+            secret_base32: start.secret_base32,
+            state: start.state,
+        }
+    }
+}

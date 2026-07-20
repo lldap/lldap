@@ -12,7 +12,7 @@ use actix_web::{App, HttpResponse, Responder, dev::AppConfig, guard, web};
 use anyhow::{Context, Result};
 use hmac::Hmac;
 use lldap_access_control::{AccessControlledBackendHandler, ReadonlyBackendHandler};
-use lldap_domain_handlers::handler::{BackendHandler, LoginHandler};
+use lldap_domain_handlers::handler::{BackendHandler, LoginHandler, MfaBackendHandler};
 use lldap_domain_model::error::DomainError;
 use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
@@ -179,6 +179,11 @@ pub(crate) struct AppState<Backend> {
 
 impl<Backend: BackendHandler> AppState<Backend> {
     pub fn get_readonly_handler(&self) -> &(impl ReadonlyBackendHandler + use<Backend>) {
+        self.backend_handler.unsafe_get_handler()
+    }
+}
+impl<Backend: MfaBackendHandler> AppState<Backend> {
+    pub fn get_mfa_handler(&self) -> &(impl MfaBackendHandler + use<Backend>) {
         self.backend_handler.unsafe_get_handler()
     }
 }

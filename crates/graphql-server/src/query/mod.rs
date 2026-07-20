@@ -67,7 +67,7 @@ impl<Handler: BackendHandler> Query<Handler> {
             ))?;
         let schema: Arc<PublicSchema> = Arc::new(self.get_schema(context, span.clone()).await?);
         let user = handler.get_user_details(&user_id).instrument(span).await?;
-        User::<Handler>::from_user(user, schema)
+        User::<Handler>::from_user(user, schema, context.validation_result.is_admin())
     }
 
     async fn users(
@@ -95,9 +95,10 @@ impl<Handler: BackendHandler> Query<Handler> {
             )
             .instrument(span)
             .await?;
+        let is_admin = context.validation_result.is_admin();
         users
             .into_iter()
-            .map(|u| User::<Handler>::from_user_and_groups(u, schema.clone()))
+            .map(|u| User::<Handler>::from_user_and_groups(u, schema.clone(), is_admin))
             .collect()
     }
 
@@ -289,6 +290,8 @@ mod tests {
                             value: "Bobberson".to_string().into(),
                         },
                     ],
+                    totp_secret: None,
+                    mfa_type: None,
                 })
             });
         let mut groups = HashSet::new();
@@ -396,6 +399,8 @@ mod tests {
                                 &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                             ),
                             attributes: Vec::new(),
+                            totp_secret: None,
+                            mfa_type: None,
                         },
                         groups: None,
                     },
@@ -415,6 +420,8 @@ mod tests {
                                 &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                             ),
                             attributes: Vec::new(),
+                            totp_secret: None,
+                            mfa_type: None,
                         },
                         groups: None,
                     },
@@ -544,5 +551,78 @@ mod tests {
         let schema = schema(Query::<MockTestBackendHandler>::new());
         let result = execute(QUERY, None, &schema, &Variables::new(), &context).await;
         assert!(result.is_ok(), "Query failed: {:?}", result);
+    }
+
+    fn get_mfa_enrolled_user() -> DomainUser {
+        DomainUser {
+            user_id: UserId::new("bob"),
+            email: "bob@bobbers.on".into(),
+            display_name: None,
+            creation_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+            modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+            password_modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+            uuid: lldap_domain::types::Uuid::from_name_and_date(
+                "bob",
+                &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+            ),
+            attributes: Vec::new(),
+            totp_secret: Some("v1.fakesealedblob".to_string()),
+            mfa_type: Some("totp".to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn mfa_attribute_values_gated_to_admins() {
+        const QUERY: &str = r#"{
+          user(userId: "bob") {
+            attributes {
+              name
+              value
+            }
+          }
+        }"#;
+
+        // An admin sees the sealed blob and mfa_type as attribute values.
+        let mut mock = MockTestBackendHandler::new();
+        setup_default_schema(&mut mock);
+        mock.expect_get_user_details()
+            .with(eq(UserId::new("bob")))
+            .return_once(|_| Ok(get_mfa_enrolled_user()));
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("admin"),
+                permission: Permission::Admin,
+            },
+        );
+        let schema = schema(Query::<MockTestBackendHandler>::new());
+        let (data, errors) = execute(QUERY, None, &schema, &Variables::new(), &context)
+            .await
+            .unwrap();
+        assert_eq!(errors, vec![]);
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains(r#"{"name":"totp_secret","value":["v1.fakesealedblob"]}"#));
+        assert!(json.contains(r#"{"name":"mfa_type","value":["totp"]}"#));
+
+        // A regular user querying themselves sees neither value.
+        let mut mock = MockTestBackendHandler::new();
+        setup_default_schema(&mut mock);
+        mock.expect_get_user_details()
+            .with(eq(UserId::new("bob")))
+            .return_once(|_| Ok(get_mfa_enrolled_user()));
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("bob"),
+                permission: Permission::Regular,
+            },
+        );
+        let (data, errors) = execute(QUERY, None, &schema, &Variables::new(), &context)
+            .await
+            .unwrap();
+        assert_eq!(errors, vec![]);
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(!json.contains("totp_secret"));
+        assert!(!json.contains("mfa_type"));
     }
 }

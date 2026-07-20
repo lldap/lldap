@@ -22,7 +22,7 @@ use lldap_auth::{
 };
 use lldap_domain::types::{GroupDetails, GroupName, UserId};
 use lldap_domain_handlers::handler::{
-    BackendHandler, BindRequest, LoginHandler, UserRequestFilter,
+    BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, UserRequestFilter,
 };
 use lldap_domain_model::{error::DomainError, model::UserColumn};
 use lldap_opaque_handler::OpaqueHandler;
@@ -245,6 +245,8 @@ where
         .get_tcp_handler()
         .delete_password_reset_token(token)
         .await;
+    // Password reset is the account recovery path: clear any MFA state.
+    data.get_mfa_handler().reset_user_mfa(&user_id).await?;
     let groups = HashSet::new();
     let token = create_jwt(data.get_tcp_handler(), &data.jwt_key, &user_id, groups).await;
     let mut path = data.server_url.path().to_string();

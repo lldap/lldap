@@ -8,7 +8,7 @@ use lldap_domain::{
     schema::Schema,
     types::{
         AttributeName, AttributeValue, Group, GroupDetails, GroupId, GroupName, LdapObjectClass,
-        User, UserAndGroups, UserId, Uuid,
+        TotpEnrollmentStart, User, UserAndGroups, UserId, Uuid,
     },
 };
 use lldap_domain_model::{error::Result, model::UserColumn};
@@ -155,6 +155,14 @@ pub trait UserBackendHandler: ReadSchemaBackendHandler {
 }
 
 #[async_trait]
+pub trait MfaBackendHandler {
+    async fn reset_user_mfa(&self, user_id: &UserId) -> Result<()>;
+    async fn start_totp_enrollment(&self, user_id: &UserId) -> Result<TotpEnrollmentStart>;
+    async fn finish_totp_enrollment(&self, user_id: &UserId, state: &str, code: &str)
+    -> Result<()>;
+}
+
+#[async_trait]
 pub trait ReadSchemaBackendHandler {
     async fn get_schema(&self) -> Result<Schema>;
 }
@@ -179,6 +187,7 @@ pub trait BackendHandler:
     + Sync
     + GroupBackendHandler
     + UserBackendHandler
+    + MfaBackendHandler
     + UserListerBackendHandler
     + GroupListerBackendHandler
     + ReadSchemaBackendHandler

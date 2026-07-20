@@ -158,6 +158,16 @@ type Group {
   users: [User!]!
 }
 
+"A pending TOTP enrollment, to be completed with `finishMfaEnrollment`."
+type MfaEnrollmentStart {
+  "The otpauth:// URI to display as a QR code."
+  otpauthUri: String!
+  "The TOTP secret in base32, for manual entry."
+  secretBase32: String!
+  "Opaque server-sealed state to echo back on finish."
+  state: String!
+}
+
 type Mutation {
   createUser(user: CreateUserInput!): User!
   createGroup(name: String!): Group!
@@ -168,6 +178,9 @@ type Mutation {
   removeUserFromGroup(userId: String!, groupId: Int!): Success!
   deleteUser(userId: String!): Success!
   deleteGroup(groupId: Int!): Success!
+  resetUserMfa(userId: String!): Success!
+  startMfaEnrollment: MfaEnrollmentStart!
+  finishMfaEnrollment(state: String!, code: String!): Success!
   addUserAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
   addGroupAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
   deleteUserAttribute(name: String!): Success!

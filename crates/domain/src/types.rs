@@ -539,6 +539,8 @@ pub struct User {
     pub attributes: Vec<Attribute>,
     pub modified_date: NaiveDateTime,
     pub password_modified_date: NaiveDateTime,
+    pub totp_secret: Option<String>,
+    pub mfa_type: Option<String>,
 }
 
 #[cfg(feature = "test")]
@@ -554,6 +556,8 @@ impl Default for User {
             attributes: Vec::new(),
             modified_date: epoch,
             password_modified_date: epoch,
+            totp_secret: None,
+            mfa_type: None,
         }
     }
 }
@@ -666,6 +670,14 @@ pub struct GroupDetails {
 pub struct UserAndGroups {
     pub user: User,
     pub groups: Option<Vec<GroupDetails>>,
+}
+
+// Pending TOTP enrollment: `state` is a server-sealed blob echoed back on finish.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TotpEnrollmentStart {
+    pub otpauth_uri: String,
+    pub secret_base32: String,
+    pub state: String,
 }
 
 #[cfg(test)]

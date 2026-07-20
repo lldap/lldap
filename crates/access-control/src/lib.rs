@@ -8,14 +8,14 @@ use lldap_domain::{
     },
     schema::{AttributeSchema, Schema},
     types::{
-        AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, User,
-        UserAndGroups, UserId,
+        AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass,
+        TotpEnrollmentStart, User, UserAndGroups, UserId,
     },
 };
 use lldap_domain_handlers::handler::{
     BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
-    ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler, UserListerBackendHandler,
-    UserRequestFilter,
+    MfaBackendHandler, ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler,
+    UserListerBackendHandler, UserRequestFilter,
 };
 use lldap_domain_model::error::Result;
 use std::collections::HashSet;
@@ -42,6 +42,9 @@ pub trait ReadonlyBackendHandler: UserReadableBackendHandler {
 #[async_trait]
 pub trait UserWriteableBackendHandler: UserReadableBackendHandler {
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
+    async fn start_totp_enrollment(&self, user_id: &UserId) -> Result<TotpEnrollmentStart>;
+    async fn finish_totp_enrollment(&self, user_id: &UserId, state: &str, code: &str)
+    -> Result<()>;
 }
 
 #[async_trait]
@@ -104,6 +107,17 @@ impl<Handler: BackendHandler> ReadonlyBackendHandler for Handler {
 impl<Handler: BackendHandler> UserWriteableBackendHandler for Handler {
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
         <Handler as UserBackendHandler>::update_user(self, request).await
+    }
+    async fn start_totp_enrollment(&self, user_id: &UserId) -> Result<TotpEnrollmentStart> {
+        <Handler as MfaBackendHandler>::start_totp_enrollment(self, user_id).await
+    }
+    async fn finish_totp_enrollment(
+        &self,
+        user_id: &UserId,
+        state: &str,
+        code: &str,
+    ) -> Result<()> {
+        <Handler as MfaBackendHandler>::finish_totp_enrollment(self, user_id, state, code).await
     }
 }
 #[async_trait]
@@ -215,6 +229,17 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         user_id: &UserId,
     ) -> Option<&(impl UserReadableBackendHandler + use<Handler>)> {
         validation_result.can_read(user_id).then_some(&self.handler)
+    }
+
+    pub fn get_mfa_reset_handler(
+        &self,
+        validation_result: &ValidationResults,
+        target: &UserId,
+        user_is_admin: bool,
+    ) -> Option<&(impl MfaBackendHandler + use<Handler>)> {
+        validation_result
+            .can_reset_mfa(target, user_is_admin)
+            .then_some(&self.handler)
     }
 
     pub fn get_user_restricted_lister_handler(
