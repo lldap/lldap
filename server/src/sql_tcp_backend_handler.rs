@@ -174,19 +174,4 @@ impl TcpBackendHandler for SqlBackendHandler {
         }
         Ok(())
     }
-
-    #[instrument(skip_all, level = "debug")]
-    async fn get_branding_settings(
-        &self,
-    ) -> anyhow::Result<Option<lldap_frontend_options::BrandingOptions>> {
-        lldap_sql_backend_handler::sql_tables::get_branding_settings(self.pool()).await
-    }
-
-    #[instrument(skip_all, level = "debug")]
-    async fn set_branding_settings(
-        &self,
-        options: &lldap_frontend_options::BrandingOptions,
-    ) -> anyhow::Result<()> {
-        lldap_sql_backend_handler::sql_tables::set_branding_settings(self.pool(), options).await
-    }
 }

@@ -30,8 +30,6 @@ pub enum AppRoute {
     ListGroupSchema,
     #[at("/group-attributes/create")]
     CreateGroupAttribute,
-    #[at("/admin/settings")]
-    AdminSettings,
     #[at("/")]
     Index,
 }

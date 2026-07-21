@@ -21,8 +21,7 @@ use crate::{
 };
 
 use gloo_console::error;
-use lldap_frontend_options::{BrandingOptions, Options, ThemeMode};
-use wasm_bindgen::prelude::wasm_bindgen;
+use lldap_frontend_options::Options;
 use yew::{
     Context, function_component,
     html::Scope,
@@ -47,7 +46,6 @@ pub struct App {
     user_info: Option<(String, bool)>,
     redirect_to: Option<AppRoute>,
     password_reset_enabled: Option<bool>,
-    branding: Option<BrandingOptions>,
 }
 
 pub enum Msg {
@@ -77,7 +75,6 @@ impl Component for App {
                 }),
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
-            branding: None,
         };
         ctx.link()
             .send_future(async move { Msg::SettingsReceived(HostService::get_settings().await) });
@@ -107,32 +104,6 @@ impl Component for App {
             }
             Msg::SettingsReceived(Ok(settings)) => {
                 self.password_reset_enabled = Some(settings.password_reset_enabled);
-                let branding = settings.branding;
-                // Apply document title.
-                if let Some(window) = web_sys::window()
-                    && let Some(document) = window.document()
-                {
-                    document.set_title(&branding.app_name);
-                }
-                // Set accent CSS custom property via JS shim in index.html.
-                if let Some(ref color) = branding.accent_color {
-                    set_theme_accent(color);
-                }
-                // Apply server-configured default theme only when the user has no
-                // explicit stored preference.
-                let has_stored_theme = web_sys::window()
-                    .and_then(|w| w.local_storage().ok().flatten())
-                    .and_then(|storage| storage.get_item("theme").ok().flatten())
-                    .is_some();
-                if !has_stored_theme {
-                    match branding.default_theme {
-                        ThemeMode::Light => apply_theme("light"),
-                        ThemeMode::Dark => apply_theme("dark"),
-                        ThemeMode::Auto => { /* let the inline script's media-query fallback stand */
-                        }
-                    }
-                }
-                self.branding = Some(branding);
             }
             Msg::SettingsReceived(Err(err)) => {
                 error!(err.to_string());
@@ -146,17 +117,12 @@ impl Component for App {
         let is_admin = self.is_admin();
         let username = self.user_info.clone().map(|(username, _)| username);
         let password_reset_enabled = self.password_reset_enabled;
-        let app_name = self
-            .branding
-            .as_ref()
-            .map_or_else(|| "LLDAP".to_string(), |b| b.app_name.clone());
-        let branding = self.branding.clone();
         html! {
           <div class="d-flex flex-column min-vh-100">
-            <Banner is_admin={is_admin} username={username} branding={branding} on_logged_out={link.callback(|_| Msg::Logout)} />
+            <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
             <main class="container app-content flex-grow-1">
               <Switch<AppRoute>
-                render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled, app_name.clone()))}
+                render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled))}
               />
             </main>
             {self.view_footer()}
@@ -228,7 +194,6 @@ impl App {
         link: &Scope<Self>,
         is_admin: bool,
         password_reset_enabled: Option<bool>,
-        app_name: String,
     ) -> Html {
         match switch {
             AppRoute::Login => {
@@ -236,7 +201,6 @@ impl App {
                     <LoginForm
                         on_logged_in={link.callback(Msg::Login)}
                         password_reset_enabled={password_reset_enabled.unwrap_or(false)}
-                        app_name={app_name.clone()}
                     />
                 }
             }
@@ -265,9 +229,6 @@ impl App {
             },
             AppRoute::CreateGroupAttribute => html! {
                 <CreateGroupAttributeForm/>
-            },
-            AppRoute::AdminSettings => html! {
-                <crate::components::admin_settings::AdminSettingsForm />
             },
             AppRoute::ListGroups => {
                 html! {
@@ -352,23 +313,4 @@ impl App {
             Some((_, is_admin)) => *is_admin,
         }
     }
-}
-
-/// Called by the server-provided branding options to set the
-/// `--lldap-accent` CSS custom property on `<html>`.
-#[wasm_bindgen]
-extern "C" {
-    fn setThemeAccent(color: &str);
-    /// Delegates to the `setTheme(theme)` JS function in `index.html`
-    /// to both set `data-bs-theme` on `<html>` and persist to
-    /// `localStorage`, keeping the theme contract in a single place.
-    fn setTheme(theme: &str);
-}
-
-fn set_theme_accent(color: &str) {
-    setThemeAccent(color);
-}
-
-fn apply_theme(theme: &str) {
-    setTheme(theme);
 }

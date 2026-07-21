@@ -56,7 +56,7 @@ dependencies = [
  "actix-web",
  "bitflags 2.11.1",
  "bytes",
- "derive_more 2.1.1",
+ "derive_more",
  "futures-core",
  "http-range",
  "log",
@@ -83,7 +83,7 @@ dependencies = [
  "brotli",
  "bytes",
  "bytestring",
- "derive_more 2.1.1",
+ "derive_more",
  "encoding_rs",
  "flate2",
  "foldhash",
@@ -113,44 +113,6 @@ version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e01ed3140b2f8d422c68afa1ed2e85d996ea619c988ac834d255db32138655cb"
 dependencies = [
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "actix-multipart"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5118a26dee7e34e894f7e85aa0ee5080ae4c18bf03c0e30d49a80e418f00a53"
-dependencies = [
- "actix-multipart-derive",
- "actix-utils",
- "actix-web",
- "derive_more 0.99.20",
- "futures-core",
- "futures-util",
- "httparse",
- "local-waker",
- "log",
- "memchr",
- "mime",
- "rand 0.8.6",
- "serde",
- "serde_json",
- "serde_plain",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "actix-multipart-derive"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e11eb847f49a700678ea2fa73daeb3208061afa2b9d1a8527c03390f4c4a1c6b"
-dependencies = [
- "darling",
- "parse-size",
- "proc-macro2",
  "quote",
  "syn 2.0.117",
 ]
@@ -257,7 +219,7 @@ dependencies = [
  "bytestring",
  "cfg-if",
  "cookie",
- "derive_more 2.1.1",
+ "derive_more",
  "encoding_rs",
  "foldhash",
  "futures-core",
@@ -934,12 +896,6 @@ checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
 name = "convert_case"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
-
-[[package]]
-name = "convert_case"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
@@ -1070,7 +1026,7 @@ checksum = "d8b9f2e4c67f833b660cdb0a3523065869fb35570177239812ed4c905aeff87b"
 dependencies = [
  "bitflags 2.11.1",
  "crossterm_winapi",
- "derive_more 2.1.1",
+ "derive_more",
  "document-features",
  "mio",
  "parking_lot",
@@ -1259,19 +1215,6 @@ dependencies = [
 
 [[package]]
 name = "derive_more"
-version = "0.99.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6edb4b64a43d977b8e99788fe3a04d483834fba1215a7e02caa415b626497f7f"
-dependencies = [
- "convert_case 0.4.0",
- "proc-macro2",
- "quote",
- "rustc_version",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "derive_more"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d751e9e49156b02b44f9c1815bcb94b984cdcc4396ecc32521c739452808b134"
@@ -1285,7 +1228,7 @@ version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "799a97264921d8623a957f6c3b9011f3b5492f557bbb7a5a19b7fa6d06ba8dcb"
 dependencies = [
- "convert_case 0.10.0",
+ "convert_case",
  "proc-macro2",
  "quote",
  "rustc_version",
@@ -2482,7 +2425,7 @@ dependencies = [
  "auto_enums",
  "chrono",
  "compact_str",
- "derive_more 2.1.1",
+ "derive_more",
  "fnv",
  "futures",
  "graphql-parser",
@@ -2503,7 +2446,7 @@ version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8634f500d6d2ec5c91c115b83e15d998d9ea05645aaa43f7afec09e660c483ba"
 dependencies = [
- "derive_more 2.1.1",
+ "derive_more",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -2696,7 +2639,6 @@ dependencies = [
  "actix",
  "actix-files",
  "actix-http",
- "actix-multipart",
  "actix-rt",
  "actix-server",
  "actix-service",
@@ -2711,7 +2653,7 @@ dependencies = [
  "clap",
  "cron",
  "derive_builder",
- "derive_more 2.1.1",
+ "derive_more",
  "figment",
  "figment_file_provider_adapter",
  "futures",
@@ -2790,14 +2732,13 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "chrono",
- "derive_more 2.1.1",
+ "derive_more",
  "gloo-console 0.4.0",
  "gloo-file 0.4.0",
  "gloo-net",
  "graphql_client",
  "image",
  "indexmap 1.6.2",
- "js-sys",
  "jwt",
  "lldap_auth",
  "lldap_frontend_options",
@@ -2825,7 +2766,7 @@ version = "0.6.3"
 dependencies = [
  "chrono",
  "curve25519-dalek",
- "derive_more 2.1.1",
+ "derive_more",
  "digest 0.9.0",
  "generic-array",
  "getrandom 0.2.17",
@@ -2847,7 +2788,7 @@ dependencies = [
  "base64 0.22.1",
  "bincode",
  "chrono",
- "derive_more 2.1.1",
+ "derive_more",
  "image",
  "itertools",
  "juniper",
@@ -2867,7 +2808,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "chrono",
- "derive_more 2.1.1",
+ "derive_more",
  "ldap3_proto",
  "lldap_auth",
  "lldap_domain",
@@ -2885,7 +2826,7 @@ dependencies = [
  "base64 0.22.1",
  "bincode",
  "chrono",
- "derive_more 2.1.1",
+ "derive_more",
  "lldap_auth",
  "lldap_domain",
  "orion",
@@ -2936,7 +2877,7 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
- "derive_more 2.1.1",
+ "derive_more",
  "itertools",
  "ldap3_proto",
  "lldap_access_control",
@@ -3011,7 +2952,6 @@ dependencies = [
  "lldap_domain",
  "lldap_domain_handlers",
  "lldap_domain_model",
- "lldap_frontend_options",
  "lldap_opaque_handler",
  "lldap_test_utils",
  "log",
@@ -3434,12 +3374,6 @@ dependencies = [
  "smallvec",
  "windows-link",
 ]
-
-[[package]]
-name = "parse-size"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "487f2ccd1e17ce8c1bfab3a65c89525af41cfad4c8659021a1e9a2aacd73b89b"
 
 [[package]]
 name = "pear"
@@ -4224,7 +4158,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "chrono",
- "derive_more 2.1.1",
+ "derive_more",
  "futures-util",
  "log",
  "ouroboros",
@@ -4393,15 +4327,6 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
-]
-
-[[package]]
-name = "serde_plain"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ce1fc6db65a611022b23a0dec6975d63fb80a302cb3388835ff02c097258d50"
-dependencies = [
- "serde",
 ]
 
 [[package]]

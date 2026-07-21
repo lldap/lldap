@@ -1,7 +1,6 @@
 use crate::sql_migrations::{Metadata, get_schema_version, migrate_from_version, upgrade_to_v1};
 use sea_orm::{
-    ConnectionTrait, DeriveValueType, Iden, QueryResult, TryGetable, Value,
-    sea_query::{Expr, Query},
+    ConnectionTrait, DeriveValueType, Iden, QueryResult, TryGetable, Value, sea_query::Query,
 };
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +9,7 @@ pub type DbConnection = sea_orm::DatabaseConnection;
 #[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord, DeriveValueType)]
 pub struct SchemaVersion(pub i16);
 
-pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(12);
+pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(11);
 
 #[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord)]
 pub struct PrivateKeyHash(pub [u8; 32]);
@@ -112,93 +111,6 @@ pub async fn set_private_key_info(pool: &DbConnection, info: PrivateKeyInfo) -> 
                 .value(
                     Metadata::PrivateKeyLocation,
                     Value::from(serde_json::to_string(&info.private_key_location).unwrap()),
-                ),
-        ),
-    )
-    .await?;
-    Ok(())
-}
-
-/// Reads the singleton branding row from the database.
-/// Returns `None` when the table exists but is empty (no row matched).
-/// Returns `Err(...)` on a genuine database failure (connectivity, missing
-/// table, etc.). Callers should handle the `Err` case explicitly — typically
-/// by logging a warning and falling back to `BrandingOptions::default()`.
-pub async fn get_branding_settings(
-    pool: &DbConnection,
-) -> anyhow::Result<Option<lldap_frontend_options::BrandingOptions>> {
-    use crate::sql_migrations::BrandingSettings;
-    let query_result = pool
-        .query_one(
-            pool.get_database_backend().build(
-                Query::select()
-                    .column(BrandingSettings::AppName)
-                    .column(BrandingSettings::AccentColor)
-                    .column(BrandingSettings::LogoUrl)
-                    .column(BrandingSettings::LogoFileHasBeenUploaded)
-                    .column(BrandingSettings::DefaultTheme)
-                    .from(BrandingSettings::Table),
-            ),
-        )
-        .await?;
-    let query_result = match query_result {
-        None => return Ok(None),
-        Some(row) => row,
-    };
-    fn get_column<T: sea_orm::TryGetable>(
-        row: &sea_orm::QueryResult,
-        column: &dyn Iden,
-    ) -> anyhow::Result<T> {
-        Ok(row.try_get("", &column.to_string())?)
-    }
-    Ok(Some(lldap_frontend_options::BrandingOptions {
-        app_name: get_column::<String>(&query_result, &BrandingSettings::AppName)?,
-        accent_color: get_column::<Option<String>>(&query_result, &BrandingSettings::AccentColor)?,
-        logo_url: get_column::<Option<String>>(&query_result, &BrandingSettings::LogoUrl)?,
-        logo_file_has_been_uploaded: get_column::<bool>(
-            &query_result,
-            &BrandingSettings::LogoFileHasBeenUploaded,
-        )?,
-        default_theme: {
-            let theme_string: String =
-                get_column::<String>(&query_result, &BrandingSettings::DefaultTheme)?;
-            theme_string.parse().unwrap_or_default()
-        },
-    }))
-}
-
-/// Persists all branding fields to the singleton row.
-/// Expects the row to already exist (created by the v12 migration).
-pub async fn set_branding_settings(
-    pool: &DbConnection,
-    options: &lldap_frontend_options::BrandingOptions,
-) -> anyhow::Result<()> {
-    use crate::sql_migrations::BrandingSettings;
-    let default_theme_text = options.default_theme.to_string();
-    pool.execute(
-        pool.get_database_backend().build(
-            Query::update()
-                .table(BrandingSettings::Table)
-                .and_where(Expr::col(BrandingSettings::Id).eq(1))
-                .value(
-                    BrandingSettings::AppName,
-                    Value::from(options.app_name.clone()),
-                )
-                .value(
-                    BrandingSettings::AccentColor,
-                    Value::from(options.accent_color.clone()),
-                )
-                .value(
-                    BrandingSettings::LogoUrl,
-                    Value::from(options.logo_url.clone()),
-                )
-                .value(
-                    BrandingSettings::LogoFileHasBeenUploaded,
-                    Value::from(options.logo_file_has_been_uploaded),
-                )
-                .value(
-                    BrandingSettings::DefaultTheme,
-                    Value::from(default_theme_text.to_owned()),
                 ),
         ),
     )

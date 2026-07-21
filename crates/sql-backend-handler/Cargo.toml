@@ -54,9 +54,6 @@ path = "../domain-handlers"
 [dependencies.lldap_domain_model]
 path = "../domain-model"
 
-[dependencies.lldap_frontend_options]
-path = "../frontend-options"
-
 [dependencies.lldap_opaque_handler]
 path = "../opaque-handler"
 

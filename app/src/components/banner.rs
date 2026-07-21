@@ -3,7 +3,6 @@ use crate::components::{
     logout::LogoutButton,
     router::{AppRoute, Link},
 };
-use lldap_frontend_options::BrandingOptions;
 use wasm_bindgen::prelude::wasm_bindgen;
 use yew::prelude::*;
 
@@ -11,37 +10,13 @@ use yew::prelude::*;
 pub struct Props {
     pub is_admin: bool,
     pub username: Option<String>,
-    pub branding: Option<BrandingOptions>,
     pub on_logged_out: Callback<()>,
 }
 
 #[function_component(Banner)]
 pub fn banner(props: &Props) -> Html {
-    let app_name = props
-        .branding
-        .as_ref()
-        .map_or_else(|| "LLDAP".to_string(), |branding| branding.app_name.clone());
-    let logo_file_has_been_uploaded = props
-        .branding
-        .as_ref()
-        .is_some_and(|branding| branding.logo_file_has_been_uploaded);
-    let logo_url = props
-        .branding
-        .as_ref()
-        .and_then(|branding| branding.logo_url.clone());
-
-    let logo_html = if logo_file_has_been_uploaded {
-        html! {
-            <img src="/branding/logo" alt="Logo" class="app-brand-logo-image" />
-        }
-    } else if let Some(logo_url) = logo_url {
-        html! {
-            <img src={logo_url.clone()} alt="Logo" class="app-brand-logo-image" />
-        }
-    } else {
-        html! {
-            <span class="app-brand-logo"><i class="bi-shield-lock-fill"></i></span>
-        }
+    let logo_html = html! {
+        <span class="app-brand-logo"><i class="bi-shield-lock-fill"></i></span>
     };
 
     html! {
@@ -50,7 +25,7 @@ pub fn banner(props: &Props) -> Html {
           <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-between gap-2 py-2">
             <a href={yew_router::utils::base_url().unwrap_or("/".to_string())} class="app-brand d-flex align-items-center text-decoration-none">
               {logo_html}
-              <span class="app-brand-name">{app_name}</span>
+              <span class="app-brand-name">{"LLDAP"}</span>
             </a>
 
             <ul class="nav app-nav justify-content-center flex-grow-1">
@@ -86,14 +61,6 @@ pub fn banner(props: &Props) -> Html {
                       to={AppRoute::ListGroupSchema}>
                       <i class="bi-list-ul me-2"></i>
                       {"Group schema"}
-                    </Link>
-                  </li>
-                  <li class="nav-item">
-                    <Link
-                      classes="nav-link"
-                      to={AppRoute::AdminSettings}>
-                      <i class="bi-gear me-2"></i>
-                      {"Settings"}
                     </Link>
                   </li>
                 </>

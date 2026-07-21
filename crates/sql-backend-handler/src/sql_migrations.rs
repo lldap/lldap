@@ -113,18 +113,6 @@ pub(crate) enum Metadata {
     PrivateKeyLocation,
 }
 
-/// Columns of the `branding_settings` table (singleton row, v12).
-#[derive(DeriveIden)]
-pub(crate) enum BrandingSettings {
-    Table,
-    Id,
-    AppName,
-    AccentColor,
-    LogoUrl,
-    LogoFileHasBeenUploaded,
-    DefaultTheme,
-}
-
 #[derive(FromQueryResult, PartialEq, Eq, Debug)]
 pub(crate) struct JustSchemaVersion {
     pub(crate) version: SchemaVersion,
@@ -1173,72 +1161,6 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
     Ok(transaction)
 }
 
-/// Creates a single-row table to hold server-side branding settings
-/// that the admin can update at runtime without restarting the server.
-/// A default row is inserted so the table is never empty.
-async fn migrate_to_v12(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
-    let builder = transaction.get_database_backend();
-    transaction
-        .execute(
-            builder.build(
-                Table::create()
-                    .table(BrandingSettings::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(BrandingSettings::Id)
-                            .integer()
-                            .primary_key()
-                            .check(Expr::expr(Expr::col(BrandingSettings::Id).eq(1))),
-                    )
-                    .col(
-                        ColumnDef::new(BrandingSettings::AppName)
-                            .text()
-                            .not_null()
-                            .default("LLDAP"),
-                    )
-                    .col(ColumnDef::new(BrandingSettings::AccentColor).text())
-                    .col(ColumnDef::new(BrandingSettings::LogoUrl).text())
-                    .col(
-                        ColumnDef::new(BrandingSettings::LogoFileHasBeenUploaded)
-                            .boolean()
-                            .not_null()
-                            .default(false),
-                    )
-                    .col(
-                        ColumnDef::new(BrandingSettings::DefaultTheme)
-                            .text()
-                            .not_null()
-                            .default("auto"),
-                    ),
-            ),
-        )
-        .await?;
-
-    // Seed the singleton row if it does not already exist.
-    transaction
-        .execute(
-            builder.build(
-                Query::insert()
-                    .into_table(BrandingSettings::Table)
-                    .columns([
-                        BrandingSettings::Id,
-                        BrandingSettings::AppName,
-                        BrandingSettings::DefaultTheme,
-                        BrandingSettings::LogoFileHasBeenUploaded,
-                    ])
-                    .values_panic([1.into(), "LLDAP".into(), "auto".into(), false.into()])
-                    .on_conflict(
-                        sea_orm::sea_query::OnConflict::column(BrandingSettings::Id)
-                            .do_nothing_on([BrandingSettings::Id])
-                            .to_owned(),
-                    ),
-            ),
-        )
-        .await?;
-
-    Ok(transaction)
-}
-
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -1270,7 +1192,6 @@ pub(crate) async fn migrate_from_version(
         to_sync!(migrate_to_v9),
         to_sync!(migrate_to_v10),
         to_sync!(migrate_to_v11),
-        to_sync!(migrate_to_v12),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {

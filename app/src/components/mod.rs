@@ -1,6 +1,5 @@
 pub mod add_group_member;
 pub mod add_user_to_group;
-pub mod admin_settings;
 pub mod app;
 pub mod avatar;
 pub mod banner;

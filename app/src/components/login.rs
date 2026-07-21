@@ -35,8 +35,6 @@ pub struct FormModel {
 pub struct Props {
     pub on_logged_in: Callback<(String, bool)>,
     pub password_reset_enabled: bool,
-    #[prop_or_else(|| "LLDAP".to_string())]
-    pub app_name: String,
 }
 
 pub enum Msg {
@@ -163,7 +161,7 @@ impl Component for LoginForm {
         } else {
             html! {
               <form class="auth-card">
-                <h1 class="form-title h4">{format!("Sign in to {}", ctx.props().app_name)}</h1>
+                <h1 class="form-title h4">{"Sign in to LLDAP"}</h1>
                 <div class="input-group">
                   <span class="input-group-text">
                     <i class="bi-person-fill"/>
