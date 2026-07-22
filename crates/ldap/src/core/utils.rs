@@ -14,6 +14,7 @@ use lldap_domain::{
         LdapObjectClass, UserId,
     },
 };
+use lldap_domain_handlers::handler::MfaPolicy;
 use lldap_domain_model::model::UserColumn;
 use std::collections::BTreeMap;
 use tracing::{debug, instrument, warn};
@@ -308,6 +309,7 @@ pub struct LdapInfo {
     pub base_dn_str: String,
     pub ignored_user_attributes: Vec<AttributeName>,
     pub ignored_group_attributes: Vec<AttributeName>,
+    pub mfa_policy: MfaPolicy,
 }
 
 impl LdapInfo {
@@ -315,6 +317,7 @@ impl LdapInfo {
         base_dn: &str,
         ignored_user_attributes: Vec<AttributeName>,
         ignored_group_attributes: Vec<AttributeName>,
+        mfa_policy: MfaPolicy,
     ) -> LdapResult<Self> {
         let base_dn = parse_distinguished_name(&base_dn.to_ascii_lowercase())?;
         let base_dn_str = join(base_dn.iter().map(|(k, v)| format!("{k}={v}")), ",");
@@ -323,6 +326,7 @@ impl LdapInfo {
             base_dn_str,
             ignored_user_attributes,
             ignored_group_attributes,
+            mfa_policy,
         })
     }
 }
@@ -546,9 +550,14 @@ mod tests {
     #[test]
     fn test_whitespace_in_ldap_info() {
         assert_eq!(
-            LdapInfo::new("   ou=people, dc =example,  dc=com \n", vec![], vec![])
-                .unwrap()
-                .base_dn_str,
+            LdapInfo::new(
+                "   ou=people, dc =example,  dc=com \n",
+                vec![],
+                vec![],
+                MfaPolicy::Disabled
+            )
+            .unwrap()
+            .base_dn_str,
             "ou=people,dc=example,dc=com"
         );
     }

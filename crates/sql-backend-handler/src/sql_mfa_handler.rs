@@ -15,11 +15,24 @@ use tracing::{info, instrument};
 // Issuer displayed by authenticator apps for the enrolled account.
 const TOTP_ISSUER: &str = "LLDAP";
 
+// Discriminates the sealed pending-state blobs (bincode ignores trailing bytes).
+const STATE_KIND_ENROLLMENT: u8 = 1;
+const STATE_KIND_LOGIN: u8 = 2;
+
 // Pending enrollment, sealed with the server key until the code is verified.
 #[derive(Serialize, Deserialize)]
 struct TotpEnrollmentState {
+    kind: u8,
     user_id: UserId,
     seed: [u8; lldap_mfa::TOTP_SEED_LEN],
+    expiry_unix: i64,
+}
+
+// Pending login: the password step succeeded, awaiting the TOTP code.
+#[derive(Serialize, Deserialize)]
+struct TotpLoginState {
+    kind: u8,
+    user_id: UserId,
     expiry_unix: i64,
 }
 
@@ -70,6 +83,7 @@ impl MfaBackendHandler for SqlBackendHandler {
         let otpauth_uri = lldap_mfa::otpauth_uri(TOTP_ISSUER, user_id.as_str(), &secret_base32);
         // Nothing is persisted until the user proves possession of the seed.
         let state = TotpEnrollmentState {
+            kind: STATE_KIND_ENROLLMENT,
             user_id: user_id.clone(),
             seed,
             // Pending enrollment is valid for 5 minutes.
@@ -102,6 +116,11 @@ impl MfaBackendHandler for SqlBackendHandler {
             DomainError::InternalError(format!("Corrupted enrollment state for {user_id}"))
         })?;
         let state: TotpEnrollmentState = bincode::deserialize(&state)?;
+        if state.kind != STATE_KIND_ENROLLMENT {
+            return Err(DomainError::InternalError(format!(
+                "Not an enrollment state for {user_id}"
+            )));
+        }
         if state.user_id != *user_id {
             return Err(DomainError::InternalError(format!(
                 "Enrollment state does not belong to {user_id}"
@@ -131,6 +150,78 @@ impl MfaBackendHandler for SqlBackendHandler {
             .await?;
         info!(r#"TOTP enrollment completed for "{}""#, user_id);
         Ok(())
+    }
+
+    #[instrument(skip_all, level = "debug", err)]
+    async fn verify_user_totp(&self, user_id: &UserId, code: &str) -> Result<()> {
+        let not_enrolled = || {
+            DomainError::AuthenticationError(format!("User {user_id} is not enrolled in TOTP MFA"))
+        };
+        let user = model::User::find_by_id(user_id.clone())
+            .one(&self.sql_pool)
+            .await?
+            .ok_or_else(not_enrolled)?;
+        if user.mfa_type.as_deref() != Some(MFA_TYPE_TOTP) {
+            return Err(not_enrolled());
+        }
+        let sealed = user.totp_secret.ok_or_else(not_enrolled)?;
+        // Decrypt failure means the server key changed: require re-enrollment, never a 500.
+        let seed = lldap_mfa::open_totp_secret(
+            self.opaque_setup.keypair().private(),
+            user.uuid.as_str(),
+            &sealed,
+        )
+        .map_err(|_| {
+            DomainError::AuthenticationError(format!("TOTP re-enrollment required for {user_id}"))
+        })?;
+        let now = chrono::Utc::now().timestamp() as u64;
+        if !lldap_mfa::totp_verify(&seed, code, now)
+            .map_err(|e| DomainError::InternalError(format!("TOTP verification failed: {e}")))?
+        {
+            return Err(DomainError::AuthenticationError(format!(
+                "Invalid TOTP code for {user_id}"
+            )));
+        }
+        Ok(())
+    }
+
+    #[instrument(skip_all, level = "debug", err)]
+    async fn start_totp_login(&self, user_id: &UserId) -> Result<String> {
+        let state = TotpLoginState {
+            kind: STATE_KIND_LOGIN,
+            user_id: user_id.clone(),
+            // The verified password step stays valid for 5 minutes.
+            expiry_unix: (chrono::Utc::now() + chrono::Duration::minutes(5)).timestamp(),
+        };
+        let sealed_state = lldap_mfa::seal_enrollment_state(
+            self.opaque_setup.keypair().private(),
+            &bincode::serialize(&state)?,
+        )
+        .map_err(|e| DomainError::InternalError(format!("Could not seal login state: {e}")))?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(sealed_state))
+    }
+
+    #[instrument(skip_all, level = "debug", err)]
+    async fn finish_totp_login(&self, state: &str, code: &str) -> Result<UserId> {
+        // All state failures look the same to the caller: an authentication error.
+        let invalid_state = || DomainError::AuthenticationError("Invalid login state".to_owned());
+        let state = base64::engine::general_purpose::STANDARD
+            .decode(state)
+            .map_err(|_| invalid_state())?;
+        let state = lldap_mfa::open_enrollment_state(self.opaque_setup.keypair().private(), &state)
+            .map_err(|_| invalid_state())?;
+        let state: TotpLoginState = bincode::deserialize(&state).map_err(|_| invalid_state())?;
+        if state.kind != STATE_KIND_LOGIN {
+            return Err(invalid_state());
+        }
+        if state.expiry_unix < chrono::Utc::now().timestamp() {
+            return Err(DomainError::AuthenticationError(format!(
+                "Expired TOTP login for {}",
+                state.user_id
+            )));
+        }
+        self.verify_user_totp(&state.user_id, code).await?;
+        Ok(state.user_id)
     }
 }
 
@@ -165,7 +256,7 @@ mod tests {
         bincode::deserialize(&bytes).unwrap()
     }
 
-    fn seal_state(setup: &ServerSetup, state: &TotpEnrollmentState) -> String {
+    fn seal_state<T: Serialize>(setup: &ServerSetup, state: &T) -> String {
         let sealed = lldap_mfa::seal_enrollment_state(
             setup.keypair().private(),
             &bincode::serialize(state).unwrap(),
@@ -235,6 +326,7 @@ mod tests {
         assert!(matches!(err, DomainError::AuthenticationError(_)));
         // A correct code, but an expired pending state.
         let expired = TotpEnrollmentState {
+            kind: STATE_KIND_ENROLLMENT,
             user_id: user_id.clone(),
             seed: state.seed,
             expiry_unix: chrono::Utc::now().timestamp() - 1,
@@ -282,5 +374,101 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::EntityNotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn test_verify_user_totp() {
+        let sql_pool = get_initialized_db().await;
+        let setup = generate_random_private_key();
+        let handler = SqlBackendHandler::new(setup.clone(), sql_pool);
+        insert_user_no_password(&handler, "bob").await;
+        insert_user_no_password(&handler, "john").await;
+        let user_id = UserId::new("bob");
+        let start = handler.start_totp_enrollment(&user_id).await.unwrap();
+        let state = open_state(&setup, &start.state);
+        let now = chrono::Utc::now().timestamp() as u64;
+        let code = format_code(totp_code(&state.seed, now).unwrap());
+        handler
+            .finish_totp_enrollment(&user_id, &start.state, &code)
+            .await
+            .unwrap();
+
+        handler.verify_user_totp(&user_id, &code).await.unwrap();
+        // Wrong code and unenrolled user are authentication errors.
+        let valid: Vec<u32> = [now - 30, now, now + 30]
+            .iter()
+            .map(|t| totp_code(&state.seed, *t).unwrap())
+            .collect();
+        let wrong = (0..).find(|c| !valid.contains(c)).unwrap();
+        let err = handler
+            .verify_user_totp(&user_id, &format_code(wrong))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DomainError::AuthenticationError(_)));
+        let err = handler
+            .verify_user_totp(&UserId::new("john"), &code)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DomainError::AuthenticationError(_)));
+        // An undecryptable stored blob requires re-enrollment, never a 500.
+        handler
+            .write_mfa_columns(
+                &user_id,
+                Some(format!("v1.{}", "A".repeat(54))),
+                Some(MFA_TYPE_TOTP.to_owned()),
+            )
+            .await
+            .unwrap();
+        let err = handler.verify_user_totp(&user_id, &code).await.unwrap_err();
+        assert!(matches!(err, DomainError::AuthenticationError(_)));
+        assert!(err.to_string().contains("re-enrollment"));
+    }
+
+    #[tokio::test]
+    async fn test_totp_login_flow() {
+        let sql_pool = get_initialized_db().await;
+        let setup = generate_random_private_key();
+        let handler = SqlBackendHandler::new(setup.clone(), sql_pool);
+        insert_user_no_password(&handler, "bob").await;
+        let user_id = UserId::new("bob");
+        let start = handler.start_totp_enrollment(&user_id).await.unwrap();
+        let state = open_state(&setup, &start.state);
+        let now = chrono::Utc::now().timestamp() as u64;
+        let code = format_code(totp_code(&state.seed, now).unwrap());
+        handler
+            .finish_totp_enrollment(&user_id, &start.state, &code)
+            .await
+            .unwrap();
+
+        let login_state = handler.start_totp_login(&user_id).await.unwrap();
+        assert_eq!(
+            handler
+                .finish_totp_login(&login_state, &code)
+                .await
+                .unwrap(),
+            user_id
+        );
+        // Expired login state.
+        let expired = TotpLoginState {
+            kind: STATE_KIND_LOGIN,
+            user_id: user_id.clone(),
+            expiry_unix: chrono::Utc::now().timestamp() - 1,
+        };
+        let err = handler
+            .finish_totp_login(&seal_state(&setup, &expired), &code)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DomainError::AuthenticationError(_)));
+        // An enrollment state cannot be replayed as a login state, nor can garbage.
+        let err = handler
+            .finish_totp_login(&start.state, &code)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DomainError::AuthenticationError(_)));
+        let err = handler
+            .finish_totp_login("not-base64!", &code)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DomainError::AuthenticationError(_)));
     }
 }

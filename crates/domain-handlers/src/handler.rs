@@ -154,12 +154,23 @@ pub trait UserBackendHandler: ReadSchemaBackendHandler {
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>>;
 }
 
+// MFA policy from the require_mfa configuration: never, enrolled users only, or everyone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MfaPolicy {
+    Disabled,
+    Enrolled,
+    Always,
+}
+
 #[async_trait]
 pub trait MfaBackendHandler {
     async fn reset_user_mfa(&self, user_id: &UserId) -> Result<()>;
     async fn start_totp_enrollment(&self, user_id: &UserId) -> Result<TotpEnrollmentStart>;
     async fn finish_totp_enrollment(&self, user_id: &UserId, state: &str, code: &str)
     -> Result<()>;
+    async fn verify_user_totp(&self, user_id: &UserId, code: &str) -> Result<()>;
+    async fn start_totp_login(&self, user_id: &UserId) -> Result<String>;
+    async fn finish_totp_login(&self, state: &str, code: &str) -> Result<UserId>;
 }
 
 #[async_trait]

@@ -12,7 +12,7 @@ use actix_web::{App, HttpResponse, Responder, dev::AppConfig, guard, web};
 use anyhow::{Context, Result};
 use hmac::Hmac;
 use lldap_access_control::{AccessControlledBackendHandler, ReadonlyBackendHandler};
-use lldap_domain_handlers::handler::{BackendHandler, LoginHandler, MfaBackendHandler};
+use lldap_domain_handlers::handler::{BackendHandler, LoginHandler, MfaBackendHandler, MfaPolicy};
 use lldap_domain_model::error::DomainError;
 use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
@@ -112,6 +112,7 @@ async fn get_settings<Backend>(data: web::Data<AppState<Backend>>) -> HttpRespon
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn http_config<Backend>(
     cfg: &mut web::ServiceConfig,
     backend_handler: Backend,
@@ -120,6 +121,7 @@ fn http_config<Backend>(
     server_url: url::Url,
     assets_path: PathBuf,
     mail_options: MailOptions,
+    mfa_policy: MfaPolicy,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
@@ -131,6 +133,7 @@ fn http_config<Backend>(
         server_url,
         assets_path: assets_path.clone(),
         mail_options,
+        mfa_policy,
     }))
     .route(
         "/health",
@@ -175,6 +178,7 @@ pub(crate) struct AppState<Backend> {
     pub server_url: url::Url,
     pub assets_path: PathBuf,
     pub mail_options: MailOptions,
+    pub mfa_policy: MfaPolicy,
 }
 
 impl<Backend: BackendHandler> AppState<Backend> {
@@ -219,6 +223,7 @@ where
     let server_url = config.http_url.0.clone();
     let assets_path = config.assets_path.clone();
     let mail_options = config.smtp_options.clone();
+    let mfa_policy = config.mfa_policy();
     let verbose = config.verbose;
     if !assets_path.join("index.html").exists() {
         warn!(
@@ -254,6 +259,7 @@ where
                                     server_url,
                                     assets_path,
                                     mail_options,
+                                    mfa_policy,
                                 )
                             }),
                         |_| AppConfig::default(),

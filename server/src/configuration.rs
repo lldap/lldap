@@ -16,6 +16,7 @@ use lldap_auth::opaque::{
     server::{ServerSetup, generate_random_private_key},
 };
 use lldap_domain::types::{AttributeName, UserId};
+use lldap_domain_handlers::handler::MfaPolicy;
 use lldap_sql_backend_handler::sql_tables::{
     ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation,
 };
@@ -195,6 +196,14 @@ impl Configuration {
 
     pub fn get_server_keys(&self) -> &KeyPair {
         self.get_server_setup().keypair()
+    }
+
+    pub fn mfa_policy(&self) -> MfaPolicy {
+        match self.require_mfa {
+            TrueFalseAlways::False => MfaPolicy::Disabled,
+            TrueFalseAlways::True => MfaPolicy::Enrolled,
+            TrueFalseAlways::Always => MfaPolicy::Always,
+        }
     }
 
     pub fn get_private_key_info(&self) -> PrivateKeyInfo {

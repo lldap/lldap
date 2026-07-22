@@ -22,9 +22,10 @@ use lldap_auth::{
 };
 use lldap_domain::types::{GroupDetails, GroupName, UserId};
 use lldap_domain_handlers::handler::{
-    BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, UserRequestFilter,
+    BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, MfaPolicy, UserRequestFilter,
 };
 use lldap_domain_model::{error::DomainError, model::UserColumn};
+use lldap_mfa::MFA_TYPE_TOTP;
 use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::{
@@ -396,6 +397,47 @@ where
         }))
 }
 
+// Decides whether a successful password step must be followed by a TOTP code.
+#[instrument(skip_all, level = "debug")]
+async fn mfa_login_gate<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    name: &UserId,
+) -> TcpResult<Option<String>>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    let mfa_required = match data.mfa_policy {
+        MfaPolicy::Disabled => false,
+        MfaPolicy::Enrolled => {
+            data.get_readonly_handler()
+                .get_user_details(name)
+                .await?
+                .mfa_type
+                .as_deref()
+                == Some(MFA_TYPE_TOTP)
+        }
+        MfaPolicy::Always => {
+            let user = data.get_readonly_handler().get_user_details(name).await?;
+            if user.mfa_type.as_deref() != Some(MFA_TYPE_TOTP) {
+                // Not enrolled yet: let the web login through so the user can enroll.
+                false
+            } else {
+                !data
+                    .get_readonly_handler()
+                    .get_user_groups(name)
+                    .await?
+                    .iter()
+                    .any(|g| g.display_name == "lldap_mfa_disabled".into())
+            }
+        }
+    };
+    Ok(if mfa_required {
+        Some(data.get_mfa_handler().start_totp_login(name).await?)
+    } else {
+        None
+    })
+}
+
 #[instrument(skip_all, level = "debug")]
 async fn opaque_login_finish<Backend>(
     data: web::Data<AppState<Backend>>,
@@ -409,7 +451,15 @@ where
         .login_finish(request.into_inner())
         .await
     {
-        Ok(name) => get_login_successful_response(&data, &name).await,
+        Ok(name) => {
+            if let Some(state) = mfa_login_gate(&data, &name).await? {
+                return Ok(HttpResponse::Ok().json(&login::ServerMfaRequiredResponse {
+                    mfa_required: true,
+                    state,
+                }));
+            }
+            get_login_successful_response(&data, &name).await
+        }
         Err(e) => Err(e.into()),
     }
 }
@@ -440,6 +490,12 @@ where
         password,
     };
     data.get_login_handler().bind(bind_request).await?;
+    if let Some(state) = mfa_login_gate(&data, &username).await? {
+        return Ok(HttpResponse::Ok().json(&login::ServerMfaRequiredResponse {
+            mfa_required: true,
+            state,
+        }));
+    }
     get_login_successful_response(&data, &username).await
 }
 
@@ -451,6 +507,34 @@ where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + LoginHandler + 'static,
 {
     simple_login(data, request)
+        .await
+        .unwrap_or_else(error_to_http_response)
+}
+
+#[instrument(skip_all, level = "debug")]
+async fn mfa_verify<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login::ClientMfaVerifyRequest>,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    let login::ClientMfaVerifyRequest { state, code } = request.into_inner();
+    let name = data
+        .get_mfa_handler()
+        .finish_totp_login(&state, &code)
+        .await?;
+    get_login_successful_response(&data, &name).await
+}
+
+async fn mfa_verify_handler<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login::ClientMfaVerifyRequest>,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    mfa_verify(data, request)
         .await
         .unwrap_or_else(error_to_http_response)
 }
@@ -637,6 +721,7 @@ where
             .route(web::post().to(opaque_login_finish_handler::<Backend>)),
     )
     .service(web::resource("/simple/login").route(web::post().to(simple_login_handler::<Backend>)))
+    .service(web::resource("/mfa/verify").route(web::post().to(mfa_verify_handler::<Backend>)))
     .service(web::resource("/refresh").route(web::get().to(get_refresh_handler::<Backend>)))
     .service(web::resource("/logout").route(web::get().to(get_logout_handler::<Backend>)))
     .service(

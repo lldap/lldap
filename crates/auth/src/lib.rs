@@ -60,6 +60,31 @@ pub mod login {
         #[serde(rename = "refreshToken", skip_serializing_if = "Option::is_none")]
         pub refresh_token: Option<String>,
     }
+
+    /// Returned instead of tokens when the password step succeeds but a TOTP code is needed.
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerMfaRequiredResponse {
+        #[serde(rename = "mfaRequired")]
+        pub mfa_required: bool,
+        /// Encrypted login state to be passed back for TOTP verification.
+        pub state: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientMfaVerifyRequest {
+        /// Encrypted login state from the previous step.
+        pub state: String,
+        pub code: String,
+    }
+
+    impl fmt::Debug for ClientMfaVerifyRequest {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("ClientMfaVerifyRequest")
+                .field("state", &self.state)
+                .field("code", &"******")
+                .finish()
+        }
+    }
 }
 
 /// The messages for the 3-step OPAQUE registration process.
