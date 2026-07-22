@@ -272,6 +272,7 @@ mod tests {
             .login_finish(ClientLoginFinishRequest {
                 server_data: start_response.server_data,
                 credential_finalization: login_finish.message,
+                totp_code: None,
             })
             .await?;
         Ok(())

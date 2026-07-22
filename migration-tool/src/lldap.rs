@@ -155,6 +155,7 @@ fn try_login(
     let req = ClientLoginFinishRequest {
         server_data: login_start_response.server_data,
         credential_finalization: login_finish.message,
+        totp_code: None,
     };
     let response = client
         .post(format!("{}/auth/opaque/login/finish", lldap_server))

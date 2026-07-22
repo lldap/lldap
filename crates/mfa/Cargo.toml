@@ -9,12 +9,18 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+default = ["seal"]
+# At-rest sealing and seed generation; disabled for the wasm frontend,
+# which only needs the TOTP math and encodings.
+seal = ["dep:base64", "dep:orion", "dep:rand"]
+
 [dependencies]
-base64 = { workspace = true }
+base64 = { workspace = true, optional = true }
 data-encoding = "2"
 hmac = "0.12"
-orion = { workspace = true }
-rand = { workspace = true }
+orion = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
 sha1 = "0.10"
 thiserror = { workspace = true }
 

@@ -1,0 +1,7 @@
+mutation StartMfaEnrollment {
+  startMfaEnrollment {
+    otpauthUri
+    secretBase32
+    state
+  }
+}

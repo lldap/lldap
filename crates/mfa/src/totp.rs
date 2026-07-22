@@ -2,7 +2,7 @@ use hmac::{Hmac, Mac};
 use sha1::Sha1;
 
 use crate::error::{MfaError, Result};
-use crate::types::{TOTP_DIGITS, TOTP_SKEW_STEPS, TOTP_STEP_SECS};
+use crate::types::{TOTP_DIGITS, TOTP_SEPARATOR, TOTP_SKEW_STEPS, TOTP_STEP_SECS};
 
 type HmacSha1 = Hmac<Sha1>;
 
@@ -42,11 +42,17 @@ fn parse_code(code: &str) -> Result<u32> {
     code.parse().map_err(|_| MfaError::InvalidCodeFormat)
 }
 
-/// Constant-time equality for two `u32` values.
+/// Branch-free equality for two `u32` values (best-effort optimizer barrier).
 fn ct_eq_u32(a: u32, b: u32) -> bool {
-    let mut v = 0u32;
-    v |= a ^ b;
-    v == 0
+    std::hint::black_box(a ^ b) == 0
+}
+
+/// Split a combined `password:123456` credential into (password, code) when the
+/// suffix after the last separator looks like a TOTP code.
+pub fn split_totp_suffix(password: &str) -> Option<(&str, &str)> {
+    let (prefix, code) = password.rsplit_once(TOTP_SEPARATOR)?;
+    (code.len() == TOTP_DIGITS as usize && code.bytes().all(|b| b.is_ascii_digit()))
+        .then_some((prefix, code))
 }
 
 /// Verify a TOTP code with ±[`TOTP_SKEW_STEPS`] window tolerance.
@@ -112,5 +118,19 @@ mod tests {
     fn format_code_zero_pads() {
         assert_eq!(format_code(42), "000042");
         assert_eq!(format_code(5801), "005801");
+    }
+
+    #[test]
+    fn split_totp_suffix_cases() {
+        // Splits at the last separator, so passwords containing one still work.
+        assert_eq!(
+            split_totp_suffix("pass:word:123456"),
+            Some(("pass:word", "123456"))
+        );
+        assert_eq!(split_totp_suffix(":123456"), Some(("", "123456")));
+        assert_eq!(split_totp_suffix("password"), None);
+        assert_eq!(split_totp_suffix("password:12345"), None);
+        assert_eq!(split_totp_suffix("password:1234567"), None);
+        assert_eq!(split_totp_suffix("password:12345a"), None);
     }
 }

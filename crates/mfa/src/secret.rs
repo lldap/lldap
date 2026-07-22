@@ -1,5 +1,4 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use data_encoding::BASE32_NOPAD;
 use orion::aead;
 use orion::hazardous::aead::chacha20poly1305::{self, Nonce, SecretKey};
 use orion::hazardous::kdf::hkdf;
@@ -7,8 +6,8 @@ use rand::RngCore;
 
 use crate::error::{MfaError, Result};
 use crate::types::{
-    SEAL_SALT_LEN, SEAL_TAG_LEN, SEALED_BLOB_LEN, SEALED_PREFIX, TOTP_DIGITS, TOTP_SEED_LEN,
-    TOTP_STEP_SECS, build_nonce_info, storage_key_info,
+    SEAL_SALT_LEN, SEAL_TAG_LEN, SEALED_BLOB_LEN, SEALED_PREFIX, TOTP_SEED_LEN, build_nonce_info,
+    storage_key_info,
 };
 
 /// Generate a 160-bit TOTP seed.
@@ -16,39 +15,6 @@ pub fn generate_seed() -> [u8; TOTP_SEED_LEN] {
     let mut seed = [0u8; TOTP_SEED_LEN];
     rand::rngs::OsRng.fill_bytes(&mut seed);
     seed
-}
-
-/// Base32 (no padding) encoding used by authenticator apps.
-pub fn seed_base32(secret: &[u8]) -> String {
-    BASE32_NOPAD.encode(secret)
-}
-
-/// Build a standard `otpauth://totp/...` URI (SHA1, 6 digits, 30s).
-pub fn otpauth_uri(issuer: &str, account_name: &str, secret_base32: &str) -> String {
-    // Label is issuer:account; query repeats issuer for Google Authenticator compatibility.
-    let label = format!(
-        "{}:{}",
-        urlencoding_minimal(issuer),
-        urlencoding_minimal(account_name)
-    );
-    format!(
-        "otpauth://totp/{label}?secret={secret_base32}&issuer={issuer_q}&algorithm=SHA1&digits={TOTP_DIGITS}&period={TOTP_STEP_SECS}",
-        issuer_q = urlencoding_minimal(issuer),
-    )
-}
-
-/// Minimal URL-encoding for otpauth labels (encode reserved characters).
-fn urlencoding_minimal(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for b in s.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char);
-            }
-            _ => out.push_str(&format!("%{b:02X}")),
-        }
-    }
-    out
 }
 
 fn derive_storage_key(ikm: &[u8]) -> Result<SecretKey> {
@@ -142,19 +108,6 @@ mod tests {
         let s = generate_seed();
         assert_eq!(s.len(), TOTP_SEED_LEN);
         assert_ne!(s, [0u8; TOTP_SEED_LEN]);
-    }
-
-    #[test]
-    fn base32_and_otpauth() {
-        let seed = b"12345678901234567890";
-        let b32 = seed_base32(seed);
-        assert!(!b32.contains('='));
-        let uri = otpauth_uri("LLDAP", "alice@example.com", &b32);
-        assert!(uri.starts_with("otpauth://totp/"));
-        assert!(uri.contains("secret="));
-        assert!(uri.contains("period=30"));
-        assert!(uri.contains("digits=6"));
-        assert!(uri.contains("algorithm=SHA1"));
     }
 
     #[test]

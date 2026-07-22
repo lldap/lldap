@@ -625,4 +625,59 @@ mod tests {
         assert!(!json.contains("totp_secret"));
         assert!(!json.contains("mfa_type"));
     }
+
+    #[tokio::test]
+    async fn mfa_enrolled_field_gated_to_admin_or_self() {
+        const QUERY: &str = r#"{
+          user(userId: "bob") {
+            mfaEnrolled
+          }
+        }"#;
+
+        let expect_mfa_enrolled = |validation_result, expected: &'static str| async move {
+            let mut mock = MockTestBackendHandler::new();
+            setup_default_schema(&mut mock);
+            mock.expect_get_user_details()
+                .with(eq(UserId::new("bob")))
+                .return_once(|_| Ok(get_mfa_enrolled_user()));
+            let context = Context::<MockTestBackendHandler>::new_for_tests(mock, validation_result);
+            let schema = schema(Query::<MockTestBackendHandler>::new());
+            let (data, errors) = execute(QUERY, None, &schema, &Variables::new(), &context)
+                .await
+                .unwrap();
+            assert_eq!(errors, vec![]);
+            let json = serde_json::to_string(&data).unwrap();
+            assert!(
+                json.contains(&format!(r#""mfaEnrolled":{expected}"#)),
+                "unexpected response: {json}"
+            );
+        };
+
+        // Admins and the user themself see the enrollment status; anyone else
+        // (here a readonly user, who can query bob) gets null.
+        expect_mfa_enrolled(
+            ValidationResults {
+                user: UserId::new("admin"),
+                permission: Permission::Admin,
+            },
+            "true",
+        )
+        .await;
+        expect_mfa_enrolled(
+            ValidationResults {
+                user: UserId::new("bob"),
+                permission: Permission::Regular,
+            },
+            "true",
+        )
+        .await;
+        expect_mfa_enrolled(
+            ValidationResults {
+                user: UserId::new("rose"),
+                permission: Permission::Readonly,
+            },
+            "null",
+        )
+        .await;
+    }
 }

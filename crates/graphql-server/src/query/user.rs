@@ -4,6 +4,7 @@ use lldap_access_control::UserReadableBackendHandler;
 use lldap_domain::public_schema::PublicSchema;
 use lldap_domain::types::{User as DomainUser, UserAndGroups as DomainUserAndGroups};
 use lldap_domain_handlers::handler::BackendHandler;
+use lldap_mfa::MFA_TYPE_TOTP;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{Instrument, debug, debug_span};
@@ -109,6 +110,15 @@ impl<Handler: BackendHandler> User<Handler> {
 
     fn uuid(&self) -> &str {
         self.user.uuid.as_str()
+    }
+
+    /// Whether the user has a second factor enrolled.
+    /// Only visible to admins and to the user themself.
+    // The self-check compares UserIds, which are case-insensitive.
+    fn mfa_enrolled(&self, context: &Context<Handler>) -> Option<bool> {
+        (context.validation_result.is_admin()
+            || context.validation_result.user == self.user.user_id)
+            .then(|| self.user.mfa_type.as_deref() == Some(MFA_TYPE_TOTP))
     }
 
     /// User-defined attributes.

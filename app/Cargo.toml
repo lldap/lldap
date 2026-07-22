@@ -19,7 +19,9 @@ gloo-file = "0.4"
 gloo-net = "0.7"
 graphql_client = { workspace = true }
 image = { workspace = true }
+js-sys = "0.3"
 jwt = { workspace = true }
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -63,6 +65,10 @@ features = [ "opaque_client" ]
 
 [dependencies.lldap_frontend_options]
 path = "../crates/frontend-options"
+
+[dependencies.lldap_mfa]
+path = "../crates/mfa"
+default-features = false
 
 [dependencies.lldap_validation]
 path = "../crates/validation"

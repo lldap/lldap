@@ -17,7 +17,10 @@ const TOTP_ISSUER: &str = "LLDAP";
 
 // Discriminates the sealed pending-state blobs (bincode ignores trailing bytes).
 const STATE_KIND_ENROLLMENT: u8 = 1;
-const STATE_KIND_LOGIN: u8 = 2;
+
+// How long a successfully used code stays rejected: its whole acceptance window.
+const USED_CODE_TTL_SECS: i64 =
+    lldap_mfa::TOTP_STEP_SECS as i64 * (2 * lldap_mfa::TOTP_SKEW_STEPS + 1);
 
 // Pending enrollment, sealed with the server key until the code is verified.
 #[derive(Serialize, Deserialize)]
@@ -25,14 +28,6 @@ struct TotpEnrollmentState {
     kind: u8,
     user_id: UserId,
     seed: [u8; lldap_mfa::TOTP_SEED_LEN],
-    expiry_unix: i64,
-}
-
-// Pending login: the password step succeeded, awaiting the TOTP code.
-#[derive(Serialize, Deserialize)]
-struct TotpLoginState {
-    kind: u8,
-    user_id: UserId,
     expiry_unix: i64,
 }
 
@@ -61,6 +56,22 @@ impl SqlBackendHandler {
             ..Default::default()
         };
         user_update.update(&self.sql_pool).await?;
+        Ok(())
+    }
+
+    // A verified code is single-use (RFC 6238): replays within the acceptance
+    // window are rejected. The map only holds codes that logged in successfully.
+    fn check_and_mark_code_used(&self, user_id: &UserId, uuid: &Uuid, code: &str) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        let mut used = self.used_totp_codes.lock().expect("poisoned TOTP code map");
+        used.retain(|_, expiry| *expiry > now);
+        let key = (uuid.as_str().to_owned(), code.to_owned());
+        if used.contains_key(&key) {
+            return Err(DomainError::AuthenticationError(format!(
+                "TOTP code already used for {user_id}"
+            )));
+        }
+        used.insert(key, now + USED_CODE_TTL_SECS);
         Ok(())
     }
 }
@@ -140,6 +151,7 @@ impl MfaBackendHandler for SqlBackendHandler {
             )));
         }
         let uuid = self.get_user_uuid(user_id).await?;
+        self.check_and_mark_code_used(user_id, &uuid, code)?;
         let sealed_secret = lldap_mfa::seal_totp_secret(
             self.opaque_setup.keypair().private(),
             uuid.as_str(),
@@ -182,46 +194,8 @@ impl MfaBackendHandler for SqlBackendHandler {
                 "Invalid TOTP code for {user_id}"
             )));
         }
+        self.check_and_mark_code_used(user_id, &user.uuid, code)?;
         Ok(())
-    }
-
-    #[instrument(skip_all, level = "debug", err)]
-    async fn start_totp_login(&self, user_id: &UserId) -> Result<String> {
-        let state = TotpLoginState {
-            kind: STATE_KIND_LOGIN,
-            user_id: user_id.clone(),
-            // The verified password step stays valid for 5 minutes.
-            expiry_unix: (chrono::Utc::now() + chrono::Duration::minutes(5)).timestamp(),
-        };
-        let sealed_state = lldap_mfa::seal_enrollment_state(
-            self.opaque_setup.keypair().private(),
-            &bincode::serialize(&state)?,
-        )
-        .map_err(|e| DomainError::InternalError(format!("Could not seal login state: {e}")))?;
-        Ok(base64::engine::general_purpose::STANDARD.encode(sealed_state))
-    }
-
-    #[instrument(skip_all, level = "debug", err)]
-    async fn finish_totp_login(&self, state: &str, code: &str) -> Result<UserId> {
-        // All state failures look the same to the caller: an authentication error.
-        let invalid_state = || DomainError::AuthenticationError("Invalid login state".to_owned());
-        let state = base64::engine::general_purpose::STANDARD
-            .decode(state)
-            .map_err(|_| invalid_state())?;
-        let state = lldap_mfa::open_enrollment_state(self.opaque_setup.keypair().private(), &state)
-            .map_err(|_| invalid_state())?;
-        let state: TotpLoginState = bincode::deserialize(&state).map_err(|_| invalid_state())?;
-        if state.kind != STATE_KIND_LOGIN {
-            return Err(invalid_state());
-        }
-        if state.expiry_unix < chrono::Utc::now().timestamp() {
-            return Err(DomainError::AuthenticationError(format!(
-                "Expired TOTP login for {}",
-                state.user_id
-            )));
-        }
-        self.verify_user_totp(&state.user_id, code).await?;
-        Ok(state.user_id)
     }
 }
 
@@ -393,7 +367,25 @@ mod tests {
             .await
             .unwrap();
 
-        handler.verify_user_totp(&user_id, &code).await.unwrap();
+        // The enrollment consumed `code` (single-use): verify with the code of
+        // an adjacent step, skipping the rare equal-code collision.
+        let next_code = [now + 30, now - 30]
+            .iter()
+            .map(|t| format_code(totp_code(&state.seed, *t).unwrap()))
+            .find(|c| *c != code)
+            .unwrap();
+        handler
+            .verify_user_totp(&user_id, &next_code)
+            .await
+            .unwrap();
+        // A used code is rejected for the rest of its window, from either door.
+        let err = handler
+            .verify_user_totp(&user_id, &next_code)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DomainError::AuthenticationError(_)));
+        let err = handler.verify_user_totp(&user_id, &code).await.unwrap_err();
+        assert!(matches!(err, DomainError::AuthenticationError(_)));
         // Wrong code and unenrolled user are authentication errors.
         let valid: Vec<u32> = [now - 30, now, now + 30]
             .iter()
@@ -422,53 +414,5 @@ mod tests {
         let err = handler.verify_user_totp(&user_id, &code).await.unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
         assert!(err.to_string().contains("re-enrollment"));
-    }
-
-    #[tokio::test]
-    async fn test_totp_login_flow() {
-        let sql_pool = get_initialized_db().await;
-        let setup = generate_random_private_key();
-        let handler = SqlBackendHandler::new(setup.clone(), sql_pool);
-        insert_user_no_password(&handler, "bob").await;
-        let user_id = UserId::new("bob");
-        let start = handler.start_totp_enrollment(&user_id).await.unwrap();
-        let state = open_state(&setup, &start.state);
-        let now = chrono::Utc::now().timestamp() as u64;
-        let code = format_code(totp_code(&state.seed, now).unwrap());
-        handler
-            .finish_totp_enrollment(&user_id, &start.state, &code)
-            .await
-            .unwrap();
-
-        let login_state = handler.start_totp_login(&user_id).await.unwrap();
-        assert_eq!(
-            handler
-                .finish_totp_login(&login_state, &code)
-                .await
-                .unwrap(),
-            user_id
-        );
-        // Expired login state.
-        let expired = TotpLoginState {
-            kind: STATE_KIND_LOGIN,
-            user_id: user_id.clone(),
-            expiry_unix: chrono::Utc::now().timestamp() - 1,
-        };
-        let err = handler
-            .finish_totp_login(&seal_state(&setup, &expired), &code)
-            .await
-            .unwrap_err();
-        assert!(matches!(err, DomainError::AuthenticationError(_)));
-        // An enrollment state cannot be replayed as a login state, nor can garbage.
-        let err = handler
-            .finish_totp_login(&start.state, &code)
-            .await
-            .unwrap_err();
-        assert!(matches!(err, DomainError::AuthenticationError(_)));
-        let err = handler
-            .finish_totp_login("not-base64!", &code)
-            .await
-            .unwrap_err();
-        assert!(matches!(err, DomainError::AuthenticationError(_)));
     }
 }

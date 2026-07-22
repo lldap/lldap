@@ -5,11 +5,32 @@ use graphql_client::GraphQLQuery;
 use lldap_auth::{JWTClaims, login, registration};
 
 use lldap_frontend_options::Options;
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use web_sys::RequestCredentials;
 
 #[derive(Default)]
 pub struct HostService {}
+
+/// Outcome of a login attempt against the server.
+pub enum LoginOutcome {
+    /// Logged in; the identity cookies are set.
+    Success {
+        user_id: String,
+        is_admin: bool,
+        mfa_enrollment_required: bool,
+    },
+    /// The password was correct but the TOTP code was missing.
+    MfaRequired,
+}
+
+// The two possible success bodies of the login finish endpoint. `MfaRequired`
+// comes first: its required `mfaRequired` marker is absent from a token response.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum LoginServerResponse {
+    MfaRequired(login::ServerMfaRequiredResponse),
+    Success(login::ServerLoginResponse),
+}
 
 fn get_claims_from_jwt(jwt: &str) -> Result<JWTClaims> {
     use jwt::*;
@@ -128,14 +149,28 @@ impl HostService {
         .await
     }
 
-    pub async fn login_finish(request: login::ClientLoginFinishRequest) -> Result<(String, bool)> {
-        call_server_json_with_error_message::<login::ServerLoginResponse, _>(
+    pub async fn login_finish(request: login::ClientLoginFinishRequest) -> Result<LoginOutcome> {
+        match call_server_json_with_error_message::<LoginServerResponse, _>(
             &(base_url() + "/auth/opaque/login/finish"),
             RequestType::Post(request),
             "Could not finish authentication",
         )
-        .await
-        .and_then(set_cookies_from_jwt)
+        .await?
+        {
+            LoginServerResponse::MfaRequired(response) => {
+                debug_assert!(response.mfa_required);
+                Ok(LoginOutcome::MfaRequired)
+            }
+            LoginServerResponse::Success(response) => {
+                let mfa_enrollment_required = response.mfa_enrollment_required.unwrap_or(false);
+                let (user_id, is_admin) = set_cookies_from_jwt(response)?;
+                Ok(LoginOutcome::Success {
+                    user_id,
+                    is_admin,
+                    mfa_enrollment_required,
+                })
+            }
+        }
     }
 
     pub async fn get_settings() -> Result<Options> {
@@ -169,14 +204,16 @@ impl HostService {
         .await
     }
 
-    pub async fn refresh() -> Result<(String, bool)> {
-        call_server_json_with_error_message::<login::ServerLoginResponse, _>(
+    pub async fn refresh() -> Result<(String, bool, bool)> {
+        let response = call_server_json_with_error_message::<login::ServerLoginResponse, _>(
             &(base_url() + "/auth/refresh"),
             GET_REQUEST,
             "Could not start authentication: ",
         )
-        .await
-        .and_then(set_cookies_from_jwt)
+        .await?;
+        let mfa_enrollment_required = response.mfa_enrollment_required.unwrap_or(false);
+        let (user_id, is_admin) = set_cookies_from_jwt(response)?;
+        Ok((user_id, is_admin, mfa_enrollment_required))
     }
 
     // The `_request` parameter is to make it the same shape as the other functions.

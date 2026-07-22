@@ -25,7 +25,7 @@ use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, MfaPolicy, UserRequestFilter,
 };
 use lldap_domain_model::{error::DomainError, model::UserColumn};
-use lldap_mfa::MFA_TYPE_TOTP;
+use lldap_mfa::{MFA_TYPE_TOTP, split_totp_suffix};
 use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::{
@@ -123,6 +123,13 @@ where
     };
     let groups = data.get_readonly_handler().get_user_groups(&user).await?;
     let token = create_jwt(data.get_tcp_handler(), jwt_key, &user, groups).await;
+    // Keep guiding unenrolled users to enrollment across page reloads.
+    let mfa_enrollment_required = if data.mfa_policy == MfaPolicy::Always {
+        let (enrolled, exempt) = always_policy_status(&data, &user).await?;
+        !enrolled && !exempt
+    } else {
+        false
+    };
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", token.as_str())
@@ -135,6 +142,7 @@ where
         .json(&login::ServerLoginResponse {
             token: token.as_str().to_owned(),
             refresh_token: None,
+            mfa_enrollment_required: mfa_enrollment_required.then_some(true),
         }))
 }
 
@@ -360,6 +368,7 @@ where
 async fn get_login_successful_response<Backend>(
     data: &web::Data<AppState<Backend>>,
     name: &UserId,
+    mfa_enrollment_required: bool,
 ) -> TcpResult<HttpResponse>
 where
     Backend: TcpBackendHandler + BackendHandler,
@@ -394,47 +403,88 @@ where
         .json(&login::ServerLoginResponse {
             token: token.as_str().to_owned(),
             refresh_token: Some(refresh_token_plus_name),
+            mfa_enrollment_required: mfa_enrollment_required.then_some(true),
         }))
 }
 
-// Decides whether a successful password step must be followed by a TOTP code.
+// Outcome of the MFA policy check for a login; TOTP enforcement happens in the
+// caller, which holds the (possibly absent) code.
+enum MfaGate {
+    // Proceed to token issuance; `enrollment_required` guides the client to
+    // enrollment (require_mfa = always only).
+    Allow { enrollment_required: bool },
+    // The user must present a valid TOTP code with this login.
+    TotpRequired,
+}
+
+// Never skip MFA or issue tokens because a policy lookup failed (LDAP do_bind parity).
+fn mfa_policy_lookup_error() -> DomainError {
+    DomainError::AuthenticationError("Invalid credentials".to_owned())
+}
+
+// (enrolled, exempt) for a user under `require_mfa = always`, failing closed.
+async fn always_policy_status<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    name: &UserId,
+) -> TcpResult<(bool, bool)>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    let user = data
+        .get_readonly_handler()
+        .get_user_details(name)
+        .await
+        .map_err(|_| mfa_policy_lookup_error())?;
+    let enrolled = user.mfa_type.as_deref() == Some(MFA_TYPE_TOTP);
+    let exempt = data
+        .get_readonly_handler()
+        .get_user_groups(name)
+        .await
+        .map_err(|_| mfa_policy_lookup_error())?
+        .iter()
+        .any(|g| g.display_name == "lldap_mfa_disabled".into());
+    Ok((enrolled, exempt))
+}
+
 #[instrument(skip_all, level = "debug")]
 async fn mfa_login_gate<Backend>(
     data: &web::Data<AppState<Backend>>,
     name: &UserId,
-) -> TcpResult<Option<String>>
+) -> TcpResult<MfaGate>
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    let mfa_required = match data.mfa_policy {
-        MfaPolicy::Disabled => false,
+    Ok(match data.mfa_policy {
+        MfaPolicy::Disabled => MfaGate::Allow {
+            enrollment_required: false,
+        },
         MfaPolicy::Enrolled => {
-            data.get_readonly_handler()
+            let user = data
+                .get_readonly_handler()
                 .get_user_details(name)
-                .await?
-                .mfa_type
-                .as_deref()
-                == Some(MFA_TYPE_TOTP)
-        }
-        MfaPolicy::Always => {
-            let user = data.get_readonly_handler().get_user_details(name).await?;
-            if user.mfa_type.as_deref() != Some(MFA_TYPE_TOTP) {
-                // Not enrolled yet: let the web login through so the user can enroll.
-                false
+                .await
+                .map_err(|_| mfa_policy_lookup_error())?;
+            if user.mfa_type.as_deref() == Some(MFA_TYPE_TOTP) {
+                MfaGate::TotpRequired
             } else {
-                !data
-                    .get_readonly_handler()
-                    .get_user_groups(name)
-                    .await?
-                    .iter()
-                    .any(|g| g.display_name == "lldap_mfa_disabled".into())
+                MfaGate::Allow {
+                    enrollment_required: false,
+                }
             }
         }
-    };
-    Ok(if mfa_required {
-        Some(data.get_mfa_handler().start_totp_login(name).await?)
-    } else {
-        None
+        MfaPolicy::Always => {
+            let (enrolled, exempt) = always_policy_status(data, name).await?;
+            match (enrolled, exempt) {
+                (_, true) => MfaGate::Allow {
+                    enrollment_required: false,
+                },
+                (true, false) => MfaGate::TotpRequired,
+                // Not enrolled yet: let the web login through, flagged for enrollment.
+                (false, false) => MfaGate::Allow {
+                    enrollment_required: true,
+                },
+            }
+        }
     })
 }
 
@@ -446,20 +496,28 @@ async fn opaque_login_finish<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    match data
-        .get_opaque_handler()
-        .login_finish(request.into_inner())
-        .await
-    {
-        Ok(name) => {
-            if let Some(state) = mfa_login_gate(&data, &name).await? {
-                return Ok(HttpResponse::Ok().json(&login::ServerMfaRequiredResponse {
-                    mfa_required: true,
-                    state,
-                }));
-            }
-            get_login_successful_response(&data, &name).await
-        }
+    let mut request = request.into_inner();
+    let totp_code = request.totp_code.take();
+    match data.get_opaque_handler().login_finish(request).await {
+        Ok(name) => match mfa_login_gate(&data, &name).await? {
+            MfaGate::TotpRequired => match totp_code {
+                Some(code) => {
+                    // Do not reveal which factor failed.
+                    data.get_mfa_handler()
+                        .verify_user_totp(&name, &code)
+                        .await
+                        .map_err(|_| {
+                            DomainError::AuthenticationError("Invalid credentials".to_owned())
+                        })?;
+                    get_login_successful_response(&data, &name, false).await
+                }
+                None => Ok(HttpResponse::Ok()
+                    .json(&login::ServerMfaRequiredResponse { mfa_required: true })),
+            },
+            MfaGate::Allow {
+                enrollment_required,
+            } => get_login_successful_response(&data, &name, enrollment_required).await,
+        },
         Err(e) => Err(e.into()),
     }
 }
@@ -485,18 +543,66 @@ where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + LoginHandler + 'static,
 {
     let login::ClientSimpleLoginRequest { username, password } = request.into_inner();
-    let bind_request = BindRequest {
-        name: username.clone(),
-        password,
+    let bind = |password: String| {
+        data.get_login_handler().bind(BindRequest {
+            name: username.clone(),
+            password,
+        })
     };
-    data.get_login_handler().bind(bind_request).await?;
-    if let Some(state) = mfa_login_gate(&data, &username).await? {
-        return Ok(HttpResponse::Ok().json(&login::ServerMfaRequiredResponse {
-            mfa_required: true,
-            state,
-        }));
+    if data.mfa_policy == MfaPolicy::Disabled {
+        bind(password).await?;
+        return get_login_successful_response(&data, &username, false).await;
     }
-    get_login_successful_response(&data, &username).await
+    let user = match data
+        .get_readonly_handler()
+        .get_user_details(&username)
+        .await
+    {
+        Ok(user) => Some(user),
+        // Unknown users go through a plain bind, which fails as before.
+        Err(DomainError::EntityNotFound(_)) => None,
+        // Fail closed: never skip MFA because of a backend error.
+        Err(_) => {
+            return Err(DomainError::AuthenticationError("Invalid credentials".to_owned()).into());
+        }
+    };
+    let enrolled = user
+        .as_ref()
+        .is_some_and(|u| u.mfa_type.as_deref() == Some(MFA_TYPE_TOTP));
+    let mfa_required = match data.mfa_policy {
+        MfaPolicy::Disabled => false,
+        MfaPolicy::Enrolled => enrolled,
+        MfaPolicy::Always => {
+            user.is_some()
+                && !data
+                    .get_readonly_handler()
+                    .get_user_groups(&username)
+                    .await
+                    .map_err(|_| mfa_policy_lookup_error())?
+                    .iter()
+                    .any(|g| g.display_name == "lldap_mfa_disabled".into())
+        }
+    };
+    if !(mfa_required && enrolled) {
+        // Unknown, unenrolled and exempt users bind with the full string, untouched.
+        bind(password).await?;
+        return get_login_successful_response(&data, &username, mfa_required && !enrolled).await;
+    }
+    match split_totp_suffix(&password).map(|(p, c)| (p.to_owned(), c.to_owned())) {
+        Some((password, code)) => {
+            bind(password).await?;
+            // Do not reveal which factor failed.
+            data.get_mfa_handler()
+                .verify_user_totp(&username, &code)
+                .await
+                .map_err(|_| DomainError::AuthenticationError("Invalid credentials".to_owned()))?;
+            get_login_successful_response(&data, &username, false).await
+        }
+        None => {
+            bind(password).await?;
+            Ok(HttpResponse::Ok().json(&login::ServerMfaRequiredResponse { mfa_required: true }))
+        }
+    }
 }
 
 async fn simple_login_handler<Backend>(
@@ -507,34 +613,6 @@ where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + LoginHandler + 'static,
 {
     simple_login(data, request)
-        .await
-        .unwrap_or_else(error_to_http_response)
-}
-
-#[instrument(skip_all, level = "debug")]
-async fn mfa_verify<Backend>(
-    data: web::Data<AppState<Backend>>,
-    request: web::Json<login::ClientMfaVerifyRequest>,
-) -> TcpResult<HttpResponse>
-where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
-{
-    let login::ClientMfaVerifyRequest { state, code } = request.into_inner();
-    let name = data
-        .get_mfa_handler()
-        .finish_totp_login(&state, &code)
-        .await?;
-    get_login_successful_response(&data, &name).await
-}
-
-async fn mfa_verify_handler<Backend>(
-    data: web::Data<AppState<Backend>>,
-    request: web::Json<login::ClientMfaVerifyRequest>,
-) -> HttpResponse
-where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
-{
-    mfa_verify(data, request)
         .await
         .unwrap_or_else(error_to_http_response)
 }
@@ -721,7 +799,6 @@ where
             .route(web::post().to(opaque_login_finish_handler::<Backend>)),
     )
     .service(web::resource("/simple/login").route(web::post().to(simple_login_handler::<Backend>)))
-    .service(web::resource("/mfa/verify").route(web::post().to(mfa_verify_handler::<Backend>)))
     .service(web::resource("/refresh").route(web::get().to(get_refresh_handler::<Backend>)))
     .service(web::resource("/logout").route(web::get().to(get_logout_handler::<Backend>)))
     .service(

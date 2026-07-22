@@ -2,6 +2,7 @@ use crate::{
     components::{
         add_user_to_group::AddUserToGroupComponent,
         remove_user_from_group::RemoveUserFromGroupComponent,
+        reset_mfa::ResetMfa,
         router::{AppRoute, Link},
         user_details_form::UserDetailsForm,
     },
@@ -62,12 +63,14 @@ pub enum Msg {
     OnError(Error),
     OnUserAddedToGroup(Group),
     OnUserRemovedFromGroup((String, i64)),
+    OnMfaReset,
 }
 
 #[derive(yew::Properties, Clone, PartialEq, Eq)]
 pub struct Props {
     pub username: String,
     pub is_admin: bool,
+    pub is_self: bool,
 }
 
 impl CommonComponent<UserDetails> for UserDetails {
@@ -88,6 +91,9 @@ impl CommonComponent<UserDetails> for UserDetails {
             }
             Msg::OnUserRemovedFromGroup((_, group_id)) => {
                 self.mut_groups().retain(|g| g.id != group_id);
+            }
+            Msg::OnMfaReset => {
+                self.user_and_schema.as_mut().unwrap().0.mfa_enrolled = Some(false);
             }
         }
         Ok(true)
@@ -211,6 +217,7 @@ impl Component for UserDetails {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = &ctx.link();
         match (&self.user_and_schema, &self.common.error) {
             (Some((u, schema)), error) => {
                 html! {
@@ -223,6 +230,29 @@ impl Component for UserDetails {
                         <i class="bi-key me-2"></i>
                         {"Modify password"}
                       </Link>
+                      { if ctx.props().is_self {
+                        html! {
+                          <Link
+                            to={AppRoute::RegisterMfa{user_id: u.id.clone()}}
+                            classes="btn btn-secondary me-2">
+                            <i class="bi-shield-lock me-2"></i>
+                            { if u.mfa_enrolled == Some(true) {
+                                "Reconfigure two-factor"
+                              } else {
+                                "Set up two-factor"
+                            }}
+                          </Link>
+                        }
+                      } else { html! {} }}
+                      { if ctx.props().is_admin {
+                        html! {
+                          <ResetMfa
+                            username={u.id.clone()}
+                            disabled={u.mfa_enrolled == Some(false)}
+                            on_mfa_reset={link.callback(|_| Msg::OnMfaReset)}
+                            on_error={link.callback(Msg::OnError)} />
+                        }
+                      } else { html! {} }}
                     </div>
                     <div>
                       <h5 class="row m-3 fw-bold">{"User details"}</h5>

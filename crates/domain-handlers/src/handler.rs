@@ -169,8 +169,6 @@ pub trait MfaBackendHandler {
     async fn finish_totp_enrollment(&self, user_id: &UserId, state: &str, code: &str)
     -> Result<()>;
     async fn verify_user_totp(&self, user_id: &UserId, code: &str) -> Result<()>;
-    async fn start_totp_login(&self, user_id: &UserId) -> Result<String>;
-    async fn finish_totp_login(&self, state: &str, code: &str) -> Result<UserId>;
 }
 
 #[async_trait]

@@ -4,13 +4,14 @@ use crate::{
         router::{AppRoute, Link},
     },
     infra::{
-        api::HostService,
+        api::{HostService, LoginOutcome},
         common_component::{CommonComponent, CommonComponentParts},
     },
 };
 use anyhow::{Result, anyhow, bail};
 use gloo_console::error;
 use lldap_auth::*;
+use lldap_mfa::split_totp_suffix;
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -20,6 +21,13 @@ pub struct LoginForm {
     common: CommonComponentParts<Self>,
     form: Form<FormModel>,
     refreshing: bool,
+    /// TOTP code stripped from the password field for the current attempt.
+    totp_code: Option<String>,
+    /// Full password kept for the single retry when the stripped attempt fails
+    /// (a real password can end in ":<6 digits>").
+    retry_password: Option<String>,
+    /// Show the combined-format teaching panel.
+    mfa_help: bool,
 }
 
 /// The fields of the form, with the constraints.
@@ -33,21 +41,45 @@ pub struct FormModel {
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct Props {
-    pub on_logged_in: Callback<(String, bool)>,
+    pub on_logged_in: Callback<(String, bool, bool)>,
     pub password_reset_enabled: bool,
 }
 
 pub enum Msg {
     Update,
     Submit,
-    AuthenticationRefreshResponse(Result<(String, bool)>),
+    AuthenticationRefreshResponse(Result<(String, bool, bool)>),
     AuthenticationStartResponse(
         (
             opaque::client::login::ClientLogin,
             Result<Box<login::ServerLoginStartResponse>>,
         ),
     ),
-    AuthenticationFinishResponse(Result<(String, bool)>),
+    AuthenticationFinishResponse(Result<LoginOutcome>),
+}
+
+impl LoginForm {
+    fn start_login_attempt(
+        &mut self,
+        ctx: &Context<Self>,
+        username: String,
+        password: String,
+    ) -> Result<bool> {
+        use anyhow::Context;
+        let mut rng = rand::rngs::OsRng;
+        let opaque::client::login::ClientLoginStartResult { state, message } =
+            opaque::client::login::start_login(&password, &mut rng)
+                .context("Could not initialize login")?;
+        let req = login::ClientLoginStartRequest {
+            username: username.into(),
+            login_start_request: message,
+        };
+        self.common
+            .call_backend(ctx, HostService::login_start(req), move |r| {
+                Msg::AuthenticationStartResponse((state, r))
+            });
+        Ok(true)
+    }
 }
 
 impl CommonComponent<LoginForm> for LoginForm {
@@ -63,20 +95,22 @@ impl CommonComponent<LoginForm> for LoginForm {
                 if !self.form.validate() {
                     bail!("Check the form for errors");
                 }
+                self.mfa_help = false;
                 let FormModel { username, password } = self.form.model();
-                let mut rng = rand::rngs::OsRng;
-                let opaque::client::login::ClientLoginStartResult { state, message } =
-                    opaque::client::login::start_login(&password, &mut rng)
-                        .context("Could not initialize login")?;
-                let req = login::ClientLoginStartRequest {
-                    username: username.into(),
-                    login_start_request: message,
+                let split = split_totp_suffix(&password).map(|(p, c)| (p.to_owned(), c.to_owned()));
+                let password = match split {
+                    Some((stripped, code)) => {
+                        self.totp_code = Some(code);
+                        self.retry_password = Some(password);
+                        stripped
+                    }
+                    None => {
+                        self.totp_code = None;
+                        self.retry_password = None;
+                        password
+                    }
                 };
-                self.common
-                    .call_backend(ctx, HostService::login_start(req), move |r| {
-                        Msg::AuthenticationStartResponse((state, r))
-                    });
-                Ok(true)
+                self.start_login_attempt(ctx, username, password)
             }
             Msg::AuthenticationStartResponse((login_start, res)) => {
                 let res = res.context("Could not log in (invalid response to login start)")?;
@@ -84,6 +118,14 @@ impl CommonComponent<LoginForm> for LoginForm {
                     match opaque::client::login::finish_login(login_start, res.credential_response)
                     {
                         Err(e) => {
+                            if let Some(password) = self.retry_password.take() {
+                                // The stripped password was wrong: retry once with
+                                // the full string.
+                                self.totp_code = None;
+                                error!(&format!("Retrying with the unsplit password: {}", e));
+                                let username = self.form.model().username;
+                                return self.start_login_attempt(ctx, username, password);
+                            }
                             // Common error, we want to print a full error to the console but only a
                             // simple one to the user.
                             error!(&format!("Invalid username or password: {}", e));
@@ -95,6 +137,7 @@ impl CommonComponent<LoginForm> for LoginForm {
                 let req = login::ClientLoginFinishRequest {
                     server_data: res.server_data,
                     credential_finalization: login_finish.message,
+                    totp_code: self.totp_code.clone(),
                 };
                 self.common.call_backend(
                     ctx,
@@ -103,16 +146,44 @@ impl CommonComponent<LoginForm> for LoginForm {
                 );
                 Ok(false)
             }
-            Msg::AuthenticationFinishResponse(user_info) => {
-                ctx.props()
-                    .on_logged_in
-                    .emit(user_info.context("Could not log in")?);
-                Ok(true)
+            Msg::AuthenticationFinishResponse(res) => {
+                // The password was proven client-side: no retry past this point.
+                self.retry_password = None;
+                match res {
+                    Err(e) => {
+                        if self.totp_code.take().is_some() {
+                            // Do not reveal which factor failed.
+                            error!(&format!("Invalid credentials: {}", e));
+                            self.common.error = Some(anyhow!("Invalid username or password"));
+                            Ok(true)
+                        } else {
+                            Err(e).context("Could not log in")
+                        }
+                    }
+                    Ok(LoginOutcome::MfaRequired) => {
+                        self.totp_code = None;
+                        self.mfa_help = true;
+                        Ok(true)
+                    }
+                    Ok(LoginOutcome::Success {
+                        user_id,
+                        is_admin,
+                        mfa_enrollment_required,
+                    }) => {
+                        self.totp_code = None;
+                        ctx.props()
+                            .on_logged_in
+                            .emit((user_id, is_admin, mfa_enrollment_required));
+                        Ok(true)
+                    }
+                }
             }
             Msg::AuthenticationRefreshResponse(user_info) => {
                 self.refreshing = false;
-                if let Ok(user_info) = user_info {
-                    ctx.props().on_logged_in.emit(user_info);
+                if let Ok((user_id, is_admin, mfa_enrollment_required)) = user_info {
+                    ctx.props()
+                        .on_logged_in
+                        .emit((user_id, is_admin, mfa_enrollment_required));
                 }
                 Ok(true)
             }
@@ -133,6 +204,9 @@ impl Component for LoginForm {
             common: CommonComponentParts::<Self>::create(),
             form: Form::<FormModel>::new(FormModel::default()),
             refreshing: true,
+            totp_code: None,
+            retry_password: None,
+            mfa_help: false,
         };
         app.common.call_backend(
             ctx,
@@ -159,6 +233,39 @@ impl Component for LoginForm {
         } else {
             html! {
               <form class="form center-block col-sm-4 col-offset-4">
+                { if self.mfa_help {
+                  html! {
+                    <div class="alert alert-warning">
+                      <h6 class="fw-bold">
+                        <i class="bi-shield-lock me-2"></i>
+                        {"This account uses two-factor authentication"}
+                      </h6>
+                      <p class="mb-2">
+                        {"Enter your password followed by ':' and the current 6-digit code from your authenticator app, all in the password field: "}
+                        <code>{"yourpassword:123456"}</code>
+                      </p>
+                      <p class="mb-2">
+                        {"The code changes every 30 seconds, so type it fresh each time rather than saving it with your password."}
+                      </p>
+                      <p class="mb-2">
+                        {"This works the same everywhere this account signs in: this page, but also email clients, VPNs and any other service that authenticates against it."}
+                      </p>
+                      { if password_reset_enabled {
+                        html! {
+                          <Link
+                            classes="btn-link"
+                            to={AppRoute::StartResetPassword}>
+                            {"Lost your authenticator? Reset your password"}
+                          </Link>
+                        }
+                      } else {
+                        html!{}
+                      }}
+                    </div>
+                  }
+                } else {
+                  html!{}
+                }}
                 <div class="input-group">
                   <div class="input-group-prepend">
                     <span class="input-group-text">

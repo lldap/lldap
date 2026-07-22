@@ -2,6 +2,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum MfaError {
+    #[cfg(feature = "seal")]
     #[error("Crypto error")]
     Crypto(#[from] orion::errors::UnknownCryptoError),
     #[error("Invalid sealed secret format")]

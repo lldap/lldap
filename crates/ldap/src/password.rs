@@ -16,18 +16,8 @@ use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, MfaPolicy, UserBackendHandler,
 };
 use lldap_domain_model::error::DomainError;
-use lldap_mfa::{MFA_TYPE_TOTP, TOTP_DIGITS};
+use lldap_mfa::{MFA_TYPE_TOTP, TOTP_SEPARATOR, split_totp_suffix};
 use lldap_opaque_handler::OpaqueHandler;
-
-// Separator between password and TOTP code in combined binds (confirmed on issue #631).
-const TOTP_SEPARATOR: char = ':';
-
-// Split "password:123456" into (password, code) when the suffix looks like a TOTP code.
-fn split_totp_suffix(password: &str) -> Option<(&str, &str)> {
-    let (prefix, code) = password.rsplit_once(TOTP_SEPARATOR)?;
-    (code.len() == TOTP_DIGITS as usize && code.bytes().all(|b| b.is_ascii_digit()))
-        .then_some((prefix, code))
-}
 
 async fn bind_password(
     backend: &impl LoginHandler,

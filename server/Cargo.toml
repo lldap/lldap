@@ -101,6 +101,7 @@ path = "../crates/domain-model"
 
 [dependencies.lldap_mfa]
 path = "../crates/mfa"
+default-features = false
 
 [dependencies.lldap_domain_handlers]
 path = "../crates/domain-handlers"

@@ -2,11 +2,16 @@ use crate::sql_tables::DbConnection;
 use async_trait::async_trait;
 use lldap_auth::opaque::server::ServerSetup;
 use lldap_domain_handlers::handler::BackendHandler;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct SqlBackendHandler {
     pub(crate) opaque_setup: ServerSetup,
     pub(crate) sql_pool: DbConnection,
+    // Successfully used TOTP codes ((uuid, code) -> expiry), shared across the
+    // cloned per-request handlers so a code is only ever accepted once.
+    pub(crate) used_totp_codes: Arc<Mutex<HashMap<(String, String), i64>>>,
 }
 
 impl SqlBackendHandler {
@@ -14,6 +19,7 @@ impl SqlBackendHandler {
         SqlBackendHandler {
             opaque_setup,
             sql_pool,
+            used_totp_codes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 

@@ -223,6 +223,11 @@ type User {
   avatar: String
   creationDate: DateTime!
   uuid: String!
+  """
+    Whether the user has a second factor enrolled.
+    Only visible to admins and to the user themself.
+  """
+  mfaEnrolled: Boolean
   "User-defined attributes."
   attributes: [AttributeValue!]!
   "The groups to which this user belongs."

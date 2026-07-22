@@ -10,6 +10,7 @@ use crate::{
         group_schema_table::ListGroupSchema,
         group_table::GroupTable,
         login::LoginForm,
+        register_mfa::RegisterMfa,
         reset_password_step1::ResetPasswordStep1Form,
         reset_password_step2::ResetPasswordStep2Form,
         router::{AppRoute, Link, Redirect},
@@ -49,7 +50,7 @@ pub struct App {
 }
 
 pub enum Msg {
-    Login((String, bool)),
+    Login((String, bool, bool)),
     Logout,
     SettingsReceived(anyhow::Result<Options>),
 }
@@ -85,17 +86,23 @@ impl Component for App {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         let history = ctx.link().history().unwrap();
         match msg {
-            Msg::Login((user_name, is_admin)) => {
+            Msg::Login((user_name, is_admin, mfa_enrollment_required)) => {
                 self.user_info = Some((user_name.clone(), is_admin));
-                history.push(self.redirect_to.take().unwrap_or_else(|| {
-                    if is_admin {
-                        AppRoute::ListUsers
-                    } else {
-                        AppRoute::UserDetails {
-                            user_id: user_name.clone(),
+                if mfa_enrollment_required {
+                    // The server requires MFA for everyone: guide straight to enrollment.
+                    self.redirect_to = None;
+                    history.push(AppRoute::RegisterMfa { user_id: user_name });
+                } else {
+                    history.push(self.redirect_to.take().unwrap_or_else(|| {
+                        if is_admin {
+                            AppRoute::ListUsers
+                        } else {
+                            AppRoute::UserDetails {
+                                user_id: user_name.clone(),
+                            }
                         }
-                    }
-                }));
+                    }));
+                }
             }
             Msg::Logout => {
                 self.user_info = None;
@@ -116,6 +123,7 @@ impl Component for App {
         let link = ctx.link().clone();
         let is_admin = self.is_admin();
         let username = self.user_info.clone().map(|(username, _)| username);
+        let logged_in_user = username.clone();
         let password_reset_enabled = self.password_reset_enabled;
         html! {
           <div>
@@ -124,7 +132,7 @@ impl Component for App {
               <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <main class="py-3">
                   <Switch<AppRoute>
-                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled))}
+                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, logged_in_user.clone(), password_reset_enabled))}
                   />
                 </main>
               </div>
@@ -197,6 +205,7 @@ impl App {
         switch: &AppRoute,
         link: &Scope<Self>,
         is_admin: bool,
+        logged_in_user: Option<String>,
         password_reset_enabled: Option<bool>,
     ) -> Html {
         match switch {
@@ -259,14 +268,34 @@ impl App {
                 <GroupDetails group_id={*group_id} is_admin={is_admin} />
             },
             AppRoute::UserDetails { user_id } => match Self::decode_user_id(user_id) {
-                Some(decoded_id) => html! {
-                    <UserDetails username={decoded_id} is_admin={is_admin} />
-                },
+                Some(decoded_id) => {
+                    let is_self = logged_in_user
+                        .as_deref()
+                        .is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id));
+                    html! {
+                        <UserDetails username={decoded_id} is_admin={is_admin} is_self={is_self} />
+                    }
+                }
                 None => html! { <Redirect to={AppRoute::Login} /> },
             },
             AppRoute::ChangePassword { user_id } => match Self::decode_user_id(user_id) {
                 Some(decoded_id) => html! {
                     <ChangePasswordForm username={decoded_id} is_admin={is_admin} />
+                },
+                None => html! { <Redirect to={AppRoute::Login} /> },
+            },
+            AppRoute::RegisterMfa { user_id } => match Self::decode_user_id(user_id) {
+                // The enrollment mutation targets the logged-in user: never
+                // render this page under someone else's URL.
+                Some(decoded_id)
+                    if logged_in_user
+                        .as_deref()
+                        .is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id)) =>
+                {
+                    html! { <RegisterMfa username={decoded_id} /> }
+                }
+                Some(decoded_id) => html! {
+                    <Redirect to={AppRoute::UserDetails { user_id: decoded_id }} />
                 },
                 None => html! { <Redirect to={AppRoute::Login} /> },
             },
