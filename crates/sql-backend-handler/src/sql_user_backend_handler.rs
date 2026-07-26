@@ -42,6 +42,19 @@ fn attribute_condition(name: AttributeName, value: Option<Serialized>) -> Cond {
     .into_condition()
 }
 
+fn attribute_value_condition(name: AttributeName, value: Serialized) -> Cond {
+    Expr::in_subquery(
+        Expr::col(UserColumn::UserId.as_column_ref()),
+        model::UserAttributeValues::find()
+            .select_only()
+            .column(model::UserAttributeValuesColumn::UserId)
+            .filter(model::UserAttributeValuesColumn::AttributeName.eq(name))
+            .filter(model::UserAttributeValuesColumn::Value.eq(value))
+            .into_query(),
+    )
+    .into_condition()
+}
+
 fn user_id_subcondition(filter: Cond) -> Cond {
     Expr::in_subquery(
         Expr::col(UserColumn::UserId.as_column_ref()),
@@ -92,6 +105,7 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
             }
         }
         AttributeEquality(column, value) => attribute_condition(column, Some(value.into())),
+        AttributeValueContains(column, value) => attribute_value_condition(column, value.into()),
         MemberOf(group) => user_id_subcondition(
             Expr::col((group_table, GroupColumn::LowercaseDisplayName))
                 .eq(group.as_str().to_lowercase())
@@ -792,6 +806,162 @@ mod tests {
             indexed_values(&fixture.handler, "alice", "mailalias").await,
             vec!["a@example.com", "b@example.com"]
         );
+    }
+
+    #[tokio::test]
+    async fn test_list_users_list_attribute_equality() {
+        // The bug in lldap#858: searching a multi-valued attribute for one of its values.
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "mailalias", AttributeType::String).await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec!["a@example.com".to_string(), "b@example.com".to_string()].into(),
+            },
+        )
+        .await;
+        set_attribute(
+            &fixture.handler,
+            "patrick",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec!["c@example.com".to_string()].into(),
+            },
+        )
+        .await;
+        // Matches on a value that isn't the first one in the list.
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::AttributeValueContains(
+                AttributeName::from("mailalias"),
+                "b@example.com".to_string().into(),
+            )),
+        )
+        .await;
+        assert_eq!(users, vec!["bob"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_users_list_attribute_equality_no_match() {
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "mailalias", AttributeType::String).await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec!["alias@example.com".to_string()].into(),
+            },
+        )
+        .await;
+        for needle in [
+            // Not one of the values.
+            "nobody@example.com",
+            // A prefix of a stored value must not match.
+            "alias@example.co",
+            // Nor must a substring.
+            "example.com",
+        ] {
+            let users = get_user_names(
+                &fixture.handler,
+                Some(UserRequestFilter::AttributeValueContains(
+                    AttributeName::from("mailalias"),
+                    needle.to_string().into(),
+                )),
+            )
+            .await;
+            assert_eq!(users, Vec::<String>::new(), "matched on {needle:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_users_integer_list_attribute_has_no_false_positives() {
+        // Matching the value as a substring of the blob, which we rejected, would find 1 in
+        // both of these: a one-element list starts with the count prefix 01 00 00 00 00 00
+        // 00 00, which is also the encoding of 1, and [256, 0] contains it at offset 9.
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "luckynumbers", AttributeType::Integer).await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "luckynumbers".into(),
+                value: vec![256i64, 0i64].into(),
+            },
+        )
+        .await;
+        set_attribute(
+            &fixture.handler,
+            "patrick",
+            Attribute {
+                name: "luckynumbers".into(),
+                value: vec![7i64].into(),
+            },
+        )
+        .await;
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::AttributeValueContains(
+                AttributeName::from("luckynumbers"),
+                1i64.into(),
+            )),
+        )
+        .await;
+        assert_eq!(users, Vec::<String>::new());
+        // The values that really are there still match.
+        for (needle, expected) in [(256i64, "bob"), (0i64, "bob"), (7i64, "patrick")] {
+            let users = get_user_names(
+                &fixture.handler,
+                Some(UserRequestFilter::AttributeValueContains(
+                    AttributeName::from("luckynumbers"),
+                    needle.into(),
+                )),
+            )
+            .await;
+            assert_eq!(users, vec![expected], "looking for {needle}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_users_list_attribute_equality_after_update() {
+        // A value removed from the list must stop matching.
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "mailalias", AttributeType::String).await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec!["old@example.com".to_string()].into(),
+            },
+        )
+        .await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec!["new@example.com".to_string()].into(),
+            },
+        )
+        .await;
+        let find = |needle: &'static str| {
+            let handler = &fixture.handler;
+            async move {
+                get_user_names(
+                    handler,
+                    Some(UserRequestFilter::AttributeValueContains(
+                        AttributeName::from("mailalias"),
+                        needle.to_string().into(),
+                    )),
+                )
+                .await
+            }
+        };
+        assert_eq!(find("new@example.com").await, vec!["bob"]);
+        assert_eq!(find("old@example.com").await, Vec::<String>::new());
     }
 
     #[tokio::test]

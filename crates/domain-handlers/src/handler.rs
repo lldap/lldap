@@ -79,6 +79,8 @@ pub enum UserRequestFilter {
     UserIdSubString(SubStringFilter),
     Equality(UserColumn, String),
     AttributeEquality(AttributeName, AttributeValue),
+    // Check if one of the values of a multi-value attribute equals this one.
+    AttributeValueContains(AttributeName, AttributeValue),
     SubString(UserColumn, SubStringFilter),
     // Check if a user belongs to a group identified by name.
     MemberOf(GroupName),
@@ -107,6 +109,8 @@ pub enum GroupRequestFilter {
     // Check if the group contains a user identified by uid.
     Member(UserId),
     AttributeEquality(AttributeName, AttributeValue),
+    // Check if one of the values of a multi-value attribute equals this one.
+    AttributeValueContains(AttributeName, AttributeValue),
     CustomAttributePresent(AttributeName),
 }
 

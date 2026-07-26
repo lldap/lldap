@@ -41,13 +41,14 @@ impl RequestFilter {
                     UserFieldType::PrimaryField(column) => {
                         Ok(DomainRequestFilter::Equality(column, eq.value))
                     }
-                    UserFieldType::Attribute(name, typ, false) => {
+                    UserFieldType::Attribute(name, typ, is_list) => {
                         let value = deserialize_attribute_value(&[eq.value], typ, false)
                             .context(format!("While deserializing attribute {}", &name))?;
-                        Ok(DomainRequestFilter::AttributeEquality(name, value))
-                    }
-                    UserFieldType::Attribute(_, _, true) => {
-                        Err("Equality not supported for list fields".into())
+                        Ok(if is_list {
+                            DomainRequestFilter::AttributeValueContains(name, value)
+                        } else {
+                            DomainRequestFilter::AttributeEquality(name, value)
+                        })
                     }
                     UserFieldType::MemberOf => Ok(DomainRequestFilter::MemberOf(eq.value.into())),
                     UserFieldType::ObjectClass | UserFieldType::Dn | UserFieldType::EntryDn => {

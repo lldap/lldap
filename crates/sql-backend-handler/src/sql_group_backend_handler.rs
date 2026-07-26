@@ -63,6 +63,19 @@ fn attribute_condition(name: AttributeName, value: Option<Serialized>) -> Cond {
     .into_condition()
 }
 
+fn attribute_value_condition(name: AttributeName, value: Serialized) -> Cond {
+    Expr::in_subquery(
+        Expr::col(GroupColumn::GroupId.as_column_ref()),
+        model::GroupAttributeValues::find()
+            .select_only()
+            .column(model::GroupAttributeValuesColumn::GroupId)
+            .filter(model::GroupAttributeValuesColumn::AttributeName.eq(name))
+            .filter(model::GroupAttributeValuesColumn::Value.eq(value))
+            .into_query(),
+    )
+    .into_condition()
+}
+
 fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
     use GroupRequestFilter::*;
     let group_table = Alias::new("groups");
@@ -110,6 +123,7 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
         .like(filter.to_sql_filter())
         .into_condition(),
         AttributeEquality(name, value) => attribute_condition(name, Some(value.into())),
+        AttributeValueContains(name, value) => attribute_value_condition(name, value.into()),
         CustomAttributePresent(name) => attribute_condition(name, None),
     }
 }
@@ -421,6 +435,117 @@ mod tests {
             .into_iter()
             .map(|g| g.display_name)
             .collect::<Vec<_>>()
+    }
+
+    #[tokio::test]
+    async fn test_list_groups_list_attribute_equality() {
+        let fixture = TestFixture::new().await;
+        fixture
+            .handler
+            .add_group_attribute(CreateAttributeRequest {
+                name: "tags".into(),
+                attribute_type: AttributeType::String,
+                is_list: true,
+                is_visible: true,
+                is_editable: true,
+            })
+            .await
+            .unwrap();
+        fixture
+            .handler
+            .update_group(UpdateGroupRequest {
+                group_id: fixture.groups[0],
+                display_name: None,
+                delete_attributes: Vec::new(),
+                insert_attributes: vec![Attribute {
+                    name: "tags".into(),
+                    value: vec!["red".to_string(), "blue".to_string()].into(),
+                }],
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            get_group_names(
+                &fixture.handler,
+                Some(GroupRequestFilter::AttributeValueContains(
+                    "tags".into(),
+                    "blue".to_string().into(),
+                ))
+            )
+            .await,
+            vec!["Best Group".into()]
+        );
+        assert_eq!(
+            get_group_names(
+                &fixture.handler,
+                Some(GroupRequestFilter::AttributeValueContains(
+                    "tags".into(),
+                    "green".to_string().into(),
+                ))
+            )
+            .await,
+            Vec::<GroupName>::new()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_group_attribute_names_in_one_update() {
+        // A repeated name resolves to the last value, as the ON CONFLICT on the attribute
+        // insert does; the per-value rows must agree rather than collide.
+        let fixture = TestFixture::new().await;
+        fixture
+            .handler
+            .add_group_attribute(CreateAttributeRequest {
+                name: "tags".into(),
+                attribute_type: AttributeType::String,
+                is_list: true,
+                is_visible: true,
+                is_editable: true,
+            })
+            .await
+            .unwrap();
+        fixture
+            .handler
+            .update_group(UpdateGroupRequest {
+                group_id: fixture.groups[0],
+                display_name: None,
+                delete_attributes: Vec::new(),
+                insert_attributes: vec![
+                    Attribute {
+                        name: "tags".into(),
+                        value: vec!["red".to_string(), "blue".to_string()].into(),
+                    },
+                    Attribute {
+                        name: "tags".into(),
+                        value: vec!["green".to_string()].into(),
+                    },
+                ],
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            get_group_names(
+                &fixture.handler,
+                Some(GroupRequestFilter::AttributeValueContains(
+                    "tags".into(),
+                    "green".to_string().into(),
+                ))
+            )
+            .await,
+            vec!["Best Group".into()]
+        );
+        // The values of the discarded first entry must not linger in the index.
+        assert_eq!(
+            get_group_names(
+                &fixture.handler,
+                Some(GroupRequestFilter::AttributeValueContains(
+                    "tags".into(),
+                    "blue".to_string().into(),
+                ))
+            )
+            .await,
+            Vec::<GroupName>::new()
+        );
     }
 
     #[tokio::test]
