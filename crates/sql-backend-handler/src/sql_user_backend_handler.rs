@@ -1,4 +1,4 @@
-use crate::sql_backend_handler::SqlBackendHandler;
+use crate::sql_backend_handler::{SqlBackendHandler, last_value_per_attribute};
 use async_trait::async_trait;
 use lldap_domain::{
     requests::{CreateUserRequest, UpdateUserRequest},
@@ -188,42 +188,89 @@ impl UserListerBackendHandler for SqlBackendHandler {
     }
 }
 
+// Empty for single-value attributes: their blob is already the scalar encoding, so it can
+// be matched with a plain equality.
+fn user_attribute_value_models(
+    user_id: &UserId,
+    attribute: &Attribute,
+    is_list: bool,
+) -> Vec<model::user_attribute_values::ActiveModel> {
+    if !is_list {
+        return Vec::new();
+    }
+    attribute
+        .value
+        .clone()
+        .into_scalar_serialized_values()
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| model::user_attribute_values::ActiveModel {
+            user_id: Set(user_id.clone()),
+            attribute_name: Set(attribute.name.clone()),
+            value_index: Set(index as i32),
+            value: Set(value),
+        })
+        .collect()
+}
+
+// Drop and rebuild the rows of every attribute we touched. Must run in the same transaction
+// as the write to `user_attributes` that it mirrors.
+async fn replace_user_attribute_values(
+    transaction: &DatabaseTransaction,
+    user_id: &UserId,
+    touched_attributes: Vec<AttributeName>,
+    new_values: Vec<model::user_attribute_values::ActiveModel>,
+) -> Result<()> {
+    if !touched_attributes.is_empty() {
+        model::UserAttributeValues::delete_many()
+            .filter(model::UserAttributeValuesColumn::UserId.eq(user_id))
+            .filter(model::UserAttributeValuesColumn::AttributeName.is_in(touched_attributes))
+            .exec(transaction)
+            .await?;
+    }
+    if !new_values.is_empty() {
+        model::UserAttributeValues::insert_many(new_values)
+            .exec(transaction)
+            .await?;
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+struct UserAttributeChanges {
+    upserts: Vec<model::user_attributes::ActiveModel>,
+    removals: Vec<AttributeName>,
+    value_upserts: Vec<model::user_attribute_values::ActiveModel>,
+    // Every attribute written or removed, whose index rows must be dropped first. A superset
+    // of the names in `value_upserts`, since a list can be set to empty.
+    touched_attributes: Vec<AttributeName>,
+}
+
 impl SqlBackendHandler {
     fn compute_user_attribute_changes(
         user_id: &UserId,
         insert_attributes: Vec<Attribute>,
         delete_attributes: Vec<AttributeName>,
         schema: &Schema,
-    ) -> Result<(Vec<model::user_attributes::ActiveModel>, Vec<AttributeName>)> {
-        let mut update_user_attributes = Vec::new();
-        let mut remove_user_attributes = Vec::new();
-        let mut process_serialized =
-            |value: ActiveValue<Serialized>, attribute_name: AttributeName| match &value {
-                ActiveValue::NotSet => {
-                    remove_user_attributes.push(attribute_name);
-                }
-                ActiveValue::Set(_) => {
-                    update_user_attributes.push(model::user_attributes::ActiveModel {
-                        user_id: Set(user_id.clone()),
-                        attribute_name: Set(attribute_name),
-                        value,
-                    })
-                }
-                _ => unreachable!(),
-            };
-        for attribute in insert_attributes {
-            if schema
-                .user_attributes
-                .get_attribute_type(&attribute.name)
-                .is_some()
-            {
-                process_serialized(ActiveValue::Set(attribute.value.into()), attribute.name);
-            } else {
+    ) -> Result<UserAttributeChanges> {
+        let mut changes = UserAttributeChanges::default();
+        for attribute in last_value_per_attribute(insert_attributes) {
+            let Some((_, is_list)) = schema.user_attributes.get_attribute_type(&attribute.name)
+            else {
                 return Err(DomainError::InternalError(format!(
                     "User attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
                     &attribute.name
                 )));
-            }
+            };
+            changes
+                .value_upserts
+                .extend(user_attribute_value_models(user_id, &attribute, is_list));
+            changes.touched_attributes.push(attribute.name.clone());
+            changes.upserts.push(model::user_attributes::ActiveModel {
+                user_id: Set(user_id.clone()),
+                attribute_name: Set(attribute.name),
+                value: Set(attribute.value.into()),
+            });
         }
         for attribute in delete_attributes {
             if schema
@@ -231,14 +278,15 @@ impl SqlBackendHandler {
                 .get_attribute_type(&attribute)
                 .is_some()
             {
-                remove_user_attributes.push(attribute);
+                changes.touched_attributes.push(attribute.clone());
+                changes.removals.push(attribute);
             } else {
                 return Err(DomainError::InternalError(format!(
                     "User attribute name {attribute} doesn't exist in the schema, yet was attempted to be removed from the database"
                 )));
             }
         }
-        Ok((update_user_attributes, remove_user_attributes))
+        Ok(changes)
     }
 
     async fn update_user_with_transaction(
@@ -246,13 +294,17 @@ impl SqlBackendHandler {
         request: UpdateUserRequest,
     ) -> Result<()> {
         let schema = Self::get_schema_with_transaction(transaction).await?;
-        let (update_user_attributes, remove_user_attributes) =
-            Self::compute_user_attribute_changes(
-                &request.user_id,
-                request.insert_attributes,
-                request.delete_attributes,
-                &schema,
-            )?;
+        let UserAttributeChanges {
+            upserts: update_user_attributes,
+            removals: remove_user_attributes,
+            value_upserts,
+            touched_attributes,
+        } = Self::compute_user_attribute_changes(
+            &request.user_id,
+            request.insert_attributes,
+            request.delete_attributes,
+            &schema,
+        )?;
         let lower_email = request.email.as_ref().map(|s| s.as_str().to_lowercase());
         let now = chrono::Utc::now().naive_utc();
         let update_user = model::users::ActiveModel {
@@ -284,6 +336,13 @@ impl SqlBackendHandler {
                 .exec(transaction)
                 .await?;
         }
+        replace_user_attribute_values(
+            transaction,
+            &request.user_id,
+            touched_attributes,
+            value_upserts,
+        )
+        .await?;
         Ok(())
     }
 }
@@ -349,32 +408,40 @@ impl UserBackendHandler for SqlBackendHandler {
             ..Default::default()
         };
         let mut new_user_attributes = Vec::new();
+        let mut new_user_attribute_values = Vec::new();
         self.sql_pool
             .transaction::<_, (), DomainError>(|transaction| {
                 Box::pin(async move {
                     let schema = Self::get_schema_with_transaction(transaction).await?;
                     for attribute in request.attributes {
-                        if schema
-                            .user_attributes
-                            .get_attribute_type(&attribute.name)
-                            .is_some()
-                        {
-                            new_user_attributes.push(model::user_attributes::ActiveModel {
-                                user_id: Set(request.user_id.clone()),
-                                attribute_name: Set(attribute.name),
-                                value: Set(attribute.value.into()),
-                            });
-                        } else {
+                        let Some((_, is_list)) =
+                            schema.user_attributes.get_attribute_type(&attribute.name)
+                        else {
                             return Err(DomainError::InternalError(format!(
                                 "Attribute name {} doesn't exist in the user schema,
                                     yet was attempted to be inserted in the database",
                                 &attribute.name
                             )));
-                        }
+                        };
+                        new_user_attribute_values.extend(user_attribute_value_models(
+                            &request.user_id,
+                            &attribute,
+                            is_list,
+                        ));
+                        new_user_attributes.push(model::user_attributes::ActiveModel {
+                            user_id: Set(request.user_id.clone()),
+                            attribute_name: Set(attribute.name),
+                            value: Set(attribute.value.into()),
+                        });
                     }
                     new_user.insert(transaction).await?;
                     if !new_user_attributes.is_empty() {
                         model::UserAttributes::insert_many(new_user_attributes)
+                            .exec(transaction)
+                            .await?;
+                    }
+                    if !new_user_attribute_values.is_empty() {
+                        model::UserAttributeValues::insert_many(new_user_attribute_values)
                             .exec(transaction)
                             .await?;
                     }
@@ -485,10 +552,247 @@ mod tests {
     use super::*;
     use crate::sql_backend_handler::tests::*;
     use lldap_auth::opaque::server::generate_random_private_key;
-    use lldap_domain::types::{Attribute, JpegPhoto};
-    use lldap_domain_handlers::handler::SubStringFilter;
+    use lldap_domain::{
+        requests::CreateAttributeRequest,
+        types::{Attribute, AttributeType, JpegPhoto},
+    };
+    use lldap_domain_handlers::handler::{SchemaBackendHandler, SubStringFilter};
     use lldap_domain_model::model::UserColumn;
     use pretty_assertions::{assert_eq, assert_ne};
+
+    async fn add_list_attribute(handler: &SqlBackendHandler, name: &str, typ: AttributeType) {
+        handler
+            .add_user_attribute(CreateAttributeRequest {
+                name: name.into(),
+                attribute_type: typ,
+                is_list: true,
+                is_visible: true,
+                is_editable: true,
+            })
+            .await
+            .unwrap();
+    }
+
+    async fn set_attribute(handler: &SqlBackendHandler, user: &str, attribute: Attribute) {
+        handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new(user),
+                insert_attributes: vec![attribute],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+    }
+
+    // Read the index directly, to check maintenance rather than the filter built on it.
+    async fn indexed_values(
+        handler: &SqlBackendHandler,
+        user: &str,
+        attribute: &str,
+    ) -> Vec<String> {
+        model::UserAttributeValues::find()
+            .filter(model::UserAttributeValuesColumn::UserId.eq(UserId::new(user)))
+            .filter(
+                model::UserAttributeValuesColumn::AttributeName.eq(AttributeName::from(attribute)),
+            )
+            .order_by_asc(model::UserAttributeValuesColumn::ValueIndex)
+            .all(&handler.sql_pool)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| row.value.unwrap::<String>())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn test_list_attribute_values_are_indexed() {
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "mailalias", AttributeType::String).await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec!["a@example.com".to_string(), "b@example.com".to_string()].into(),
+            },
+        )
+        .await;
+        assert_eq!(
+            indexed_values(&fixture.handler, "bob", "mailalias").await,
+            vec!["a@example.com", "b@example.com"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_list_values_are_indexed_separately() {
+        // Keyed by position, so repeated values don't collide on the primary key.
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "mailalias", AttributeType::String).await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec!["dup@example.com".to_string(), "dup@example.com".to_string()].into(),
+            },
+        )
+        .await;
+        assert_eq!(
+            indexed_values(&fixture.handler, "bob", "mailalias").await,
+            vec!["dup@example.com", "dup@example.com"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_attribute_names_in_one_update() {
+        // The blob insert resolves a repeated name with ON CONFLICT ... last one wins. The
+        // index has to agree with it.
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "mailalias", AttributeType::String).await;
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                insert_attributes: vec![
+                    Attribute {
+                        name: "mailalias".into(),
+                        value: vec!["a@x.com".to_string(), "b@x.com".to_string()].into(),
+                    },
+                    Attribute {
+                        name: "mailalias".into(),
+                        value: vec!["z@x.com".to_string()].into(),
+                    },
+                ],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            indexed_values(&fixture.handler, "bob", "mailalias").await,
+            vec!["z@x.com"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_updating_list_attribute_replaces_index() {
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "mailalias", AttributeType::String).await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec![
+                    "old@example.com".to_string(),
+                    "kept@example.com".to_string(),
+                ]
+                .into(),
+            },
+        )
+        .await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec!["kept@example.com".to_string()].into(),
+            },
+        )
+        .await;
+        // The stale row for `old@example.com` must be gone, not merely shadowed.
+        assert_eq!(
+            indexed_values(&fixture.handler, "bob", "mailalias").await,
+            vec!["kept@example.com"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_deleting_list_attribute_clears_index() {
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "mailalias", AttributeType::String).await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec!["a@example.com".to_string()].into(),
+            },
+        )
+        .await;
+        fixture
+            .handler
+            .update_user(UpdateUserRequest {
+                user_id: UserId::new("bob"),
+                delete_attributes: vec!["mailalias".into()],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(
+            indexed_values(&fixture.handler, "bob", "mailalias")
+                .await
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_deleting_user_clears_index() {
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "mailalias", AttributeType::String).await;
+        set_attribute(
+            &fixture.handler,
+            "bob",
+            Attribute {
+                name: "mailalias".into(),
+                value: vec!["a@example.com".to_string()].into(),
+            },
+        )
+        .await;
+        fixture
+            .handler
+            .delete_user(&UserId::new("bob"))
+            .await
+            .unwrap();
+        assert!(
+            indexed_values(&fixture.handler, "bob", "mailalias")
+                .await
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_single_valued_attribute_is_not_indexed() {
+        // Single-value attributes are matchable through their blob, so they're left out.
+        let fixture = TestFixture::new().await;
+        assert!(
+            indexed_values(&fixture.handler, "bob", "first_name")
+                .await
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_with_list_attribute_is_indexed() {
+        let fixture = TestFixture::new().await;
+        add_list_attribute(&fixture.handler, "mailalias", AttributeType::String).await;
+        fixture
+            .handler
+            .create_user(CreateUserRequest {
+                user_id: UserId::new("alice"),
+                email: "alice@example.com".into(),
+                attributes: vec![Attribute {
+                    name: "mailalias".into(),
+                    value: vec!["a@example.com".to_string(), "b@example.com".to_string()].into(),
+                }],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            indexed_values(&fixture.handler, "alice", "mailalias").await,
+            vec!["a@example.com", "b@example.com"]
+        );
+    }
 
     #[tokio::test]
     async fn test_list_users_no_filter() {

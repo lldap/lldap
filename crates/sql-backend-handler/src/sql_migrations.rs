@@ -1,12 +1,15 @@
 use crate::sql_tables::{DbConnection, LAST_SCHEMA_VERSION, SchemaVersion};
 use itertools::Itertools;
-use lldap_domain::types::{AttributeType, GroupId, JpegPhoto, Serialized, UserId, Uuid};
+use lldap_domain::types::{
+    AttributeName, AttributeType, GroupId, JpegPhoto, Serialized, UserId, Uuid,
+};
+use lldap_domain_model::model::deserialize;
 use sea_orm::{
     ConnectionTrait, DatabaseTransaction, DbErr, DeriveIden, FromQueryResult, Iden, Order,
     Statement, TransactionTrait,
     sea_query::{
-        BinOper, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, Query, SimpleExpr,
-        Table, Value, all,
+        Alias, BinOper, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, Query,
+        SimpleExpr, Table, Value, all,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -86,6 +89,24 @@ pub(crate) enum GroupAttributes {
     Table,
     GroupAttributeGroupId,
     GroupAttributeName,
+    GroupAttributeValue,
+}
+
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub(crate) enum UserAttributeValues {
+    Table,
+    UserAttributeValueUserId,
+    UserAttributeValueName,
+    UserAttributeValueIndex,
+    UserAttributeValue,
+}
+
+#[derive(DeriveIden, PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub(crate) enum GroupAttributeValues {
+    Table,
+    GroupAttributeValueGroupId,
+    GroupAttributeValueName,
+    GroupAttributeValueIndex,
     GroupAttributeValue,
 }
 
@@ -1161,6 +1182,326 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
     Ok(transaction)
 }
 
+async fn migrate_to_v12(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
+    // Create the per-value tables and fill them from the existing attribute blobs, so that
+    // equality filters also work on data written before the tables existed.
+    let builder = transaction.get_database_backend();
+    transaction
+        .execute(
+            builder.build(
+                Table::create()
+                    .table(UserAttributeValues::Table)
+                    .col(
+                        ColumnDef::new(UserAttributeValues::UserAttributeValueUserId)
+                            .string_len(255)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserAttributeValues::UserAttributeValueName)
+                            .string_len(64)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserAttributeValues::UserAttributeValueIndex)
+                            .integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserAttributeValues::UserAttributeValue)
+                            .blob()
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("UserAttributeValueUserIdForeignKey")
+                            .from(
+                                UserAttributeValues::Table,
+                                UserAttributeValues::UserAttributeValueUserId,
+                            )
+                            .to(Users::Table, Users::UserId)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("UserAttributeValueNameForeignKey")
+                            .from(
+                                UserAttributeValues::Table,
+                                UserAttributeValues::UserAttributeValueName,
+                            )
+                            .to(
+                                UserAttributeSchema::Table,
+                                UserAttributeSchema::UserAttributeSchemaName,
+                            )
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .primary_key(
+                        Index::create()
+                            .col(UserAttributeValues::UserAttributeValueUserId)
+                            .col(UserAttributeValues::UserAttributeValueName)
+                            .col(UserAttributeValues::UserAttributeValueIndex),
+                    ),
+            ),
+        )
+        .await?;
+
+    transaction
+        .execute(
+            builder.build(
+                Table::create()
+                    .table(GroupAttributeValues::Table)
+                    .col(
+                        ColumnDef::new(GroupAttributeValues::GroupAttributeValueGroupId)
+                            .integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupAttributeValues::GroupAttributeValueName)
+                            .string_len(64)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupAttributeValues::GroupAttributeValueIndex)
+                            .integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(GroupAttributeValues::GroupAttributeValue)
+                            .blob()
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("GroupAttributeValueGroupIdForeignKey")
+                            .from(
+                                GroupAttributeValues::Table,
+                                GroupAttributeValues::GroupAttributeValueGroupId,
+                            )
+                            .to(Groups::Table, Groups::GroupId)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("GroupAttributeValueNameForeignKey")
+                            .from(
+                                GroupAttributeValues::Table,
+                                GroupAttributeValues::GroupAttributeValueName,
+                            )
+                            .to(
+                                GroupAttributeSchema::Table,
+                                GroupAttributeSchema::GroupAttributeSchemaName,
+                            )
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .primary_key(
+                        Index::create()
+                            .col(GroupAttributeValues::GroupAttributeValueGroupId)
+                            .col(GroupAttributeValues::GroupAttributeValueName)
+                            .col(GroupAttributeValues::GroupAttributeValueIndex),
+                    ),
+            ),
+        )
+        .await?;
+
+    // Lookup index: equality filters search by (attribute name, value).
+    transaction
+        .execute(
+            builder.build(
+                Index::create()
+                    .name("user-attribute-value-lookup")
+                    .table(UserAttributeValues::Table)
+                    .col(UserAttributeValues::UserAttributeValueName)
+                    .col(UserAttributeValues::UserAttributeValue),
+            ),
+        )
+        .await?;
+    transaction
+        .execute(
+            builder.build(
+                Index::create()
+                    .name("group-attribute-value-lookup")
+                    .table(GroupAttributeValues::Table)
+                    .col(GroupAttributeValues::GroupAttributeValueName)
+                    .col(GroupAttributeValues::GroupAttributeValue),
+            ),
+        )
+        .await?;
+
+    backfill_user_attribute_values(&transaction).await?;
+    backfill_group_attribute_values(&transaction).await?;
+
+    Ok(transaction)
+}
+
+#[derive(FromQueryResult)]
+struct ListAttributeSchema {
+    attribute_name: AttributeName,
+    attribute_type: AttributeType,
+}
+
+// The values of one stored blob, each serialized on its own and paired with its position.
+fn exploded_values(value: &Serialized, typ: AttributeType) -> Vec<(i32, Serialized)> {
+    deserialize::deserialize_attribute_value(value, typ, true)
+        .into_scalar_serialized_values()
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| (index as i32, value))
+        .collect()
+}
+
+// The list attributes of a schema table, the only ones we index.
+async fn get_list_attributes(
+    transaction: &DatabaseTransaction,
+    table: impl Iden + 'static,
+    name_column: impl Iden + 'static,
+    type_column: impl Iden + 'static,
+    is_list_column: impl Iden + 'static,
+) -> Result<Vec<ListAttributeSchema>, DbErr> {
+    let builder = transaction.get_database_backend();
+    ListAttributeSchema::find_by_statement(
+        builder.build(
+            Query::select()
+                .from(table)
+                .expr_as(Expr::col(name_column), Alias::new("attribute_name"))
+                .expr_as(Expr::col(type_column), Alias::new("attribute_type"))
+                .and_where(Expr::col(is_list_column).eq(true)),
+        ),
+    )
+    .all(transaction)
+    .await
+}
+
+async fn backfill_user_attribute_values(transaction: &DatabaseTransaction) -> Result<(), DbErr> {
+    let builder = transaction.get_database_backend();
+    let attributes = get_list_attributes(
+        transaction,
+        UserAttributeSchema::Table,
+        UserAttributeSchema::UserAttributeSchemaName,
+        UserAttributeSchema::UserAttributeSchemaType,
+        UserAttributeSchema::UserAttributeSchemaIsList,
+    )
+    .await?;
+    #[derive(FromQueryResult)]
+    struct StoredAttribute {
+        owner_id: UserId,
+        value: Serialized,
+    }
+    for attribute in attributes {
+        let rows = StoredAttribute::find_by_statement(
+            builder.build(
+                Query::select()
+                    .from(UserAttributes::Table)
+                    .expr_as(
+                        Expr::col(UserAttributes::UserAttributeUserId),
+                        Alias::new("owner_id"),
+                    )
+                    .expr_as(
+                        Expr::col(UserAttributes::UserAttributeValue),
+                        Alias::new("value"),
+                    )
+                    .and_where(
+                        Expr::col(UserAttributes::UserAttributeName)
+                            .eq(attribute.attribute_name.clone()),
+                    ),
+            ),
+        )
+        .all(transaction)
+        .await?;
+        for row in rows {
+            for (index, value) in exploded_values(&row.value, attribute.attribute_type) {
+                transaction
+                    .execute(
+                        builder.build(
+                            Query::insert()
+                                .into_table(UserAttributeValues::Table)
+                                .columns([
+                                    UserAttributeValues::UserAttributeValueUserId,
+                                    UserAttributeValues::UserAttributeValueName,
+                                    UserAttributeValues::UserAttributeValueIndex,
+                                    UserAttributeValues::UserAttributeValue,
+                                ])
+                                .values_panic([
+                                    row.owner_id.clone().into(),
+                                    attribute.attribute_name.clone().into(),
+                                    index.into(),
+                                    value.into(),
+                                ]),
+                        ),
+                    )
+                    .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn backfill_group_attribute_values(transaction: &DatabaseTransaction) -> Result<(), DbErr> {
+    let builder = transaction.get_database_backend();
+    let attributes = get_list_attributes(
+        transaction,
+        GroupAttributeSchema::Table,
+        GroupAttributeSchema::GroupAttributeSchemaName,
+        GroupAttributeSchema::GroupAttributeSchemaType,
+        GroupAttributeSchema::GroupAttributeSchemaIsList,
+    )
+    .await?;
+    #[derive(FromQueryResult)]
+    struct StoredAttribute {
+        owner_id: GroupId,
+        value: Serialized,
+    }
+    for attribute in attributes {
+        let rows = StoredAttribute::find_by_statement(
+            builder.build(
+                Query::select()
+                    .from(GroupAttributes::Table)
+                    .expr_as(
+                        Expr::col(GroupAttributes::GroupAttributeGroupId),
+                        Alias::new("owner_id"),
+                    )
+                    .expr_as(
+                        Expr::col(GroupAttributes::GroupAttributeValue),
+                        Alias::new("value"),
+                    )
+                    .and_where(
+                        Expr::col(GroupAttributes::GroupAttributeName)
+                            .eq(attribute.attribute_name.clone()),
+                    ),
+            ),
+        )
+        .all(transaction)
+        .await?;
+        for row in rows {
+            for (index, value) in exploded_values(&row.value, attribute.attribute_type) {
+                transaction
+                    .execute(
+                        builder.build(
+                            Query::insert()
+                                .into_table(GroupAttributeValues::Table)
+                                .columns([
+                                    GroupAttributeValues::GroupAttributeValueGroupId,
+                                    GroupAttributeValues::GroupAttributeValueName,
+                                    GroupAttributeValues::GroupAttributeValueIndex,
+                                    GroupAttributeValues::GroupAttributeValue,
+                                ])
+                                .values_panic([
+                                    row.owner_id.into(),
+                                    attribute.attribute_name.clone().into(),
+                                    index.into(),
+                                    value.into(),
+                                ]),
+                        ),
+                    )
+                    .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
 // This is needed to make an array of async functions.
 macro_rules! to_sync {
     ($l:ident) => {
@@ -1192,6 +1533,7 @@ pub(crate) async fn migrate_from_version(
         to_sync!(migrate_to_v9),
         to_sync!(migrate_to_v10),
         to_sync!(migrate_to_v11),
+        to_sync!(migrate_to_v12),
     ];
     assert_eq!(migrations.len(), (LAST_SCHEMA_VERSION.0 - 1) as usize);
     for migration in 2..=last_version.0 {

@@ -1,9 +1,9 @@
-use crate::sql_backend_handler::SqlBackendHandler;
+use crate::sql_backend_handler::{SqlBackendHandler, last_value_per_attribute};
 use async_trait::async_trait;
 use lldap_access_control::UserReadableBackendHandler;
 use lldap_domain::{
     requests::{CreateGroupRequest, UpdateGroupRequest},
-    types::{AttributeName, Group, GroupDetails, GroupId, Serialized, Uuid},
+    types::{Attribute, AttributeName, Group, GroupDetails, GroupId, Serialized, Uuid},
 };
 use lldap_domain_handlers::handler::{
     GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
@@ -18,6 +18,33 @@ use sea_orm::{
     sea_query::{Alias, Cond, Expr, Func, IntoCondition, OnConflict, SimpleExpr},
 };
 use tracing::instrument;
+
+// Empty for single-value attributes: their blob is already the scalar encoding, so it can
+// be matched with a plain equality.
+fn group_attribute_value_models(
+    group_id: GroupId,
+    attribute: &Attribute,
+    is_list: bool,
+) -> Vec<model::group_attribute_values::ActiveModel> {
+    if !is_list {
+        return Vec::new();
+    }
+    attribute
+        .value
+        .clone()
+        .into_scalar_serialized_values()
+        .into_iter()
+        .enumerate()
+        .map(
+            |(index, value)| model::group_attribute_values::ActiveModel {
+                group_id: Set(group_id),
+                attribute_name: Set(attribute.name.clone()),
+                value_index: Set(index as i32),
+                value: Set(value),
+            },
+        )
+        .collect()
+}
 
 fn attribute_condition(name: AttributeName, value: Option<Serialized>) -> Cond {
     Expr::in_subquery(
@@ -216,27 +243,32 @@ impl GroupBackendHandler for SqlBackendHandler {
                     let schema = Self::get_schema_with_transaction(transaction).await?;
                     let group_id = new_group.insert(transaction).await?.group_id;
                     let mut new_group_attributes = Vec::new();
+                    let mut new_group_attribute_values = Vec::new();
                     for attribute in request.attributes {
-                        if schema
-                            .group_attributes
-                            .get_attribute_type(&attribute.name)
-                            .is_some()
-                        {
-                            new_group_attributes.push(model::group_attributes::ActiveModel {
-                                group_id: Set(group_id),
-                                attribute_name: Set(attribute.name),
-                                value: Set(attribute.value.into()),
-                            });
-                        } else {
+                        let Some((_, is_list)) =
+                            schema.group_attributes.get_attribute_type(&attribute.name)
+                        else {
                             return Err(DomainError::InternalError(format!(
                                 "Attribute name {} doesn't exist in the group schema,
                                     yet was attempted to be inserted in the database",
                                 &attribute.name
                             )));
-                        }
+                        };
+                        new_group_attribute_values
+                            .extend(group_attribute_value_models(group_id, &attribute, is_list));
+                        new_group_attributes.push(model::group_attributes::ActiveModel {
+                            group_id: Set(group_id),
+                            attribute_name: Set(attribute.name),
+                            value: Set(attribute.value.into()),
+                        });
                     }
                     if !new_group_attributes.is_empty() {
                         model::GroupAttributes::insert_many(new_group_attributes)
+                            .exec(transaction)
+                            .await?;
+                    }
+                    if !new_group_attribute_values.is_empty() {
+                        model::GroupAttributeValues::insert_many(new_group_attribute_values)
                             .exec(transaction)
                             .await?;
                     }
@@ -280,24 +312,29 @@ impl SqlBackendHandler {
         update_group.update(transaction).await?;
         let mut update_group_attributes = Vec::new();
         let mut remove_group_attributes = Vec::new();
+        let mut update_group_attribute_values = Vec::new();
+        // Every attribute written or removed, whose index rows must be dropped first.
+        let mut touched_attributes = Vec::new();
         let schema = Self::get_schema_with_transaction(transaction).await?;
-        for attribute in request.insert_attributes {
-            if schema
-                .group_attributes
-                .get_attribute_type(&attribute.name)
-                .is_some()
-            {
-                update_group_attributes.push(model::group_attributes::ActiveModel {
-                    group_id: Set(request.group_id),
-                    attribute_name: Set(attribute.name.to_owned()),
-                    value: Set(attribute.value.into()),
-                });
-            } else {
+        for attribute in last_value_per_attribute(request.insert_attributes) {
+            let Some((_, is_list)) = schema.group_attributes.get_attribute_type(&attribute.name)
+            else {
                 return Err(DomainError::InternalError(format!(
                     "Group attribute name {} doesn't exist in the schema, yet was attempted to be inserted in the database",
                     &attribute.name
                 )));
-            }
+            };
+            update_group_attribute_values.extend(group_attribute_value_models(
+                request.group_id,
+                &attribute,
+                is_list,
+            ));
+            touched_attributes.push(attribute.name.clone());
+            update_group_attributes.push(model::group_attributes::ActiveModel {
+                group_id: Set(request.group_id),
+                attribute_name: Set(attribute.name.to_owned()),
+                value: Set(attribute.value.into()),
+            });
         }
         for attribute in request.delete_attributes {
             if schema
@@ -305,6 +342,7 @@ impl SqlBackendHandler {
                 .get_attribute_type(&attribute)
                 .is_some()
             {
+                touched_attributes.push(attribute.clone());
                 remove_group_attributes.push(attribute);
             } else {
                 return Err(DomainError::InternalError(format!(
@@ -329,6 +367,18 @@ impl SqlBackendHandler {
                     .update_column(model::GroupAttributesColumn::Value)
                     .to_owned(),
                 )
+                .exec(transaction)
+                .await?;
+        }
+        if !touched_attributes.is_empty() {
+            model::GroupAttributeValues::delete_many()
+                .filter(model::GroupAttributeValuesColumn::GroupId.eq(request.group_id))
+                .filter(model::GroupAttributeValuesColumn::AttributeName.is_in(touched_attributes))
+                .exec(transaction)
+                .await?;
+        }
+        if !update_group_attribute_values.is_empty() {
+            model::GroupAttributeValues::insert_many(update_group_attribute_values)
                 .exec(transaction)
                 .await?;
         }

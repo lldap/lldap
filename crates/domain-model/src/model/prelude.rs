@@ -2,6 +2,8 @@
 
 pub use super::group_attribute_schema::Column as GroupAttributeSchemaColumn;
 pub use super::group_attribute_schema::Entity as GroupAttributeSchema;
+pub use super::group_attribute_values::Column as GroupAttributeValuesColumn;
+pub use super::group_attribute_values::Entity as GroupAttributeValues;
 pub use super::group_attributes::Column as GroupAttributesColumn;
 pub use super::group_attributes::Entity as GroupAttributes;
 pub use super::group_object_classes::Column as GroupObjectClassesColumn;
@@ -18,6 +20,8 @@ pub use super::password_reset_tokens::Column as PasswordResetTokensColumn;
 pub use super::password_reset_tokens::Entity as PasswordResetTokens;
 pub use super::user_attribute_schema::Column as UserAttributeSchemaColumn;
 pub use super::user_attribute_schema::Entity as UserAttributeSchema;
+pub use super::user_attribute_values::Column as UserAttributeValuesColumn;
+pub use super::user_attribute_values::Entity as UserAttributeValues;
 pub use super::user_attributes::Column as UserAttributesColumn;
 pub use super::user_attributes::Entity as UserAttributes;
 pub use super::user_object_classes::Column as UserObjectClassesColumn;

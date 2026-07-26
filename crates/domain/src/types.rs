@@ -477,6 +477,15 @@ impl AttributeValue {
             None
         }
     }
+    // The values serialized individually, rather than the whole list as a single blob.
+    pub fn into_scalar_serialized_values(self) -> Vec<Serialized> {
+        match self {
+            AttributeValue::String(c) => c.into_vec().iter().map(Serialized::from).collect(),
+            AttributeValue::Integer(c) => c.into_vec().iter().map(Serialized::from).collect(),
+            AttributeValue::JpegPhoto(c) => c.into_vec().iter().map(Serialized::from).collect(),
+            AttributeValue::DateTime(c) => c.into_vec().iter().map(Serialized::from).collect(),
+        }
+    }
 }
 
 impl From<String> for AttributeValue {

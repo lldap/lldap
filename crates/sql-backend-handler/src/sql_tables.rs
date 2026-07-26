@@ -9,7 +9,7 @@ pub type DbConnection = sea_orm::DatabaseConnection;
 #[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord, DeriveValueType)]
 pub struct SchemaVersion(pub i16);
 
-pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(11);
+pub const LAST_SCHEMA_VERSION: SchemaVersion = SchemaVersion(12);
 
 #[derive(Copy, PartialEq, Eq, Debug, Clone, PartialOrd, Ord)]
 pub struct PrivateKeyHash(pub [u8; 32]);
@@ -177,6 +177,110 @@ mod tests {
                 display_name: "Bob Bobbersön".to_owned(),
                 creation_date: Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
             }
+        );
+    }
+
+    // Without the backfill, equality filters would only work on attributes written after
+    // the upgrade.
+    #[tokio::test]
+    async fn test_migrate_to_v12_backfills_list_attribute_values() {
+        crate::logging::init_for_tests();
+        let sql_pool = get_in_memory_db().await;
+        sql_migrations::upgrade_to_v1(&sql_pool).await.unwrap();
+        sql_migrations::migrate_from_version(&sql_pool, SchemaVersion(1), SchemaVersion(11))
+            .await
+            .unwrap();
+        let builder = sql_pool.get_database_backend();
+        sql_pool
+            .execute(raw_statement(
+                r#"INSERT INTO users
+                   (user_id, email, lowercase_email, display_name, creation_date, modified_date,
+                    password_modified_date, password_hash, uuid)
+                   VALUES ("bob", "bob@bob.bob", "bob@bob.bob", "Bob", "1970-01-01 00:00:00",
+                           "1970-01-01 00:00:00", "1970-01-01 00:00:00", "bob00", "abc")"#,
+            ))
+            .await
+            .unwrap();
+        sql_pool
+            .execute(
+                builder.build(
+                    sea_orm::sea_query::Query::insert()
+                        .into_table(sql_migrations::UserAttributeSchema::Table)
+                        .columns([
+                            sql_migrations::UserAttributeSchema::UserAttributeSchemaName,
+                            sql_migrations::UserAttributeSchema::UserAttributeSchemaType,
+                            sql_migrations::UserAttributeSchema::UserAttributeSchemaIsList,
+                            sql_migrations::UserAttributeSchema::UserAttributeSchemaIsUserVisible,
+                            sql_migrations::UserAttributeSchema::UserAttributeSchemaIsUserEditable,
+                            sql_migrations::UserAttributeSchema::UserAttributeSchemaIsHardcoded,
+                        ])
+                        .values_panic([
+                            "mailalias".into(),
+                            lldap_domain::types::AttributeType::String.into(),
+                            true.into(),
+                            true.into(),
+                            true.into(),
+                            false.into(),
+                        ]),
+                ),
+            )
+            .await
+            .unwrap();
+        // A list attribute stored the old way: the whole list in a single blob.
+        sql_pool
+            .execute(
+                builder.build(
+                    sea_orm::sea_query::Query::insert()
+                        .into_table(sql_migrations::UserAttributes::Table)
+                        .columns([
+                            sql_migrations::UserAttributes::UserAttributeUserId,
+                            sql_migrations::UserAttributes::UserAttributeName,
+                            sql_migrations::UserAttributes::UserAttributeValue,
+                        ])
+                        .values_panic([
+                            "bob".into(),
+                            "mailalias".into(),
+                            Serialized::from(&vec![
+                                "a@example.com".to_string(),
+                                "dup@example.com".to_string(),
+                                "dup@example.com".to_string(),
+                            ])
+                            .into(),
+                        ]),
+                ),
+            )
+            .await
+            .unwrap();
+
+        sql_migrations::migrate_from_version(&sql_pool, SchemaVersion(11), SchemaVersion(12))
+            .await
+            .unwrap();
+
+        #[derive(FromQueryResult, PartialEq, Eq, Debug)]
+        struct IndexedValue {
+            user_attribute_value_index: i32,
+            user_attribute_value: Serialized,
+        }
+        let rows = IndexedValue::find_by_statement(raw_statement(
+            r#"SELECT user_attribute_value_index, user_attribute_value FROM user_attribute_values
+               WHERE user_attribute_value_user_id = "bob" AND user_attribute_value_name = "mailalias"
+               ORDER BY user_attribute_value_index"#,
+        ))
+        .all(&sql_pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows.iter()
+                .map(|r| (
+                    r.user_attribute_value_index,
+                    r.user_attribute_value.unwrap::<String>()
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, "a@example.com".to_owned()),
+                (1, "dup@example.com".to_owned()),
+                (2, "dup@example.com".to_owned()),
+            ]
         );
     }
 

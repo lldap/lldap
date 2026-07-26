@@ -1,7 +1,22 @@
 use crate::sql_tables::DbConnection;
 use async_trait::async_trait;
 use lldap_auth::opaque::server::ServerSetup;
+use lldap_domain::types::Attribute;
 use lldap_domain_handlers::handler::BackendHandler;
+
+// Keep only the last value given for each attribute, the same way the ON CONFLICT on the
+// attribute insert resolves a repeated name. The per-value rows have to agree with it: two
+// sets of rows for one attribute would collide on the primary key.
+pub(crate) fn last_value_per_attribute(attributes: Vec<Attribute>) -> Vec<Attribute> {
+    let mut result: Vec<Attribute> = Vec::new();
+    for attribute in attributes {
+        match result.iter_mut().find(|a| a.name == attribute.name) {
+            Some(existing) => *existing = attribute,
+            None => result.push(attribute),
+        }
+    }
+    result
+}
 
 #[derive(Clone)]
 pub struct SqlBackendHandler {
