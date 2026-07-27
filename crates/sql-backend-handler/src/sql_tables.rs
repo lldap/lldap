@@ -54,6 +54,52 @@ pub async fn init_table(pool: &DbConnection) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Check whether the schema may be migrated automatically on startup, returning
+/// an error with instructions if not.
+///
+/// Migrations run on every startup as an unguarded check-then-apply, so two
+/// instances booting against the same networked database can race and one of
+/// them crashes on the duplicate DDL. To keep multiple instances safe by
+/// default, a networked database (PostgreSQL/MySQL) whose schema is out of date
+/// must be migrated explicitly with the `create_schema` subcommand, unless
+/// auto-migration is turned on. SQLite is single-writer, so it has no race and
+/// migrates automatically.
+///
+/// `auto_migrate`:
+/// - `None`: use the per-backend default (SQLite migrates, networked requires
+///   the explicit step).
+/// - `Some(value)`: force that behavior for any backend.
+///
+/// A database already at the latest version needs no migration and is always
+/// allowed, which is the steady state for every running instance.
+pub async fn check_migration_allowed(
+    pool: &DbConnection,
+    auto_migrate: Option<bool>,
+) -> anyhow::Result<()> {
+    let current_version = get_schema_version(pool).await;
+    // `None` means the schema doesn't exist yet and must be created; a version
+    // below the latest needs an upgrade. A version above the latest is a
+    // downgrade, which `migrate_from_version` rejects later.
+    let needs_migration = match current_version {
+        Some(version) => version < LAST_SCHEMA_VERSION,
+        None => true,
+    };
+    if needs_migration {
+        let is_sqlite = matches!(pool.get_database_backend(), sea_orm::DbBackend::Sqlite);
+        if !auto_migrate.unwrap_or(is_sqlite) {
+            anyhow::bail!(
+                "The database schema needs to be initialized or migrated (current version: {}, \
+required version: {}), but automatic migration on startup is disabled for networked databases \
+to avoid races between multiple instances. Run the `create_schema` subcommand first, then \
+restart; or set LLDAP_AUTO_MIGRATE=true (config key `auto_migrate`) to migrate on startup.",
+                current_version.map_or_else(|| "none".to_owned(), |v| v.0.to_string()),
+                LAST_SCHEMA_VERSION.0,
+            );
+        }
+    }
+    Ok(())
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum ConfigLocation {
     ConfigFile(String),
@@ -562,5 +608,38 @@ mod tests {
             .await
             .unwrap();
         assert!(init_table(&sql_pool).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_check_migration_allowed_up_to_date_is_always_ok() {
+        crate::logging::init_for_tests();
+        let sql_pool = get_in_memory_db().await;
+        // Bring the DB fully up to date.
+        init_table(&sql_pool).await.unwrap();
+        // A DB already at the latest version needs no migration, so it's allowed
+        // even with auto-migration off: the steady state of a running instance
+        // must not error.
+        check_migration_allowed(&sql_pool, Some(false))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_check_migration_allowed_gates_pending_migration() {
+        crate::logging::init_for_tests();
+        let sql_pool = get_in_memory_db().await;
+        // Out-of-date schema: created at v1, below LAST_SCHEMA_VERSION.
+        upgrade_to_v1(&sql_pool).await.unwrap();
+        // Explicitly disabling auto-migration must refuse to proceed...
+        assert!(
+            check_migration_allowed(&sql_pool, Some(false))
+                .await
+                .is_err()
+        );
+        // ...while enabling it, or relying on the SQLite default (None), is allowed.
+        check_migration_allowed(&sql_pool, Some(true))
+            .await
+            .unwrap();
+        check_migration_allowed(&sql_pool, None).await.unwrap();
     }
 }

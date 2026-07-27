@@ -127,6 +127,11 @@ pub struct Configuration {
     pub force_ldap_user_pass_reset: TrueFalseAlways,
     #[builder(default = "false")]
     pub force_update_private_key: bool,
+    // Whether to run schema migrations automatically on startup. `None` uses the
+    // per-backend default: SQLite migrates, networked databases require the
+    // explicit `create_schema` step. See `check_migration_allowed`.
+    #[builder(default)]
+    pub auto_migrate: Option<bool>,
     #[builder(default = r#"DatabaseUrl::from("sqlite://users.db?mode=rwc")"#)]
     pub database_url: DatabaseUrl,
     #[builder(default)]
@@ -462,6 +467,9 @@ impl ConfigOverrider for RunOpts {
             .inspect(|&force_update_private_key| {
                 config.force_update_private_key = force_update_private_key;
             });
+
+        self.auto_migrate
+            .inspect(|&auto_migrate| config.auto_migrate = Some(auto_migrate));
 
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);
