@@ -233,39 +233,6 @@ impl Component for LoginForm {
         } else {
             html! {
               <form class="form center-block col-sm-4 col-offset-4">
-                { if self.mfa_help {
-                  html! {
-                    <div class="alert alert-warning">
-                      <h6 class="fw-bold">
-                        <i class="bi-shield-lock me-2"></i>
-                        {"This account uses two-factor authentication"}
-                      </h6>
-                      <p class="mb-2">
-                        {"Enter your password followed by ':' and the current 6-digit code from your authenticator app, all in the password field: "}
-                        <code>{"yourpassword:123456"}</code>
-                      </p>
-                      <p class="mb-2">
-                        {"The code changes every 30 seconds, so type it fresh each time rather than saving it with your password."}
-                      </p>
-                      <p class="mb-2">
-                        {"This works the same everywhere this account signs in: this page, but also email clients, VPNs and any other service that authenticates against it."}
-                      </p>
-                      { if password_reset_enabled {
-                        html! {
-                          <Link
-                            classes="btn-link"
-                            to={AppRoute::StartResetPassword}>
-                            {"Lost your authenticator? Reset your password"}
-                          </Link>
-                        }
-                      } else {
-                        html!{}
-                      }}
-                    </div>
-                  }
-                } else {
-                  html!{}
-                }}
                 <div class="input-group">
                   <div class="input-group-prepend">
                     <span class="input-group-text">
@@ -321,6 +288,28 @@ impl Component for LoginForm {
                   } else { html! {} }
                 }
                 </div>
+                { if self.mfa_help {
+                  html! {
+                    <div class="alert alert-warning">
+                      <h6 class="fw-bold">
+                        <i class="bi-shield-lock me-2"></i>
+                        {"This account uses two-factor authentication"}
+                      </h6>
+                      <p class="mb-2">
+                        {"Enter your password followed by ':' and the current 6-digit code from your authenticator app, all in the password field: "}
+                        <code>{"yourpassword:123456"}</code>
+                      </p>
+                      <p class="mb-2">
+                        {"The code changes every 30 seconds, so type it fresh each time rather than saving it with your password."}
+                      </p>
+                      <p class="mb-2">
+                        {"This works the same everywhere this account signs in: this page, but also email clients, VPNs and any other service that authenticates against it."}
+                      </p>
+                    </div>
+                  }
+                } else {
+                  html!{}
+                }}
               </form>
             }
         }

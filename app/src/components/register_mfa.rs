@@ -1,6 +1,6 @@
 use crate::{
     components::{
-        form::{field::Field, submit::Submit},
+        form::submit::Submit,
         router::{AppRoute, Link},
     },
     infra::common_component::{CommonComponent, CommonComponentParts},
@@ -208,7 +208,7 @@ impl Component for RegisterMfa {
         html! {
           <>
             <div class="mb-2 mt-2">
-              <h5 class="fw-bold">
+              <h5 class="fw-bold text-center">
                 {"Set up two-factor authentication"}
               </h5>
             </div>
@@ -237,42 +237,58 @@ impl Component for RegisterMfa {
 
 impl RegisterMfa {
     fn view_enrollment(&self, ctx: &Context<Self>, data: &EnrollmentData) -> Html {
+        type Field = yew_form::Field<ConfirmationModel>;
         let link = ctx.link();
         html! {
           <>
-            <p>
+            <p class="text-center">
               {"Scan the QR code with an authenticator app (or enter the secret manually):"}
             </p>
-            <p>
+            <p class="text-center">
               <img
                 src={data.qr_data_uri.clone()}
                 width="200"
                 height="200"
                 alt="TOTP QR code" />
             </p>
-            <p>
+            <p class="text-center">
               <code>{spaced_groups(&data.secret_base32)}</code>
             </p>
-            <p>
+            <p style="max-width:720px;margin-left:auto;margin-right:auto;">
               {"From now on, every login with this account uses your password followed by ':' and the current 6-digit code, all in the password field: "}
               <code>{"yourpassword:123456"}</code>
               {". That applies here and to anything else that signs in with this account, such as email clients, VPNs and other websites."}
             </p>
-            <p>
+            <p style="max-width:720px;margin-left:auto;margin-right:auto;">
               {"To finish, practice it once below with your real password and the code shown in the app."}
             </p>
             <form class="form">
-              <Field<ConfirmationModel>
-                form={&self.form}
-                required=true
-                label="Password and code"
-                field_name="combined"
-                input_type="password"
-                autocomplete="off"
-                oninput={link.callback(|_| Msg::Update)} />
-              <div class="row mb-3">
-                <div class="col-4"></div>
-                <div class="col-8">
+              <div style="max-width:410px;margin:0 auto;">
+                <label for="combined" class="form-label">
+                  {"Password and code"}
+                  <span class="text-danger">{"*"}</span>
+                  {":"}
+                </label>
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">
+                      <i class="bi-lock-fill"/>
+                    </span>
+                  </div>
+                  <Field
+                    class="form-control"
+                    class_invalid="is-invalid has-error"
+                    class_valid="has-success"
+                    form={&self.form}
+                    field_name="combined"
+                    input_type="password"
+                    autocomplete="off"
+                    oninput={link.callback(|_| Msg::Update)} />
+                  <div class="invalid-feedback">
+                    {self.form.field_message("combined")}
+                  </div>
+                </div>
+                <div class="mb-3 mt-1">
                   { match self.hint {
                       CodeHint::None => html! {},
                       CodeHint::Valid => html! {
