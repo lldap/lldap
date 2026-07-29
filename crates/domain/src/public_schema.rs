@@ -4,6 +4,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Attribute names that never leave the server, on any interface.
+pub const PRIVATE_ATTRIBUTE_NAMES: &[&str] = &["totp_secret"];
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct PublicSchema(Schema);
 
@@ -93,12 +96,16 @@ impl From<Schema> for PublicSchema {
                 name: "mfa_type".into(),
                 attribute_type: AttributeType::String,
                 is_list: false,
-                is_visible: false,
+                is_visible: true,
                 is_editable: false,
                 is_hardcoded: true,
                 is_readonly: true,
             },
         ]);
+        schema
+            .user_attributes
+            .attributes
+            .retain(|a| !PRIVATE_ATTRIBUTE_NAMES.contains(&a.name.as_str()));
         schema
             .user_attributes
             .attributes
@@ -182,21 +189,13 @@ mod tests {
         let public = PublicSchema::from(empty_schema());
         let attrs = &public.get_schema().user_attributes.attributes;
 
-        let totp = attrs
-            .iter()
-            .find(|a| a.name == "totp_secret".into())
-            .unwrap();
-        assert_eq!(totp.attribute_type, AttributeType::String);
-        assert!(!totp.is_list);
-        assert!(!totp.is_visible);
-        assert!(!totp.is_editable);
-        assert!(totp.is_hardcoded);
-        assert!(totp.is_readonly);
+        // Private attributes are stripped from every derived surface.
+        assert!(!attrs.iter().any(|a| a.name == "totp_secret".into()));
 
         let mfa = attrs.iter().find(|a| a.name == "mfa_type".into()).unwrap();
         assert_eq!(mfa.attribute_type, AttributeType::String);
         assert!(!mfa.is_list);
-        assert!(!mfa.is_visible);
+        assert!(mfa.is_visible);
         assert!(!mfa.is_editable);
         assert!(mfa.is_hardcoded);
         assert!(mfa.is_readonly);

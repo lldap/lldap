@@ -529,7 +529,7 @@ pub struct Attribute {
     pub value: AttributeValue,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, derive_more::Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub user_id: UserId,
     pub email: Email,
@@ -539,6 +539,8 @@ pub struct User {
     pub attributes: Vec<Attribute>,
     pub modified_date: NaiveDateTime,
     pub password_modified_date: NaiveDateTime,
+    // Sealed, but kept out of logs entirely.
+    #[debug(skip)]
     pub totp_secret: Option<String>,
     pub mfa_type: Option<String>,
 }

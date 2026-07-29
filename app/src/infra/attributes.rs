@@ -99,6 +99,11 @@ pub mod user {
                 attribute_name: name,
                 aliases: vec!["email"],
             }),
+            "mfa_type" => Some(AttributeDescription {
+                attribute_identifier: name,
+                attribute_name: "mfatype",
+                aliases: vec![name],
+            }),
             "user_id" => Some(AttributeDescription {
                 attribute_identifier: name,
                 attribute_name: "uid",

@@ -47,12 +47,16 @@ pub struct App {
     user_info: Option<(String, bool)>,
     redirect_to: Option<AppRoute>,
     password_reset_enabled: Option<bool>,
+    mfa_enabled: Option<bool>,
+    mfa_enrollment_pending: bool,
 }
 
 pub enum Msg {
     Login((String, bool, bool)),
     Logout,
     SettingsReceived(anyhow::Result<Options>),
+    SessionRefreshed(anyhow::Result<(String, bool, bool)>),
+    MfaEnrolled,
 }
 
 impl Component for App {
@@ -76,9 +80,16 @@ impl Component for App {
                 }),
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
+            mfa_enabled: None,
+            mfa_enrollment_pending: false,
         };
         ctx.link()
             .send_future(async move { Msg::SettingsReceived(HostService::get_settings().await) });
+        if app.user_info.is_some() {
+            // Re-fetch the enrollment-guidance flag so a reload cannot bypass it.
+            ctx.link()
+                .send_future(async move { Msg::SessionRefreshed(HostService::refresh().await) });
+        }
         app.apply_initial_redirections(ctx);
         app
     }
@@ -88,6 +99,7 @@ impl Component for App {
         match msg {
             Msg::Login((user_name, is_admin, mfa_enrollment_required)) => {
                 self.user_info = Some((user_name.clone(), is_admin));
+                self.mfa_enrollment_pending = mfa_enrollment_required;
                 if mfa_enrollment_required {
                     // The server requires MFA for everyone: guide straight to enrollment.
                     self.redirect_to = None;
@@ -107,13 +119,26 @@ impl Component for App {
             Msg::Logout => {
                 self.user_info = None;
                 self.redirect_to = None;
+                self.mfa_enrollment_pending = false;
                 history.push(AppRoute::Login);
             }
             Msg::SettingsReceived(Ok(settings)) => {
                 self.password_reset_enabled = Some(settings.password_reset_enabled);
+                self.mfa_enabled = Some(settings.mfa_enabled);
             }
             Msg::SettingsReceived(Err(err)) => {
                 error!(err.to_string());
+            }
+            Msg::SessionRefreshed(Ok((user_name, is_admin, mfa_enrollment_required))) => {
+                self.user_info = Some((user_name, is_admin));
+                // No history push: the route guard redirects declaratively.
+                self.mfa_enrollment_pending = mfa_enrollment_required;
+            }
+            Msg::SessionRefreshed(Err(err)) => {
+                error!(err.to_string());
+            }
+            Msg::MfaEnrolled => {
+                self.mfa_enrollment_pending = false;
             }
         }
         true
@@ -125,6 +150,8 @@ impl Component for App {
         let username = self.user_info.clone().map(|(username, _)| username);
         let logged_in_user = username.clone();
         let password_reset_enabled = self.password_reset_enabled;
+        let mfa_enabled = self.mfa_enabled;
+        let mfa_enrollment_pending = self.mfa_enrollment_pending;
         html! {
           <div>
             <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
@@ -132,7 +159,7 @@ impl Component for App {
               <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <main class="py-3">
                   <Switch<AppRoute>
-                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, logged_in_user.clone(), password_reset_enabled))}
+                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, logged_in_user.clone(), password_reset_enabled, mfa_enabled, mfa_enrollment_pending))}
                   />
                 </main>
               </div>
@@ -207,7 +234,28 @@ impl App {
         is_admin: bool,
         logged_in_user: Option<String>,
         password_reset_enabled: Option<bool>,
+        mfa_enabled: Option<bool>,
+        mfa_enrollment_pending: bool,
     ) -> Html {
+        // Under require_mfa = always, an unenrolled user is confined to their
+        // own enrollment page until they complete it (or log out).
+        if mfa_enrollment_pending
+            && mfa_enabled != Some(false)
+            && let Some(user) = logged_in_user.as_deref()
+        {
+            let on_own_enrollment = matches!(
+                switch,
+                AppRoute::RegisterMfa { user_id }
+                    if Self::decode_user_id(user_id)
+                        .as_deref()
+                        .is_some_and(|d| user.eq_ignore_ascii_case(d))
+            );
+            if !on_own_enrollment {
+                return html! {
+                    <Redirect to={AppRoute::RegisterMfa { user_id: user.to_owned() }} />
+                };
+            }
+        }
         match switch {
             AppRoute::Login => html! {
                 <LoginForm on_logged_in={link.callback(Msg::Login)} password_reset_enabled={password_reset_enabled.unwrap_or(false)}/>
@@ -273,7 +321,7 @@ impl App {
                         .as_deref()
                         .is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id));
                     html! {
-                        <UserDetails username={decoded_id} is_admin={is_admin} is_self={is_self} />
+                        <UserDetails username={decoded_id} is_admin={is_admin} is_self={is_self} mfa_enabled={mfa_enabled.unwrap_or(false)} />
                     }
                 }
                 None => html! { <Redirect to={AppRoute::Login} /> },
@@ -284,20 +332,32 @@ impl App {
                 },
                 None => html! { <Redirect to={AppRoute::Login} /> },
             },
-            AppRoute::RegisterMfa { user_id } => match Self::decode_user_id(user_id) {
+            AppRoute::RegisterMfa { user_id } => match (Self::decode_user_id(user_id), mfa_enabled)
+            {
+                // Nothing to enroll into while the server's MFA policy is disabled.
+                (Some(decoded_id), Some(false)) => html! {
+                    <Redirect to={AppRoute::UserDetails { user_id: decoded_id }} />
+                },
+                (Some(_), None) => html! {},
                 // The enrollment mutation targets the logged-in user: never
                 // render this page under someone else's URL.
-                Some(decoded_id)
+                (Some(decoded_id), Some(true))
                     if logged_in_user
                         .as_deref()
                         .is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id)) =>
                 {
-                    html! { <RegisterMfa username={decoded_id} /> }
+                    html! {
+                        <RegisterMfa
+                            username={decoded_id}
+                            enrollment_required={mfa_enrollment_pending}
+                            on_enrolled={link.callback(|_| Msg::MfaEnrolled)}
+                            on_logged_out={link.callback(|_| Msg::Logout)} />
+                    }
                 }
-                Some(decoded_id) => html! {
+                (Some(decoded_id), Some(true)) => html! {
                     <Redirect to={AppRoute::UserDetails { user_id: decoded_id }} />
                 },
-                None => html! { <Redirect to={AppRoute::Login} /> },
+                (None, _) => html! { <Redirect to={AppRoute::Login} /> },
             },
             AppRoute::StartResetPassword => match password_reset_enabled {
                 Some(true) => html! { <ResetPasswordStep1Form /> },

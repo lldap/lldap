@@ -3,12 +3,18 @@ use crate::{
         form::submit::Submit,
         router::{AppRoute, Link},
     },
-    infra::common_component::{CommonComponent, CommonComponentParts},
+    infra::{
+        api::HostService,
+        common_component::{CommonComponent, CommonComponentParts},
+        cookies::delete_cookie,
+        modal::Modal,
+    },
 };
 use anyhow::{Result, anyhow, bail};
 use base64::Engine;
+use gloo_timers::callback::Timeout;
 use graphql_client::GraphQLQuery;
-use lldap_mfa::split_totp_suffix;
+use lldap_mfa::{TOTP_ENROLLMENT_EXPIRED, TOTP_ENROLLMENT_TTL_SECS, split_totp_suffix};
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -88,11 +94,19 @@ pub struct RegisterMfa {
     form: Form<ConfirmationModel>,
     phase: Phase,
     hint: CodeHint,
+    /// Mirrors the server-side validity of the sealed enrollment state.
+    expiry_timer: Option<Timeout>,
+    node_ref: NodeRef,
+    modal: Option<Modal>,
 }
 
-#[derive(Clone, PartialEq, Eq, Properties)]
+#[derive(Clone, PartialEq, Properties)]
 pub struct Props {
     pub username: String,
+    /// The server forces enrollment (require_mfa = always): no way back but logout.
+    pub enrollment_required: bool,
+    pub on_enrolled: Callback<()>,
+    pub on_logged_out: Callback<()>,
 }
 
 pub enum Msg {
@@ -101,6 +115,10 @@ pub enum Msg {
     Update,
     Submit,
     EnrollmentFinishResponse(Result<finish_mfa_enrollment::ResponseData>),
+    /// The pending enrollment outlived its server-side validity.
+    EnrollmentExpired,
+    ExpiredLogoutRequested,
+    ExpiredLogoutCompleted(Result<()>),
 }
 
 impl CommonComponent<RegisterMfa> for RegisterMfa {
@@ -167,10 +185,41 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                 );
                 Ok(true)
             }
-            Msg::EnrollmentFinishResponse(res) => {
-                res?;
-                self.phase = Phase::Complete;
+            Msg::EnrollmentFinishResponse(res) => match res {
+                Ok(_) => {
+                    if let Some(timer) = self.expiry_timer.take() {
+                        timer.cancel();
+                    }
+                    self.phase = Phase::Complete;
+                    ctx.props().on_enrolled.emit(());
+                    Ok(true)
+                }
+                // The server is the timekeeper: an expired state gets the same
+                // modal as the local timer, not a raw error.
+                Err(e) if e.to_string().contains(TOTP_ENROLLMENT_EXPIRED) => {
+                    self.modal.as_ref().expect("modal not initialized").show();
+                    Ok(true)
+                }
+                Err(e) => Err(e),
+            },
+            Msg::EnrollmentExpired => {
+                if !matches!(self.phase, Phase::Complete) {
+                    self.modal.as_ref().expect("modal not initialized").show();
+                }
                 Ok(true)
+            }
+            Msg::ExpiredLogoutRequested => {
+                self.common
+                    .call_backend(ctx, HostService::logout(), Msg::ExpiredLogoutCompleted);
+                Ok(true)
+            }
+            Msg::ExpiredLogoutCompleted(res) => {
+                res?;
+                // Hide before navigating away so the backdrop does not linger.
+                self.modal.as_ref().expect("modal not initialized").hide();
+                delete_cookie("user_id")?;
+                ctx.props().on_logged_out.emit(());
+                Ok(false)
             }
         }
     }
@@ -185,11 +234,18 @@ impl Component for RegisterMfa {
     type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
+        let link = ctx.link().clone();
         let mut component = RegisterMfa {
             common: CommonComponentParts::<Self>::create(),
             form: Form::<ConfirmationModel>::new(ConfirmationModel::default()),
             phase: Phase::Loading,
             hint: CodeHint::None,
+            expiry_timer: Some(Timeout::new(
+                (TOTP_ENROLLMENT_TTL_SECS * 1000) as u32,
+                move || link.send_message(Msg::EnrollmentExpired),
+            )),
+            node_ref: NodeRef::default(),
+            modal: None,
         };
         component.common.call_graphql::<StartMfaEnrollment, _>(
             ctx,
@@ -198,6 +254,16 @@ impl Component for RegisterMfa {
             "Error starting two-factor enrollment",
         );
         component
+    }
+
+    fn rendered(&mut self, _: &Context<Self>, first_render: bool) {
+        if first_render {
+            self.modal = Some(Modal::new(
+                self.node_ref
+                    .cast::<web_sys::Element>()
+                    .expect("Modal node is not an element"),
+            ));
+        }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
@@ -230,6 +296,7 @@ impl Component for RegisterMfa {
                 Phase::InProgress(data) => self.view_enrollment(ctx, data),
                 Phase::Complete => self.view_complete(ctx),
             }}
+            {self.expiry_modal(ctx)}
           </>
         }
     }
@@ -310,12 +377,14 @@ impl RegisterMfa {
                 text="Enable two-factor"
                 disabled={self.common.is_task_running()}
                 onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
-                <Link
-                  classes="btn btn-secondary ms-2 col-auto col-form-label"
-                  to={AppRoute::UserDetails{user_id: ctx.props().username.clone()}}>
-                  <i class="bi-arrow-return-left me-2"></i>
-                  {"Back"}
-                </Link>
+                { if ctx.props().enrollment_required { html! {} } else { html! {
+                  <Link
+                    classes="btn btn-secondary ms-2 col-auto col-form-label"
+                    to={AppRoute::UserDetails{user_id: ctx.props().username.clone()}}>
+                    <i class="bi-arrow-return-left me-2"></i>
+                    {"Back"}
+                  </Link>
+                }}}
               </Submit>
             </form>
           </>
@@ -340,6 +409,44 @@ impl RegisterMfa {
               {"Back to profile"}
             </Link>
           </>
+        }
+    }
+
+    fn expiry_modal(&self, ctx: &Context<Self>) -> Html {
+        let link = &ctx.link();
+        html! {
+          <div
+            class="modal fade"
+            id="mfaEnrollmentExpiredModal"
+            tabindex="-1"
+            aria-labelledby="mfaEnrollmentExpiredModalLabel"
+            aria-hidden="true"
+            data-bs-backdrop="static"
+            data-bs-keyboard="false"
+            ref={self.node_ref.clone()}>
+            <div class="modal-dialog">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title" id="mfaEnrollmentExpiredModalLabel">{"Enrollment session expired"}</h5>
+                </div>
+                <div class="modal-body">
+                  <span>
+                    {"This page has expired. Log in again to continue setting up two-factor authentication."}
+                  </span>
+                </div>
+                <div class="modal-footer">
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    disabled={self.common.is_task_running()}
+                    onclick={link.callback(|_| Msg::ExpiredLogoutRequested)}>
+                    <i class="bi-box-arrow-right me-2"></i>
+                    {"Log in again"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         }
     }
 }

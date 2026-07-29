@@ -554,7 +554,7 @@ mod tests {
     }
 
     fn get_mfa_enrolled_user() -> DomainUser {
-        DomainUser {
+        let user = DomainUser {
             user_id: UserId::new("bob"),
             email: "bob@bobbers.on".into(),
             display_name: None,
@@ -568,11 +568,14 @@ mod tests {
             attributes: Vec::new(),
             totp_secret: Some("v1.fakesealedblob".to_string()),
             mfa_type: Some("totp".to_string()),
-        }
+        };
+        // The sealed secret never reaches Debug output.
+        assert!(!format!("{user:?}").contains("fakesealedblob"));
+        user
     }
 
     #[tokio::test]
-    async fn mfa_attribute_values_gated_to_admins() {
+    async fn mfa_attribute_visibility() {
         const QUERY: &str = r#"{
           user(userId: "bob") {
             attributes {
@@ -582,7 +585,7 @@ mod tests {
           }
         }"#;
 
-        // An admin sees the sealed blob and mfa_type as attribute values.
+        // An admin sees mfa_type, but the sealed secret never leaves the server.
         let mut mock = MockTestBackendHandler::new();
         setup_default_schema(&mut mock);
         mock.expect_get_user_details()
@@ -601,10 +604,10 @@ mod tests {
             .unwrap();
         assert_eq!(errors, vec![]);
         let json = serde_json::to_string(&data).unwrap();
-        assert!(json.contains(r#"{"name":"totp_secret","value":["v1.fakesealedblob"]}"#));
+        assert!(!json.contains("totp_secret"));
         assert!(json.contains(r#"{"name":"mfa_type","value":["totp"]}"#));
 
-        // A regular user querying themselves sees neither value.
+        // A regular user querying themselves sees mfa_type (visible), no secret.
         let mut mock = MockTestBackendHandler::new();
         setup_default_schema(&mut mock);
         mock.expect_get_user_details()
@@ -623,7 +626,7 @@ mod tests {
         assert_eq!(errors, vec![]);
         let json = serde_json::to_string(&data).unwrap();
         assert!(!json.contains("totp_secret"));
-        assert!(!json.contains("mfa_type"));
+        assert!(json.contains(r#"{"name":"mfa_type","value":["totp"]}"#));
     }
 
     #[tokio::test]

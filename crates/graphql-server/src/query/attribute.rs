@@ -161,7 +161,7 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
                             "mail" => Some(user.email.clone().into_string().into()),
                             "uuid" => Some(user.uuid.clone().into_string().into()),
                             "display_name" => user.display_name.as_ref().map(|d| d.clone().into()),
-                            "totp_secret" => user.totp_secret.as_ref().map(|s| s.clone().into()),
+                            // totp_secret is in PRIVATE_ATTRIBUTE_NAMES: never in the schema here.
                             "mfa_type" => user.mfa_type.as_ref().map(|m| m.clone().into()),
                             "avatar" | "first_name" | "last_name" => None,
                             _ => {

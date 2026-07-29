@@ -2723,6 +2723,7 @@ dependencies = [
  "lldap_domain",
  "lldap_domain_handlers",
  "lldap_domain_model",
+ "lldap_mfa",
  "tracing",
 ]
 
@@ -2737,6 +2738,7 @@ dependencies = [
  "gloo-console 0.4.0",
  "gloo-file 0.4.0",
  "gloo-net",
+ "gloo-timers",
  "graphql_client",
  "image",
  "indexmap 1.6.2",

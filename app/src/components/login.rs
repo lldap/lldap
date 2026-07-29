@@ -11,7 +11,7 @@ use crate::{
 use anyhow::{Result, anyhow, bail};
 use gloo_console::error;
 use lldap_auth::*;
-use lldap_mfa::split_totp_suffix;
+use lldap_mfa::{TOTP_CODE_ALREADY_USED, split_totp_suffix};
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -152,9 +152,18 @@ impl CommonComponent<LoginForm> for LoginForm {
                 match res {
                     Err(e) => {
                         if self.totp_code.take().is_some() {
-                            // Do not reveal which factor failed.
                             error!(&format!("Invalid credentials: {}", e));
-                            self.common.error = Some(anyhow!("Invalid username or password"));
+                            // The server names a replayed code (the password was
+                            // verified first); anything else stays generic.
+                            self.common.error =
+                                Some(if e.to_string().contains(TOTP_CODE_ALREADY_USED) {
+                                    anyhow!(
+                                        "That two-factor code was already used. Wait for your \
+                                         authenticator app to show a new code and try again."
+                                    )
+                                } else {
+                                    anyhow!("Invalid username or password")
+                                });
                             Ok(true)
                         } else {
                             Err(e).context("Could not log in")

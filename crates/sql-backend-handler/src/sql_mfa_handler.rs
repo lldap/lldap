@@ -7,7 +7,9 @@ use lldap_domain_model::{
     error::{DomainError, Result},
     model,
 };
-use lldap_mfa::MFA_TYPE_TOTP;
+use lldap_mfa::{
+    MFA_TYPE_TOTP, TOTP_CODE_ALREADY_USED, TOTP_ENROLLMENT_EXPIRED, TOTP_ENROLLMENT_TTL_SECS,
+};
 use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait};
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
@@ -68,7 +70,7 @@ impl SqlBackendHandler {
         let key = (uuid.as_str().to_owned(), code.to_owned());
         if used.contains_key(&key) {
             return Err(DomainError::AuthenticationError(format!(
-                "TOTP code already used for {user_id}"
+                "{TOTP_CODE_ALREADY_USED} for {user_id}"
             )));
         }
         used.insert(key, now + USED_CODE_TTL_SECS);
@@ -97,8 +99,9 @@ impl MfaBackendHandler for SqlBackendHandler {
             kind: STATE_KIND_ENROLLMENT,
             user_id: user_id.clone(),
             seed,
-            // Pending enrollment is valid for 5 minutes.
-            expiry_unix: (chrono::Utc::now() + chrono::Duration::minutes(5)).timestamp(),
+            expiry_unix: (chrono::Utc::now()
+                + chrono::Duration::seconds(TOTP_ENROLLMENT_TTL_SECS as i64))
+            .timestamp(),
         };
         let sealed_state = lldap_mfa::seal_enrollment_state(
             self.opaque_setup.keypair().private(),
@@ -140,7 +143,7 @@ impl MfaBackendHandler for SqlBackendHandler {
         let now = chrono::Utc::now();
         if state.expiry_unix < now.timestamp() {
             return Err(DomainError::AuthenticationError(format!(
-                "Expired TOTP enrollment for {user_id}"
+                "{TOTP_ENROLLMENT_EXPIRED} for {user_id}"
             )));
         }
         if !lldap_mfa::totp_verify(&state.seed, code, now.timestamp() as u64)
@@ -378,12 +381,14 @@ mod tests {
             .verify_user_totp(&user_id, &next_code)
             .await
             .unwrap();
-        // A used code is rejected for the rest of its window, from either door.
+        // A used code is rejected for the rest of its window, from either door,
+        // with the marker the login doors key on.
         let err = handler
             .verify_user_totp(&user_id, &next_code)
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
+        assert!(err.to_string().contains(TOTP_CODE_ALREADY_USED));
         let err = handler.verify_user_totp(&user_id, &code).await.unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
         // Wrong code and unenrolled user are authentication errors.

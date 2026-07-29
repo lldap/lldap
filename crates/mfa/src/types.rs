@@ -9,6 +9,8 @@ pub const TOTP_SKEW_STEPS: i64 = 1;
 /// Separator between password and appended TOTP code in combined logins
 /// (colon, confirmed on issue #631).
 pub const TOTP_SEPARATOR: char = ':';
+/// Validity of a pending TOTP enrollment, from start to code confirmation.
+pub const TOTP_ENROLLMENT_TTL_SECS: u64 = 5 * 60;
 
 /// 4-byte salt stored with each sealed blob (E2+salt).
 #[cfg(feature = "seal")]
@@ -25,6 +27,11 @@ pub const SEALED_BLOB_LEN: usize = 57;
 
 /// Value stored in `mfa_type` when TOTP is enrolled.
 pub const MFA_TYPE_TOTP: &str = "totp";
+
+/// Error prefix for a replayed, already-consumed code (the login doors key on it).
+pub const TOTP_CODE_ALREADY_USED: &str = "TOTP code already used";
+/// Error prefix for an expired pending enrollment (the frontend keys on it).
+pub const TOTP_ENROLLMENT_EXPIRED: &str = "Expired TOTP enrollment";
 
 #[cfg(feature = "seal")]
 const STORAGE_KEY_INFO: &[u8] = b"lldap-totp-storage-key-v1";

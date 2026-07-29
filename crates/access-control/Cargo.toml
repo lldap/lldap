@@ -25,3 +25,7 @@ path = "../domain-handlers"
 
 [dependencies.lldap_domain_model]
 path = "../domain-model"
+
+[dependencies.lldap_mfa]
+path = "../mfa"
+default-features = false

@@ -17,6 +17,7 @@ derive_more = { workspace = true }
 gloo-console = "0.4"
 gloo-file = "0.4"
 gloo-net = "0.7"
+gloo-timers = "0.2"
 graphql_client = { workspace = true }
 image = { workspace = true }
 js-sys = "0.3"

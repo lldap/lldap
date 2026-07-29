@@ -18,6 +18,7 @@ use lldap_domain_handlers::handler::{
     UserListerBackendHandler, UserRequestFilter,
 };
 use lldap_domain_model::error::Result;
+use lldap_mfa::MFA_TYPE_TOTP;
 use std::collections::HashSet;
 use tracing::info;
 
@@ -167,6 +168,21 @@ impl<Handler: BackendHandler> AdminBackendHandler for Handler {
     async fn delete_group_object_class(&self, name: &LdapObjectClass) -> Result<()> {
         <Handler as SchemaBackendHandler>::delete_group_object_class(self, name).await
     }
+}
+
+/// (enrolled, exempt) for a user, as consumed by the `require_mfa = always` gates.
+pub async fn mfa_enrollment_status(
+    handler: &impl UserReadableBackendHandler,
+    user_id: &UserId,
+) -> Result<(bool, bool)> {
+    let enrolled =
+        handler.get_user_details(user_id).await?.mfa_type.as_deref() == Some(MFA_TYPE_TOTP);
+    let exempt = handler
+        .get_user_groups(user_id)
+        .await?
+        .iter()
+        .any(|g| g.display_name == "lldap_mfa_disabled".into());
+    Ok((enrolled, exempt))
 }
 
 pub struct AccessControlledBackendHandler<Handler> {

@@ -127,7 +127,7 @@ pub struct Configuration {
     #[builder(default)]
     pub force_ldap_user_pass_reset: TrueFalseAlways,
     // MFA policy: false = disabled, true = only enrolled users, "always" = all users.
-    #[builder(default = "TrueFalseAlways::True")]
+    #[builder(default)]
     pub require_mfa: TrueFalseAlways,
     #[builder(default = "false")]
     pub force_update_private_key: bool,
@@ -892,10 +892,10 @@ mod tests {
     }
 
     #[test]
-    fn require_mfa_defaults_to_true() {
+    fn require_mfa_defaults_to_false() {
         assert!(matches!(
             Configuration::default().require_mfa,
-            TrueFalseAlways::True
+            TrueFalseAlways::False
         ));
     }
 

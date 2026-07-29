@@ -71,6 +71,7 @@ pub struct Props {
     pub username: String,
     pub is_admin: bool,
     pub is_self: bool,
+    pub mfa_enabled: bool,
 }
 
 impl CommonComponent<UserDetails> for UserDetails {
@@ -230,7 +231,7 @@ impl Component for UserDetails {
                         <i class="bi-key me-2"></i>
                         {"Modify password"}
                       </Link>
-                      { if ctx.props().is_self {
+                      { if ctx.props().is_self && ctx.props().mfa_enabled {
                         html! {
                           <Link
                             to={AppRoute::RegisterMfa{user_id: u.id.clone()}}
@@ -244,7 +245,7 @@ impl Component for UserDetails {
                           </Link>
                         }
                       } else { html! {} }}
-                      { if ctx.props().is_admin {
+                      { if ctx.props().is_admin && ctx.props().mfa_enabled {
                         html! {
                           <ResetMfa
                             username={u.id.clone()}

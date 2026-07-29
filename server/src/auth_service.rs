@@ -25,7 +25,7 @@ use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, MfaPolicy, UserRequestFilter,
 };
 use lldap_domain_model::{error::DomainError, model::UserColumn};
-use lldap_mfa::{MFA_TYPE_TOTP, split_totp_suffix};
+use lldap_mfa::{MFA_TYPE_TOTP, TOTP_CODE_ALREADY_USED, split_totp_suffix};
 use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::{
@@ -422,6 +422,17 @@ fn mfa_policy_lookup_error() -> DomainError {
     DomainError::AuthenticationError("Invalid credentials".to_owned())
 }
 
+// A replayed code may be named: the password was already verified by then.
+// Everything else stays generic to not reveal which factor failed.
+fn totp_failure_error(e: DomainError) -> DomainError {
+    match e {
+        DomainError::AuthenticationError(m) if m.starts_with(TOTP_CODE_ALREADY_USED) => {
+            DomainError::AuthenticationError(TOTP_CODE_ALREADY_USED.to_owned())
+        }
+        _ => DomainError::AuthenticationError("Invalid credentials".to_owned()),
+    }
+}
+
 // (enrolled, exempt) for a user under `require_mfa = always`, failing closed.
 async fn always_policy_status<Backend>(
     data: &web::Data<AppState<Backend>>,
@@ -430,20 +441,9 @@ async fn always_policy_status<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
-    let user = data
-        .get_readonly_handler()
-        .get_user_details(name)
+    lldap_access_control::mfa_enrollment_status(data.get_readonly_handler(), name)
         .await
-        .map_err(|_| mfa_policy_lookup_error())?;
-    let enrolled = user.mfa_type.as_deref() == Some(MFA_TYPE_TOTP);
-    let exempt = data
-        .get_readonly_handler()
-        .get_user_groups(name)
-        .await
-        .map_err(|_| mfa_policy_lookup_error())?
-        .iter()
-        .any(|g| g.display_name == "lldap_mfa_disabled".into());
-    Ok((enrolled, exempt))
+        .map_err(|_| mfa_policy_lookup_error().into())
 }
 
 #[instrument(skip_all, level = "debug")]
@@ -502,13 +502,10 @@ where
         Ok(name) => match mfa_login_gate(&data, &name).await? {
             MfaGate::TotpRequired => match totp_code {
                 Some(code) => {
-                    // Do not reveal which factor failed.
                     data.get_mfa_handler()
                         .verify_user_totp(&name, &code)
                         .await
-                        .map_err(|_| {
-                            DomainError::AuthenticationError("Invalid credentials".to_owned())
-                        })?;
+                        .map_err(totp_failure_error)?;
                     get_login_successful_response(&data, &name, false).await
                 }
                 None => Ok(HttpResponse::Ok()
@@ -572,16 +569,7 @@ where
     let mfa_required = match data.mfa_policy {
         MfaPolicy::Disabled => false,
         MfaPolicy::Enrolled => enrolled,
-        MfaPolicy::Always => {
-            user.is_some()
-                && !data
-                    .get_readonly_handler()
-                    .get_user_groups(&username)
-                    .await
-                    .map_err(|_| mfa_policy_lookup_error())?
-                    .iter()
-                    .any(|g| g.display_name == "lldap_mfa_disabled".into())
-        }
+        MfaPolicy::Always => user.is_some() && !always_policy_status(&data, &username).await?.1,
     };
     if !(mfa_required && enrolled) {
         // Unknown, unenrolled and exempt users bind with the full string, untouched.
@@ -591,11 +579,10 @@ where
     match split_totp_suffix(&password).map(|(p, c)| (p.to_owned(), c.to_owned())) {
         Some((password, code)) => {
             bind(password).await?;
-            // Do not reveal which factor failed.
             data.get_mfa_handler()
                 .verify_user_totp(&username, &code)
                 .await
-                .map_err(|_| DomainError::AuthenticationError("Invalid credentials".to_owned()))?;
+                .map_err(totp_failure_error)?;
             get_login_successful_response(&data, &username, false).await
         }
         None => {

@@ -5,12 +5,13 @@ use lldap_access_control::{
     UserReadableBackendHandler, UserWriteableBackendHandler,
 };
 use lldap_auth::{access_control::ValidationResults, types::UserId};
-use lldap_domain_handlers::handler::{BackendHandler, MfaBackendHandler};
+use lldap_domain_handlers::handler::{BackendHandler, MfaBackendHandler, MfaPolicy};
 use tracing::debug;
 
 pub struct Context<Handler: BackendHandler> {
     pub handler: AccessControlledBackendHandler<Handler>,
     pub validation_result: ValidationResults,
+    pub mfa_policy: MfaPolicy,
 }
 
 pub fn field_error_callback<'a>(
@@ -26,9 +27,19 @@ pub fn field_error_callback<'a>(
 impl<Handler: BackendHandler> Context<Handler> {
     #[cfg(test)]
     pub fn new_for_tests(handler: Handler, validation_result: ValidationResults) -> Self {
+        Self::new_for_tests_with_policy(handler, validation_result, MfaPolicy::Enrolled)
+    }
+
+    #[cfg(test)]
+    pub fn new_for_tests_with_policy(
+        handler: Handler,
+        validation_result: ValidationResults,
+        mfa_policy: MfaPolicy,
+    ) -> Self {
         Self {
             handler: AccessControlledBackendHandler::new(handler),
             validation_result,
+            mfa_policy,
         }
     }
 

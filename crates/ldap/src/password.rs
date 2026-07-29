@@ -16,7 +16,7 @@ use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, MfaPolicy, UserBackendHandler,
 };
 use lldap_domain_model::error::DomainError;
-use lldap_mfa::{MFA_TYPE_TOTP, TOTP_SEPARATOR, split_totp_suffix};
+use lldap_mfa::{MFA_TYPE_TOTP, TOTP_CODE_ALREADY_USED, TOTP_SEPARATOR, split_totp_suffix};
 use lldap_opaque_handler::OpaqueHandler;
 
 async fn bind_password(
@@ -113,9 +113,22 @@ pub(crate) async fn do_bind(
     match split_totp_suffix(password) {
         Some((password, code)) => {
             bind_password(backend, &user_id, password).await?;
-            if backend.verify_user_totp(&user_id, code).await.is_err() {
-                // Do not reveal which factor failed.
-                return Err(invalid_credentials());
+            if let Err(e) = backend.verify_user_totp(&user_id, code).await {
+                return Err(match e {
+                    // The password was verified above: a replay diagnostic is safe.
+                    DomainError::AuthenticationError(m)
+                        if m.starts_with(TOTP_CODE_ALREADY_USED) =>
+                    {
+                        LdapError {
+                            code: LdapResultCode::InvalidCredentials,
+                            message: format!(
+                                "{TOTP_CODE_ALREADY_USED}: wait for the next code and try again"
+                            ),
+                        }
+                    }
+                    // Do not reveal which factor failed.
+                    _ => invalid_credentials(),
+                });
             }
             Ok(user_id)
         }
@@ -377,12 +390,12 @@ pub mod tests {
             .returning(|_| Ok(()));
         mock.expect_verify_user_totp()
             .withf(|user_id, _| user_id == &UserId::new("bob"))
-            .returning(|_, code| {
-                if code == "123456" {
-                    Ok(())
-                } else {
-                    Err(DomainError::AuthenticationError("wrong code".to_string()))
-                }
+            .returning(|_, code| match code {
+                "123456" => Ok(()),
+                "111111" => Err(DomainError::AuthenticationError(format!(
+                    "{TOTP_CODE_ALREADY_USED} for bob"
+                ))),
+                _ => Err(DomainError::AuthenticationError("wrong code".to_string())),
             });
         mock.expect_get_user_groups()
             .with(eq(UserId::new("bob")))
@@ -402,6 +415,18 @@ pub mod tests {
         assert_eq!(
             ldap_handler.do_bind(&request).await,
             make_bind_result(LdapResultCode::InvalidCredentials, "")
+        );
+        // A replayed code names the cause: the password was already verified.
+        let request = LdapBindRequest {
+            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
+            cred: LdapBindCred::Simple("pass:word:111111".to_string()),
+        };
+        assert_eq!(
+            ldap_handler.do_bind(&request).await,
+            make_bind_result(
+                LdapResultCode::InvalidCredentials,
+                "TOTP code already used: wait for the next code and try again"
+            )
         );
         // The password alone teaches the combined format, but only when it is correct.
         let request = LdapBindRequest {
