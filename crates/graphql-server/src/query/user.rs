@@ -2,9 +2,10 @@ use chrono::TimeZone;
 use juniper::{FieldResult, graphql_object};
 use lldap_access_control::UserReadableBackendHandler;
 use lldap_domain::public_schema::PublicSchema;
-use lldap_domain::types::{User as DomainUser, UserAndGroups as DomainUserAndGroups};
+use lldap_domain::types::{
+    MFA_TYPE_TOTP, User as DomainUser, UserAndGroups as DomainUserAndGroups,
+};
 use lldap_domain_handlers::handler::BackendHandler;
-use lldap_mfa::MFA_TYPE_TOTP;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{Instrument, debug, debug_span};
@@ -24,13 +25,8 @@ pub struct User<Handler: BackendHandler> {
 }
 
 impl<Handler: BackendHandler> User<Handler> {
-    pub fn from_user(
-        mut user: DomainUser,
-        schema: Arc<PublicSchema>,
-        is_admin: bool,
-    ) -> FieldResult<Self> {
-        let attributes =
-            AttributeValue::<Handler>::user_attributes_from_schema(&mut user, &schema, is_admin);
+    pub fn from_user(mut user: DomainUser, schema: Arc<PublicSchema>) -> FieldResult<Self> {
+        let attributes = AttributeValue::<Handler>::user_attributes_from_schema(&mut user, &schema);
         Ok(Self {
             user,
             attributes,
@@ -45,9 +41,8 @@ impl<Handler: BackendHandler> User<Handler> {
     pub fn from_user_and_groups(
         DomainUserAndGroups { user, groups }: DomainUserAndGroups,
         schema: Arc<PublicSchema>,
-        is_admin: bool,
     ) -> FieldResult<Self> {
-        let mut user = Self::from_user(user, schema.clone(), is_admin)?;
+        let mut user = Self::from_user(user, schema.clone())?;
         if let Some(groups) = groups {
             user.groups = Some(
                 groups
@@ -112,9 +107,7 @@ impl<Handler: BackendHandler> User<Handler> {
         self.user.uuid.as_str()
     }
 
-    /// Whether the user has a second factor enrolled.
-    /// Only visible to admins and to the user themself.
-    // The self-check compares UserIds, which are case-insensitive.
+    /// Whether the user has a second factor enrolled (admin or self).
     fn mfa_enrolled(&self, context: &Context<Handler>) -> Option<bool> {
         (context.validation_result.is_admin()
             || context.validation_result.user == self.user.user_id)

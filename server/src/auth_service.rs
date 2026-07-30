@@ -16,7 +16,10 @@ use futures::future::{Ready, ok};
 use futures_util::FutureExt;
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
-use lldap_access_control::{ReadonlyBackendHandler, UserReadableBackendHandler};
+use lldap_access_control::{
+    MfaRequirement, ReadonlyBackendHandler, UserReadableBackendHandler, mfa_enrollment_status,
+    mfa_requirement,
+};
 use lldap_auth::{
     JWTClaims, access_control::ValidationResults, login, password_reset, registration,
 };
@@ -25,7 +28,7 @@ use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, MfaPolicy, UserRequestFilter,
 };
 use lldap_domain_model::{error::DomainError, model::UserColumn};
-use lldap_mfa::{MFA_TYPE_TOTP, TOTP_CODE_ALREADY_USED, split_totp_suffix};
+use lldap_mfa::{TOTP_CODE_ALREADY_USED, split_totp_suffix};
 use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::{
@@ -98,6 +101,40 @@ fn get_refresh_token(request: HttpRequest) -> TcpResult<(u64, UserId)> {
     }
 }
 
+// A replayed code may be named: the password was verified by then. Anything else
+// stays generic, to not reveal which factor failed.
+fn totp_error(e: DomainError) -> DomainError {
+    match e {
+        DomainError::AuthenticationError(m) if m.starts_with(TOTP_CODE_ALREADY_USED) => {
+            DomainError::AuthenticationError(TOTP_CODE_ALREADY_USED.to_owned())
+        }
+        _ => DomainError::AuthenticationError("Invalid credentials".to_owned()),
+    }
+}
+
+// Never skip MFA because the status could not be read.
+async fn get_mfa_requirement<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    user: &UserId,
+) -> TcpResult<MfaRequirement>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
+    if data.mfa_policy == MfaPolicy::Disabled {
+        return Ok(MfaRequirement::None);
+    }
+    let status = match mfa_enrollment_status(data.get_readonly_handler(), user).await {
+        Ok(status) => Some(status),
+        // Unknown users bind as before, and fail there.
+        Err(DomainError::EntityNotFound(_)) => None,
+        Err(e) => {
+            warn!("Could not read the MFA status, refusing the login: {:#}", e);
+            return Err(DomainError::AuthenticationError("Invalid credentials".to_owned()).into());
+        }
+    };
+    Ok(mfa_requirement(data.mfa_policy, status.as_ref()))
+}
+
 #[instrument(skip_all, level = "debug")]
 async fn get_refresh<Backend>(
     data: web::Data<AppState<Backend>>,
@@ -124,12 +161,8 @@ where
     let groups = data.get_readonly_handler().get_user_groups(&user).await?;
     let token = create_jwt(data.get_tcp_handler(), jwt_key, &user, groups).await;
     // Keep guiding unenrolled users to enrollment across page reloads.
-    let mfa_enrollment_required = if data.mfa_policy == MfaPolicy::Always {
-        let (enrolled, exempt) = always_policy_status(&data, &user).await?;
-        !enrolled && !exempt
-    } else {
-        false
-    };
+    let mfa_enrollment_required =
+        get_mfa_requirement(&data, &user).await? == MfaRequirement::Enrollment;
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", token.as_str())
@@ -407,87 +440,6 @@ where
         }))
 }
 
-// Outcome of the MFA policy check for a login; TOTP enforcement happens in the
-// caller, which holds the (possibly absent) code.
-enum MfaGate {
-    // Proceed to token issuance; `enrollment_required` guides the client to
-    // enrollment (require_mfa = always only).
-    Allow { enrollment_required: bool },
-    // The user must present a valid TOTP code with this login.
-    TotpRequired,
-}
-
-// Never skip MFA or issue tokens because a policy lookup failed (LDAP do_bind parity).
-fn mfa_policy_lookup_error() -> DomainError {
-    DomainError::AuthenticationError("Invalid credentials".to_owned())
-}
-
-// A replayed code may be named: the password was already verified by then.
-// Everything else stays generic to not reveal which factor failed.
-fn totp_failure_error(e: DomainError) -> DomainError {
-    match e {
-        DomainError::AuthenticationError(m) if m.starts_with(TOTP_CODE_ALREADY_USED) => {
-            DomainError::AuthenticationError(TOTP_CODE_ALREADY_USED.to_owned())
-        }
-        _ => DomainError::AuthenticationError("Invalid credentials".to_owned()),
-    }
-}
-
-// (enrolled, exempt) for a user under `require_mfa = always`, failing closed.
-async fn always_policy_status<Backend>(
-    data: &web::Data<AppState<Backend>>,
-    name: &UserId,
-) -> TcpResult<(bool, bool)>
-where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
-{
-    lldap_access_control::mfa_enrollment_status(data.get_readonly_handler(), name)
-        .await
-        .map_err(|_| mfa_policy_lookup_error().into())
-}
-
-#[instrument(skip_all, level = "debug")]
-async fn mfa_login_gate<Backend>(
-    data: &web::Data<AppState<Backend>>,
-    name: &UserId,
-) -> TcpResult<MfaGate>
-where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
-{
-    Ok(match data.mfa_policy {
-        MfaPolicy::Disabled => MfaGate::Allow {
-            enrollment_required: false,
-        },
-        MfaPolicy::Enrolled => {
-            let user = data
-                .get_readonly_handler()
-                .get_user_details(name)
-                .await
-                .map_err(|_| mfa_policy_lookup_error())?;
-            if user.mfa_type.as_deref() == Some(MFA_TYPE_TOTP) {
-                MfaGate::TotpRequired
-            } else {
-                MfaGate::Allow {
-                    enrollment_required: false,
-                }
-            }
-        }
-        MfaPolicy::Always => {
-            let (enrolled, exempt) = always_policy_status(data, name).await?;
-            match (enrolled, exempt) {
-                (_, true) => MfaGate::Allow {
-                    enrollment_required: false,
-                },
-                (true, false) => MfaGate::TotpRequired,
-                // Not enrolled yet: let the web login through, flagged for enrollment.
-                (false, false) => MfaGate::Allow {
-                    enrollment_required: true,
-                },
-            }
-        }
-    })
-}
-
 #[instrument(skip_all, level = "debug")]
 async fn opaque_login_finish<Backend>(
     data: web::Data<AppState<Backend>>,
@@ -499,21 +451,23 @@ where
     let mut request = request.into_inner();
     let totp_code = request.totp_code.take();
     match data.get_opaque_handler().login_finish(request).await {
-        Ok(name) => match mfa_login_gate(&data, &name).await? {
-            MfaGate::TotpRequired => match totp_code {
+        Ok(name) => match get_mfa_requirement(&data, &name).await? {
+            MfaRequirement::Totp => match totp_code {
                 Some(code) => {
                     data.get_mfa_handler()
                         .verify_user_totp(&name, &code)
                         .await
-                        .map_err(totp_failure_error)?;
+                        .map_err(totp_error)?;
                     get_login_successful_response(&data, &name, false).await
                 }
                 None => Ok(HttpResponse::Ok()
                     .json(&login::ServerMfaRequiredResponse { mfa_required: true })),
             },
-            MfaGate::Allow {
-                enrollment_required,
-            } => get_login_successful_response(&data, &name, enrollment_required).await,
+            // Not enrolled yet: let the web login through, flagged for enrollment.
+            requirement => {
+                let enrollment_required = requirement == MfaRequirement::Enrollment;
+                get_login_successful_response(&data, &name, enrollment_required).await
+            }
         },
         Err(e) => Err(e.into()),
     }
@@ -546,35 +500,12 @@ where
             password,
         })
     };
-    if data.mfa_policy == MfaPolicy::Disabled {
-        bind(password).await?;
-        return get_login_successful_response(&data, &username, false).await;
-    }
-    let user = match data
-        .get_readonly_handler()
-        .get_user_details(&username)
-        .await
-    {
-        Ok(user) => Some(user),
-        // Unknown users go through a plain bind, which fails as before.
-        Err(DomainError::EntityNotFound(_)) => None,
-        // Fail closed: never skip MFA because of a backend error.
-        Err(_) => {
-            return Err(DomainError::AuthenticationError("Invalid credentials".to_owned()).into());
-        }
-    };
-    let enrolled = user
-        .as_ref()
-        .is_some_and(|u| u.mfa_type.as_deref() == Some(MFA_TYPE_TOTP));
-    let mfa_required = match data.mfa_policy {
-        MfaPolicy::Disabled => false,
-        MfaPolicy::Enrolled => enrolled,
-        MfaPolicy::Always => user.is_some() && !always_policy_status(&data, &username).await?.1,
-    };
-    if !(mfa_required && enrolled) {
+    let requirement = get_mfa_requirement(&data, &username).await?;
+    if requirement != MfaRequirement::Totp {
         // Unknown, unenrolled and exempt users bind with the full string, untouched.
         bind(password).await?;
-        return get_login_successful_response(&data, &username, mfa_required && !enrolled).await;
+        let enrollment_required = requirement == MfaRequirement::Enrollment;
+        return get_login_successful_response(&data, &username, enrollment_required).await;
     }
     match split_totp_suffix(&password).map(|(p, c)| (p.to_owned(), c.to_owned())) {
         Some((password, code)) => {
@@ -582,7 +513,7 @@ where
             data.get_mfa_handler()
                 .verify_user_totp(&username, &code)
                 .await
-                .map_err(totp_failure_error)?;
+                .map_err(totp_error)?;
             get_login_successful_response(&data, &username, false).await
         }
         None => {
@@ -813,5 +744,28 @@ where
         cfg.service(
             web::resource("/reset/step1/{user_id}").route(web::post().to(HttpResponse::NotFound)),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_totp_error() {
+        assert!(matches!(
+            totp_error(DomainError::AuthenticationError(format!(
+                "{TOTP_CODE_ALREADY_USED} for bob"
+            ))),
+            DomainError::AuthenticationError(m) if m == TOTP_CODE_ALREADY_USED
+        ));
+        assert!(matches!(
+            totp_error(DomainError::AuthenticationError("wrong code".to_owned())),
+            DomainError::AuthenticationError(m) if m == "Invalid credentials"
+        ));
+        assert!(matches!(
+            totp_error(DomainError::InternalError("db down".to_owned())),
+            DomainError::AuthenticationError(m) if m == "Invalid credentials"
+        ));
     }
 }

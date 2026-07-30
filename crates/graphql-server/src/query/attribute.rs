@@ -138,7 +138,6 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
     pub fn user_attributes_from_schema(
         user: &mut DomainUser,
         schema: &PublicSchema,
-        is_admin: bool,
     ) -> Vec<AttributeValue<Handler>> {
         let user_attributes = std::mem::take(&mut user.attributes);
         let mut all_attributes = schema
@@ -148,27 +147,17 @@ impl<Handler: BackendHandler> AttributeValue<Handler> {
             .iter()
             .filter(|a| a.is_hardcoded)
             .flat_map(|attribute_schema| {
-                // Values of non-visible hardcoded attributes are restricted to admins.
-                let value: Option<DomainAttributeValue> =
-                    if !is_admin && !attribute_schema.is_visible {
-                        None
-                    } else {
-                        match attribute_schema.name.as_str() {
-                            "user_id" => Some(user.user_id.clone().into_string().into()),
-                            "creation_date" => Some(user.creation_date.into()),
-                            "modified_date" => Some(user.modified_date.into()),
-                            "password_modified_date" => Some(user.password_modified_date.into()),
-                            "mail" => Some(user.email.clone().into_string().into()),
-                            "uuid" => Some(user.uuid.clone().into_string().into()),
-                            "display_name" => user.display_name.as_ref().map(|d| d.clone().into()),
-                            // totp_secret is in PRIVATE_ATTRIBUTE_NAMES: never in the schema here.
-                            "mfa_type" => user.mfa_type.as_ref().map(|m| m.clone().into()),
-                            "avatar" | "first_name" | "last_name" => None,
-                            _ => {
-                                panic!("Unexpected hardcoded attribute: {}", attribute_schema.name)
-                            }
-                        }
-                    };
+                let value: Option<DomainAttributeValue> = match attribute_schema.name.as_str() {
+                    "user_id" => Some(user.user_id.clone().into_string().into()),
+                    "creation_date" => Some(user.creation_date.into()),
+                    "modified_date" => Some(user.modified_date.into()),
+                    "password_modified_date" => Some(user.password_modified_date.into()),
+                    "mail" => Some(user.email.clone().into_string().into()),
+                    "uuid" => Some(user.uuid.clone().into_string().into()),
+                    "display_name" => user.display_name.as_ref().map(|d| d.clone().into()),
+                    "avatar" | "first_name" | "last_name" => None,
+                    _ => panic!("Unexpected hardcoded attribute: {}", attribute_schema.name),
+                };
                 value.map(|v| (attribute_schema, v))
             })
             .map(|(attribute_schema, value)| {

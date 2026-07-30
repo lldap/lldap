@@ -7,12 +7,11 @@ pub use inputs::{
     UpdateGroupInput, UpdateUserInput,
 };
 
-use crate::api::{Context, field_error_callback};
+use crate::api::{Context, check_mfa_enrollment, field_error_callback};
 use anyhow::anyhow;
 use juniper::{FieldError, FieldResult, graphql_object};
 use lldap_access_control::{
     AdminBackendHandler, UserReadableBackendHandler, UserWriteableBackendHandler,
-    mfa_enrollment_status,
 };
 use lldap_domain::{
     requests::{CreateAttributeRequest, CreateUserRequest, UpdateGroupRequest, UpdateUserRequest},
@@ -48,29 +47,6 @@ impl<Handler: BackendHandler> Mutation<Handler> {
     }
 }
 
-// Under `require_mfa = always`, an unenrolled, non-exempt user may only enroll:
-// every other mutation is refused until MFA is set up.
-async fn check_mfa_enrollment_gate<Handler: BackendHandler>(
-    context: &Context<Handler>,
-    span: &tracing::Span,
-) -> FieldResult<()> {
-    if context.mfa_policy != MfaPolicy::Always {
-        return Ok(());
-    }
-    let user_id = context.validation_result.user.clone();
-    let handler = context
-        .get_readable_handler(&user_id)
-        .ok_or_else(field_error_callback(span, "Unauthorized access"))?;
-    let (enrolled, exempt) = mfa_enrollment_status(handler, &user_id).await?;
-    if !enrolled && !exempt {
-        return Err(field_error_callback(
-            span,
-            "MFA enrollment required: enroll through the web interface or contact an administrator",
-        )());
-    }
-    Ok(())
-}
-
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> Mutation<Handler> {
     async fn create_user(
@@ -81,7 +57,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!("{:?}", &user.id);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized user creation"))?;
@@ -112,11 +88,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             .instrument(span.clone())
             .await?;
         let user_details = handler.get_user_details(&user_id).instrument(span).await?;
-        super::query::User::<Handler>::from_user(
-            user_details,
-            Arc::new(schema),
-            context.validation_result.is_admin(),
-        )
+        super::query::User::<Handler>::from_user(user_details, Arc::new(schema))
     }
 
     async fn create_group(
@@ -127,7 +99,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         create_group_with_details(
             context,
             CreateGroupInput {
@@ -146,7 +118,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?request);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         create_group_with_details(context, request, span).await
     }
 
@@ -158,7 +130,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user.id);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let user_id = UserId::new(&user.id);
         let handler = context
             .get_writeable_handler(&user_id)
@@ -218,7 +190,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?group.id);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized group update"))?;
@@ -268,7 +240,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id, ?group_id);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -291,7 +263,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id, ?group_id);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -315,7 +287,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let user_id = UserId::new(&user_id);
         let handler = context
             .get_admin_handler()
@@ -333,7 +305,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?group_id);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized group deletion"))?;
@@ -353,7 +325,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let user_id = UserId::new(&user_id);
         let readable_handler = context
             .get_readable_handler(&user_id)
@@ -378,14 +350,11 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             debug!(?user_id);
         });
         if context.mfa_policy == MfaPolicy::Disabled {
-            return Err(FieldError::from(
-                "MFA is disabled by the server configuration",
-            ));
+            span.in_scope(|| debug!("MFA is disabled by the server configuration"));
+            return Err("MFA is disabled by the server configuration".into());
         }
-        let handler = context
-            .get_writeable_handler(&user_id)
-            .ok_or_else(field_error_callback(&span, "Unauthorized MFA enrollment"))?;
-        let start = handler
+        let start = context
+            .get_mfa_enrollment_handler()
             .start_totp_enrollment(&user_id)
             .instrument(span)
             .await?;
@@ -404,14 +373,11 @@ impl<Handler: BackendHandler> Mutation<Handler> {
             debug!(?user_id);
         });
         if context.mfa_policy == MfaPolicy::Disabled {
-            return Err(FieldError::from(
-                "MFA is disabled by the server configuration",
-            ));
+            span.in_scope(|| debug!("MFA is disabled by the server configuration"));
+            return Err("MFA is disabled by the server configuration".into());
         }
-        let handler = context
-            .get_writeable_handler(&user_id)
-            .ok_or_else(field_error_callback(&span, "Unauthorized MFA enrollment"))?;
-        handler
+        context
+            .get_mfa_enrollment_handler()
             .finish_totp_enrollment(&user_id, &state, &code)
             .instrument(span)
             .await?;
@@ -430,7 +396,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name, ?attribute_type, is_list, is_visible, is_editable);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         validate_attribute_name(&name).map_err(|invalid_chars: Vec<char>| -> FieldError {
             let chars = String::from_iter(invalid_chars);
             span.in_scope(|| {
@@ -478,7 +444,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name, ?attribute_type, is_list, is_visible, is_editable);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         validate_attribute_name(&name).map_err(|invalid_chars: Vec<char>| -> FieldError {
             let chars = String::from_iter(invalid_chars);
             span.in_scope(|| {
@@ -521,7 +487,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -553,7 +519,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -584,7 +550,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -606,7 +572,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -628,7 +594,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -650,7 +616,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
-        check_mfa_enrollment_gate(context, &span).await?;
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -1035,6 +1001,7 @@ mod tests {
             .await
             .unwrap();
         assert!(response.is_null());
+        assert!(!errors.is_empty());
         assert!(
             errors
                 .iter()
@@ -1064,7 +1031,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_reset_user_mfa_authorized() {
-        // Admin, and password manager on a non-admin target.
         for permission in [Permission::Admin, Permission::PasswordManager] {
             let mut mock = MockTestBackendHandler::new();
             expect_target_in_admin_group(&mut mock, false);
@@ -1084,7 +1050,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_reset_user_mfa_unauthorized() {
-        // Password manager on an admin target.
         let mut mock = MockTestBackendHandler::new();
         expect_target_in_admin_group(&mut mock, true);
         assert_unauthorized_reset(
@@ -1095,7 +1060,6 @@ mod tests {
             },
         )
         .await;
-        // No session resets its own MFA: regular user, and password manager on self.
         for permission in [Permission::Regular, Permission::PasswordManager] {
             let mut mock = MockTestBackendHandler::new();
             expect_target_in_admin_group(&mut mock, false);
@@ -1131,12 +1095,13 @@ mod tests {
                 user_id == &UserId::new("bob") && state == "sealed-state" && code == "123456"
             })
             .return_once(|_, _, _| Ok(()));
-        let context = Context::<MockTestBackendHandler>::new_for_tests(
+        let context = Context::<MockTestBackendHandler>::new_for_tests_with_policy(
             mock,
             ValidationResults {
                 user: UserId::new("bob"),
                 permission: Permission::Regular,
             },
+            MfaPolicy::Enrolled,
         );
         let schema = mutation_schema(
             Query::<MockTestBackendHandler>::new(),
@@ -1176,7 +1141,6 @@ mod tests {
         const FINISH_QUERY: &str =
             r#"mutation { finishMfaEnrollment(state: "sealed-state", code: "123456") { ok } }"#;
         let mut mock = MockTestBackendHandler::new();
-        // resetUserMfa stays available to clean up stale enrollments.
         expect_target_in_admin_group(&mut mock, false);
         mock.expect_reset_user_mfa()
             .with(eq(UserId::new("bob")))
@@ -1222,14 +1186,25 @@ mod tests {
     #[tokio::test]
     async fn test_mutations_gated_until_enrolled_under_always() {
         const UPDATE_QUERY: &str = r#"mutation { updateUser(user: { id: "bob" }) { ok } }"#;
+        const USERS_QUERY: &str = r#"{ users { id } }"#;
         const START_QUERY: &str = r#"mutation { startMfaEnrollment { state } }"#;
+        const GATE_ERROR: &str =
+            "MFA enrollment required: enroll through the web interface or contact an administrator";
         let mut mock = MockTestBackendHandler::new();
         mock.expect_get_user_details()
             .with(eq(UserId::new("bob")))
             .returning(|_| {
+                let epoch = chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc();
                 Ok(User {
                     user_id: UserId::new("bob"),
-                    ..Default::default()
+                    email: "bob@bobbers.on".into(),
+                    display_name: None,
+                    creation_date: epoch,
+                    modified_date: epoch,
+                    password_modified_date: epoch,
+                    uuid: lldap_domain::types::Uuid::from_name_and_date("bob", &epoch),
+                    attributes: Vec::new(),
+                    mfa_type: None,
                 })
             });
         mock.expect_get_user_groups()
@@ -1256,15 +1231,14 @@ mod tests {
             Query::<MockTestBackendHandler>::new(),
             Mutation::<MockTestBackendHandler>::new(),
         );
-        // An unenrolled, non-exempt user is refused everything but enrollment.
-        let (response, errors) = execute(UPDATE_QUERY, None, &schema, &Variables::new(), &context)
-            .await
-            .unwrap();
-        assert!(response.is_null());
-        assert!(!errors.is_empty());
-        assert!(errors.iter().all(|e| e.error().message()
-            == "MFA enrollment required: enroll through the web interface or contact an administrator"));
-        // The enrollment escape hatch stays open.
+        for query in [UPDATE_QUERY, USERS_QUERY] {
+            let (response, errors) = execute(query, None, &schema, &Variables::new(), &context)
+                .await
+                .unwrap();
+            assert!(response.is_null());
+            assert!(!errors.is_empty());
+            assert!(errors.iter().all(|e| e.error().message() == GATE_ERROR));
+        }
         assert_eq!(
             execute(START_QUERY, None, &schema, &Variables::new(), &context).await,
             Ok((

@@ -892,11 +892,17 @@ mod tests {
     }
 
     #[test]
-    fn require_mfa_defaults_to_false() {
-        assert!(matches!(
-            Configuration::default().require_mfa,
-            TrueFalseAlways::False
-        ));
+    fn require_mfa_default_and_policy_mapping() {
+        let mut config = ConfigurationBuilder::default().private_build().unwrap();
+        assert!(matches!(config.require_mfa, TrueFalseAlways::False));
+        for (require_mfa, policy) in [
+            (TrueFalseAlways::False, MfaPolicy::Disabled),
+            (TrueFalseAlways::True, MfaPolicy::Enrolled),
+            (TrueFalseAlways::Always, MfaPolicy::Always),
+        ] {
+            config.require_mfa = require_mfa;
+            assert_eq!(config.mfa_policy(), policy);
+        }
     }
 
     #[test]

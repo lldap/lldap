@@ -2723,7 +2723,6 @@ dependencies = [
  "lldap_domain",
  "lldap_domain_handlers",
  "lldap_domain_model",
- "lldap_mfa",
  "tracing",
 ]
 
@@ -2864,7 +2863,6 @@ dependencies = [
  "lldap_domain_handlers",
  "lldap_domain_model",
  "lldap_ldap",
- "lldap_mfa",
  "lldap_sql_backend_handler",
  "lldap_test_utils",
  "lldap_validation",
@@ -2905,14 +2903,17 @@ dependencies = [
 
 [[package]]
 name = "lldap_mfa"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
+ "bincode",
  "data-encoding",
  "hmac 0.12.1",
  "orion",
+ "percent-encoding",
  "pretty_assertions",
  "rand 0.8.6",
+ "serde",
  "sha1 0.10.6",
  "thiserror 2.0.18",
 ]

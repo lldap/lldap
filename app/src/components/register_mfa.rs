@@ -57,7 +57,6 @@ fn has_combined_shape(value: &str) -> Result<(), validator::ValidationError> {
     }
 }
 
-// Display-only: the secret in 4-character groups, easier to enter manually.
 fn spaced_groups(secret: &str) -> String {
     secret
         .chars()
@@ -71,9 +70,7 @@ fn spaced_groups(secret: &str) -> String {
 struct EnrollmentData {
     secret_base32: String,
     state: String,
-    /// QR code pre-rendered as an SVG data URI.
     qr_data_uri: String,
-    /// Decoded seed for the live local code check.
     seed: Vec<u8>,
 }
 
@@ -94,7 +91,6 @@ pub struct RegisterMfa {
     form: Form<ConfirmationModel>,
     phase: Phase,
     hint: CodeHint,
-    /// Mirrors the server-side validity of the sealed enrollment state.
     expiry_timer: Option<Timeout>,
     node_ref: NodeRef,
     modal: Option<Modal>,
@@ -111,11 +107,9 @@ pub struct Props {
 
 pub enum Msg {
     EnrollmentStartResponse(Result<start_mfa_enrollment::ResponseData>),
-    /// The confirmation field changed: recompute the live code hint.
     Update,
     Submit,
     EnrollmentFinishResponse(Result<finish_mfa_enrollment::ResponseData>),
-    /// The pending enrollment outlived its server-side validity.
     EnrollmentExpired,
     ExpiredLogoutRequested,
     ExpiredLogoutCompleted(Result<()>),
@@ -173,7 +167,6 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                 let combined = self.form.field_value("combined");
                 let (_, code) =
                     split_totp_suffix(&combined).expect("The validator checked the shape");
-                // The server stays the authority even when the local check disagrees.
                 self.common.call_graphql::<FinishMfaEnrollment, _>(
                     ctx,
                     finish_mfa_enrollment::Variables {
@@ -203,7 +196,9 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                 Err(e) => Err(e),
             },
             Msg::EnrollmentExpired => {
-                if !matches!(self.phase, Phase::Complete) {
+                // Only a session that actually started can expire: a failed
+                // start keeps its own error instead.
+                if matches!(self.phase, Phase::InProgress(_)) {
                     self.modal.as_ref().expect("modal not initialized").show();
                 }
                 Ok(true)
@@ -321,16 +316,16 @@ impl RegisterMfa {
             <p class="text-center">
               <code>{spaced_groups(&data.secret_base32)}</code>
             </p>
-            <p style="max-width:720px;margin-left:auto;margin-right:auto;">
-              {"From now on, every login with this account uses your password followed by ':' and the current 6-digit code, all in the password field: "}
+            <div class="mx-auto" style="max-width: 720px">
+            <p>
+              {"From now on, sign in everywhere with your password, ':' and the current code: "}
               <code>{"yourpassword:123456"}</code>
-              {". That applies here and to anything else that signs in with this account, such as email clients, VPNs and other websites."}
             </p>
-            <p style="max-width:720px;margin-left:auto;margin-right:auto;">
-              {"To finish, practice it once below with your real password and the code shown in the app."}
+            <p>
+              {"Practice the format once below. Only the code is checked here."}
             </p>
             <form class="form">
-              <div style="max-width:410px;margin:0 auto;">
+              <div class="mx-auto" style="max-width: 410px">
                 <label for="combined" class="form-label">
                   {"Password and code"}
                   <span class="text-danger">{"*"}</span>
@@ -387,6 +382,7 @@ impl RegisterMfa {
                 }}}
               </Submit>
             </form>
+            </div>
           </>
         }
     }
@@ -398,9 +394,9 @@ impl RegisterMfa {
               {"Two-factor authentication is enabled."}
             </div>
             <p>
-              {"Remember: from now on, sign in everywhere with "}
+              {"Sign in everywhere with "}
               <code>{"yourpassword:123456"}</code>
-              {" in the password field, using the current code from your authenticator app."}
+              {", using the current code."}
             </p>
             <Link
               classes="btn btn-primary"

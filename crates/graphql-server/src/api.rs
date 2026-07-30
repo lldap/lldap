@@ -1,8 +1,9 @@
 use crate::{mutation::Mutation, query::Query};
-use juniper::{EmptySubscription, FieldError, RootNode};
+use juniper::{EmptySubscription, FieldError, FieldResult, RootNode};
 use lldap_access_control::{
-    AccessControlledBackendHandler, AdminBackendHandler, ReadonlyBackendHandler,
-    UserReadableBackendHandler, UserWriteableBackendHandler,
+    AccessControlledBackendHandler, AdminBackendHandler, MFA_ENROLLMENT_REQUIRED,
+    ReadonlyBackendHandler, UserReadableBackendHandler, UserWriteableBackendHandler,
+    mfa_enrollment_status,
 };
 use lldap_auth::{access_control::ValidationResults, types::UserId};
 use lldap_domain_handlers::handler::{BackendHandler, MfaBackendHandler, MfaPolicy};
@@ -24,10 +25,31 @@ pub fn field_error_callback<'a>(
     }
 }
 
+// Under `require_mfa = always`, an unenrolled, non-exempt user may only enroll.
+// A session-level precondition, so it runs before the per-resolver permissions.
+pub(crate) async fn check_mfa_enrollment<Handler: BackendHandler>(
+    context: &Context<Handler>,
+    span: &tracing::Span,
+) -> FieldResult<()> {
+    if context.mfa_policy != MfaPolicy::Always {
+        return Ok(());
+    }
+    let user_id = context.validation_result.user.clone();
+    let handler = context
+        .get_readable_handler(&user_id)
+        .ok_or_else(field_error_callback(span, "Unauthorized access"))?;
+    let status = mfa_enrollment_status(handler, &user_id).await?;
+    if !status.enrolled && !status.exempt {
+        span.in_scope(|| debug!("{MFA_ENROLLMENT_REQUIRED}"));
+        return Err(MFA_ENROLLMENT_REQUIRED.into());
+    }
+    Ok(())
+}
+
 impl<Handler: BackendHandler> Context<Handler> {
     #[cfg(test)]
     pub fn new_for_tests(handler: Handler, validation_result: ValidationResults) -> Self {
-        Self::new_for_tests_with_policy(handler, validation_result, MfaPolicy::Enrolled)
+        Self::new_for_tests_with_policy(handler, validation_result, MfaPolicy::Disabled)
     }
 
     #[cfg(test)]
@@ -69,11 +91,15 @@ impl<Handler: BackendHandler> Context<Handler> {
 
     pub fn get_mfa_reset_handler(
         &self,
-        target: &UserId,
+        user_id: &UserId,
         user_is_admin: bool,
     ) -> Option<&(impl MfaBackendHandler + use<Handler>)> {
         self.handler
-            .get_mfa_reset_handler(&self.validation_result, target, user_is_admin)
+            .get_mfa_reset_handler(&self.validation_result, user_id, user_is_admin)
+    }
+
+    pub fn get_mfa_enrollment_handler(&self) -> &(impl MfaBackendHandler + use<Handler>) {
+        self.handler.get_mfa_enrollment_handler()
     }
 }
 

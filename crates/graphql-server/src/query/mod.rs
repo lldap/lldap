@@ -19,7 +19,7 @@ use lldap_domain_handlers::handler::{BackendHandler, ReadSchemaBackendHandler};
 use std::sync::Arc;
 use tracing::{Instrument, Span, debug, debug_span};
 
-use crate::api::{Context, field_error_callback};
+use crate::api::{Context, check_mfa_enrollment, field_error_callback};
 
 #[derive(PartialEq, Eq, Debug)]
 /// The top-level GraphQL query type.
@@ -43,6 +43,7 @@ impl<Handler: BackendHandler> Query<Handler> {
 
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> Query<Handler> {
+    // Constant with no data access: not subject to the MFA enrollment gate.
     fn api_version() -> &'static str {
         "1.0"
     }
@@ -57,6 +58,7 @@ impl<Handler: BackendHandler> Query<Handler> {
         span.in_scope(|| {
             debug!(?user_id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let user_id = urlencoding::decode(&user_id).context("Invalid user parameter")?;
         let user_id = UserId::new(&user_id);
         let handler = context
@@ -67,7 +69,7 @@ impl<Handler: BackendHandler> Query<Handler> {
             ))?;
         let schema: Arc<PublicSchema> = Arc::new(self.get_schema(context, span.clone()).await?);
         let user = handler.get_user_details(&user_id).instrument(span).await?;
-        User::<Handler>::from_user(user, schema, context.validation_result.is_admin())
+        User::<Handler>::from_user(user, schema)
     }
 
     async fn users(
@@ -79,6 +81,7 @@ impl<Handler: BackendHandler> Query<Handler> {
         span.in_scope(|| {
             debug!(?filters);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_readonly_handler()
             .ok_or_else(field_error_callback(
@@ -95,15 +98,15 @@ impl<Handler: BackendHandler> Query<Handler> {
             )
             .instrument(span)
             .await?;
-        let is_admin = context.validation_result.is_admin();
         users
             .into_iter()
-            .map(|u| User::<Handler>::from_user_and_groups(u, schema.clone(), is_admin))
+            .map(|u| User::<Handler>::from_user_and_groups(u, schema.clone()))
             .collect()
     }
 
     async fn groups(&self, context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
         let span = debug_span!("[GraphQL query] groups");
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_readonly_handler()
             .ok_or_else(field_error_callback(
@@ -127,6 +130,7 @@ impl<Handler: BackendHandler> Query<Handler> {
         span.in_scope(|| {
             debug!(?group_id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_readonly_handler()
             .ok_or_else(field_error_callback(
@@ -143,6 +147,7 @@ impl<Handler: BackendHandler> Query<Handler> {
 
     async fn schema(&self, context: &Context<Handler>) -> FieldResult<Schema<Handler>> {
         let span = debug_span!("[GraphQL query] get_schema");
+        check_mfa_enrollment(context, &span).await?;
         self.get_schema(context, span).await.map(Into::into)
     }
 }
@@ -290,7 +295,6 @@ mod tests {
                             value: "Bobberson".to_string().into(),
                         },
                     ],
-                    totp_secret: None,
                     mfa_type: None,
                 })
             });
@@ -399,7 +403,6 @@ mod tests {
                                 &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                             ),
                             attributes: Vec::new(),
-                            totp_secret: None,
                             mfa_type: None,
                         },
                         groups: None,
@@ -420,7 +423,6 @@ mod tests {
                                 &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                             ),
                             attributes: Vec::new(),
-                            totp_secret: None,
                             mfa_type: None,
                         },
                         groups: None,
@@ -554,7 +556,7 @@ mod tests {
     }
 
     fn get_mfa_enrolled_user() -> DomainUser {
-        let user = DomainUser {
+        DomainUser {
             user_id: UserId::new("bob"),
             email: "bob@bobbers.on".into(),
             display_name: None,
@@ -566,67 +568,8 @@ mod tests {
                 &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
             ),
             attributes: Vec::new(),
-            totp_secret: Some("v1.fakesealedblob".to_string()),
-            mfa_type: Some("totp".to_string()),
-        };
-        // The sealed secret never reaches Debug output.
-        assert!(!format!("{user:?}").contains("fakesealedblob"));
-        user
-    }
-
-    #[tokio::test]
-    async fn mfa_attribute_visibility() {
-        const QUERY: &str = r#"{
-          user(userId: "bob") {
-            attributes {
-              name
-              value
-            }
-          }
-        }"#;
-
-        // An admin sees mfa_type, but the sealed secret never leaves the server.
-        let mut mock = MockTestBackendHandler::new();
-        setup_default_schema(&mut mock);
-        mock.expect_get_user_details()
-            .with(eq(UserId::new("bob")))
-            .return_once(|_| Ok(get_mfa_enrolled_user()));
-        let context = Context::<MockTestBackendHandler>::new_for_tests(
-            mock,
-            ValidationResults {
-                user: UserId::new("admin"),
-                permission: Permission::Admin,
-            },
-        );
-        let schema = schema(Query::<MockTestBackendHandler>::new());
-        let (data, errors) = execute(QUERY, None, &schema, &Variables::new(), &context)
-            .await
-            .unwrap();
-        assert_eq!(errors, vec![]);
-        let json = serde_json::to_string(&data).unwrap();
-        assert!(!json.contains("totp_secret"));
-        assert!(json.contains(r#"{"name":"mfa_type","value":["totp"]}"#));
-
-        // A regular user querying themselves sees mfa_type (visible), no secret.
-        let mut mock = MockTestBackendHandler::new();
-        setup_default_schema(&mut mock);
-        mock.expect_get_user_details()
-            .with(eq(UserId::new("bob")))
-            .return_once(|_| Ok(get_mfa_enrolled_user()));
-        let context = Context::<MockTestBackendHandler>::new_for_tests(
-            mock,
-            ValidationResults {
-                user: UserId::new("bob"),
-                permission: Permission::Regular,
-            },
-        );
-        let (data, errors) = execute(QUERY, None, &schema, &Variables::new(), &context)
-            .await
-            .unwrap();
-        assert_eq!(errors, vec![]);
-        let json = serde_json::to_string(&data).unwrap();
-        assert!(!json.contains("totp_secret"));
-        assert!(json.contains(r#"{"name":"mfa_type","value":["totp"]}"#));
+            mfa_type: Some(lldap_domain::types::MFA_TYPE_TOTP.to_string()),
+        }
     }
 
     #[tokio::test]
@@ -656,8 +599,6 @@ mod tests {
             );
         };
 
-        // Admins and the user themself see the enrollment status; anyone else
-        // (here a readonly user, who can query bob) gets null.
         expect_mfa_enrolled(
             ValidationResults {
                 user: UserId::new("admin"),

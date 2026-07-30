@@ -101,7 +101,6 @@ impl Component for App {
                 self.user_info = Some((user_name.clone(), is_admin));
                 self.mfa_enrollment_pending = mfa_enrollment_required;
                 if mfa_enrollment_required {
-                    // The server requires MFA for everyone: guide straight to enrollment.
                     self.redirect_to = None;
                     history.push(AppRoute::RegisterMfa { user_id: user_name });
                 } else {
@@ -243,12 +242,15 @@ impl App {
             && mfa_enabled != Some(false)
             && let Some(user) = logged_in_user.as_deref()
         {
+            // Match the raw segment too: the redirect below builds the raw form,
+            // so a '%' in the username must not loop through decoding.
             let on_own_enrollment = matches!(
                 switch,
                 AppRoute::RegisterMfa { user_id }
-                    if Self::decode_user_id(user_id)
-                        .as_deref()
-                        .is_some_and(|d| user.eq_ignore_ascii_case(d))
+                    if user.eq_ignore_ascii_case(user_id)
+                        || Self::decode_user_id(user_id)
+                            .as_deref()
+                            .is_some_and(|d| user.eq_ignore_ascii_case(d))
             );
             if !on_own_enrollment {
                 return html! {
@@ -334,13 +336,10 @@ impl App {
             },
             AppRoute::RegisterMfa { user_id } => match (Self::decode_user_id(user_id), mfa_enabled)
             {
-                // Nothing to enroll into while the server's MFA policy is disabled.
                 (Some(decoded_id), Some(false)) => html! {
                     <Redirect to={AppRoute::UserDetails { user_id: decoded_id }} />
                 },
                 (Some(_), None) => html! {},
-                // The enrollment mutation targets the logged-in user: never
-                // render this page under someone else's URL.
                 (Some(decoded_id), Some(true))
                     if logged_in_user
                         .as_deref()

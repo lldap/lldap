@@ -115,10 +115,9 @@ impl<Handler: BackendHandler> Group<Handler> {
             )
             .instrument(span)
             .await?;
-        let is_admin = context.validation_result.is_admin();
         domain_users
             .into_iter()
-            .map(|u| User::<Handler>::from_user_and_groups(u, self.schema.clone(), is_admin))
+            .map(|u| User::<Handler>::from_user_and_groups(u, self.schema.clone()))
             .collect()
     }
 }

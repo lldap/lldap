@@ -1,6 +1,6 @@
 [package]
 name = "lldap_mfa"
-version = "0.1.0"
+version = "0.1.1"
 description = "TOTP MFA helpers for LLDAP"
 edition.workspace = true
 authors.workspace = true
@@ -11,15 +11,17 @@ rust-version.workspace = true
 
 [features]
 default = ["seal"]
-# At-rest sealing and seed generation; disabled for the wasm frontend,
-# which only needs the TOTP math and encodings.
-seal = ["dep:base64", "dep:orion", "dep:rand"]
+# At-rest sealing; off for the wasm frontend, which only needs the TOTP math.
+seal = ["dep:base64", "dep:bincode", "dep:orion", "dep:rand", "dep:serde"]
 
 [dependencies]
 base64 = { workspace = true, optional = true }
+bincode = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["derive"] }
 data-encoding = "2"
 hmac = "0.12"
 orion = { workspace = true, optional = true }
+percent-encoding = "2"
 rand = { workspace = true, optional = true }
 sha1 = "0.10"
 thiserror = { workspace = true }

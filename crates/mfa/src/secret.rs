@@ -3,11 +3,12 @@ use orion::aead;
 use orion::hazardous::aead::chacha20poly1305::{self, Nonce, SecretKey};
 use orion::hazardous::kdf::hkdf;
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{MfaError, Result};
 use crate::types::{
-    SEAL_SALT_LEN, SEAL_TAG_LEN, SEALED_BLOB_LEN, SEALED_PREFIX, TOTP_SEED_LEN, build_nonce_info,
-    storage_key_info,
+    SEAL_SALT_LEN, SEAL_TAG_LEN, SEALED_BLOB_LEN, SEALED_PREFIX, TOTP_ENROLLMENT_TTL_SECS,
+    TOTP_SEED_LEN, build_nonce_info, enrollment_key_info, storage_key_info,
 };
 
 /// Generate a 160-bit TOTP seed.
@@ -82,16 +83,59 @@ pub fn open_totp_secret(ikm: &[u8], user_uuid: &str, sealed: &str) -> Result<Vec
     Ok(plain)
 }
 
-/// Seal enrollment pending state for the wire (high-level AEAD; not column-sized).
-pub fn seal_enrollment_state(server_key: &[u8], state: &[u8]) -> Result<Vec<u8>> {
-    let key = aead::SecretKey::from_slice(server_key)?;
-    Ok(aead::seal(&key, state)?)
+// Distinct info string: wire-state blobs must never share a key with column blobs.
+fn derive_enrollment_key(ikm: &[u8]) -> Result<aead::SecretKey> {
+    let mut key_bytes = [0u8; 32];
+    hkdf::sha256::derive_key(&[], ikm, Some(enrollment_key_info()), &mut key_bytes)?;
+    Ok(aead::SecretKey::from_slice(&key_bytes)?)
 }
 
-/// Open enrollment pending state.
-pub fn open_enrollment_state(server_key: &[u8], blob: &[u8]) -> Result<Vec<u8>> {
-    let key = aead::SecretKey::from_slice(server_key)?;
-    Ok(aead::open(&key, blob)?)
+/// A TOTP enrollment awaiting confirmation, sealed until the code is verified.
+/// The caller owns the user comparison: `user_id` here is a plain string.
+#[derive(Serialize, Deserialize)]
+pub struct EnrollmentState {
+    // Discriminates the sealed blob: bincode ignores trailing bytes, so an
+    // unrelated payload could otherwise be parsed as an enrollment.
+    kind: u8,
+    pub user_id: String,
+    pub seed: [u8; TOTP_SEED_LEN],
+    expiry_unix: i64,
+}
+
+const STATE_KIND_ENROLLMENT: u8 = 1;
+
+/// Seal a pending enrollment, valid for [`TOTP_ENROLLMENT_TTL_SECS`].
+pub fn seal_enrollment(
+    ikm: &[u8],
+    user_id: &str,
+    seed: &[u8; TOTP_SEED_LEN],
+    now_unix: i64,
+) -> Result<String> {
+    let state = EnrollmentState {
+        kind: STATE_KIND_ENROLLMENT,
+        user_id: user_id.to_owned(),
+        seed: *seed,
+        expiry_unix: now_unix + TOTP_ENROLLMENT_TTL_SECS as i64,
+    };
+    let key = derive_enrollment_key(ikm)?;
+    let sealed = aead::seal(&key, &bincode::serialize(&state)?)?;
+    Ok(URL_SAFE_NO_PAD.encode(sealed))
+}
+
+/// Open a pending enrollment, rejecting anything expired or malformed.
+pub fn open_enrollment(ikm: &[u8], sealed: &str, now_unix: i64) -> Result<EnrollmentState> {
+    let key = derive_enrollment_key(ikm)?;
+    let blob = URL_SAFE_NO_PAD
+        .decode(sealed.as_bytes())
+        .map_err(|_| MfaError::InvalidSealedFormat)?;
+    let state: EnrollmentState = bincode::deserialize(&aead::open(&key, &blob)?)?;
+    if state.kind != STATE_KIND_ENROLLMENT {
+        return Err(MfaError::InvalidSealedFormat);
+    }
+    if state.expiry_unix < now_unix {
+        return Err(MfaError::EnrollmentExpired);
+    }
+    Ok(state)
 }
 
 #[cfg(test)]
@@ -199,11 +243,29 @@ mod tests {
     }
 
     #[test]
-    fn enrollment_state_round_trip() {
-        let key = b"0123456789abcdef0123456789abcdef";
-        let state = b"pending-enrollment-payload";
-        let blob = seal_enrollment_state(key, state).unwrap();
-        assert_ne!(blob.as_slice(), state.as_slice());
-        assert_eq!(open_enrollment_state(key, &blob).unwrap(), state);
+    fn enrollment_round_trip() {
+        let seed = generate_seed();
+        let sealed = seal_enrollment(IKM, "bob", &seed, 1000).unwrap();
+        assert!(!sealed.contains("bob"));
+        let state = open_enrollment(IKM, &sealed, 1000).unwrap();
+        assert_eq!(state.user_id, "bob");
+        assert_eq!(state.seed, seed);
+    }
+
+    #[test]
+    fn enrollment_rejects_expired_wrong_key_and_tampered() {
+        let seed = generate_seed();
+        let sealed = seal_enrollment(IKM, "bob", &seed, 1000).unwrap();
+        let expired = 1001 + TOTP_ENROLLMENT_TTL_SECS as i64;
+        assert!(matches!(
+            open_enrollment(IKM, &sealed, expired),
+            Err(MfaError::EnrollmentExpired)
+        ));
+        let bad_ikm = b"ff23456789abcdef0123456789abcdef";
+        assert!(open_enrollment(bad_ikm, &sealed, 1000).is_err());
+        let mut bytes = sealed.into_bytes();
+        let i = bytes.len() - 2;
+        bytes[i] = if bytes[i] == b'A' { b'B' } else { b'A' };
+        assert!(open_enrollment(IKM, &String::from_utf8(bytes).unwrap(), 1000).is_err());
     }
 }

@@ -35,15 +35,15 @@ pub fn format_code(code: u32) -> String {
 }
 
 fn parse_code(code: &str) -> Result<u32> {
-    let code = code.trim();
     if code.len() != TOTP_DIGITS as usize || !code.chars().all(|c| c.is_ascii_digit()) {
         return Err(MfaError::InvalidCodeFormat);
     }
     code.parse().map_err(|_| MfaError::InvalidCodeFormat)
 }
 
-/// Branch-free equality for two `u32` values (best-effort optimizer barrier).
-fn ct_eq_u32(a: u32, b: u32) -> bool {
+/// Equality through an optimizer barrier, so the comparison is not short-circuited
+/// per window. `black_box` gives no timing guarantee; the surrounding HMAC dominates.
+fn barrier_eq_u32(a: u32, b: u32) -> bool {
     std::hint::black_box(a ^ b) == 0
 }
 
@@ -71,7 +71,7 @@ pub fn totp_verify(secret: &[u8], code: &str, unix_secs: u64) -> Result<bool> {
         }
         let expected = hotp(secret, counter as u64)?;
         // Non-short-circuiting accumulate so all windows are always checked.
-        ok |= ct_eq_u32(expected, provided);
+        ok |= barrier_eq_u32(expected, provided);
     }
     Ok(ok)
 }
@@ -81,12 +81,11 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
-    // RFC 6238 Appendix B seed (ASCII) for SHA-1 vectors.
+    // RFC 6238 Appendix B seed (ASCII); expected codes are Digit=8 vectors % 10^6.
     const RFC_SEED: &[u8] = b"12345678901234567890";
 
     #[test]
     fn rfc6238_sha1_6_digits() {
-        // RFC 6238 Appendix B (SHA-1, Digit=8) reduced with % 10^6 for Digit=6.
         assert_eq!(totp_code(RFC_SEED, 59).unwrap(), 287_082); // 94287082
         assert_eq!(totp_code(RFC_SEED, 1_111_111_109).unwrap(), 81_804); // 07081804
         assert_eq!(totp_code(RFC_SEED, 1_111_111_111).unwrap(), 50_471); // 14050471
@@ -100,7 +99,6 @@ mod tests {
         let t = 1_111_111_111u64;
         let code = format_code(totp_code(RFC_SEED, t).unwrap());
         assert!(totp_verify(RFC_SEED, &code, t).unwrap());
-        // Adjacent steps (t ± 30s) are accepted via the ±1 skew window.
         assert!(totp_verify(RFC_SEED, &code, t + TOTP_STEP_SECS).unwrap());
         assert!(totp_verify(RFC_SEED, &code, t - TOTP_STEP_SECS).unwrap());
     }
@@ -112,6 +110,9 @@ mod tests {
         assert!(!totp_verify(RFC_SEED, "12345", t).unwrap());
         assert!(!totp_verify(RFC_SEED, "abcdef", t).unwrap());
         assert!(!totp_verify(RFC_SEED, "", t).unwrap());
+        let code = format_code(totp_code(RFC_SEED, t).unwrap());
+        assert!(!totp_verify(RFC_SEED, &format!(" {code}"), t).unwrap());
+        assert!(!totp_verify(RFC_SEED, &format!("{code} "), t).unwrap());
     }
 
     #[test]
@@ -122,7 +123,6 @@ mod tests {
 
     #[test]
     fn split_totp_suffix_cases() {
-        // Splits at the last separator, so passwords containing one still work.
         assert_eq!(
             split_totp_suffix("pass:word:123456"),
             Some(("pass:word", "123456"))

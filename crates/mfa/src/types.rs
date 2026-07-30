@@ -6,11 +6,13 @@ pub const TOTP_DIGITS: u32 = 6;
 pub const TOTP_STEP_SECS: u64 = 30;
 /// Allowed clock skew in steps (±1 → check three windows).
 pub const TOTP_SKEW_STEPS: i64 = 1;
-/// Separator between password and appended TOTP code in combined logins
-/// (colon, confirmed on issue #631).
+/// Separator between password and appended TOTP code in combined logins.
 pub const TOTP_SEPARATOR: char = ':';
 /// Validity of a pending TOTP enrollment, from start to code confirmation.
 pub const TOTP_ENROLLMENT_TTL_SECS: u64 = 5 * 60;
+/// How long a code stays valid, and therefore how long a used one is refused.
+#[cfg(feature = "seal")]
+pub const TOTP_ACCEPTANCE_WINDOW_SECS: i64 = TOTP_STEP_SECS as i64 * (2 * TOTP_SKEW_STEPS + 1);
 
 /// 4-byte salt stored with each sealed blob (E2+salt).
 #[cfg(feature = "seal")]
@@ -21,26 +23,32 @@ pub const SEAL_TAG_LEN: usize = 16;
 /// Prefix for column-stored sealed secrets.
 #[cfg(feature = "seal")]
 pub const SEALED_PREFIX: &str = "v1.";
-/// Expected length of a sealed column value for a 20-byte seed.
+/// Length of a sealed column value: the prefix plus unpadded base64url of
+/// salt||ciphertext||tag.
 #[cfg(feature = "seal")]
-pub const SEALED_BLOB_LEN: usize = 57;
+pub const SEALED_BLOB_LEN: usize =
+    SEALED_PREFIX.len() + ((SEAL_SALT_LEN + TOTP_SEED_LEN + SEAL_TAG_LEN) * 4).div_ceil(3);
 
-/// Value stored in `mfa_type` when TOTP is enrolled.
-pub const MFA_TYPE_TOTP: &str = "totp";
-
-/// Error prefix for a replayed, already-consumed code (the login doors key on it).
+/// Error prefix for a replayed code; the login paths match on it.
 pub const TOTP_CODE_ALREADY_USED: &str = "TOTP code already used";
-/// Error prefix for an expired pending enrollment (the frontend keys on it).
+/// Error prefix for an expired pending enrollment; the frontend matches on it.
 pub const TOTP_ENROLLMENT_EXPIRED: &str = "Expired TOTP enrollment";
 
 #[cfg(feature = "seal")]
 const STORAGE_KEY_INFO: &[u8] = b"lldap-totp-storage-key-v1";
+#[cfg(feature = "seal")]
+const ENROLLMENT_KEY_INFO: &[u8] = b"lldap-totp-enrollment-key-v1";
 #[cfg(feature = "seal")]
 const NONCE_INFO_PREFIX: &[u8] = b"lldap-totp-nonce-v1";
 
 #[cfg(feature = "seal")]
 pub(crate) fn storage_key_info() -> &'static [u8] {
     STORAGE_KEY_INFO
+}
+
+#[cfg(feature = "seal")]
+pub(crate) fn enrollment_key_info() -> &'static [u8] {
+    ENROLLMENT_KEY_INFO
 }
 
 #[cfg(feature = "seal")]

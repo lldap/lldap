@@ -167,6 +167,7 @@ pub struct RunOpts {
 
     /// MFA policy. false = disabled (default); true = enabled (only enrolled users);
     /// "always" = force all users.
+    /// Members of the lldap_mfa_disabled group are exempt.
     #[clap(long, env = "LLDAP_REQUIRE_MFA")]
     pub require_mfa: Option<TrueFalseAlways>,
 

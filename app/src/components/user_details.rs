@@ -221,6 +221,8 @@ impl Component for UserDetails {
         let link = &ctx.link();
         match (&self.user_and_schema, &self.common.error) {
             (Some((u, schema)), error) => {
+                // A null mfaEnrolled (hidden from this viewer) means not enrolled.
+                let mfa_enrolled = u.mfa_enrolled.unwrap_or(false);
                 html! {
                   <>
                     <h3>{u.id.to_string()}</h3>
@@ -237,7 +239,7 @@ impl Component for UserDetails {
                             to={AppRoute::RegisterMfa{user_id: u.id.clone()}}
                             classes="btn btn-secondary me-2">
                             <i class="bi-shield-lock me-2"></i>
-                            { if u.mfa_enrolled == Some(true) {
+                            { if mfa_enrolled {
                                 "Reconfigure two-factor"
                               } else {
                                 "Set up two-factor"
@@ -249,7 +251,7 @@ impl Component for UserDetails {
                         html! {
                           <ResetMfa
                             username={u.id.clone()}
-                            disabled={u.mfa_enrolled == Some(false)}
+                            disabled={!mfa_enrolled}
                             on_mfa_reset={link.callback(|_| Msg::OnMfaReset)}
                             on_error={link.callback(Msg::OnError)} />
                         }

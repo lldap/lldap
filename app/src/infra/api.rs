@@ -13,13 +13,11 @@ pub struct HostService {}
 
 /// Outcome of a login attempt against the server.
 pub enum LoginOutcome {
-    /// Logged in; the identity cookies are set.
     Success {
         user_id: String,
         is_admin: bool,
         mfa_enrollment_required: bool,
     },
-    /// The password was correct but the TOTP code was missing.
     MfaRequired,
 }
 
@@ -157,10 +155,10 @@ impl HostService {
         )
         .await?
         {
-            LoginServerResponse::MfaRequired(response) => {
-                debug_assert!(response.mfa_required);
+            LoginServerResponse::MfaRequired(response) if response.mfa_required => {
                 Ok(LoginOutcome::MfaRequired)
             }
+            LoginServerResponse::MfaRequired(_) => Err(anyhow!("Invalid response to login finish")),
             LoginServerResponse::Success(response) => {
                 let mfa_enrollment_required = response.mfa_enrollment_required.unwrap_or(false);
                 let (user_id, is_admin) = set_cookies_from_jwt(response)?;

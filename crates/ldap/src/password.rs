@@ -9,15 +9,19 @@ use anyhow::Result;
 use ldap3_proto::proto::{
     LdapBindCred, LdapBindRequest, LdapOp, LdapPasswordModifyRequest, LdapResultCode,
 };
-use lldap_access_control::{AccessControlledBackendHandler, UserReadableBackendHandler};
+use lldap_access_control::{
+    AccessControlledBackendHandler, MFA_ENROLLMENT_REQUIRED, MfaRequirement,
+    UserReadableBackendHandler, mfa_enrollment_status, mfa_requirement,
+};
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::types::UserId;
 use lldap_domain_handlers::handler::{
-    BackendHandler, BindRequest, LoginHandler, MfaPolicy, UserBackendHandler,
+    BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, MfaPolicy,
 };
 use lldap_domain_model::error::DomainError;
-use lldap_mfa::{MFA_TYPE_TOTP, TOTP_CODE_ALREADY_USED, TOTP_SEPARATOR, split_totp_suffix};
+use lldap_mfa::{TOTP_CODE_ALREADY_USED, TOTP_SEPARATOR, split_totp_suffix};
 use lldap_opaque_handler::OpaqueHandler;
+use tracing::warn;
 
 async fn bind_password(
     backend: &impl LoginHandler,
@@ -39,7 +43,7 @@ async fn bind_password(
 pub(crate) async fn do_bind(
     ldap_info: &LdapInfo,
     request: &LdapBindRequest,
-    backend: &(impl BackendHandler + LoginHandler),
+    backend: &(impl LoginHandler + UserReadableBackendHandler + MfaBackendHandler),
 ) -> LdapResult<UserId> {
     if request.dn.is_empty() {
         return Err(LdapError {
@@ -76,54 +80,41 @@ pub(crate) async fn do_bind(
         code: LdapResultCode::InvalidCredentials,
         message: "".to_string(),
     };
-    let user = match UserBackendHandler::get_user_details(backend, &user_id).await {
-        Ok(user) => Some(user),
+    let status = match mfa_enrollment_status(backend, &user_id).await {
+        Ok(status) => Some(status),
         // Unknown users go through a plain bind, which fails as before.
         Err(DomainError::EntityNotFound(_)) => None,
-        // Fail closed: never skip MFA because of a backend error.
-        Err(_) => return Err(invalid_credentials()),
-    };
-    let enrolled = user
-        .as_ref()
-        .is_some_and(|u| u.mfa_type.as_deref() == Some(MFA_TYPE_TOTP));
-    let mfa_required = match ldap_info.mfa_policy {
-        MfaPolicy::Disabled => false,
-        MfaPolicy::Enrolled => enrolled,
-        MfaPolicy::Always => {
-            user.is_some()
-                && !UserBackendHandler::get_user_groups(backend, &user_id)
-                    .await
-                    .map_err(|_| invalid_credentials())?
-                    .iter()
-                    .any(|g| g.display_name == "lldap_mfa_disabled".into())
+        Err(e) => {
+            warn!("Could not read the MFA status, refusing the bind: {:#}", e);
+            return Err(invalid_credentials());
         }
     };
-    if !mfa_required {
-        bind_password(backend, &user_id, password).await?;
-        return Ok(user_id);
-    }
-    // The password is always verified first: only its rightful owner gets guidance.
-    if !enrolled {
-        bind_password(backend, &user_id, password).await?;
-        return Err(LdapError {
-            code: LdapResultCode::InvalidCredentials,
-            message: "MFA enrollment required: enroll through the web interface or contact an administrator".to_string(),
-        });
+    // The password is verified first everywhere below: only its owner gets guidance.
+    match mfa_requirement(ldap_info.mfa_policy, status.as_ref()) {
+        MfaRequirement::None => {
+            bind_password(backend, &user_id, password).await?;
+            return Ok(user_id);
+        }
+        MfaRequirement::Enrollment => {
+            bind_password(backend, &user_id, password).await?;
+            return Err(LdapError {
+                code: LdapResultCode::InvalidCredentials,
+                message: MFA_ENROLLMENT_REQUIRED.to_owned(),
+            });
+        }
+        MfaRequirement::Totp => {}
     }
     match split_totp_suffix(password) {
         Some((password, code)) => {
             bind_password(backend, &user_id, password).await?;
             if let Err(e) = backend.verify_user_totp(&user_id, code).await {
                 return Err(match e {
-                    // The password was verified above: a replay diagnostic is safe.
                     DomainError::AuthenticationError(m)
                         if m.starts_with(TOTP_CODE_ALREADY_USED) =>
                     {
                         LdapError {
                             code: LdapResultCode::InvalidCredentials,
-                            message: format!(
-                                "{TOTP_CODE_ALREADY_USED}: wait for the next code and try again"
-                            ),
+                            message: format!("{TOTP_CODE_ALREADY_USED}, wait for the next one"),
                         }
                     }
                     // Do not reveal which factor failed.
@@ -136,9 +127,7 @@ pub(crate) async fn do_bind(
             bind_password(backend, &user_id, password).await?;
             Err(LdapError {
                 code: LdapResultCode::InvalidCredentials,
-                message: format!(
-                    "TOTP code required: bind with your password followed by '{TOTP_SEPARATOR}' and the current 6-digit code"
-                ),
+                message: format!("TOTP code required: append '{TOTP_SEPARATOR}' and the code"),
             })
         }
     }
@@ -379,7 +368,6 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_bind_with_totp() {
-        // Enrolled user: the bind sees the stripped password, the code is verified.
         let mut mock = MockTestBackendHandler::new();
         expect_mfa_user_details(&mut mock, "bob", true);
         mock.expect_bind()
@@ -407,7 +395,6 @@ pub mod tests {
             cred: LdapBindCred::Simple("pass:word:123456".to_string()),
         };
         assert_eq!(ldap_handler.do_bind(&request).await, make_bind_success());
-        // A wrong code fails without revealing which factor was wrong.
         let request = LdapBindRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass:word:654321".to_string()),
@@ -416,7 +403,6 @@ pub mod tests {
             ldap_handler.do_bind(&request).await,
             make_bind_result(LdapResultCode::InvalidCredentials, "")
         );
-        // A replayed code names the cause: the password was already verified.
         let request = LdapBindRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass:word:111111".to_string()),
@@ -425,10 +411,9 @@ pub mod tests {
             ldap_handler.do_bind(&request).await,
             make_bind_result(
                 LdapResultCode::InvalidCredentials,
-                "TOTP code already used: wait for the next code and try again"
+                "TOTP code already used, wait for the next one"
             )
         );
-        // The password alone teaches the combined format, but only when it is correct.
         let request = LdapBindRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
             cred: LdapBindCred::Simple("pass:word".to_string()),
@@ -437,11 +422,10 @@ pub mod tests {
             ldap_handler.do_bind(&request).await,
             make_bind_result(
                 LdapResultCode::InvalidCredentials,
-                "TOTP code required: bind with your password followed by ':' and the current 6-digit code"
+                "TOTP code required: append ':' and the code"
             )
         );
 
-        // Unenrolled users bind unchanged, even with a code-like password suffix.
         let mut mock = MockTestBackendHandler::new();
         expect_mfa_user_details(&mut mock, "john", false);
         mock.expect_bind()
@@ -463,8 +447,60 @@ pub mod tests {
     }
 
     #[tokio::test]
+    async fn test_bind_enrolled_exempt() {
+        let mut mock = MockTestBackendHandler::new();
+        expect_mfa_user_details(&mut mock, "bob", true);
+        mock.expect_bind()
+            .with(eq(BindRequest {
+                name: UserId::new("bob"),
+                password: "pass".to_string(),
+            }))
+            .returning(|_| Ok(()));
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .returning(|_| {
+                let mut set = HashSet::new();
+                set.insert(GroupDetails {
+                    group_id: GroupId(7),
+                    display_name: "lldap_mfa_disabled".into(),
+                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                    uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+                    attributes: Vec::new(),
+                    modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+                });
+                Ok(set)
+            });
+        let mut ldap_handler =
+            LdapHandler::new_for_tests_with_policy(mock, "dc=example,dc=com", MfaPolicy::Enrolled);
+        let request = LdapBindRequest {
+            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
+            cred: LdapBindCred::Simple("pass".to_string()),
+        };
+        assert_eq!(ldap_handler.do_bind(&request).await, make_bind_success());
+    }
+
+    #[tokio::test]
+    async fn test_bind_disabled_passthrough() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_bind()
+            .with(eq(BindRequest {
+                name: UserId::new("bob"),
+                password: "pass:123456".to_string(),
+            }))
+            .returning(|_| Ok(()));
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .returning(|_| Ok(HashSet::new()));
+        let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=example,dc=com");
+        let request = LdapBindRequest {
+            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
+            cred: LdapBindCred::Simple("pass:123456".to_string()),
+        };
+        assert_eq!(ldap_handler.do_bind(&request).await, make_bind_success());
+    }
+
+    #[tokio::test]
     async fn test_bind_totp_always() {
-        // A member of lldap_mfa_disabled binds with the password alone.
         let mut mock = MockTestBackendHandler::new();
         expect_mfa_user_details(&mut mock, "bob", true);
         mock.expect_bind()
@@ -495,7 +531,6 @@ pub mod tests {
         };
         assert_eq!(ldap_handler.do_bind(&request).await, make_bind_success());
 
-        // An unenrolled, non-exempt user is denied with an enrollment diagnostic.
         let mut mock = MockTestBackendHandler::new();
         expect_mfa_user_details(&mut mock, "john", false);
         mock.expect_bind()

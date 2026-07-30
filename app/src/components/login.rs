@@ -21,12 +21,10 @@ pub struct LoginForm {
     common: CommonComponentParts<Self>,
     form: Form<FormModel>,
     refreshing: bool,
-    /// TOTP code stripped from the password field for the current attempt.
     totp_code: Option<String>,
-    /// Full password kept for the single retry when the stripped attempt fails
-    /// (a real password can end in ":<6 digits>").
-    retry_password: Option<String>,
-    /// Show the combined-format teaching panel.
+    /// Username and full password kept for the single retry when the stripped
+    /// attempt fails (a real password can end in ":<6 digits>").
+    retry_credentials: Option<(String, String)>,
     mfa_help: bool,
 }
 
@@ -101,12 +99,12 @@ impl CommonComponent<LoginForm> for LoginForm {
                 let password = match split {
                     Some((stripped, code)) => {
                         self.totp_code = Some(code);
-                        self.retry_password = Some(password);
+                        self.retry_credentials = Some((username.clone(), password));
                         stripped
                     }
                     None => {
                         self.totp_code = None;
-                        self.retry_password = None;
+                        self.retry_credentials = None;
                         password
                     }
                 };
@@ -118,12 +116,8 @@ impl CommonComponent<LoginForm> for LoginForm {
                     match opaque::client::login::finish_login(login_start, res.credential_response)
                     {
                         Err(e) => {
-                            if let Some(password) = self.retry_password.take() {
-                                // The stripped password was wrong: retry once with
-                                // the full string.
+                            if let Some((username, password)) = self.retry_credentials.take() {
                                 self.totp_code = None;
-                                error!(&format!("Retrying with the unsplit password: {}", e));
-                                let username = self.form.model().username;
                                 return self.start_login_attempt(ctx, username, password);
                             }
                             // Common error, we want to print a full error to the console but only a
@@ -148,19 +142,15 @@ impl CommonComponent<LoginForm> for LoginForm {
             }
             Msg::AuthenticationFinishResponse(res) => {
                 // The password was proven client-side: no retry past this point.
-                self.retry_password = None;
+                self.retry_credentials = None;
                 match res {
                     Err(e) => {
                         if self.totp_code.take().is_some() {
                             error!(&format!("Invalid credentials: {}", e));
-                            // The server names a replayed code (the password was
-                            // verified first); anything else stays generic.
+                            // Only a replayed code is named: the password was verified first.
                             self.common.error =
                                 Some(if e.to_string().contains(TOTP_CODE_ALREADY_USED) {
-                                    anyhow!(
-                                        "That two-factor code was already used. Wait for your \
-                                         authenticator app to show a new code and try again."
-                                    )
+                                    anyhow!("That code was already used. Wait for the next one.")
                                 } else {
                                     anyhow!("Invalid username or password")
                                 });
@@ -214,7 +204,7 @@ impl Component for LoginForm {
             form: Form::<FormModel>::new(FormModel::default()),
             refreshing: true,
             totp_code: None,
-            retry_password: None,
+            retry_credentials: None,
             mfa_help: false,
         };
         app.common.call_backend(
@@ -305,14 +295,8 @@ impl Component for LoginForm {
                         {"This account uses two-factor authentication"}
                       </h6>
                       <p class="mb-2">
-                        {"Enter your password followed by ':' and the current 6-digit code from your authenticator app, all in the password field: "}
+                        {"Enter your password, ':' and the current code: "}
                         <code>{"yourpassword:123456"}</code>
-                      </p>
-                      <p class="mb-2">
-                        {"The code changes every 30 seconds, so type it fresh each time rather than saving it with your password."}
-                      </p>
-                      <p class="mb-2">
-                        {"This works the same everywhere this account signs in: this page, but also email clients, VPNs and any other service that authenticates against it."}
                       </p>
                     </div>
                   }

@@ -98,7 +98,9 @@ impl Default for Success {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, GraphQLObject)]
+// Every field carries the secret (the URI embeds the seed), so this derives no
+// Debug: it must never be printed.
+#[derive(GraphQLObject)]
 /// A pending TOTP enrollment, to be completed with `finishMfaEnrollment`.
 pub struct MfaEnrollmentStart {
     /// The otpauth:// URI to display as a QR code.

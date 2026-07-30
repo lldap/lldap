@@ -8,19 +8,21 @@ use lldap_domain::{
     },
     schema::{AttributeSchema, Schema},
     types::{
-        AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass,
-        TotpEnrollmentStart, User, UserAndGroups, UserId,
+        AttributeName, Group, GroupDetails, GroupId, GroupName, LdapObjectClass, MFA_TYPE_TOTP,
+        User, UserAndGroups, UserId,
     },
 };
 use lldap_domain_handlers::handler::{
     BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
-    MfaBackendHandler, ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler,
-    UserListerBackendHandler, UserRequestFilter,
+    MfaBackendHandler, MfaPolicy, ReadSchemaBackendHandler, SchemaBackendHandler,
+    UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
 };
 use lldap_domain_model::error::Result;
-use lldap_mfa::MFA_TYPE_TOTP;
 use std::collections::HashSet;
 use tracing::info;
+
+pub const MFA_ENROLLMENT_REQUIRED: &str =
+    "MFA enrollment required: enroll through the web interface or contact an administrator";
 
 #[async_trait]
 pub trait UserReadableBackendHandler: ReadSchemaBackendHandler {
@@ -43,9 +45,6 @@ pub trait ReadonlyBackendHandler: UserReadableBackendHandler {
 #[async_trait]
 pub trait UserWriteableBackendHandler: UserReadableBackendHandler {
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()>;
-    async fn start_totp_enrollment(&self, user_id: &UserId) -> Result<TotpEnrollmentStart>;
-    async fn finish_totp_enrollment(&self, user_id: &UserId, state: &str, code: &str)
-    -> Result<()>;
 }
 
 #[async_trait]
@@ -109,17 +108,6 @@ impl<Handler: BackendHandler> UserWriteableBackendHandler for Handler {
     async fn update_user(&self, request: UpdateUserRequest) -> Result<()> {
         <Handler as UserBackendHandler>::update_user(self, request).await
     }
-    async fn start_totp_enrollment(&self, user_id: &UserId) -> Result<TotpEnrollmentStart> {
-        <Handler as MfaBackendHandler>::start_totp_enrollment(self, user_id).await
-    }
-    async fn finish_totp_enrollment(
-        &self,
-        user_id: &UserId,
-        state: &str,
-        code: &str,
-    ) -> Result<()> {
-        <Handler as MfaBackendHandler>::finish_totp_enrollment(self, user_id, state, code).await
-    }
 }
 #[async_trait]
 impl<Handler: BackendHandler> AdminBackendHandler for Handler {
@@ -168,21 +156,6 @@ impl<Handler: BackendHandler> AdminBackendHandler for Handler {
     async fn delete_group_object_class(&self, name: &LdapObjectClass) -> Result<()> {
         <Handler as SchemaBackendHandler>::delete_group_object_class(self, name).await
     }
-}
-
-/// (enrolled, exempt) for a user, as consumed by the `require_mfa = always` gates.
-pub async fn mfa_enrollment_status(
-    handler: &impl UserReadableBackendHandler,
-    user_id: &UserId,
-) -> Result<(bool, bool)> {
-    let enrolled =
-        handler.get_user_details(user_id).await?.mfa_type.as_deref() == Some(MFA_TYPE_TOTP);
-    let exempt = handler
-        .get_user_groups(user_id)
-        .await?
-        .iter()
-        .any(|g| g.display_name == "lldap_mfa_disabled".into());
-    Ok((enrolled, exempt))
 }
 
 pub struct AccessControlledBackendHandler<Handler> {
@@ -250,12 +223,17 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
     pub fn get_mfa_reset_handler(
         &self,
         validation_result: &ValidationResults,
-        target: &UserId,
+        user_id: &UserId,
         user_is_admin: bool,
     ) -> Option<&(impl MfaBackendHandler + use<Handler>)> {
         validation_result
-            .can_reset_mfa(target, user_is_admin)
+            .can_reset_mfa(user_id, user_is_admin)
             .then_some(&self.handler)
+    }
+
+    // Enrollment only ever targets the authenticated user, so there is no check.
+    pub fn get_mfa_enrollment_handler(&self) -> &(impl MfaBackendHandler + use<Handler>) {
+        &self.handler
     }
 
     pub fn get_user_restricted_lister_handler(
@@ -300,6 +278,43 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
                 Permission::Regular
             },
         }
+    }
+}
+
+pub struct MfaEnrollmentStatus {
+    pub enrolled: bool,
+    pub exempt: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MfaRequirement {
+    None,
+    Totp,
+    Enrollment,
+}
+
+pub async fn mfa_enrollment_status(
+    handler: &impl UserReadableBackendHandler,
+    user_id: &UserId,
+) -> Result<MfaEnrollmentStatus> {
+    let enrolled =
+        handler.get_user_details(user_id).await?.mfa_type.as_deref() == Some(MFA_TYPE_TOTP);
+    let exempt = handler
+        .get_user_groups(user_id)
+        .await?
+        .iter()
+        .any(|g| g.display_name == "lldap_mfa_disabled".into());
+    Ok(MfaEnrollmentStatus { enrolled, exempt })
+}
+
+// `status` is None for unknown users, who keep the unauthenticated behaviour.
+pub fn mfa_requirement(policy: MfaPolicy, status: Option<&MfaEnrollmentStatus>) -> MfaRequirement {
+    match (policy, status) {
+        (MfaPolicy::Disabled, _) | (_, None) => MfaRequirement::None,
+        (_, Some(status)) if status.exempt => MfaRequirement::None,
+        (_, Some(status)) if status.enrolled => MfaRequirement::Totp,
+        (MfaPolicy::Enrolled, _) => MfaRequirement::None,
+        (MfaPolicy::Always, _) => MfaRequirement::Enrollment,
     }
 }
 
@@ -380,5 +395,50 @@ impl<Handler: GroupListerBackendHandler + UserListerBackendHandler + Sync>
 {
     fn user_filter(&self) -> &Option<UserId> {
         &self.user_filter
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn status(enrolled: bool, exempt: bool) -> MfaEnrollmentStatus {
+        MfaEnrollmentStatus { enrolled, exempt }
+    }
+
+    #[test]
+    fn test_mfa_requirement() {
+        let policies = [MfaPolicy::Disabled, MfaPolicy::Enrolled, MfaPolicy::Always];
+        for policy in policies {
+            assert_eq!(mfa_requirement(policy, Option::None), MfaRequirement::None);
+        }
+        for enrolled in [false, true] {
+            for exempt in [false, true] {
+                assert_eq!(
+                    mfa_requirement(MfaPolicy::Disabled, Some(&status(enrolled, exempt))),
+                    MfaRequirement::None
+                );
+            }
+        }
+        for policy in [MfaPolicy::Enrolled, MfaPolicy::Always] {
+            for enrolled in [false, true] {
+                assert_eq!(
+                    mfa_requirement(policy, Some(&status(enrolled, true))),
+                    MfaRequirement::None
+                );
+            }
+            assert_eq!(
+                mfa_requirement(policy, Some(&status(true, false))),
+                MfaRequirement::Totp
+            );
+        }
+        assert_eq!(
+            mfa_requirement(MfaPolicy::Enrolled, Some(&status(false, false))),
+            MfaRequirement::None
+        );
+        assert_eq!(
+            mfa_requirement(MfaPolicy::Always, Some(&status(false, false))),
+            MfaRequirement::Enrollment
+        );
     }
 }

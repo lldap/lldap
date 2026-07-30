@@ -51,14 +51,13 @@ impl ValidationResults {
             || &self.user == user
     }
 
-    // Admin may reset anyone (including self). Password managers may reset
-    // non-admin targets but never their own MFA (CPCSC self-exclusion).
+    // A compromised session must not be able to remove its own second factor.
     #[must_use]
-    pub fn can_reset_mfa(&self, target: &UserId, user_is_admin: bool) -> bool {
+    pub fn can_reset_mfa(&self, user: &UserId, user_is_admin: bool) -> bool {
         self.permission == Permission::Admin
             || (self.permission == Permission::PasswordManager
                 && !user_is_admin
-                && &self.user != target)
+                && &self.user != user)
     }
 
     #[must_use]

@@ -16,10 +16,14 @@ use ldap3_proto::proto::{
     LdapExtendedResponse, LdapFilter, LdapModifyRequest, LdapOp, LdapPasswordModifyRequest,
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, OID_PASSWORD_MODIFY, OID_WHOAMI,
 };
-use lldap_access_control::AccessControlledBackendHandler;
+use lldap_access_control::{AccessControlledBackendHandler, UserReadableBackendHandler};
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::public_schema::PublicSchema;
-use lldap_domain_handlers::handler::{BackendHandler, LoginHandler, ReadSchemaBackendHandler};
+#[cfg(test)]
+use lldap_domain_handlers::handler::MfaPolicy;
+use lldap_domain_handlers::handler::{
+    BackendHandler, LoginHandler, MfaBackendHandler, ReadSchemaBackendHandler,
+};
 use lldap_opaque_handler::OpaqueHandler;
 use tracing::{debug, instrument};
 
@@ -69,6 +73,14 @@ impl<Backend> LdapHandler<Backend> {
     }
 }
 
+impl<Backend: LoginHandler + UserReadableBackendHandler + MfaBackendHandler> LdapHandler<Backend> {
+    pub fn get_login_handler(
+        &self,
+    ) -> &(impl LoginHandler + UserReadableBackendHandler + MfaBackendHandler + use<Backend>) {
+        self.backend_handler.unsafe_get_handler()
+    }
+}
+
 impl<Backend: OpaqueHandler> LdapHandler<Backend> {
     pub fn get_opaque_handler(&self) -> &(impl OpaqueHandler + use<Backend>) {
         self.backend_handler.unsafe_get_handler()
@@ -96,7 +108,6 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     #[cfg(test)]
     pub fn new_for_tests(backend_handler: Backend, ldap_base_dn: &str) -> Self {
-        use lldap_domain_handlers::handler::MfaPolicy;
         Self::new_for_tests_with_policy(backend_handler, ldap_base_dn, MfaPolicy::Disabled)
     }
 
@@ -104,7 +115,7 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
     pub fn new_for_tests_with_policy(
         backend_handler: Backend,
         ldap_base_dn: &str,
-        mfa_policy: lldap_domain_handlers::handler::MfaPolicy,
+        mfa_policy: MfaPolicy,
     ) -> Self {
         Self::new(
             AccessControlledBackendHandler::new(backend_handler),
@@ -170,24 +181,19 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     #[instrument(skip_all, level = "debug", fields(dn = %request.dn))]
     pub async fn do_bind(&mut self, request: &LdapBindRequest) -> Vec<LdapOp> {
-        let (code, message) = match password::do_bind(
-            self.ldap_info,
-            request,
-            self.backend_handler.unsafe_get_handler(),
-        )
-        .await
-        {
-            Ok(user_id) => {
-                self.user_info = self
-                    .backend_handler
-                    .get_permissions_for_user(user_id)
-                    .await
-                    .ok();
-                debug!("Success!");
-                (LdapResultCode::Success, "".to_string())
-            }
-            Err(err) => (err.code, err.message),
-        };
+        let (code, message) =
+            match password::do_bind(self.ldap_info, request, self.get_login_handler()).await {
+                Ok(user_id) => {
+                    self.user_info = self
+                        .backend_handler
+                        .get_permissions_for_user(user_id)
+                        .await
+                        .ok();
+                    debug!("Success!");
+                    (LdapResultCode::Success, "".to_string())
+                }
+                Err(err) => (err.code, err.message),
+            };
         vec![LdapOp::BindResponse(LdapBindResponse {
             res: LdapResultOp {
                 code,
