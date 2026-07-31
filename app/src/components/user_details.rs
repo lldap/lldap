@@ -256,8 +256,18 @@ impl Component for UserDetails {
                         }
                       } else { html! {} }}
                     </div>
-                    <div>
+                    <div class="d-flex justify-content-between align-items-center">
                       <h5 class="row m-3 fw-bold">{"User details"}</h5>
+                      { if ctx.props().mfa_enabled && u.mfa_enrolled.is_some() {
+                        html! {
+                          <span class="my-3">
+                            {"Two-factor: "}
+                            <span class="border rounded px-1">
+                              { if mfa_enrolled { "Enabled" } else { "Disabled" }}
+                            </span>
+                          </span>
+                        }
+                      } else { html! {} }}
                     </div>
                     <UserDetailsForm
                       user={u.clone()}

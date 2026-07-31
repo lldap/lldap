@@ -279,13 +279,9 @@ mod tests {
         assert!(matches!(err, DomainError::AuthenticationError(_)));
 
         let stale = now as i64 - TOTP_ENROLLMENT_TTL_SECS as i64 - 1;
-        let expired = lldap_mfa::seal_enrollment(
-            setup.keypair().private(),
-            "bob",
-            &state.seed,
-            stale,
-        )
-        .unwrap();
+        let expired =
+            lldap_mfa::seal_enrollment(setup.keypair().private(), "bob", &state.seed, stale)
+                .unwrap();
         let err = handler
             .finish_totp_enrollment(&user_id, &expired, &code)
             .await
@@ -335,7 +331,10 @@ mod tests {
             .map(|t| format_code(totp_code(&seed, *t).unwrap()))
             .find(|c| *c != enroll_code)
             .unwrap();
-        handler.verify_user_totp(&user_id, &next_code).await.unwrap();
+        handler
+            .verify_user_totp(&user_id, &next_code)
+            .await
+            .unwrap();
         let err = handler
             .verify_user_totp(&user_id, &next_code)
             .await
