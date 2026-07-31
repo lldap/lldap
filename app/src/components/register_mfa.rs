@@ -6,7 +6,7 @@ use crate::{
     infra::{
         api::HostService,
         common_component::{CommonComponent, CommonComponentParts},
-        cookies::delete_cookie,
+        cookies::{delete_cookie, get_cookie},
         modal::Modal,
     },
 };
@@ -88,6 +88,7 @@ pub struct RegisterMfa {
     form: Form<ConfirmationModel>,
     phase: Phase,
     hint: CodeHint,
+    mfa_exempt: bool,
     expiry_timer: Option<Timeout>,
     node_ref: NodeRef,
     modal: Option<Modal>,
@@ -226,6 +227,11 @@ impl Component for RegisterMfa {
             form: Form::<ConfirmationModel>::new(ConfirmationModel::default()),
             phase: Phase::Loading,
             hint: CodeHint::None,
+            mfa_exempt: get_cookie("mfa_exempt")
+                .ok()
+                .flatten()
+                .as_deref()
+                == Some("true"),
             expiry_timer: Some(Timeout::new(
                 (TOTP_ENROLLMENT_TTL_SECS * 1000) as u32,
                 move || link.send_message(Msg::EnrollmentExpired),
@@ -308,8 +314,21 @@ impl RegisterMfa {
               <code>{spaced_groups(&data.secret_base32)}</code>
             </p>
             <div class="mx-auto" style="max-width: 720px">
+            { if self.mfa_exempt {
+                html! {
+                  <div class="alert alert-warning">
+                    {"You are part of lldap_mfa_disabled. While you may continue with totp setup, you will not be required to enter your totp to log in until removed from the group."}
+                  </div>
+                }
+              } else {
+                html! {
+                  <p>
+                    {"To login after enrolling you will use your password followed by a colon \":\" and the totp code."}
+                  </p>
+                }
+              }}
             <p>
-              {"Practice signing in with your password, ':' and the current code: "}
+              {"Verify by confirming with your password, ':' and the current code: "}
               <code>{"yourpassword:123456"}</code>
             </p>
             <form class="form">

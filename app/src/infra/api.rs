@@ -98,8 +98,10 @@ async fn call_server_empty_response_with_error_message<Body: Serialize>(
 fn set_cookies_from_jwt(response: login::ServerLoginResponse) -> Result<(String, bool)> {
     let jwt_claims = get_claims_from_jwt(response.token.as_str()).context("Could not parse JWT")?;
     let is_admin = jwt_claims.groups.contains("lldap_admin");
+    let mfa_exempt = jwt_claims.groups.contains("lldap_mfa_disabled");
     set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
-        .map(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
+        .and_then(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
+        .and_then(|_| set_cookie("mfa_exempt", &mfa_exempt.to_string(), &jwt_claims.exp))
         .map(|_| (jwt_claims.user.clone(), is_admin))
         .context("Error setting cookie")
 }
