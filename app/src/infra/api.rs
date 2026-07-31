@@ -11,7 +11,6 @@ use web_sys::RequestCredentials;
 #[derive(Default)]
 pub struct HostService {}
 
-/// Outcome of a login attempt against the server.
 pub enum LoginOutcome {
     Success {
         user_id: String,

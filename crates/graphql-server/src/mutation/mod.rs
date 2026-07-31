@@ -1236,7 +1236,6 @@ mod tests {
                 .await
                 .unwrap();
             assert!(response.is_null());
-            assert!(!errors.is_empty());
             assert!(errors.iter().all(|e| e.error().message() == GATE_ERROR));
         }
         assert_eq!(

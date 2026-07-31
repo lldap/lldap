@@ -11,7 +11,6 @@ use crate::types::{
     TOTP_SEED_LEN, build_nonce_info, enrollment_key_info, storage_key_info,
 };
 
-/// Generate a 160-bit TOTP seed.
 pub fn generate_seed() -> [u8; TOTP_SEED_LEN] {
     let mut seed = [0u8; TOTP_SEED_LEN];
     rand::rngs::OsRng.fill_bytes(&mut seed);
@@ -38,7 +37,6 @@ fn aad(user_uuid: &str, salt: &[u8]) -> Vec<u8> {
     a
 }
 
-/// Seal a TOTP seed for the `totp_secret` column (E2+salt, ≤64 chars).
 pub fn seal_totp_secret(ikm: &[u8], user_uuid: &str, seed: &[u8]) -> Result<String> {
     if seed.len() != TOTP_SEED_LEN {
         return Err(MfaError::InvalidSecretLength);
@@ -61,7 +59,6 @@ pub fn seal_totp_secret(ikm: &[u8], user_uuid: &str, seed: &[u8]) -> Result<Stri
     Ok(sealed)
 }
 
-/// Open a column-stored sealed TOTP seed.
 pub fn open_totp_secret(ikm: &[u8], user_uuid: &str, sealed: &str) -> Result<Vec<u8>> {
     let rest = sealed
         .strip_prefix(SEALED_PREFIX)
@@ -90,8 +87,6 @@ fn derive_enrollment_key(ikm: &[u8]) -> Result<aead::SecretKey> {
     Ok(aead::SecretKey::from_slice(&key_bytes)?)
 }
 
-/// A TOTP enrollment awaiting confirmation, sealed until the code is verified.
-/// The caller owns the user comparison: `user_id` here is a plain string.
 #[derive(Serialize, Deserialize)]
 pub struct EnrollmentState {
     // Discriminates the sealed blob: bincode ignores trailing bytes, so an
@@ -104,7 +99,6 @@ pub struct EnrollmentState {
 
 const STATE_KIND_ENROLLMENT: u8 = 1;
 
-/// Seal a pending enrollment, valid for [`TOTP_ENROLLMENT_TTL_SECS`].
 pub fn seal_enrollment(
     ikm: &[u8],
     user_id: &str,
@@ -122,7 +116,6 @@ pub fn seal_enrollment(
     Ok(URL_SAFE_NO_PAD.encode(sealed))
 }
 
-/// Open a pending enrollment, rejecting anything expired or malformed.
 pub fn open_enrollment(ikm: &[u8], sealed: &str, now_unix: i64) -> Result<EnrollmentState> {
     let key = derive_enrollment_key(ikm)?;
     let blob = URL_SAFE_NO_PAD

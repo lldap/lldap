@@ -86,7 +86,6 @@ impl Component for App {
         ctx.link()
             .send_future(async move { Msg::SettingsReceived(HostService::get_settings().await) });
         if app.user_info.is_some() {
-            // Re-fetch the enrollment-guidance flag so a reload cannot bypass it.
             ctx.link()
                 .send_future(async move { Msg::SessionRefreshed(HostService::refresh().await) });
         }
@@ -130,7 +129,6 @@ impl Component for App {
             }
             Msg::SessionRefreshed(Ok((user_name, is_admin, mfa_enrollment_required))) => {
                 self.user_info = Some((user_name, is_admin));
-                // No history push: the route guard redirects declaratively.
                 self.mfa_enrollment_pending = mfa_enrollment_required;
             }
             Msg::SessionRefreshed(Err(err)) => {
@@ -236,14 +234,10 @@ impl App {
         mfa_enabled: Option<bool>,
         mfa_enrollment_pending: bool,
     ) -> Html {
-        // Under require_mfa = always, an unenrolled user is confined to their
-        // own enrollment page until they complete it (or log out).
         if mfa_enrollment_pending
             && mfa_enabled != Some(false)
             && let Some(user) = logged_in_user.as_deref()
         {
-            // Match the raw segment too: the redirect below builds the raw form,
-            // so a '%' in the username must not loop through decoding.
             let on_own_enrollment = matches!(
                 switch,
                 AppRoute::RegisterMfa { user_id }

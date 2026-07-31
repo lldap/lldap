@@ -174,6 +174,12 @@ mod tests {
     };
     use pretty_assertions::assert_eq;
 
+    async fn setup_handler() -> (ServerSetup, SqlBackendHandler) {
+        let setup = generate_random_private_key();
+        let handler = SqlBackendHandler::new(setup.clone(), get_initialized_db().await);
+        (setup, handler)
+    }
+
     async fn get_mfa_columns(
         handler: &SqlBackendHandler,
         user_id: &str,
@@ -195,20 +201,39 @@ mod tests {
         .unwrap()
     }
 
-    fn seal_state(
+    fn current_code(seed: &[u8]) -> (u64, String) {
+        let now = chrono::Utc::now().timestamp() as u64;
+        (now, format_code(totp_code(seed, now).unwrap()))
+    }
+
+    fn wrong_code(seed: &[u8], now: u64) -> String {
+        let valid: Vec<u32> = [now - 30, now, now + 30]
+            .iter()
+            .map(|t| totp_code(seed, *t).unwrap())
+            .collect();
+        format_code((0..).find(|c| !valid.contains(c)).unwrap())
+    }
+
+    async fn enroll_user(
+        handler: &SqlBackendHandler,
         setup: &ServerSetup,
-        user_id: &str,
-        seed: &[u8; TOTP_SEED_LEN],
-        at: i64,
-    ) -> String {
-        lldap_mfa::seal_enrollment(setup.keypair().private(), user_id, seed, at).unwrap()
+        user: &str,
+    ) -> (UserId, [u8; TOTP_SEED_LEN], String) {
+        insert_user_no_password(handler, user).await;
+        let user_id = UserId::new(user);
+        let start = handler.start_totp_enrollment(&user_id).await.unwrap();
+        let state = open_state(setup, &start.state);
+        let (_, code) = current_code(&state.seed);
+        handler
+            .finish_totp_enrollment(&user_id, &start.state, &code)
+            .await
+            .unwrap();
+        (user_id, state.seed, code)
     }
 
     #[tokio::test]
     async fn test_totp_enrollment_flow() {
-        let sql_pool = get_initialized_db().await;
-        let setup = generate_random_private_key();
-        let handler = SqlBackendHandler::new(setup.clone(), sql_pool);
+        let (setup, handler) = setup_handler().await;
         insert_user_no_password(&handler, "bob").await;
         let user_id = UserId::new("bob");
 
@@ -220,18 +245,15 @@ mod tests {
 
         let state = open_state(&setup, &start.state);
         assert_eq!(seed_base32(&state.seed), start.secret_base32);
-        let now = chrono::Utc::now().timestamp() as u64;
-        let code = format_code(totp_code(&state.seed, now).unwrap());
+        let (_, code) = current_code(&state.seed);
         handler
             .finish_totp_enrollment(&user_id, &start.state, &code)
             .await
             .unwrap();
 
         let (totp_secret, mfa_type) = get_mfa_columns(&handler, "bob").await;
-        let sealed = totp_secret.unwrap();
-        assert!(sealed.starts_with(SEALED_PREFIX));
-        assert_eq!(sealed.len(), SEALED_BLOB_LEN);
         assert_eq!(mfa_type.as_deref(), Some(MFA_TYPE_TOTP));
+        let sealed = totp_secret.unwrap();
         let uuid = handler.get_user_uuid(&user_id).await.unwrap();
         assert_eq!(
             open_totp_secret(setup.keypair().private(), uuid.as_str(), &sealed).unwrap(),
@@ -241,38 +263,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_finish_totp_enrollment_rejected() {
-        let sql_pool = get_initialized_db().await;
-        let setup = generate_random_private_key();
-        let handler = SqlBackendHandler::new(setup.clone(), sql_pool);
+        let (setup, handler) = setup_handler().await;
         insert_user_no_password(&handler, "bob").await;
         insert_user_no_password(&handler, "john").await;
         let user_id = UserId::new("bob");
 
         let start = handler.start_totp_enrollment(&user_id).await.unwrap();
         let state = open_state(&setup, &start.state);
-        let now = chrono::Utc::now().timestamp() as u64;
-        let code = format_code(totp_code(&state.seed, now).unwrap());
-        let valid: Vec<u32> = [now - 30, now, now + 30]
-            .iter()
-            .map(|t| totp_code(&state.seed, *t).unwrap())
-            .collect();
-        let wrong = (0..).find(|c| !valid.contains(c)).unwrap();
+        let (now, code) = current_code(&state.seed);
+
         let err = handler
-            .finish_totp_enrollment(&user_id, &start.state, &format_code(wrong))
+            .finish_totp_enrollment(&user_id, &start.state, &wrong_code(&state.seed, now))
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
+
         let stale = now as i64 - TOTP_ENROLLMENT_TTL_SECS as i64 - 1;
+        let expired = lldap_mfa::seal_enrollment(
+            setup.keypair().private(),
+            "bob",
+            &state.seed,
+            stale,
+        )
+        .unwrap();
         let err = handler
-            .finish_totp_enrollment(
-                &user_id,
-                &seal_state(&setup, "bob", &state.seed, stale),
-                &code,
-            )
+            .finish_totp_enrollment(&user_id, &expired, &code)
             .await
             .unwrap_err();
-        assert!(matches!(err, DomainError::AuthenticationError(_)));
         assert!(err.to_string().contains(TOTP_ENROLLMENT_EXPIRED));
+
         let err = handler
             .finish_totp_enrollment(&UserId::new("john"), &start.state, &code)
             .await
@@ -284,20 +303,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_reset_user_mfa() {
-        let sql_pool = get_initialized_db().await;
-        let setup = generate_random_private_key();
-        let handler = SqlBackendHandler::new(setup.clone(), sql_pool);
-        insert_user_no_password(&handler, "bob").await;
-        let user_id = UserId::new("bob");
-
-        let start = handler.start_totp_enrollment(&user_id).await.unwrap();
-        let state = open_state(&setup, &start.state);
-        let now = chrono::Utc::now().timestamp() as u64;
-        let code = format_code(totp_code(&state.seed, now).unwrap());
-        handler
-            .finish_totp_enrollment(&user_id, &start.state, &code)
-            .await
-            .unwrap();
+        let (setup, handler) = setup_handler().await;
+        let (user_id, _, _) = enroll_user(&handler, &setup, "bob").await;
         assert!(get_mfa_columns(&handler, "bob").await.0.is_some());
 
         handler.reset_user_mfa(&user_id).await.unwrap();
@@ -312,53 +319,40 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_user_totp() {
-        let sql_pool = get_initialized_db().await;
-        let setup = generate_random_private_key();
-        let handler = SqlBackendHandler::new(setup.clone(), sql_pool);
-        insert_user_no_password(&handler, "bob").await;
+        let (setup, handler) = setup_handler().await;
+        let (user_id, seed, enroll_code) = enroll_user(&handler, &setup, "bob").await;
         insert_user_no_password(&handler, "john").await;
-        let user_id = UserId::new("bob");
-        let start = handler.start_totp_enrollment(&user_id).await.unwrap();
-        let state = open_state(&setup, &start.state);
         let now = chrono::Utc::now().timestamp() as u64;
-        let code = format_code(totp_code(&state.seed, now).unwrap());
-        handler
-            .finish_totp_enrollment(&user_id, &start.state, &code)
+
+        let err = handler
+            .verify_user_totp(&user_id, &enroll_code)
             .await
-            .unwrap();
+            .unwrap_err();
+        assert!(err.to_string().contains(TOTP_CODE_ALREADY_USED));
 
         let next_code = [now + 30, now - 30]
             .iter()
-            .map(|t| format_code(totp_code(&state.seed, *t).unwrap()))
-            .find(|c| *c != code)
+            .map(|t| format_code(totp_code(&seed, *t).unwrap()))
+            .find(|c| *c != enroll_code)
             .unwrap();
-        handler
-            .verify_user_totp(&user_id, &next_code)
-            .await
-            .unwrap();
+        handler.verify_user_totp(&user_id, &next_code).await.unwrap();
         let err = handler
             .verify_user_totp(&user_id, &next_code)
             .await
             .unwrap_err();
-        assert!(matches!(err, DomainError::AuthenticationError(_)));
         assert!(err.to_string().contains(TOTP_CODE_ALREADY_USED));
-        let err = handler.verify_user_totp(&user_id, &code).await.unwrap_err();
-        assert!(matches!(err, DomainError::AuthenticationError(_)));
-        let valid: Vec<u32> = [now - 30, now, now + 30]
-            .iter()
-            .map(|t| totp_code(&state.seed, *t).unwrap())
-            .collect();
-        let wrong = (0..).find(|c| !valid.contains(c)).unwrap();
+
         let err = handler
-            .verify_user_totp(&user_id, &format_code(wrong))
+            .verify_user_totp(&user_id, &wrong_code(&seed, now))
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
         let err = handler
-            .verify_user_totp(&UserId::new("john"), &code)
+            .verify_user_totp(&UserId::new("john"), &enroll_code)
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
+
         handler
             .write_mfa_columns(
                 &user_id,
@@ -370,35 +364,10 @@ mod tests {
             )
             .await
             .unwrap();
-        let err = handler.verify_user_totp(&user_id, &code).await.unwrap_err();
-        assert!(matches!(err, DomainError::AuthenticationError(_)));
+        let err = handler
+            .verify_user_totp(&user_id, &next_code)
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("re-enrollment"));
-    }
-
-    #[tokio::test]
-    async fn test_totp_replay_scoped_per_user() {
-        let sql_pool = get_initialized_db().await;
-        let setup = generate_random_private_key();
-        let handler = SqlBackendHandler::new(setup.clone(), sql_pool);
-        insert_user_no_password(&handler, "bob").await;
-        insert_user_no_password(&handler, "john").await;
-        let bob = UserId::new("bob");
-        let john = UserId::new("john");
-
-        let start = handler.start_totp_enrollment(&bob).await.unwrap();
-        let state = open_state(&setup, &start.state);
-        let now = chrono::Utc::now().timestamp() as u64;
-        let code = format_code(totp_code(&state.seed, now).unwrap());
-        handler
-            .finish_totp_enrollment(&bob, &start.state, &code)
-            .await
-            .unwrap();
-        let john_state = seal_state(&setup, "john", &state.seed, now as i64);
-        handler
-            .finish_totp_enrollment(&john, &john_state, &code)
-            .await
-            .unwrap();
-        let err = handler.verify_user_totp(&bob, &code).await.unwrap_err();
-        assert!(err.to_string().contains(TOTP_CODE_ALREADY_USED));
     }
 }

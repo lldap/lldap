@@ -25,8 +25,6 @@ pub fn field_error_callback<'a>(
     }
 }
 
-// Under `require_mfa = always`, an unenrolled, non-exempt user may only enroll.
-// A session-level precondition, so it runs before the per-resolver permissions.
 pub(crate) async fn check_mfa_enrollment<Handler: BackendHandler>(
     context: &Context<Handler>,
     span: &tracing::Span,

@@ -1,30 +1,18 @@
-/// 160-bit TOTP seed length (RFC 4226 / common authenticator default).
 pub const TOTP_SEED_LEN: usize = 20;
-/// Digits in a TOTP code.
 pub const TOTP_DIGITS: u32 = 6;
-/// Time step in seconds (RFC 6238 default).
 pub const TOTP_STEP_SECS: u64 = 30;
-/// Allowed clock skew in steps (±1 → check three windows).
 pub const TOTP_SKEW_STEPS: i64 = 1;
-/// Separator between password and appended TOTP code in combined logins.
 pub const TOTP_SEPARATOR: char = ':';
-/// Validity of a pending TOTP enrollment, from start to code confirmation.
 pub const TOTP_ENROLLMENT_TTL_SECS: u64 = 5 * 60;
-/// How long a code stays valid, and therefore how long a used one is refused.
 #[cfg(feature = "seal")]
 pub const TOTP_ACCEPTANCE_WINDOW_SECS: i64 = TOTP_STEP_SECS as i64 * (2 * TOTP_SKEW_STEPS + 1);
 
-/// 4-byte salt stored with each sealed blob (E2+salt).
 #[cfg(feature = "seal")]
 pub const SEAL_SALT_LEN: usize = 4;
-/// Poly1305 tag size (ChaCha20-Poly1305).
 #[cfg(feature = "seal")]
 pub const SEAL_TAG_LEN: usize = 16;
-/// Prefix for column-stored sealed secrets.
 #[cfg(feature = "seal")]
 pub const SEALED_PREFIX: &str = "v1.";
-/// Length of a sealed column value: the prefix plus unpadded base64url of
-/// salt||ciphertext||tag.
 #[cfg(feature = "seal")]
 pub const SEALED_BLOB_LEN: usize =
     SEALED_PREFIX.len() + ((SEAL_SALT_LEN + TOTP_SEED_LEN + SEAL_TAG_LEN) * 4).div_ceil(3);

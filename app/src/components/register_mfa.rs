@@ -38,8 +38,6 @@ pub struct StartMfaEnrollment;
 )]
 pub struct FinishMfaEnrollment;
 
-/// The confirmation field: the user practices the combined "password:code"
-/// format that every future login will use.
 #[derive(Model, Validate, PartialEq, Eq, Clone, Default)]
 pub struct ConfirmationModel {
     #[validate(custom(
@@ -49,7 +47,6 @@ pub struct ConfirmationModel {
     combined: String,
 }
 
-// The password half is only checked for shape, never authenticated here.
 fn has_combined_shape(value: &str) -> Result<(), validator::ValidationError> {
     match split_totp_suffix(value) {
         Some((password, _)) if !password.is_empty() => Ok(()),
@@ -99,7 +96,6 @@ pub struct RegisterMfa {
 #[derive(Clone, PartialEq, Properties)]
 pub struct Props {
     pub username: String,
-    /// The server forces enrollment (require_mfa = always): no way back but logout.
     pub enrollment_required: bool,
     pub on_enrolled: Callback<()>,
     pub on_logged_out: Callback<()>,
@@ -187,8 +183,6 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                     ctx.props().on_enrolled.emit(());
                     Ok(true)
                 }
-                // The server is the timekeeper: an expired state gets the same
-                // modal as the local timer, not a raw error.
                 Err(e) if e.to_string().contains(TOTP_ENROLLMENT_EXPIRED) => {
                     self.modal.as_ref().expect("modal not initialized").show();
                     Ok(true)
@@ -196,8 +190,6 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                 Err(e) => Err(e),
             },
             Msg::EnrollmentExpired => {
-                // Only a session that actually started can expire: a failed
-                // start keeps its own error instead.
                 if matches!(self.phase, Phase::InProgress(_)) {
                     self.modal.as_ref().expect("modal not initialized").show();
                 }
@@ -210,7 +202,6 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
             }
             Msg::ExpiredLogoutCompleted(res) => {
                 res?;
-                // Hide before navigating away so the backdrop does not linger.
                 self.modal.as_ref().expect("modal not initialized").hide();
                 delete_cookie("user_id")?;
                 ctx.props().on_logged_out.emit(());
@@ -318,11 +309,8 @@ impl RegisterMfa {
             </p>
             <div class="mx-auto" style="max-width: 720px">
             <p>
-              {"From now on, sign in everywhere with your password, ':' and the current code: "}
+              {"Practice signing in with your password, ':' and the current code: "}
               <code>{"yourpassword:123456"}</code>
-            </p>
-            <p>
-              {"Practice the format once below. Only the code is checked here."}
             </p>
             <form class="form">
               <div class="mx-auto" style="max-width: 410px">
@@ -393,11 +381,6 @@ impl RegisterMfa {
             <div class="alert alert-success mt-4">
               {"Two-factor authentication is enabled."}
             </div>
-            <p>
-              {"Sign in everywhere with "}
-              <code>{"yourpassword:123456"}</code>
-              {", using the current code."}
-            </p>
             <Link
               classes="btn btn-primary"
               to={AppRoute::UserDetails{user_id: ctx.props().username.clone()}}>

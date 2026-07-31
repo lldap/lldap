@@ -22,8 +22,6 @@ pub struct LoginForm {
     form: Form<FormModel>,
     refreshing: bool,
     totp_code: Option<String>,
-    /// Username and full password kept for the single retry when the stripped
-    /// attempt fails (a real password can end in ":<6 digits>").
     retry_credentials: Option<(String, String)>,
     mfa_help: bool,
 }
@@ -141,13 +139,11 @@ impl CommonComponent<LoginForm> for LoginForm {
                 Ok(false)
             }
             Msg::AuthenticationFinishResponse(res) => {
-                // The password was proven client-side: no retry past this point.
                 self.retry_credentials = None;
                 match res {
                     Err(e) => {
                         if self.totp_code.take().is_some() {
                             error!(&format!("Invalid credentials: {}", e));
-                            // Only a replayed code is named: the password was verified first.
                             self.common.error =
                                 Some(if e.to_string().contains(TOTP_CODE_ALREADY_USED) {
                                     anyhow!("That code was already used. Wait for the next one.")

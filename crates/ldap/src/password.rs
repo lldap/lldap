@@ -366,6 +366,26 @@ pub mod tests {
             });
     }
 
+    fn mfa_disabled_groups() -> HashSet<GroupDetails> {
+        let mut set = HashSet::new();
+        set.insert(GroupDetails {
+            group_id: GroupId(7),
+            display_name: "lldap_mfa_disabled".into(),
+            creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+            uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
+            attributes: Vec::new(),
+            modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+        });
+        set
+    }
+
+    fn simple_bind(user: &str, password: &str) -> LdapBindRequest {
+        LdapBindRequest {
+            dn: format!("uid={user},ou=people,dc=example,dc=com"),
+            cred: LdapBindCred::Simple(password.to_owned()),
+        }
+    }
+
     #[tokio::test]
     async fn test_bind_with_totp() {
         let mut mock = MockTestBackendHandler::new();
@@ -390,36 +410,29 @@ pub mod tests {
             .returning(|_| Ok(HashSet::new()));
         let mut ldap_handler =
             LdapHandler::new_for_tests_with_policy(mock, "dc=example,dc=com", MfaPolicy::Enrolled);
-        let request = LdapBindRequest {
-            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass:word:123456".to_string()),
-        };
-        assert_eq!(ldap_handler.do_bind(&request).await, make_bind_success());
-        let request = LdapBindRequest {
-            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass:word:654321".to_string()),
-        };
         assert_eq!(
-            ldap_handler.do_bind(&request).await,
+            ldap_handler
+                .do_bind(&simple_bind("bob", "pass:word:123456"))
+                .await,
+            make_bind_success()
+        );
+        assert_eq!(
+            ldap_handler
+                .do_bind(&simple_bind("bob", "pass:word:654321"))
+                .await,
             make_bind_result(LdapResultCode::InvalidCredentials, "")
         );
-        let request = LdapBindRequest {
-            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass:word:111111".to_string()),
-        };
         assert_eq!(
-            ldap_handler.do_bind(&request).await,
+            ldap_handler
+                .do_bind(&simple_bind("bob", "pass:word:111111"))
+                .await,
             make_bind_result(
                 LdapResultCode::InvalidCredentials,
                 "TOTP code already used, wait for the next one"
             )
         );
-        let request = LdapBindRequest {
-            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass:word".to_string()),
-        };
         assert_eq!(
-            ldap_handler.do_bind(&request).await,
+            ldap_handler.do_bind(&simple_bind("bob", "pass:word")).await,
             make_bind_result(
                 LdapResultCode::InvalidCredentials,
                 "TOTP code required: append ':' and the code"
@@ -439,44 +452,12 @@ pub mod tests {
             .returning(|_| Ok(HashSet::new()));
         let mut ldap_handler =
             LdapHandler::new_for_tests_with_policy(mock, "dc=example,dc=com", MfaPolicy::Enrolled);
-        let request = LdapBindRequest {
-            dn: "uid=john,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass:123456".to_string()),
-        };
-        assert_eq!(ldap_handler.do_bind(&request).await, make_bind_success());
-    }
-
-    #[tokio::test]
-    async fn test_bind_enrolled_exempt() {
-        let mut mock = MockTestBackendHandler::new();
-        expect_mfa_user_details(&mut mock, "bob", true);
-        mock.expect_bind()
-            .with(eq(BindRequest {
-                name: UserId::new("bob"),
-                password: "pass".to_string(),
-            }))
-            .returning(|_| Ok(()));
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("bob")))
-            .returning(|_| {
-                let mut set = HashSet::new();
-                set.insert(GroupDetails {
-                    group_id: GroupId(7),
-                    display_name: "lldap_mfa_disabled".into(),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                    uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
-                    attributes: Vec::new(),
-                    modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                });
-                Ok(set)
-            });
-        let mut ldap_handler =
-            LdapHandler::new_for_tests_with_policy(mock, "dc=example,dc=com", MfaPolicy::Enrolled);
-        let request = LdapBindRequest {
-            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass".to_string()),
-        };
-        assert_eq!(ldap_handler.do_bind(&request).await, make_bind_success());
+        assert_eq!(
+            ldap_handler
+                .do_bind(&simple_bind("john", "pass:123456"))
+                .await,
+            make_bind_success()
+        );
     }
 
     #[tokio::test]
@@ -492,44 +473,35 @@ pub mod tests {
             .with(eq(UserId::new("bob")))
             .returning(|_| Ok(HashSet::new()));
         let mut ldap_handler = LdapHandler::new_for_tests(mock, "dc=example,dc=com");
-        let request = LdapBindRequest {
-            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass:123456".to_string()),
-        };
-        assert_eq!(ldap_handler.do_bind(&request).await, make_bind_success());
+        assert_eq!(
+            ldap_handler
+                .do_bind(&simple_bind("bob", "pass:123456"))
+                .await,
+            make_bind_success()
+        );
     }
 
     #[tokio::test]
-    async fn test_bind_totp_always() {
-        let mut mock = MockTestBackendHandler::new();
-        expect_mfa_user_details(&mut mock, "bob", true);
-        mock.expect_bind()
-            .with(eq(BindRequest {
-                name: UserId::new("bob"),
-                password: "pass".to_string(),
-            }))
-            .returning(|_| Ok(()));
-        mock.expect_get_user_groups()
-            .with(eq(UserId::new("bob")))
-            .returning(|_| {
-                let mut set = HashSet::new();
-                set.insert(GroupDetails {
-                    group_id: GroupId(7),
-                    display_name: "lldap_mfa_disabled".into(),
-                    creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                    uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
-                    attributes: Vec::new(),
-                    modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
-                });
-                Ok(set)
-            });
-        let mut ldap_handler =
-            LdapHandler::new_for_tests_with_policy(mock, "dc=example,dc=com", MfaPolicy::Always);
-        let request = LdapBindRequest {
-            dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass".to_string()),
-        };
-        assert_eq!(ldap_handler.do_bind(&request).await, make_bind_success());
+    async fn test_bind_totp_always_and_exempt() {
+        for policy in [MfaPolicy::Enrolled, MfaPolicy::Always] {
+            let mut mock = MockTestBackendHandler::new();
+            expect_mfa_user_details(&mut mock, "bob", true);
+            mock.expect_bind()
+                .with(eq(BindRequest {
+                    name: UserId::new("bob"),
+                    password: "pass".to_string(),
+                }))
+                .returning(|_| Ok(()));
+            mock.expect_get_user_groups()
+                .with(eq(UserId::new("bob")))
+                .returning(|_| Ok(mfa_disabled_groups()));
+            let mut ldap_handler =
+                LdapHandler::new_for_tests_with_policy(mock, "dc=example,dc=com", policy);
+            assert_eq!(
+                ldap_handler.do_bind(&simple_bind("bob", "pass")).await,
+                make_bind_success()
+            );
+        }
 
         let mut mock = MockTestBackendHandler::new();
         expect_mfa_user_details(&mut mock, "john", false);
@@ -544,12 +516,8 @@ pub mod tests {
             .returning(|_| Ok(HashSet::new()));
         let mut ldap_handler =
             LdapHandler::new_for_tests_with_policy(mock, "dc=example,dc=com", MfaPolicy::Always);
-        let request = LdapBindRequest {
-            dn: "uid=john,ou=people,dc=example,dc=com".to_string(),
-            cred: LdapBindCred::Simple("pass".to_string()),
-        };
         assert_eq!(
-            ldap_handler.do_bind(&request).await,
+            ldap_handler.do_bind(&simple_bind("john", "pass")).await,
             make_bind_result(
                 LdapResultCode::InvalidCredentials,
                 "MFA enrollment required: enroll through the web interface or contact an administrator"

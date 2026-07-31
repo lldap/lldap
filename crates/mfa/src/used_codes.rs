@@ -4,8 +4,6 @@ use std::sync::{Mutex, PoisonError};
 
 use crate::types::TOTP_ACCEPTANCE_WINDOW_SECS;
 
-/// Codes that were accepted, until they fall out of their acceptance window.
-/// A code is only ever valid once (RFC 6238), per user.
 #[derive(Default)]
 pub struct UsedCodes(Mutex<HashMap<(String, String), i64>>);
 
@@ -14,8 +12,7 @@ impl UsedCodes {
         Self::default()
     }
 
-    /// Whether the code can be used now; marks it used if so. A refused code
-    /// keeps its original expiry, so replays cannot extend it.
+    // Refused codes keep their original expiry so replays cannot extend the ban.
     pub fn mark_used(&self, user_uuid: &str, code: &str, now_unix: i64) -> bool {
         let mut used = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         used.retain(|_, expiry| *expiry > now_unix);

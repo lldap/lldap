@@ -1,8 +1,4 @@
-//! TOTP MFA helpers for LLDAP (seed generation, verification, at-rest sealing).
-//!
-//! Library only: no SQL, GraphQL, or auth wiring. The default `seal` feature
-//! carries the at-rest sealing; without it the crate is wasm-friendly TOTP
-//! math and encodings for the frontend.
+//! TOTP helpers and (optional) at-rest sealing for LLDAP.
 
 #![forbid(non_ascii_idents)]
 

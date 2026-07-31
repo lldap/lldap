@@ -6,7 +6,6 @@ use crate::types::{TOTP_DIGITS, TOTP_SEPARATOR, TOTP_SKEW_STEPS, TOTP_STEP_SECS}
 
 type HmacSha1 = Hmac<Sha1>;
 
-/// RFC 4226 HOTP truncated to [`TOTP_DIGITS`].
 fn hotp(secret: &[u8], counter: u64) -> Result<u32> {
     if secret.is_empty() {
         return Err(MfaError::InvalidSecretLength);
@@ -23,13 +22,11 @@ fn hotp(secret: &[u8], counter: u64) -> Result<u32> {
     Ok(bin_code % modulus)
 }
 
-/// TOTP code for `unix_secs` (HMAC-SHA1, 6 digits, 30s step).
 pub fn totp_code(secret: &[u8], unix_secs: u64) -> Result<u32> {
     let counter = unix_secs / TOTP_STEP_SECS;
     hotp(secret, counter)
 }
 
-/// Format a code as a zero-padded digit string.
 pub fn format_code(code: u32) -> String {
     format!("{:0width$}", code, width = TOTP_DIGITS as usize)
 }
@@ -41,21 +38,18 @@ fn parse_code(code: &str) -> Result<u32> {
     code.parse().map_err(|_| MfaError::InvalidCodeFormat)
 }
 
-/// Equality through an optimizer barrier, so the comparison is not short-circuited
-/// per window. `black_box` gives no timing guarantee; the surrounding HMAC dominates.
+// Optimizer barrier so windows are not short-circuited. black_box is not constant-time;
+// the surrounding HMAC dominates.
 fn barrier_eq_u32(a: u32, b: u32) -> bool {
     std::hint::black_box(a ^ b) == 0
 }
 
-/// Split a combined `password:123456` credential into (password, code) when the
-/// suffix after the last separator looks like a TOTP code.
 pub fn split_totp_suffix(password: &str) -> Option<(&str, &str)> {
     let (prefix, code) = password.rsplit_once(TOTP_SEPARATOR)?;
     (code.len() == TOTP_DIGITS as usize && code.bytes().all(|b| b.is_ascii_digit()))
         .then_some((prefix, code))
 }
 
-/// Verify a TOTP code with ±[`TOTP_SKEW_STEPS`] window tolerance.
 pub fn totp_verify(secret: &[u8], code: &str, unix_secs: u64) -> Result<bool> {
     let provided = match parse_code(code) {
         Ok(c) => c,
@@ -70,7 +64,6 @@ pub fn totp_verify(secret: &[u8], code: &str, unix_secs: u64) -> Result<bool> {
             continue;
         }
         let expected = hotp(secret, counter as u64)?;
-        // Non-short-circuiting accumulate so all windows are always checked.
         ok |= barrier_eq_u32(expected, provided);
     }
     Ok(ok)

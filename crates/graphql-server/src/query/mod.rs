@@ -43,7 +43,6 @@ impl<Handler: BackendHandler> Query<Handler> {
 
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> Query<Handler> {
-    // Constant with no data access: not subject to the MFA enrollment gate.
     fn api_version() -> &'static str {
         "1.0"
     }

@@ -221,7 +221,6 @@ impl Component for UserDetails {
         let link = &ctx.link();
         match (&self.user_and_schema, &self.common.error) {
             (Some((u, schema)), error) => {
-                // A null mfaEnrolled (hidden from this viewer) means not enrolled.
                 let mfa_enrolled = u.mfa_enrolled.unwrap_or(false);
                 html! {
                   <>
