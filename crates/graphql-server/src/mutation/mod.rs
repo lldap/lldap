@@ -1079,7 +1079,8 @@ mod tests {
     async fn test_mfa_enrollment() {
         const START_QUERY: &str =
             r#"mutation { startMfaEnrollment { otpauthUri secretBase32 state } }"#;
-        const FINISH_QUERY: &str = r#"mutation { finishMfaEnrollment(state: "sealed-state", code: "123456", currentCode: "654321") { ok } }"#;
+        const FINISH_QUERY: &str = r#"mutation { finishMfaEnrollment(
+            state: "sealed-state", code: "123456", currentCode: "654321") { ok } }"#;
         let mut mock = MockTestBackendHandler::new();
         mock.expect_start_totp_enrollment()
             .with(eq(UserId::new("bob")))

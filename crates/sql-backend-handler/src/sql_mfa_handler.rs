@@ -322,7 +322,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_reenrollment_needs_the_current_code() {
+    async fn test_finish_totp_enrollment_requires_current_code() {
         let (setup, handler) = setup_handler().await;
         let (user_id, seed, enroll_code) = enroll_user(&handler, &setup, "bob").await;
         let sealed_before = get_mfa_columns(&handler, "bob").await.0.unwrap();

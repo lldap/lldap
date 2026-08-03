@@ -386,9 +386,7 @@ impl RegisterMfa {
                   html! {
                     <>
                       <div class="alert alert-warning">
-                        {"This account already has two-factor authentication. Enter a code from
-                          your existing authenticator to replace it. If you no longer have it, ask
-                          an administrator to reset your two-factor authentication."}
+                        {"This account already has two-factor. Enter a code from your existing authenticator to replace it, or ask an administrator to reset it."}
                       </div>
                       <label for="current_code" class="form-label">
                         {"Code from your existing authenticator"}
@@ -406,8 +404,7 @@ impl RegisterMfa {
                           form={&self.form}
                           field_name="current_code"
                           input_type="password"
-                          autocomplete="off"
-                          oninput={link.callback(|_| Msg::Update)} />
+                          autocomplete="off" />
                       </div>
                     </>
                   }

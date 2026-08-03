@@ -11,8 +11,7 @@ impl FailedAttempts {
         Self::default()
     }
 
-    // The allowance is spent per step and refills with the next code, so a mistyped
-    // digit costs a wait rather than a lockout.
+    // Spent per step and refilled by the next code, so a mistyped digit costs a wait.
     pub fn allowed(&self, user_uuid: &str, now_unix: u64) -> bool {
         let step = now_unix / TOTP_STEP_SECS;
         let mut failed = self.0.lock().unwrap_or_else(PoisonError::into_inner);
@@ -46,7 +45,7 @@ mod tests {
     }
 
     #[test]
-    fn the_next_step_refills_the_allowance() {
+    fn allowance_refills_on_the_next_step() {
         let failed = FailedAttempts::new();
         for _ in 0..TOTP_MAX_ATTEMPTS_PER_STEP {
             failed.record_failure("uuid-a", 1000);

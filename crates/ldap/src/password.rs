@@ -124,7 +124,7 @@ pub(crate) async fn do_bind(
                     {
                         LdapError {
                             code: LdapResultCode::InvalidCredentials,
-                            message: format!("{TOTP_TOO_MANY_ATTEMPTS}, wait for the next code"),
+                            message: format!("{TOTP_TOO_MANY_ATTEMPTS}, wait for the next one"),
                         }
                     }
                     // Do not reveal which factor failed.
