@@ -19,7 +19,9 @@ use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, MfaPolicy,
 };
 use lldap_domain_model::error::DomainError;
-use lldap_mfa::{TOTP_CODE_ALREADY_USED, TOTP_SEPARATOR, split_totp_suffix};
+use lldap_mfa::{
+    TOTP_CODE_ALREADY_USED, TOTP_SEPARATOR, TOTP_TOO_MANY_ATTEMPTS, split_totp_suffix,
+};
 use lldap_opaque_handler::OpaqueHandler;
 use tracing::warn;
 
@@ -115,6 +117,14 @@ pub(crate) async fn do_bind(
                         LdapError {
                             code: LdapResultCode::InvalidCredentials,
                             message: format!("{TOTP_CODE_ALREADY_USED}, wait for the next one"),
+                        }
+                    }
+                    DomainError::AuthenticationError(m)
+                        if m.starts_with(TOTP_TOO_MANY_ATTEMPTS) =>
+                    {
+                        LdapError {
+                            code: LdapResultCode::InvalidCredentials,
+                            message: format!("{TOTP_TOO_MANY_ATTEMPTS}, wait for the next code"),
                         }
                     }
                     // Do not reveal which factor failed.

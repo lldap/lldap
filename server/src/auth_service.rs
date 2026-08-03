@@ -28,7 +28,7 @@ use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, MfaPolicy, UserRequestFilter,
 };
 use lldap_domain_model::{error::DomainError, model::UserColumn};
-use lldap_mfa::{TOTP_CODE_ALREADY_USED, split_totp_suffix};
+use lldap_mfa::{TOTP_CODE_ALREADY_USED, TOTP_TOO_MANY_ATTEMPTS, split_totp_suffix};
 use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::{
@@ -103,12 +103,15 @@ fn get_refresh_token(request: HttpRequest) -> TcpResult<(u64, UserId)> {
     }
 }
 
-// A replayed code may be named: the password was verified by then. Anything else
-// stays generic, to not reveal which factor failed.
+// A replayed code or a spent allowance may be named: the password was verified by
+// then. Anything else stays generic, to not reveal which factor failed.
 fn totp_error(e: DomainError) -> DomainError {
     match e {
         DomainError::AuthenticationError(m) if m.starts_with(TOTP_CODE_ALREADY_USED) => {
             DomainError::AuthenticationError(TOTP_CODE_ALREADY_USED.to_owned())
+        }
+        DomainError::AuthenticationError(m) if m.starts_with(TOTP_TOO_MANY_ATTEMPTS) => {
+            DomainError::AuthenticationError(TOTP_TOO_MANY_ATTEMPTS.to_owned())
         }
         _ => DomainError::AuthenticationError("Invalid credentials".to_owned()),
     }

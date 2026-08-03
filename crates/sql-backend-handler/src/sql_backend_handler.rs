@@ -2,7 +2,7 @@ use crate::sql_tables::DbConnection;
 use async_trait::async_trait;
 use lldap_auth::opaque::server::ServerSetup;
 use lldap_domain_handlers::handler::BackendHandler;
-use lldap_mfa::UsedCodes;
+use lldap_mfa::{FailedAttempts, UsedCodes};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -11,6 +11,7 @@ pub struct SqlBackendHandler {
     pub(crate) sql_pool: DbConnection,
     // Shared across the cloned per-request handlers, so a code is used once.
     pub(crate) used_totp_codes: Arc<UsedCodes>,
+    pub(crate) failed_totp_attempts: Arc<FailedAttempts>,
 }
 
 impl SqlBackendHandler {
@@ -19,6 +20,7 @@ impl SqlBackendHandler {
             opaque_setup,
             sql_pool,
             used_totp_codes: Arc::new(UsedCodes::new()),
+            failed_totp_attempts: Arc::new(FailedAttempts::new()),
         }
     }
 

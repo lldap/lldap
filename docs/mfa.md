@@ -89,6 +89,28 @@ input stays a generic credentials error.
 The used-code record lives **in memory in the running process**. It does
 not survive a restart and is not shared between replicas.
 
+### Attempt limiting
+
+An enrolled account gets **5 code attempts per 30-second step**. Once
+they are spent, further attempts fail with *"Too many TOTP attempts"*
+until the next code, whether or not the code offered is correct. A
+mistyped digit therefore costs a short wait, never a lockout, and the
+allowance is per account rather than global.
+
+Only codes that fail verification count. A replay is refused by the
+single-use record above and does not spend an attempt, so a
+double-submitted login does not eat the allowance. The counter is only
+ever reached after the password has been verified, so it cannot be used
+to lock out someone whose password the attacker does not have.
+
+Like the used-code record, this lives **in memory in the running
+process**: it resets on restart and is not shared between replicas.
+It bounds guessing rather than capping total failures, so it does not
+meet the NIST SP 800-63B ceiling on consecutive failed attempts — for
+that, rate-limit `/auth/*` at the reverse proxy or point fail2ban at the
+failed-verification log lines. Each guess also costs a full password
+bind, which is what limits the unthrottled rate.
+
 ## Resetting MFA
 
 | Actor | Can reset |

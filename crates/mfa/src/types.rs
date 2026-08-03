@@ -6,6 +6,8 @@ pub const TOTP_SEPARATOR: char = ':';
 pub const TOTP_ENROLLMENT_TTL_SECS: u64 = 5 * 60;
 #[cfg(feature = "seal")]
 pub const TOTP_ACCEPTANCE_WINDOW_SECS: i64 = TOTP_STEP_SECS as i64 * (2 * TOTP_SKEW_STEPS + 1);
+#[cfg(feature = "seal")]
+pub const TOTP_MAX_ATTEMPTS_PER_STEP: u8 = 5;
 
 #[cfg(feature = "seal")]
 pub const SEAL_SALT_LEN: usize = 4;
@@ -21,6 +23,8 @@ pub const SEALED_BLOB_LEN: usize =
 pub const TOTP_CODE_ALREADY_USED: &str = "TOTP code already used";
 /// Error prefix for an expired pending enrollment; the frontend matches on it.
 pub const TOTP_ENROLLMENT_EXPIRED: &str = "Expired TOTP enrollment";
+/// Error prefix for a spent attempt allowance; the login paths match on it.
+pub const TOTP_TOO_MANY_ATTEMPTS: &str = "Too many TOTP attempts";
 
 #[cfg(feature = "seal")]
 const STORAGE_KEY_INFO: &[u8] = b"lldap-totp-storage-key-v1";

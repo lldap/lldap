@@ -6,7 +6,9 @@ use lldap_domain_model::{
     error::{DomainError, Result},
     model,
 };
-use lldap_mfa::{MfaError, TOTP_CODE_ALREADY_USED};
+use lldap_mfa::{
+    MfaError, TOTP_CODE_ALREADY_USED, TOTP_TOO_MANY_ATTEMPTS,
+};
 use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait};
 use tracing::{info, instrument};
 
@@ -150,9 +152,17 @@ impl MfaBackendHandler for SqlBackendHandler {
                 ))
             })?;
         let now = chrono::Utc::now().timestamp() as u64;
+        // Gate before verifying, so a spent allowance cannot keep testing codes.
+        if !self.failed_totp_attempts.allowed(user.uuid.as_str(), now) {
+            return Err(DomainError::AuthenticationError(format!(
+                "{TOTP_TOO_MANY_ATTEMPTS} for {user_id}"
+            )));
+        }
         if !lldap_mfa::totp_verify(&seed, code, now)
             .map_err(|e| DomainError::InternalError(format!("TOTP verification failed: {e}")))?
         {
+            self.failed_totp_attempts
+                .record_failure(user.uuid.as_str(), now);
             return Err(DomainError::AuthenticationError(format!(
                 "Invalid TOTP code for {user_id}"
             )));
