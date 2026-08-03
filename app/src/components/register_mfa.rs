@@ -227,11 +227,7 @@ impl Component for RegisterMfa {
             form: Form::<ConfirmationModel>::new(ConfirmationModel::default()),
             phase: Phase::Loading,
             hint: CodeHint::None,
-            mfa_exempt: get_cookie("mfa_exempt")
-                .ok()
-                .flatten()
-                .as_deref()
-                == Some("true"),
+            mfa_exempt: get_cookie("mfa_exempt").ok().flatten().as_deref() == Some("true"),
             expiry_timer: Some(Timeout::new(
                 (TOTP_ENROLLMENT_TTL_SECS * 1000) as u32,
                 move || link.send_message(Msg::EnrollmentExpired),
@@ -317,13 +313,13 @@ impl RegisterMfa {
             { if self.mfa_exempt {
                 html! {
                   <div class="alert alert-warning">
-                    {"You are part of lldap_mfa_disabled. While you may continue with totp setup, you will not be required to enter your totp to log in until removed from the group."}
+                    {"You are in lldap_mfa_disabled, so you will not be asked for a code at login until you leave the group."}
                   </div>
                 }
               } else {
                 html! {
                   <p>
-                    {"To login after enrolling you will use your password followed by a colon \":\" and the totp code."}
+                    {"After enrolling, sign in with your password, a colon, and your two-factor code."}
                   </p>
                 }
               }}
