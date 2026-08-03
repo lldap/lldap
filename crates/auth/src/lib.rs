@@ -234,4 +234,7 @@ pub struct JWTClaims {
     pub jti: Uuid,
     pub user: String,
     pub groups: HashSet<String>,
+    // Defaulted so tokens issued before this field existed still parse.
+    #[serde(default)]
+    pub password_reset: bool,
 }
