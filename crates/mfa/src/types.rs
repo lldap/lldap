@@ -25,6 +25,8 @@ pub const TOTP_CODE_ALREADY_USED: &str = "TOTP code already used";
 pub const TOTP_ENROLLMENT_EXPIRED: &str = "Expired TOTP enrollment";
 /// Error prefix for a spent attempt allowance; the login paths match on it.
 pub const TOTP_TOO_MANY_ATTEMPTS: &str = "Too many TOTP attempts";
+/// Error prefix asking for a code from the existing authenticator; the frontend matches on it.
+pub const TOTP_CURRENT_CODE_REQUIRED: &str = "Current TOTP code required";
 
 #[cfg(feature = "seal")]
 const STORAGE_KEY_INFO: &[u8] = b"lldap-totp-storage-key-v1";

@@ -50,6 +50,15 @@ accounts that cannot type a code, and for break-glass admins.
 The pending enrollment is valid for **5 minutes**. After that, a session
 expired dialog asks you to sign in again and restart.
 
+### Replacing an existing authenticator
+
+Enrolling over an existing second factor additionally requires a current
+code from the **authenticator being replaced**, so a stolen session
+cannot silently rebind the account to someone else's device. Moving to a
+new phone therefore works while you still have the old one. If the old
+authenticator is gone, an administrator must `resetUserMfa` first, or you
+can complete a password reset by email, which clears the factor.
+
 Under `"always"`, unenrolled users are sent to this page automatically
 and cannot use the rest of the UI until they finish or log out.
 
@@ -120,7 +129,9 @@ bind, which is what limits the unthrottled rate.
 | Regular user | Nobody |
 
 In the UI: open the target user's profile and use the reset control, or
-call the GraphQL mutation `resetUserMfa`.
+call the GraphQL mutation `resetUserMfa`. This is the recovery path when
+a user has lost the authenticator they would otherwise need in order to
+replace it.
 
 A successful **password-reset email** also clears MFA (the mailbox is
 the recovery factor). The user must re-enroll afterwards.

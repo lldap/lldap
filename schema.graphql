@@ -180,7 +180,7 @@ type Mutation {
   deleteGroup(groupId: Int!): Success!
   resetUserMfa(userId: String!): Success!
   startMfaEnrollment: MfaEnrollmentStart!
-  finishMfaEnrollment(state: String!, code: String!): Success!
+  finishMfaEnrollment(state: String!, code: String!, currentCode: String): Success!
   addUserAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
   addGroupAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
   deleteUserAttribute(name: String!): Success!

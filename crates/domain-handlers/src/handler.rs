@@ -166,8 +166,13 @@ pub enum MfaPolicy {
 pub trait MfaBackendHandler {
     async fn reset_user_mfa(&self, user_id: &UserId) -> Result<()>;
     async fn start_totp_enrollment(&self, user_id: &UserId) -> Result<TotpEnrollmentStart>;
-    async fn finish_totp_enrollment(&self, user_id: &UserId, state: &str, code: &str)
-    -> Result<()>;
+    async fn finish_totp_enrollment(
+        &self,
+        user_id: &UserId,
+        state: &str,
+        code: &str,
+        current_code: Option<String>,
+    ) -> Result<()>;
     async fn verify_user_totp(&self, user_id: &UserId, code: &str) -> Result<()>;
 }
 

@@ -14,7 +14,10 @@ use anyhow::{Result, anyhow, bail};
 use base64::Engine;
 use gloo_timers::callback::Timeout;
 use graphql_client::GraphQLQuery;
-use lldap_mfa::{TOTP_ENROLLMENT_EXPIRED, TOTP_ENROLLMENT_TTL_SECS, split_totp_suffix};
+use lldap_mfa::{
+    TOTP_CURRENT_CODE_REQUIRED, TOTP_ENROLLMENT_EXPIRED, TOTP_ENROLLMENT_TTL_SECS,
+    split_totp_suffix,
+};
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -45,6 +48,7 @@ pub struct ConfirmationModel {
         message = "Enter your password, a ':' and the current 6-digit code"
     ))]
     combined: String,
+    current_code: String,
 }
 
 fn has_combined_shape(value: &str) -> Result<(), validator::ValidationError> {
@@ -88,6 +92,7 @@ pub struct RegisterMfa {
     form: Form<ConfirmationModel>,
     phase: Phase,
     hint: CodeHint,
+    needs_current_code: bool,
     mfa_exempt: bool,
     expiry_timer: Option<Timeout>,
     node_ref: NodeRef,
@@ -164,11 +169,13 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                 let combined = self.form.field_value("combined");
                 let (_, code) =
                     split_totp_suffix(&combined).expect("The validator checked the shape");
+                let current_code = self.form.field_value("current_code");
                 self.common.call_graphql::<FinishMfaEnrollment, _>(
                     ctx,
                     finish_mfa_enrollment::Variables {
                         state: data.state.clone(),
                         code: code.to_owned(),
+                        current_code: (!current_code.is_empty()).then_some(current_code),
                     },
                     Msg::EnrollmentFinishResponse,
                     "Error enabling two-factor authentication",
@@ -186,6 +193,10 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                 }
                 Err(e) if e.to_string().contains(TOTP_ENROLLMENT_EXPIRED) => {
                     self.modal.as_ref().expect("modal not initialized").show();
+                    Ok(true)
+                }
+                Err(e) if e.to_string().contains(TOTP_CURRENT_CODE_REQUIRED) => {
+                    self.needs_current_code = true;
                     Ok(true)
                 }
                 Err(e) => Err(e),
@@ -227,6 +238,7 @@ impl Component for RegisterMfa {
             form: Form::<ConfirmationModel>::new(ConfirmationModel::default()),
             phase: Phase::Loading,
             hint: CodeHint::None,
+            needs_current_code: false,
             mfa_exempt: get_cookie("mfa_exempt").ok().flatten().as_deref() == Some("true"),
             expiry_timer: Some(Timeout::new(
                 (TOTP_ENROLLMENT_TTL_SECS * 1000) as u32,
@@ -370,6 +382,36 @@ impl RegisterMfa {
                       },
                   }}
                 </div>
+                { if self.needs_current_code {
+                  html! {
+                    <>
+                      <div class="alert alert-warning">
+                        {"This account already has two-factor authentication. Enter a code from
+                          your existing authenticator to replace it. If you no longer have it, ask
+                          an administrator to reset your two-factor authentication."}
+                      </div>
+                      <label for="current_code" class="form-label">
+                        {"Code from your existing authenticator"}
+                        <span class="text-danger">{"*"}</span>
+                        {":"}
+                      </label>
+                      <div class="input-group">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text">
+                            <i class="bi-shield-lock"/>
+                          </span>
+                        </div>
+                        <Field
+                          class="form-control"
+                          form={&self.form}
+                          field_name="current_code"
+                          input_type="password"
+                          autocomplete="off"
+                          oninput={link.callback(|_| Msg::Update)} />
+                      </div>
+                    </>
+                  }
+                } else { html! {} }}
               </div>
               <Submit
                 text="Enable two-factor"

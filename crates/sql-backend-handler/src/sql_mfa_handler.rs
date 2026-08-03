@@ -7,7 +7,7 @@ use lldap_domain_model::{
     model,
 };
 use lldap_mfa::{
-    MfaError, TOTP_CODE_ALREADY_USED, TOTP_TOO_MANY_ATTEMPTS,
+    MfaError, TOTP_CODE_ALREADY_USED, TOTP_CURRENT_CODE_REQUIRED, TOTP_TOO_MANY_ATTEMPTS,
 };
 use sea_orm::{ActiveModelTrait, ActiveValue, EntityTrait};
 use tracing::{info, instrument};
@@ -95,6 +95,7 @@ impl MfaBackendHandler for SqlBackendHandler {
         user_id: &UserId,
         state: &str,
         code: &str,
+        current_code: Option<String>,
     ) -> Result<()> {
         let now = chrono::Utc::now().timestamp();
         let state =
@@ -119,7 +120,20 @@ impl MfaBackendHandler for SqlBackendHandler {
                 "Invalid TOTP code for {user_id}"
             )));
         }
-        let uuid = self.get_user_uuid(user_id).await?;
+        let user = model::User::find_by_id(user_id.clone())
+            .one(&self.sql_pool)
+            .await?
+            .ok_or_else(|| DomainError::EntityNotFound(user_id.to_string()))?;
+        // Replacing a factor needs the old one, so a stolen session cannot rebind it.
+        if user.mfa_type.is_some() {
+            let current = current_code.ok_or_else(|| {
+                DomainError::AuthenticationError(format!(
+                    "{TOTP_CURRENT_CODE_REQUIRED} for {user_id}"
+                ))
+            })?;
+            self.verify_user_totp(user_id, &current).await?;
+        }
+        let uuid = user.uuid;
         self.mark_code_used(user_id, &uuid, code)?;
         let sealed_secret =
             lldap_mfa::seal_totp_secret(self.sealing_key(), uuid.as_str(), &state.seed).map_err(
@@ -235,7 +249,7 @@ mod tests {
         let state = open_state(setup, &start.state);
         let (_, code) = current_code(&state.seed);
         handler
-            .finish_totp_enrollment(&user_id, &start.state, &code)
+            .finish_totp_enrollment(&user_id, &start.state, &code, None)
             .await
             .unwrap();
         (user_id, state.seed, code)
@@ -257,7 +271,7 @@ mod tests {
         assert_eq!(seed_base32(&state.seed), start.secret_base32);
         let (_, code) = current_code(&state.seed);
         handler
-            .finish_totp_enrollment(&user_id, &start.state, &code)
+            .finish_totp_enrollment(&user_id, &start.state, &code, None)
             .await
             .unwrap();
 
@@ -283,7 +297,7 @@ mod tests {
         let (now, code) = current_code(&state.seed);
 
         let err = handler
-            .finish_totp_enrollment(&user_id, &start.state, &wrong_code(&state.seed, now))
+            .finish_totp_enrollment(&user_id, &start.state, &wrong_code(&state.seed, now), None)
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
@@ -293,18 +307,66 @@ mod tests {
             lldap_mfa::seal_enrollment(setup.keypair().private(), "bob", &state.seed, stale)
                 .unwrap();
         let err = handler
-            .finish_totp_enrollment(&user_id, &expired, &code)
+            .finish_totp_enrollment(&user_id, &expired, &code, None)
             .await
             .unwrap_err();
         assert!(err.to_string().contains(TOTP_ENROLLMENT_EXPIRED));
 
         let err = handler
-            .finish_totp_enrollment(&UserId::new("john"), &start.state, &code)
+            .finish_totp_enrollment(&UserId::new("john"), &start.state, &code, None)
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::InternalError(_)));
         assert_eq!(get_mfa_columns(&handler, "bob").await, (None, None));
         assert_eq!(get_mfa_columns(&handler, "john").await, (None, None));
+    }
+
+    #[tokio::test]
+    async fn test_reenrollment_needs_the_current_code() {
+        let (setup, handler) = setup_handler().await;
+        let (user_id, seed, enroll_code) = enroll_user(&handler, &setup, "bob").await;
+        let sealed_before = get_mfa_columns(&handler, "bob").await.0.unwrap();
+
+        let restart = handler.start_totp_enrollment(&user_id).await.unwrap();
+        let new_state = open_state(&setup, &restart.state);
+        let (now, new_code) = current_code(&new_state.seed);
+
+        let err = handler
+            .finish_totp_enrollment(&user_id, &restart.state, &new_code, None)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains(TOTP_CURRENT_CODE_REQUIRED));
+
+        let err = handler
+            .finish_totp_enrollment(
+                &user_id,
+                &restart.state,
+                &new_code,
+                Some(wrong_code(&seed, now)),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DomainError::AuthenticationError(_)));
+        assert_eq!(
+            get_mfa_columns(&handler, "bob").await.0,
+            Some(sealed_before)
+        );
+
+        let current = [now + 30, now - 30]
+            .iter()
+            .map(|t| format_code(totp_code(&seed, *t).unwrap()))
+            .find(|c| *c != enroll_code)
+            .unwrap();
+        handler
+            .finish_totp_enrollment(&user_id, &restart.state, &new_code, Some(current))
+            .await
+            .unwrap();
+        let uuid = handler.get_user_uuid(&user_id).await.unwrap();
+        let sealed_after = get_mfa_columns(&handler, "bob").await.0.unwrap();
+        assert_eq!(
+            open_totp_secret(setup.keypair().private(), uuid.as_str(), &sealed_after).unwrap(),
+            new_state.seed
+        );
     }
 
     #[tokio::test]

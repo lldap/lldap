@@ -26,8 +26,8 @@ pub use totp::{format_code, split_totp_suffix, totp_code, totp_verify};
 #[cfg(feature = "seal")]
 pub use types::{SEALED_BLOB_LEN, SEALED_PREFIX};
 pub use types::{
-    TOTP_CODE_ALREADY_USED, TOTP_ENROLLMENT_EXPIRED, TOTP_ENROLLMENT_TTL_SECS, TOTP_SEED_LEN,
-    TOTP_SEPARATOR, TOTP_TOO_MANY_ATTEMPTS,
+    TOTP_CODE_ALREADY_USED, TOTP_CURRENT_CODE_REQUIRED, TOTP_ENROLLMENT_EXPIRED,
+    TOTP_ENROLLMENT_TTL_SECS, TOTP_SEED_LEN, TOTP_SEPARATOR, TOTP_TOO_MANY_ATTEMPTS,
 };
 #[cfg(feature = "seal")]
 pub use used_codes::UsedCodes;

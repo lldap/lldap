@@ -1,5 +1,5 @@
-mutation FinishMfaEnrollment($state: String!, $code: String!) {
-  finishMfaEnrollment(state: $state, code: $code) {
+mutation FinishMfaEnrollment($state: String!, $code: String!, $currentCode: String) {
+  finishMfaEnrollment(state: $state, code: $code, currentCode: $currentCode) {
     ok
   }
 }

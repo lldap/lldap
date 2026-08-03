@@ -365,6 +365,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         context: &Context<Handler>,
         state: String,
         code: String,
+        current_code: Option<String>,
     ) -> FieldResult<Success> {
         let span = debug_span!("[GraphQL mutation] finish_mfa_enrollment");
         let user_id = context.validation_result.user.clone();
@@ -378,7 +379,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         }
         context
             .get_mfa_enrollment_handler()
-            .finish_totp_enrollment(&user_id, &state, &code)
+            .finish_totp_enrollment(&user_id, &state, &code, current_code)
             .instrument(span)
             .await?;
         Ok(Success::new())
@@ -1078,8 +1079,7 @@ mod tests {
     async fn test_mfa_enrollment() {
         const START_QUERY: &str =
             r#"mutation { startMfaEnrollment { otpauthUri secretBase32 state } }"#;
-        const FINISH_QUERY: &str =
-            r#"mutation { finishMfaEnrollment(state: "sealed-state", code: "123456") { ok } }"#;
+        const FINISH_QUERY: &str = r#"mutation { finishMfaEnrollment(state: "sealed-state", code: "123456", currentCode: "654321") { ok } }"#;
         let mut mock = MockTestBackendHandler::new();
         mock.expect_start_totp_enrollment()
             .with(eq(UserId::new("bob")))
@@ -1091,10 +1091,13 @@ mod tests {
                 })
             });
         mock.expect_finish_totp_enrollment()
-            .withf(|user_id, state, code| {
-                user_id == &UserId::new("bob") && state == "sealed-state" && code == "123456"
+            .withf(|user_id, state, code, current_code| {
+                user_id == &UserId::new("bob")
+                    && state == "sealed-state"
+                    && code == "123456"
+                    && *current_code == Some("654321".to_owned())
             })
-            .return_once(|_, _, _| Ok(()));
+            .return_once(|_, _, _, _| Ok(()));
         let context = Context::<MockTestBackendHandler>::new_for_tests_with_policy(
             mock,
             ValidationResults {
