@@ -154,7 +154,7 @@ pub trait UserBackendHandler: ReadSchemaBackendHandler {
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>>;
 }
 
-// MFA policy from the require_mfa configuration: never, enrolled users only, or everyone.
+// MFA policy from the enable_mfa configuration: never, enrolled users only, or everyone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MfaPolicy {
     Disabled,

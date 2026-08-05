@@ -9,8 +9,8 @@ resetting, and deploying MFA. Configuration defaults keep it off.
 
 ## Configuration
 
-Set `require_mfa` in the config file, via the environment, or with
-`--require-mfa`:
+Set `enable_mfa` in the config file, via the environment, or with
+`--enable-mfa`:
 
 | Value | Effect |
 | --- | --- |
@@ -22,15 +22,15 @@ Examples:
 
 ```toml
 # lldap_config.toml
-require_mfa = false
-# require_mfa = true
-# require_mfa = "always"
+enable_mfa = false
+# enable_mfa = true
+# enable_mfa = "always"
 ```
 
 ```bash
 # Environment (unquoted for the always form)
-LLDAP_REQUIRE_MFA=true
-# LLDAP_REQUIRE_MFA=always
+LLDAP_ENABLE_MFA=true
+# LLDAP_ENABLE_MFA=always
 ```
 
 When the policy is `true` or `"always"`, LLDAP creates the

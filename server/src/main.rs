@@ -157,7 +157,7 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
     ensure_group_exists(&backend_handler, "lldap_admin").await?;
     ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
     ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;
-    if config.require_mfa.is_positive() {
+    if config.enable_mfa.is_positive() {
         ensure_group_exists(&backend_handler, "lldap_mfa_disabled").await?;
     }
     let admin_present = if let Ok(admins) = backend_handler

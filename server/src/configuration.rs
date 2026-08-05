@@ -128,7 +128,7 @@ pub struct Configuration {
     pub force_ldap_user_pass_reset: TrueFalseAlways,
     // MFA policy: false = disabled, true = only enrolled users, "always" = all users.
     #[builder(default)]
-    pub require_mfa: TrueFalseAlways,
+    pub enable_mfa: TrueFalseAlways,
     #[builder(default = "false")]
     pub force_update_private_key: bool,
     #[builder(default = r#"DatabaseUrl::from("sqlite://users.db?mode=rwc")"#)]
@@ -199,7 +199,7 @@ impl Configuration {
     }
 
     pub fn mfa_policy(&self) -> MfaPolicy {
-        match self.require_mfa {
+        match self.enable_mfa {
             TrueFalseAlways::False => MfaPolicy::Disabled,
             TrueFalseAlways::True => MfaPolicy::Enrolled,
             TrueFalseAlways::Always => MfaPolicy::Always,
@@ -470,8 +470,8 @@ impl ConfigOverrider for RunOpts {
                 config.force_ldap_user_pass_reset = force_ldap_user_pass_reset;
             });
 
-        self.require_mfa
-            .inspect(|&require_mfa| config.require_mfa = require_mfa);
+        self.enable_mfa
+            .inspect(|&enable_mfa| config.enable_mfa = enable_mfa);
 
         self.force_update_private_key
             .inspect(|&force_update_private_key| {
@@ -892,29 +892,29 @@ mod tests {
     }
 
     #[test]
-    fn require_mfa_default_and_policy_mapping() {
+    fn enable_mfa_default_and_policy_mapping() {
         let mut config = ConfigurationBuilder::default().private_build().unwrap();
-        assert!(matches!(config.require_mfa, TrueFalseAlways::False));
-        for (require_mfa, policy) in [
+        assert!(matches!(config.enable_mfa, TrueFalseAlways::False));
+        for (enable_mfa, policy) in [
             (TrueFalseAlways::False, MfaPolicy::Disabled),
             (TrueFalseAlways::True, MfaPolicy::Enrolled),
             (TrueFalseAlways::Always, MfaPolicy::Always),
         ] {
-            config.require_mfa = require_mfa;
+            config.enable_mfa = enable_mfa;
             assert_eq!(config.mfa_policy(), policy);
         }
     }
 
     #[test]
-    fn require_mfa_from_env() {
+    fn enable_mfa_from_env() {
         Jail::expect_with(|jail| {
             jail.clear_env();
             jail.set_env("LLDAP_JWT_SECRET", "secret");
-            jail.set_env("LLDAP_REQUIRE_MFA", "always");
+            jail.set_env("LLDAP_ENABLE_MFA", "always");
             jail.create_file("lldap_config.toml", r#"key_file = "test""#)?;
             write_random_key(jail, "test");
             let config = init(default_run_opts()).unwrap();
-            assert!(matches!(config.require_mfa, TrueFalseAlways::Always));
+            assert!(matches!(config.enable_mfa, TrueFalseAlways::Always));
             Ok(())
         });
     }

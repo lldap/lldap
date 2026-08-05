@@ -92,8 +92,8 @@
 ## false = disabled (default); true = only users who have enrolled need a
 ## code; "always" = require MFA for all users.
 ## Members of the lldap_mfa_disabled group are exempt.
-## Env variable: LLDAP_REQUIRE_MFA
-# require_mfa = false
+## Env variable: LLDAP_ENABLE_MFA
+# enable_mfa = false
 
 ## Database URL.
 ## This encodes the type of database (SQlite, MySQL, or PostgreSQL)
