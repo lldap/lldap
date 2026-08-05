@@ -12,10 +12,12 @@ use crate::{
 };
 use anyhow::{Result, anyhow, bail};
 use base64::Engine;
+use gloo_console::error;
 use gloo_timers::callback::Timeout;
 use graphql_client::GraphQLQuery;
+use lldap_auth::{login, opaque::client::login as opaque_login};
 use lldap_mfa::{
-    TOTP_CURRENT_CODE_REQUIRED, TOTP_ENROLLMENT_EXPIRED, TOTP_ENROLLMENT_TTL_SECS,
+    TOTP_CURRENT_CODE_REQUIRED, TOTP_DIGITS, TOTP_ENROLLMENT_EXPIRED, TOTP_ENROLLMENT_TTL_SECS,
     split_totp_suffix,
 };
 use validator_derive::Validate;
@@ -48,13 +50,28 @@ pub struct ConfirmationModel {
         message = "Enter your password, a ':' and the current 6-digit code"
     ))]
     combined: String,
+}
+
+#[derive(Model, Validate, PartialEq, Eq, Clone, Default)]
+pub struct GateModel {
+    #[validate(custom(
+        function = "is_totp_code",
+        message = "Enter the 6-digit code from your authenticator"
+    ))]
     current_code: String,
 }
 
-fn has_combined_shape(value: &str) -> Result<(), validator::ValidationError> {
+pub fn has_combined_shape(value: &str) -> Result<(), validator::ValidationError> {
     match split_totp_suffix(value) {
         Some((password, _)) if !password.is_empty() => Ok(()),
         _ => Err(validator::ValidationError::new("")),
+    }
+}
+
+fn is_totp_code(value: &str) -> Result<(), validator::ValidationError> {
+    match value.len() == TOTP_DIGITS as usize && value.bytes().all(|b| b.is_ascii_digit()) {
+        true => Ok(()),
+        false => Err(validator::ValidationError::new("")),
     }
 }
 
@@ -77,6 +94,7 @@ struct EnrollmentData {
 
 enum Phase {
     Loading,
+    Gate,
     InProgress(EnrollmentData),
     Complete,
 }
@@ -90,9 +108,10 @@ enum CodeHint {
 pub struct RegisterMfa {
     common: CommonComponentParts<Self>,
     form: Form<ConfirmationModel>,
+    gate: Form<GateModel>,
+    opaque_data: Option<opaque_login::ClientLogin>,
     phase: Phase,
     hint: CodeHint,
-    needs_current_code: bool,
     mfa_exempt: bool,
     expiry_timer: Option<Timeout>,
     node_ref: NodeRef,
@@ -110,7 +129,9 @@ pub struct Props {
 pub enum Msg {
     EnrollmentStartResponse(Result<start_mfa_enrollment::ResponseData>),
     Update,
+    SubmitGate,
     Submit,
+    AuthenticationStartResponse(Result<Box<login::ServerLoginStartResponse>>),
     EnrollmentFinishResponse(Result<finish_mfa_enrollment::ResponseData>),
     EnrollmentExpired,
     ExpiredLogoutRequested,
@@ -124,27 +145,34 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
         msg: <Self as Component>::Message,
     ) -> Result<bool> {
         match msg {
-            Msg::EnrollmentStartResponse(res) => {
-                let start = res?.start_mfa_enrollment;
-                let qr_svg = qrcode::QrCode::new(start.otpauth_uri.as_bytes())
-                    .map_err(|e| anyhow!("Could not render the QR code: {}", e))?
-                    .render::<qrcode::render::svg::Color>()
-                    .min_dimensions(200, 200)
-                    .build();
-                let qr_data_uri = format!(
-                    "data:image/svg+xml;base64,{}",
-                    base64::engine::general_purpose::STANDARD.encode(&qr_svg)
-                );
-                let seed = lldap_mfa::seed_from_base32(&start.secret_base32)
-                    .map_err(|_| anyhow!("Invalid secret received from the server"))?;
-                self.phase = Phase::InProgress(EnrollmentData {
-                    secret_base32: start.secret_base32,
-                    state: start.state,
-                    qr_data_uri,
-                    seed,
-                });
-                Ok(true)
-            }
+            Msg::EnrollmentStartResponse(res) => match res {
+                Ok(res) => {
+                    let start = res.start_mfa_enrollment;
+                    let qr_svg = qrcode::QrCode::new(start.otpauth_uri.as_bytes())
+                        .map_err(|e| anyhow!("Could not render the QR code: {}", e))?
+                        .render::<qrcode::render::svg::Color>()
+                        .min_dimensions(200, 200)
+                        .build();
+                    let qr_data_uri = format!(
+                        "data:image/svg+xml;base64,{}",
+                        base64::engine::general_purpose::STANDARD.encode(&qr_svg)
+                    );
+                    let seed = lldap_mfa::seed_from_base32(&start.secret_base32)
+                        .map_err(|_| anyhow!("Invalid secret received from the server"))?;
+                    self.phase = Phase::InProgress(EnrollmentData {
+                        secret_base32: start.secret_base32,
+                        state: start.state,
+                        qr_data_uri,
+                        seed,
+                    });
+                    Ok(true)
+                }
+                Err(e) if e.to_string().contains(TOTP_CURRENT_CODE_REQUIRED) => {
+                    self.phase = Phase::Gate;
+                    Ok(true)
+                }
+                Err(e) => Err(e),
+            },
             Msg::Update => {
                 let combined = self.form.field_value("combined");
                 self.hint = match (&self.phase, split_totp_suffix(&combined)) {
@@ -159,23 +187,55 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                 };
                 Ok(true)
             }
+            Msg::SubmitGate => {
+                if !self.gate.validate() {
+                    bail!("Check the form for errors");
+                }
+                self.start_enrollment(ctx, Some(self.gate.field_value("current_code")));
+                Ok(true)
+            }
             Msg::Submit => {
                 if !self.form.validate() {
                     bail!("Check the form for errors");
                 }
+                if !matches!(self.phase, Phase::InProgress(_)) {
+                    bail!("No enrollment in progress");
+                }
+                let combined = self.form.field_value("combined");
+                let (password, _) =
+                    split_totp_suffix(&combined).expect("The validator checked the shape");
+                let mut rng = rand::rngs::OsRng;
+                let login_start = opaque_login::start_login(password, &mut rng)
+                    .map_err(|e| anyhow!("Could not initialize login: {}", e))?;
+                self.opaque_data = Some(login_start.state);
+                self.common.call_backend(
+                    ctx,
+                    HostService::login_start(login::ClientLoginStartRequest {
+                        username: ctx.props().username.clone().into(),
+                        login_start_request: login_start.message,
+                    }),
+                    Msg::AuthenticationStartResponse,
+                );
+                Ok(true)
+            }
+            Msg::AuthenticationStartResponse(res) => {
+                let res = res.map_err(|e| anyhow!("Could not initiate login: {}", e))?;
+                let login = self.opaque_data.take().expect("Missing login data");
+                opaque_login::finish_login(login, res.credential_response).map_err(|e| {
+                    error!(&format!("Invalid password: {}", e));
+                    anyhow!("Invalid password")
+                })?;
                 let Phase::InProgress(data) = &self.phase else {
                     bail!("No enrollment in progress");
                 };
                 let combined = self.form.field_value("combined");
                 let (_, code) =
                     split_totp_suffix(&combined).expect("The validator checked the shape");
-                let current_code = self.form.field_value("current_code");
                 self.common.call_graphql::<FinishMfaEnrollment, _>(
                     ctx,
                     finish_mfa_enrollment::Variables {
                         state: data.state.clone(),
                         code: code.to_owned(),
-                        current_code: (!current_code.is_empty()).then_some(current_code),
                     },
                     Msg::EnrollmentFinishResponse,
                     "Error enabling two-factor authentication",
@@ -193,10 +253,6 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                 }
                 Err(e) if e.to_string().contains(TOTP_ENROLLMENT_EXPIRED) => {
                     self.modal.as_ref().expect("modal not initialized").show();
-                    Ok(true)
-                }
-                Err(e) if e.to_string().contains(TOTP_CURRENT_CODE_REQUIRED) => {
-                    self.needs_current_code = true;
                     Ok(true)
                 }
                 Err(e) => Err(e),
@@ -236,9 +292,10 @@ impl Component for RegisterMfa {
         let mut component = RegisterMfa {
             common: CommonComponentParts::<Self>::create(),
             form: Form::<ConfirmationModel>::new(ConfirmationModel::default()),
+            gate: Form::<GateModel>::new(GateModel::default()),
+            opaque_data: None,
             phase: Phase::Loading,
             hint: CodeHint::None,
-            needs_current_code: false,
             mfa_exempt: get_cookie("mfa_exempt").ok().flatten().as_deref() == Some("true"),
             expiry_timer: Some(Timeout::new(
                 (TOTP_ENROLLMENT_TTL_SECS * 1000) as u32,
@@ -247,12 +304,7 @@ impl Component for RegisterMfa {
             node_ref: NodeRef::default(),
             modal: None,
         };
-        component.common.call_graphql::<StartMfaEnrollment, _>(
-            ctx,
-            start_mfa_enrollment::Variables {},
-            Msg::EnrollmentStartResponse,
-            "Error starting two-factor enrollment",
-        );
+        component.start_enrollment(ctx, None);
         component
     }
 
@@ -293,6 +345,7 @@ impl Component for RegisterMfa {
                     <img src={"spinner.gif"} alt={"Loading"} />
                   </div>
                 },
+                Phase::Gate => self.view_gate(ctx),
                 Phase::InProgress(data) => self.view_enrollment(ctx, data),
                 Phase::Complete => self.view_complete(ctx),
             }}
@@ -303,6 +356,73 @@ impl Component for RegisterMfa {
 }
 
 impl RegisterMfa {
+    fn start_enrollment(&mut self, ctx: &Context<Self>, current_code: Option<String>) {
+        self.common.call_graphql::<StartMfaEnrollment, _>(
+            ctx,
+            start_mfa_enrollment::Variables { current_code },
+            Msg::EnrollmentStartResponse,
+            "Error starting two-factor enrollment",
+        );
+    }
+
+    fn view_gate(&self, ctx: &Context<Self>) -> Html {
+        type Field = yew_form::Field<GateModel>;
+        let link = ctx.link();
+        html! {
+          <div class="mx-auto" style="max-width: 410px">
+            <p>
+              {"Please enter only your current two-factor code to proceed. Example: "}
+              <code>{"123456"}</code>
+            </p>
+            <form class="form">
+              <label for="current_code" class="form-label">
+                {"Current two-factor code"}
+                <span class="text-danger">{"*"}</span>
+                {":"}
+              </label>
+              <div class="input-group">
+                <div class="input-group-prepend">
+                  <span class="input-group-text">
+                    <i class="bi-shield-lock"/>
+                  </span>
+                </div>
+                <Field
+                  class="form-control"
+                  class_invalid="is-invalid has-error"
+                  class_valid="has-success"
+                  form={&self.gate}
+                  field_name="current_code"
+                  input_type="password"
+                  autocomplete="off" />
+                <div class="invalid-feedback">
+                  {self.gate.field_message("current_code")}
+                </div>
+              </div>
+              <Submit
+                text="Continue"
+                disabled={self.common.is_task_running()}
+                onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::SubmitGate})}>
+                {self.back_link(ctx)}
+              </Submit>
+            </form>
+          </div>
+        }
+    }
+
+    fn back_link(&self, ctx: &Context<Self>) -> Html {
+        if ctx.props().enrollment_required {
+            return html! {};
+        }
+        html! {
+          <Link
+            classes="btn btn-secondary ms-2 col-auto col-form-label"
+            to={AppRoute::UserDetails{user_id: ctx.props().username.clone()}}>
+            <i class="bi-arrow-return-left me-2"></i>
+            {"Back"}
+          </Link>
+        }
+    }
+
     fn view_enrollment(&self, ctx: &Context<Self>, data: &EnrollmentData) -> Html {
         type Field = yew_form::Field<ConfirmationModel>;
         let link = ctx.link();
@@ -382,46 +502,12 @@ impl RegisterMfa {
                       },
                   }}
                 </div>
-                { if self.needs_current_code {
-                  html! {
-                    <>
-                      <div class="alert alert-warning">
-                        {"This account already has two-factor. Enter a code from your existing authenticator to replace it, or ask an administrator to reset it."}
-                      </div>
-                      <label for="current_code" class="form-label">
-                        {"Code from your existing authenticator"}
-                        <span class="text-danger">{"*"}</span>
-                        {":"}
-                      </label>
-                      <div class="input-group">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text">
-                            <i class="bi-shield-lock"/>
-                          </span>
-                        </div>
-                        <Field
-                          class="form-control"
-                          form={&self.form}
-                          field_name="current_code"
-                          input_type="password"
-                          autocomplete="off" />
-                      </div>
-                    </>
-                  }
-                } else { html! {} }}
               </div>
               <Submit
                 text="Enable two-factor"
                 disabled={self.common.is_task_running()}
                 onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
-                { if ctx.props().enrollment_required { html! {} } else { html! {
-                  <Link
-                    classes="btn btn-secondary ms-2 col-auto col-form-label"
-                    to={AppRoute::UserDetails{user_id: ctx.props().username.clone()}}>
-                    <i class="bi-arrow-return-left me-2"></i>
-                    {"Back"}
-                  </Link>
-                }}}
+                {self.back_link(ctx)}
               </Submit>
             </form>
             </div>

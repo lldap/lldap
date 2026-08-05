@@ -6,4 +6,7 @@ pub struct Options {
     /// Whether the server's MFA policy is anything other than disabled.
     #[serde(default)]
     pub mfa_enabled: bool,
+    /// Whether the policy is "always", where a user may not give up their factor.
+    #[serde(default)]
+    pub mfa_required: bool,
 }

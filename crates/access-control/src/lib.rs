@@ -231,8 +231,8 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
             .then_some(&self.handler)
     }
 
-    // Enrollment only ever targets the authenticated user, so there is no check.
-    pub fn get_mfa_enrollment_handler(&self) -> &(impl MfaBackendHandler + use<Handler>) {
+    // These only ever target the authenticated user, so there is no check.
+    pub fn get_mfa_self_handler(&self) -> &(impl MfaBackendHandler + use<Handler>) {
         &self.handler
     }
 

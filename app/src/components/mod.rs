@@ -23,6 +23,7 @@ pub mod logout;
 pub mod register_mfa;
 pub mod remove_user_from_group;
 pub mod reset_mfa;
+pub mod reset_own_mfa;
 pub mod reset_password_step1;
 pub mod reset_password_step2;
 pub mod router;

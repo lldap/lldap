@@ -72,6 +72,7 @@ pub struct Props {
     pub is_admin: bool,
     pub is_self: bool,
     pub mfa_enabled: bool,
+    pub mfa_required: bool,
 }
 
 impl CommonComponent<UserDetails> for UserDetails {
@@ -222,6 +223,8 @@ impl Component for UserDetails {
         match (&self.user_and_schema, &self.common.error) {
             (Some((u, schema)), error) => {
                 let mfa_enrolled = u.mfa_enrolled.unwrap_or(false);
+                // Under "always" an account may not be left without a factor.
+                let own_reset_blocked = ctx.props().is_self && ctx.props().mfa_required;
                 html! {
                   <>
                     <h3>{u.id.to_string()}</h3>
@@ -246,13 +249,22 @@ impl Component for UserDetails {
                           </Link>
                         }
                       } else { html! {} }}
-                      { if ctx.props().is_admin && ctx.props().mfa_enabled {
+                      { if ctx.props().is_admin && ctx.props().mfa_enabled && !own_reset_blocked {
                         html! {
                           <ResetMfa
                             username={u.id.clone()}
                             disabled={!mfa_enrolled}
                             on_mfa_reset={link.callback(|_| Msg::OnMfaReset)}
                             on_error={link.callback(Msg::OnError)} />
+                        }
+                      } else if ctx.props().is_self && mfa_enrolled && !own_reset_blocked {
+                        html! {
+                          <Link
+                            to={AppRoute::ResetOwnMfa{user_id: u.id.clone()}}
+                            classes="btn btn-danger me-2">
+                            <i class="bi-shield-x me-2"></i>
+                            {"Reset two-factor"}
+                          </Link>
                         }
                       } else { html! {} }}
                     </div>

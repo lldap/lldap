@@ -44,20 +44,32 @@ accounts that cannot type a code, and for break-glass admins.
 1. Open your own profile in the web interface and click **Set up two-factor**.
 2. Scan the QR code with an authenticator app, or enter the secret manually.
 3. Confirm with the combined format: password, a colon, and the current
-   6-digit code. Only the code is checked at this step (the password half
-   is shape practice for later logins).
+   6-digit code. Both halves are checked, and the format is the one you
+   will use to log in from then on.
+
+The password is verified the same way the **Modify password** page
+verifies the current password: the browser runs the OPAQUE login
+handshake against the server and checks the result locally, so the
+password itself is never sent. As with that page, the check is enforced
+by the client, so a caller driving the GraphQL API directly can skip it.
+The code checks below are the server-side ones.
 
 The pending enrollment is valid for **5 minutes**. After that, a session
 expired dialog asks you to sign in again and restart.
 
 ### Replacing an existing authenticator
 
-Enrolling over an existing second factor additionally requires a current
-code from the **authenticator being replaced**, so a stolen session
-cannot silently rebind the account to someone else's device. Moving to a
-new phone therefore works while you still have the old one. If the old
-authenticator is gone, an administrator must `resetUserMfa` first, or you
-can complete a password reset by email, which clears the factor.
+Enrolling over an existing second factor asks for a current code from the
+**authenticator being replaced** before the new QR code is shown, so a
+stolen session cannot silently rebind the account to someone else's
+device. Moving to a new phone therefore works while you still have the
+old one. If the old authenticator is gone, an administrator must
+`resetUserMfa` first, or you can complete a password reset by email,
+which clears the factor.
+
+The code is checked by the server at `startMfaEnrollment`, and the sealed
+enrollment state it returns records that the check passed. A state minted
+before the account had a factor cannot be used to replace one.
 
 Under `"always"`, unenrolled users are sent to this page automatically
 and cannot use the rest of the UI until they finish or log out.
@@ -122,16 +134,25 @@ bind, which is what limits the unthrottled rate.
 
 ## Resetting MFA
 
-| Actor | Can reset |
-| --- | --- |
-| Admin | Any user, including themselves |
-| Password manager | Non-admin users only (never self) |
-| Regular user | Nobody |
+| Actor | Can reset | Needs a code |
+| --- | --- | --- |
+| Admin | Any user; themselves only when the policy is not `"always"` | No |
+| Password manager | Non-admin users only (never self) | No |
+| Regular user | Themselves, unless the policy is `"always"` | Yes |
 
-In the UI: open the target user's profile and use the reset control, or
-call the GraphQL mutation `resetUserMfa`. This is the recovery path when
-a user has lost the authenticator they would otherwise need in order to
-replace it.
+An administrator resets from the target user's profile, or by calling
+`resetUserMfa`. This is the recovery path when a user has lost the
+authenticator they would otherwise need in order to replace it.
+
+Users give up their own factor from **Reset two-factor** on their own
+profile, confirming with password, a colon and a current code — gated
+like enrollment above, so it needs the authenticator rather than only a
+session.
+
+Under `"always"` **nobody removes their own second factor**, including an
+administrator acting on their own account: the control is not offered and
+both `resetOwnMfa` and a self-targeted `resetUserMfa` are refused. What
+remains is another administrator, or the password-reset email below.
 
 A successful **password-reset email** also clears MFA (the mailbox is
 the recovery factor). The user must re-enroll afterwards.
@@ -143,8 +164,8 @@ the recovery factor). The user must re-enroll afterwards.
   see `null`.
 - The sealed TOTP secret is **never** returned on any interface, to
   anyone (including admins).
-- Related GraphQL mutations: `startMfaEnrollment`, `finishMfaEnrollment`
-  (self), `resetUserMfa` (as above).
+- Related GraphQL mutations: `startMfaEnrollment`, `finishMfaEnrollment`,
+  `resetOwnMfa` (self), `resetUserMfa` (as above).
 
 ## Deployment checklist
 
@@ -153,7 +174,11 @@ the recovery factor). The user must re-enroll afterwards.
   do not enroll those accounts.
 - Keep at least one admin who can still sign in (exempt, enrolled with
   a working authenticator, or unenrolled under `true`) as break-glass
-  access.
+  access. There is no command-line way to clear a second factor, and
+  under `"always"` an admin cannot clear their own, so plan for either a
+  second admin or `enable_password_reset` left on. Without both, a lone
+  admin who loses their authenticator is down to editing `mfa_type` and
+  `totp_secret` in the database by hand.
 - Sealed secrets are derived from the server private key
   (`key_seed` / `key_file`). Rotating that key leaves enrolled users with
   `mfa_type` set but an undecryptable secret: login demands a code that

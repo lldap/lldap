@@ -179,8 +179,9 @@ type Mutation {
   deleteUser(userId: String!): Success!
   deleteGroup(groupId: Int!): Success!
   resetUserMfa(userId: String!): Success!
-  startMfaEnrollment: MfaEnrollmentStart!
-  finishMfaEnrollment(state: String!, code: String!, currentCode: String): Success!
+  resetOwnMfa(code: String!): Success!
+  startMfaEnrollment(currentCode: String): MfaEnrollmentStart!
+  finishMfaEnrollment(state: String!, code: String!): Success!
   addUserAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
   addGroupAttribute(name: String!, attributeType: AttributeType!, isList: Boolean!, isVisible: Boolean!, isEditable: Boolean!): Success!
   deleteUserAttribute(name: String!): Success!

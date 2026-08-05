@@ -94,6 +94,9 @@ pub struct EnrollmentState {
     kind: u8,
     pub user_id: String,
     pub seed: [u8; TOTP_SEED_LEN],
+    // Whether a factor was already enrolled when this state was issued, so a
+    // state minted before enrollment cannot be replayed to replace one.
+    pub replaces_existing: bool,
     expiry_unix: i64,
 }
 
@@ -103,12 +106,14 @@ pub fn seal_enrollment(
     ikm: &[u8],
     user_id: &str,
     seed: &[u8; TOTP_SEED_LEN],
+    replaces_existing: bool,
     now_unix: i64,
 ) -> Result<String> {
     let state = EnrollmentState {
         kind: STATE_KIND_ENROLLMENT,
         user_id: user_id.to_owned(),
         seed: *seed,
+        replaces_existing,
         expiry_unix: now_unix + TOTP_ENROLLMENT_TTL_SECS as i64,
     };
     let key = derive_enrollment_key(ikm)?;
@@ -238,17 +243,22 @@ mod tests {
     #[test]
     fn enrollment_round_trip() {
         let seed = generate_seed();
-        let sealed = seal_enrollment(IKM, "bob", &seed, 1000).unwrap();
+        let sealed = seal_enrollment(IKM, "bob", &seed, true, 1000).unwrap();
         assert!(!sealed.contains("bob"));
         let state = open_enrollment(IKM, &sealed, 1000).unwrap();
         assert_eq!(state.user_id, "bob");
         assert_eq!(state.seed, seed);
+        assert!(state.replaces_existing);
+
+        let sealed = seal_enrollment(IKM, "bob", &seed, false, 1000).unwrap();
+        let state = open_enrollment(IKM, &sealed, 1000).unwrap();
+        assert!(!state.replaces_existing);
     }
 
     #[test]
     fn enrollment_rejects_expired_wrong_key_and_tampered() {
         let seed = generate_seed();
-        let sealed = seal_enrollment(IKM, "bob", &seed, 1000).unwrap();
+        let sealed = seal_enrollment(IKM, "bob", &seed, false, 1000).unwrap();
         let expired = 1001 + TOTP_ENROLLMENT_TTL_SECS as i64;
         assert!(matches!(
             open_enrollment(IKM, &sealed, expired),

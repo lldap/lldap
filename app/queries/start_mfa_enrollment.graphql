@@ -1,5 +1,5 @@
-mutation StartMfaEnrollment {
-  startMfaEnrollment {
+mutation StartMfaEnrollment($currentCode: String) {
+  startMfaEnrollment(currentCode: $currentCode) {
     otpauthUri
     secretBase32
     state

@@ -110,6 +110,7 @@ async fn get_settings<Backend>(data: web::Data<AppState<Backend>>) -> HttpRespon
     HttpResponse::Ok().json(lldap_frontend_options::Options {
         password_reset_enabled: data.mail_options.enable_password_reset,
         mfa_enabled: data.mfa_policy != MfaPolicy::Disabled,
+        mfa_required: data.mfa_policy == MfaPolicy::Always,
     })
 }
 

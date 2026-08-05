@@ -96,8 +96,8 @@ impl<Handler: BackendHandler> Context<Handler> {
             .get_mfa_reset_handler(&self.validation_result, user_id, user_is_admin)
     }
 
-    pub fn get_mfa_enrollment_handler(&self) -> &(impl MfaBackendHandler + use<Handler>) {
-        self.handler.get_mfa_enrollment_handler()
+    pub fn get_mfa_self_handler(&self) -> &(impl MfaBackendHandler + use<Handler>) {
+        self.handler.get_mfa_self_handler()
     }
 }
 

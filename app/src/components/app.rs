@@ -11,6 +11,7 @@ use crate::{
         group_table::GroupTable,
         login::LoginForm,
         register_mfa::RegisterMfa,
+        reset_own_mfa::ResetOwnMfaForm,
         reset_password_step1::ResetPasswordStep1Form,
         reset_password_step2::ResetPasswordStep2Form,
         router::{AppRoute, Link, Redirect},
@@ -48,6 +49,7 @@ pub struct App {
     redirect_to: Option<AppRoute>,
     password_reset_enabled: Option<bool>,
     mfa_enabled: Option<bool>,
+    mfa_required: bool,
     mfa_enrollment_pending: bool,
 }
 
@@ -81,6 +83,7 @@ impl Component for App {
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
             mfa_enabled: None,
+            mfa_required: false,
             mfa_enrollment_pending: false,
         };
         ctx.link()
@@ -123,6 +126,7 @@ impl Component for App {
             Msg::SettingsReceived(Ok(settings)) => {
                 self.password_reset_enabled = Some(settings.password_reset_enabled);
                 self.mfa_enabled = Some(settings.mfa_enabled);
+                self.mfa_required = settings.mfa_required;
             }
             Msg::SettingsReceived(Err(err)) => {
                 error!(err.to_string());
@@ -148,6 +152,7 @@ impl Component for App {
         let logged_in_user = username.clone();
         let password_reset_enabled = self.password_reset_enabled;
         let mfa_enabled = self.mfa_enabled;
+        let mfa_required = self.mfa_required;
         let mfa_enrollment_pending = self.mfa_enrollment_pending;
         html! {
           <div>
@@ -156,7 +161,7 @@ impl Component for App {
               <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <main class="py-3">
                   <Switch<AppRoute>
-                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, logged_in_user.clone(), password_reset_enabled, mfa_enabled, mfa_enrollment_pending))}
+                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, logged_in_user.clone(), password_reset_enabled, mfa_enabled, mfa_required, mfa_enrollment_pending))}
                   />
                 </main>
               </div>
@@ -225,6 +230,7 @@ impl App {
             .map(|s| s.into_owned())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn dispatch_route(
         switch: &AppRoute,
         link: &Scope<Self>,
@@ -232,6 +238,7 @@ impl App {
         logged_in_user: Option<String>,
         password_reset_enabled: Option<bool>,
         mfa_enabled: Option<bool>,
+        mfa_required: bool,
         mfa_enrollment_pending: bool,
     ) -> Html {
         if mfa_enrollment_pending
@@ -317,7 +324,7 @@ impl App {
                         .as_deref()
                         .is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id));
                     html! {
-                        <UserDetails username={decoded_id} is_admin={is_admin} is_self={is_self} mfa_enabled={mfa_enabled.unwrap_or(false)} />
+                        <UserDetails username={decoded_id} is_admin={is_admin} is_self={is_self} mfa_enabled={mfa_enabled.unwrap_or(false)} mfa_required={mfa_required} />
                     }
                 }
                 None => html! { <Redirect to={AppRoute::Login} /> },
@@ -348,6 +355,24 @@ impl App {
                     }
                 }
                 (Some(decoded_id), Some(true)) => html! {
+                    <Redirect to={AppRoute::UserDetails { user_id: decoded_id }} />
+                },
+                (None, _) => html! { <Redirect to={AppRoute::Login} /> },
+            },
+            AppRoute::ResetOwnMfa { user_id } => match (Self::decode_user_id(user_id), mfa_enabled)
+            {
+                (Some(_), None) => html! {},
+                (Some(decoded_id), Some(true))
+                    if !mfa_required
+                        && logged_in_user
+                            .as_deref()
+                            .is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id)) =>
+                {
+                    html! {
+                        <ResetOwnMfaForm username={decoded_id} />
+                    }
+                }
+                (Some(decoded_id), _) => html! {
                     <Redirect to={AppRoute::UserDetails { user_id: decoded_id }} />
                 },
                 (None, _) => html! { <Redirect to={AppRoute::Login} /> },
