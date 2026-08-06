@@ -15,16 +15,11 @@ pub struct Props {
 
 #[function_component(Banner)]
 pub fn banner(props: &Props) -> Html {
-    let logo_html = html! {
-        <span class="app-brand-logo"><i class="bi-shield-lock-fill"></i></span>
-    };
-
     html! {
       <header class="app-header border-bottom mb-4">
         <div class="container">
           <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-between gap-2 py-2">
             <a href={yew_router::utils::base_url().unwrap_or("/".to_string())} class="app-brand d-flex align-items-center text-decoration-none">
-              {logo_html}
               <span class="app-brand-name">{"LLDAP"}</span>
             </a>
 
@@ -130,13 +125,6 @@ extern "C" {
     fn inDarkMode() -> bool;
 }
 
-/// Bootstrap Icons class shown when dark mode is active (offers to switch to light).
-const LIGHT_MODE_ICON: &str = "bi-sun-fill";
-/// Bootstrap Icons class shown when light mode is active (offers to switch to dark).
-const DARK_MODE_ICON: &str = "bi-moon-stars-fill";
-const SWITCH_TO_LIGHT_LABEL: &str = "Switch to light mode";
-const SWITCH_TO_DARK_LABEL: &str = "Switch to dark mode";
-
 #[function_component(DarkModeToggle)]
 fn dark_mode_toggle() -> Html {
     let dark_state = use_state(inDarkMode);
@@ -147,15 +135,11 @@ fn dark_mode_toggle() -> Html {
             dark_state.set(inDarkMode());
         })
     };
-    // Read the actual DOM state on every render instead of relying
-    // solely on the stored state so that external theme changes
-    // (e.g. from the Settings page applying a new default_theme) are
-    // reflected immediately in the toggle icon and label.
     let current_is_dark = inDarkMode();
     let (icon, label) = if current_is_dark {
-        (LIGHT_MODE_ICON, SWITCH_TO_LIGHT_LABEL)
+        ("bi-sun-fill", "Switch to light mode")
     } else {
-        (DARK_MODE_ICON, SWITCH_TO_DARK_LABEL)
+        ("bi-moon-stars-fill", "Switch to dark mode")
     };
     html! {
       <button

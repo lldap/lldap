@@ -6,7 +6,7 @@
    ========================================================================== */
 
 :root {
-  /* Brand accent. Overridable at runtime (see setThemeAccent in index.html). */
+  /* Brand accent */
   --lldap-accent: #4f46e5;
   --lldap-accent-hover: #4338ca;
   --lldap-accent-contrast: #ffffff;
@@ -139,17 +139,6 @@ a:hover {
   background-color: var(--lldap-accent);
   color: var(--lldap-accent-contrast);
   font-size: 1.25rem;
-}
-
-/* Uploaded or URL-sourced logo image shown next to the brand name.
-   Constrained to match the height of the shield icon so oversized logos
-   never break the header layout. */
-.app-brand-logo-image {
-  height: 2.25rem;
-  width: auto;
-  max-width: 10rem;
-  object-fit: contain;
-  border-radius: var(--lldap-radius-sm);
 }
 
 .app-brand-name {

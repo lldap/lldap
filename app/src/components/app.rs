@@ -218,6 +218,13 @@ impl App {
                       </Link>
                     </div>
                     <UserTable />
+                    <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2 mt-3">
+                      <div></div>
+                      <Link classes="btn btn-primary" to={AppRoute::CreateUser}>
+                        <i class="bi-person-plus me-2"></i>
+                        {"Create a user"}
+                      </Link>
+                    </div>
                   </div>
                 }
             }
@@ -241,6 +248,13 @@ impl App {
                       </Link>
                     </div>
                     <GroupTable />
+                    <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2 mt-3">
+                      <div></div>
+                      <Link classes="btn btn-primary" to={AppRoute::CreateGroup}>
+                        <i class="bi-plus-circle me-2"></i>
+                        {"Create a group"}
+                      </Link>
+                    </div>
                   </div>
                 }
             }
