@@ -50,8 +50,8 @@ accounts that cannot type a code, and for break-glass admins.
 The password is verified the same way the **Modify password** page
 verifies the current password: the browser runs the OPAQUE login
 handshake against the server and checks the result locally, so the
-password itself is never sent. As with that page, the check is enforced
-by the client, so a caller driving the GraphQL API directly can skip it.
+password itself is never sent. As with that page the check is enforced by
+the client — see [Standards and limitations](#standards-and-limitations).
 The code checks below are the server-side ones.
 
 The pending enrollment is valid for **5 minutes**. After that, a session
@@ -125,12 +125,9 @@ ever reached after the password has been verified, so it cannot be used
 to lock out someone whose password the attacker does not have.
 
 Like the used-code record, this lives **in memory in the running
-process**: it resets on restart and is not shared between replicas.
-It bounds guessing rather than capping total failures, so it does not
-meet the NIST SP 800-63B ceiling on consecutive failed attempts — for
-that, rate-limit `/auth/*` at the reverse proxy or point fail2ban at the
-failed-verification log lines. Each guess also costs a full password
-bind, which is what limits the unthrottled rate.
+process**: it resets on restart and is not shared between replicas. It
+bounds the guessing rate rather than capping total failures; see
+[Standards and limitations](#standards-and-limitations) below.
 
 ## Resetting MFA
 
@@ -166,6 +163,62 @@ the recovery factor). The user must re-enroll afterwards.
   anyone (including admins).
 - Related GraphQL mutations: `startMfaEnrollment`, `finishMfaEnrollment`,
   `resetOwnMfa` (self), `resetUserMfa` (as above).
+
+## Standards and limitations
+
+The parameters are hardcoded to the values below; none of them is configurable.
+
+| Requirement | Source | Status |
+| --- | --- | --- |
+| HMAC-SHA-1, 6 digits, 30 second step | RFC 6238 §4–5 | Met. The RFC's Appendix B vectors are unit tests. |
+| Validation window of at most one step either side | RFC 6238 §5.2 | Met: ±1 step, so a code is accepted for 90 seconds. |
+| Throttle failed verification attempts | RFC 4226 §7.3 | Met: 5 attempts per 30 second step, per account. |
+| Resynchronisation for counter drift | RFC 4226 §7.4 | Not applicable to time-based codes; the ±1 step window absorbs clock drift. |
+| Authenticator secrets stored in encrypted form | NIST SP 800-63B §5.1.4.2 | Met: sealed with AEAD under a key HKDF-derived from the server's private key, with a per-enrollment salt and the user UUID as associated data. Never returned on any interface. |
+| Replay resistance | NIST SP 800-63B §5.2.8 | Met: a verified code is refused for the rest of its acceptance window, at every door. |
+| No more than 100 consecutive failed attempts | NIST SP 800-63B §5.2.2 | **Not met** — see below. |
+| OTP not usable more than once | OWASP ASVS V2.8.4 | Met, as above. |
+| OTP not valid beyond its defined period | OWASP ASVS V2.8.5 | Met: 90 seconds. |
+| Approved algorithm, protected symmetric key | OWASP ASVS V2.8.2–3 | Met, as above. |
+
+### Known limitations
+
+**No cap on consecutive failures, and no lockout.** The limiter paces guessing (5 per 30
+second step) instead of counting failures toward a ceiling, so it does not meet NIST
+SP 800-63B §5.2.2. This is deliberate: locking accounts turns a wrong digit into a denial
+of service, and RFC 4226 §7.3 explicitly offers the delay scheme as an alternative. Note
+that verification is only reachable **after the password is correct**, so an attacker who
+does not have the password cannot spend the allowance or lock anyone out. For a hard
+ceiling, rate-limit `/auth/*` at your reverse proxy, or point fail2ban at the failed
+verification log lines.
+
+**The replay and rate-limit records are per process, in memory.** Both reset on restart
+and neither is shared between replicas. A code consumed on one replica can be replayed on
+another, and a restart refills the allowance.
+
+**No recovery codes.** Recovery is an administrator reset, the password-reset email (which
+clears the factor), or the `lldap_mfa_disabled` group. There is no offline code list, and
+no command-line way to clear a factor.
+
+**Enrolling does not end existing sessions.** A refresh token issued before enrollment
+keeps minting access tokens afterwards, without a code, until it expires. Adding a second
+factor therefore does not evict someone already holding a session — the same is true of a
+password change in LLDAP today. If that matters to you, log out everywhere after enrolling.
+
+**Administrators can exempt themselves.** `lldap_mfa_disabled` is the break-glass path and
+membership is admin-only — a regular user or a password manager cannot add anyone, checked
+in tests. But an administrator on `"always"` who adds themselves signs in with a password
+alone from then on, which is a way around the rule that nobody may drop their own factor.
+
+**The password check at enrollment is enforced by the browser.** The enrollment page runs
+the same OPAQUE handshake the **Modify password** page uses, and checks the result locally,
+so a caller driving the GraphQL API directly can skip it. Every code check is server-side.
+
+**Turning the policy off strands enrolled users' combined format.** With `enable_mfa =
+false` the `password:code` suffix is no longer split, so the whole string is treated as the
+password and the login fails. Enrolled users must go back to a plain password.
+
+**Rotating the server key orphans sealed secrets.** See the deployment checklist below.
 
 ## Deployment checklist
 

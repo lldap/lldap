@@ -109,7 +109,7 @@ pub struct RegisterMfa {
     common: CommonComponentParts<Self>,
     form: Form<ConfirmationModel>,
     gate: Form<GateModel>,
-    opaque_data: Option<opaque_login::ClientLogin>,
+    opaque_data: Option<(opaque_login::ClientLogin, String)>,
     phase: Phase,
     hint: CodeHint,
     mfa_exempt: bool,
@@ -202,12 +202,14 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                     bail!("No enrollment in progress");
                 }
                 let combined = self.form.field_value("combined");
-                let (password, _) =
-                    split_totp_suffix(&combined).expect("The validator checked the shape");
+                let Some((password, code)) = split_totp_suffix(&combined) else {
+                    bail!("Check the form for errors");
+                };
                 let mut rng = rand::rngs::OsRng;
                 let login_start = opaque_login::start_login(password, &mut rng)
                     .map_err(|e| anyhow!("Could not initialize login: {}", e))?;
-                self.opaque_data = Some(login_start.state);
+                // Keep the submitted code: the field stays editable while the login is in flight.
+                self.opaque_data = Some((login_start.state, code.to_owned()));
                 self.common.call_backend(
                     ctx,
                     HostService::login_start(login::ClientLoginStartRequest {
@@ -220,7 +222,7 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
             }
             Msg::AuthenticationStartResponse(res) => {
                 let res = res.map_err(|e| anyhow!("Could not initiate login: {}", e))?;
-                let login = self.opaque_data.take().expect("Missing login data");
+                let (login, code) = self.opaque_data.take().expect("Missing login data");
                 opaque_login::finish_login(login, res.credential_response).map_err(|e| {
                     error!(&format!("Invalid password: {}", e));
                     anyhow!("Invalid password")
@@ -228,14 +230,11 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
                 let Phase::InProgress(data) = &self.phase else {
                     bail!("No enrollment in progress");
                 };
-                let combined = self.form.field_value("combined");
-                let (_, code) =
-                    split_totp_suffix(&combined).expect("The validator checked the shape");
                 self.common.call_graphql::<FinishMfaEnrollment, _>(
                     ctx,
                     finish_mfa_enrollment::Variables {
                         state: data.state.clone(),
-                        code: code.to_owned(),
+                        code,
                     },
                     Msg::EnrollmentFinishResponse,
                     "Error enabling two-factor authentication",

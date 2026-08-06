@@ -53,6 +53,14 @@ pub struct App {
     mfa_enrollment_pending: bool,
 }
 
+// Session state the routes need, kept together so dispatch_route keeps a readable signature.
+struct SessionRouting {
+    user: Option<String>,
+    mfa_enabled: Option<bool>,
+    mfa_required: bool,
+    mfa_enrollment_pending: bool,
+}
+
 pub enum Msg {
     Login((String, bool, bool)),
     Logout,
@@ -149,11 +157,13 @@ impl Component for App {
         let link = ctx.link().clone();
         let is_admin = self.is_admin();
         let username = self.user_info.clone().map(|(username, _)| username);
-        let logged_in_user = username.clone();
         let password_reset_enabled = self.password_reset_enabled;
-        let mfa_enabled = self.mfa_enabled;
-        let mfa_required = self.mfa_required;
-        let mfa_enrollment_pending = self.mfa_enrollment_pending;
+        let session = SessionRouting {
+            user: username.clone(),
+            mfa_enabled: self.mfa_enabled,
+            mfa_required: self.mfa_required,
+            mfa_enrollment_pending: self.mfa_enrollment_pending,
+        };
         html! {
           <div>
             <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
@@ -161,7 +171,7 @@ impl Component for App {
               <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <main class="py-3">
                   <Switch<AppRoute>
-                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, logged_in_user.clone(), password_reset_enabled, mfa_enabled, mfa_required, mfa_enrollment_pending))}
+                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled, &session))}
                   />
                 </main>
               </div>
@@ -230,20 +240,23 @@ impl App {
             .map(|s| s.into_owned())
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn dispatch_route(
         switch: &AppRoute,
         link: &Scope<Self>,
         is_admin: bool,
-        logged_in_user: Option<String>,
         password_reset_enabled: Option<bool>,
-        mfa_enabled: Option<bool>,
-        mfa_required: bool,
-        mfa_enrollment_pending: bool,
+        session: &SessionRouting,
     ) -> Html {
+        let logged_in_user = session.user.as_deref();
+        let SessionRouting {
+            mfa_enabled,
+            mfa_required,
+            mfa_enrollment_pending,
+            ..
+        } = *session;
         if mfa_enrollment_pending
             && mfa_enabled != Some(false)
-            && let Some(user) = logged_in_user.as_deref()
+            && let Some(user) = logged_in_user
         {
             let on_own_enrollment = matches!(
                 switch,
@@ -320,11 +333,15 @@ impl App {
             },
             AppRoute::UserDetails { user_id } => match Self::decode_user_id(user_id) {
                 Some(decoded_id) => {
-                    let is_self = logged_in_user
-                        .as_deref()
-                        .is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id));
+                    let is_self =
+                        logged_in_user.is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id));
                     html! {
-                        <UserDetails username={decoded_id} is_admin={is_admin} is_self={is_self} mfa_enabled={mfa_enabled.unwrap_or(false)} mfa_required={mfa_required} />
+                        <UserDetails
+                            username={decoded_id}
+                            is_admin={is_admin}
+                            is_self={is_self}
+                            mfa_enabled={mfa_enabled.unwrap_or(false)}
+                            mfa_required={mfa_required} />
                     }
                 }
                 None => html! { <Redirect to={AppRoute::Login} /> },
@@ -342,9 +359,7 @@ impl App {
                 },
                 (Some(_), None) => html! {},
                 (Some(decoded_id), Some(true))
-                    if logged_in_user
-                        .as_deref()
-                        .is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id)) =>
+                    if logged_in_user.is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id)) =>
                 {
                     html! {
                         <RegisterMfa
@@ -364,9 +379,7 @@ impl App {
                 (Some(_), None) => html! {},
                 (Some(decoded_id), Some(true))
                     if !mfa_required
-                        && logged_in_user
-                            .as_deref()
-                            .is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id)) =>
+                        && logged_in_user.is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id)) =>
                 {
                     html! {
                         <ResetOwnMfaForm username={decoded_id} />

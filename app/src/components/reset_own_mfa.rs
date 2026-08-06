@@ -41,7 +41,7 @@ pub struct FormModel {
 pub struct ResetOwnMfaForm {
     common: CommonComponentParts<Self>,
     form: Form<FormModel>,
-    opaque_data: Option<opaque_login::ClientLogin>,
+    opaque_data: Option<(opaque_login::ClientLogin, String)>,
 }
 
 #[derive(Clone, PartialEq, Eq, Properties)]
@@ -69,12 +69,14 @@ impl CommonComponent<ResetOwnMfaForm> for ResetOwnMfaForm {
                     bail!("Check the form for errors");
                 }
                 let combined = self.form.field_value("combined");
-                let (password, _) =
-                    split_totp_suffix(&combined).expect("The validator checked the shape");
+                let Some((password, code)) = split_totp_suffix(&combined) else {
+                    bail!("Check the form for errors");
+                };
                 let mut rng = rand::rngs::OsRng;
                 let login_start = opaque_login::start_login(password, &mut rng)
                     .map_err(|e| anyhow!("Could not initialize login: {}", e))?;
-                self.opaque_data = Some(login_start.state);
+                // Keep the submitted code: the field stays editable while the login is in flight.
+                self.opaque_data = Some((login_start.state, code.to_owned()));
                 self.common.call_backend(
                     ctx,
                     HostService::login_start(login::ClientLoginStartRequest {
@@ -87,19 +89,14 @@ impl CommonComponent<ResetOwnMfaForm> for ResetOwnMfaForm {
             }
             Msg::AuthenticationStartResponse(res) => {
                 let res = res.map_err(|e| anyhow!("Could not initiate login: {}", e))?;
-                let login = self.opaque_data.take().expect("Missing login data");
+                let (login, code) = self.opaque_data.take().expect("Missing login data");
                 opaque_login::finish_login(login, res.credential_response).map_err(|e| {
                     error!(&format!("Invalid password: {}", e));
                     anyhow!("Invalid password")
                 })?;
-                let combined = self.form.field_value("combined");
-                let (_, code) =
-                    split_totp_suffix(&combined).expect("The validator checked the shape");
                 self.common.call_graphql::<ResetOwnMfa, _>(
                     ctx,
-                    reset_own_mfa::Variables {
-                        code: code.to_owned(),
-                    },
+                    reset_own_mfa::Variables { code },
                     Msg::ResetResponse,
                     "Error resetting two-factor authentication",
                 );
