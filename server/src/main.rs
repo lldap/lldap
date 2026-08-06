@@ -14,6 +14,7 @@ mod jwt_sql_tables;
 mod ldap_server;
 mod logging;
 mod mail;
+mod mfa_login;
 mod sql_tcp_backend_handler;
 mod tcp_backend_handler;
 mod tcp_server;

@@ -20,7 +20,8 @@ use lldap_domain_handlers::handler::{
 };
 use lldap_domain_model::error::DomainError;
 use lldap_mfa::{
-    TOTP_CODE_ALREADY_USED, TOTP_SEPARATOR, TOTP_TOO_MANY_ATTEMPTS, split_totp_suffix,
+    TOTP_CODE_ALREADY_USED, TOTP_SEPARATOR, TOTP_TOO_MANY_ATTEMPTS, TotpFailure, split_totp_suffix,
+    totp_failure,
 };
 use lldap_opaque_handler::OpaqueHandler;
 use tracing::warn;
@@ -110,25 +111,15 @@ pub(crate) async fn do_bind(
         Some((password, code)) => {
             bind_password(backend, &user_id, password).await?;
             if let Err(e) = backend.verify_user_totp(&user_id, code).await {
-                return Err(match e {
-                    DomainError::AuthenticationError(m)
-                        if m.starts_with(TOTP_CODE_ALREADY_USED) =>
-                    {
-                        LdapError {
-                            code: LdapResultCode::InvalidCredentials,
-                            message: format!("{TOTP_CODE_ALREADY_USED}, wait for the next one"),
-                        }
-                    }
-                    DomainError::AuthenticationError(m)
-                        if m.starts_with(TOTP_TOO_MANY_ATTEMPTS) =>
-                    {
-                        LdapError {
-                            code: LdapResultCode::InvalidCredentials,
-                            message: format!("{TOTP_TOO_MANY_ATTEMPTS}, wait for the next one"),
-                        }
-                    }
+                let named = match totp_failure(&e.to_string()) {
+                    TotpFailure::Replayed => TOTP_CODE_ALREADY_USED,
+                    TotpFailure::TooManyAttempts => TOTP_TOO_MANY_ATTEMPTS,
                     // Do not reveal which factor failed.
-                    _ => invalid_credentials(),
+                    TotpFailure::Other => return Err(invalid_credentials()),
+                };
+                return Err(LdapError {
+                    code: LdapResultCode::InvalidCredentials,
+                    message: format!("{named}, wait for the next one"),
                 });
             }
             Ok(user_id)

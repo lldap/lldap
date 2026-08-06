@@ -11,7 +11,7 @@ use crate::{
 use anyhow::{Result, anyhow, bail};
 use gloo_console::error;
 use lldap_auth::*;
-use lldap_mfa::{TOTP_CODE_ALREADY_USED, split_totp_suffix};
+use lldap_mfa::{TotpFailure, split_totp_suffix, totp_failure};
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -144,12 +144,15 @@ impl CommonComponent<LoginForm> for LoginForm {
                     Err(e) => {
                         if self.totp_code.take().is_some() {
                             error!(&format!("Invalid credentials: {}", e));
-                            self.common.error =
-                                Some(if e.to_string().contains(TOTP_CODE_ALREADY_USED) {
+                            self.common.error = Some(match totp_failure(&e.to_string()) {
+                                TotpFailure::Replayed => {
                                     anyhow!("That code was already used. Wait for the next one.")
-                                } else {
-                                    anyhow!("Invalid username or password")
-                                });
+                                }
+                                TotpFailure::TooManyAttempts => {
+                                    anyhow!("Too many attempts. Wait for the next code.")
+                                }
+                                TotpFailure::Other => anyhow!("Invalid username or password"),
+                            });
                             Ok(true)
                         } else {
                             Err(e).context("Could not log in")

@@ -19,14 +19,34 @@ pub const SEALED_PREFIX: &str = "v1.";
 pub const SEALED_BLOB_LEN: usize =
     SEALED_PREFIX.len() + ((SEAL_SALT_LEN + TOTP_SEED_LEN + SEAL_TAG_LEN) * 4).div_ceil(3);
 
-/// Error prefix for a replayed code; the login paths match on it.
+/// Error prefix for a replayed code; `totp_failure` matches on it.
 pub const TOTP_CODE_ALREADY_USED: &str = "TOTP code already used";
 /// Error prefix for an expired pending enrollment; the frontend matches on it.
 pub const TOTP_ENROLLMENT_EXPIRED: &str = "Expired TOTP enrollment";
-/// Error prefix for a spent attempt allowance; the login paths match on it.
+/// Error prefix for a spent attempt allowance; `totp_failure` matches on it.
 pub const TOTP_TOO_MANY_ATTEMPTS: &str = "Too many TOTP attempts";
 /// Error prefix asking for a code from the existing authenticator; the frontend matches on it.
 pub const TOTP_CURRENT_CODE_REQUIRED: &str = "Current TOTP code required";
+
+/// Why a verification failed, for doors that name some failures and hide the rest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TotpFailure {
+    Replayed,
+    TooManyAttempts,
+    Other,
+}
+
+// Matches anywhere rather than at the start: the message reaches the frontend wrapped
+// in the GraphQL and anyhow layers, where a prefix test would miss.
+pub fn totp_failure(message: &str) -> TotpFailure {
+    if message.contains(TOTP_CODE_ALREADY_USED) {
+        TotpFailure::Replayed
+    } else if message.contains(TOTP_TOO_MANY_ATTEMPTS) {
+        TotpFailure::TooManyAttempts
+    } else {
+        TotpFailure::Other
+    }
+}
 
 #[cfg(feature = "seal")]
 const STORAGE_KEY_INFO: &[u8] = b"lldap-totp-storage-key-v1";
@@ -55,4 +75,27 @@ pub(crate) fn build_nonce_info(user_uuid: &str, salt: &[u8]) -> Vec<u8> {
     info.push(0);
     info.extend_from_slice(salt);
     info
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failures_are_named_only_when_recognised() {
+        for (message, expected) in [
+            (
+                format!("{TOTP_CODE_ALREADY_USED} for bob"),
+                TotpFailure::Replayed,
+            ),
+            (
+                format!("Authentication error {TOTP_TOO_MANY_ATTEMPTS} for bob"),
+                TotpFailure::TooManyAttempts,
+            ),
+            ("Invalid TOTP code for bob".to_owned(), TotpFailure::Other),
+            (String::new(), TotpFailure::Other),
+        ] {
+            assert_eq!(totp_failure(&message), expected, "{message}");
+        }
+    }
 }

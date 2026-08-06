@@ -1,4 +1,5 @@
 use crate::{
+    mfa_login::{get_mfa_requirement, totp_error},
     tcp_backend_handler::*,
     tcp_server::{AppState, TcpError, TcpResult, error_to_http_response},
 };
@@ -16,19 +17,16 @@ use futures::future::{Ready, ok};
 use futures_util::FutureExt;
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
-use lldap_access_control::{
-    MfaRequirement, ReadonlyBackendHandler, UserReadableBackendHandler, mfa_enrollment_status,
-    mfa_requirement,
-};
+use lldap_access_control::{MfaRequirement, ReadonlyBackendHandler, UserReadableBackendHandler};
 use lldap_auth::{
     JWTClaims, access_control::ValidationResults, login, password_reset, registration,
 };
 use lldap_domain::types::{GroupDetails, GroupName, UserId};
 use lldap_domain_handlers::handler::{
-    BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, MfaPolicy, UserRequestFilter,
+    BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, UserRequestFilter,
 };
 use lldap_domain_model::{error::DomainError, model::UserColumn};
-use lldap_mfa::{TOTP_CODE_ALREADY_USED, TOTP_TOO_MANY_ATTEMPTS, split_totp_suffix};
+use lldap_mfa::split_totp_suffix;
 use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::{
@@ -101,43 +99,6 @@ fn get_refresh_token(request: HttpRequest) -> TcpResult<(u64, UserId)> {
             Err(DomainError::AuthenticationError("Missing refresh token".to_string()).into())
         }
     }
-}
-
-// A replayed code or a spent allowance may be named: the password was verified by
-// then. Anything else stays generic, to not reveal which factor failed.
-fn totp_error(e: DomainError) -> DomainError {
-    match e {
-        DomainError::AuthenticationError(m) if m.starts_with(TOTP_CODE_ALREADY_USED) => {
-            DomainError::AuthenticationError(TOTP_CODE_ALREADY_USED.to_owned())
-        }
-        DomainError::AuthenticationError(m) if m.starts_with(TOTP_TOO_MANY_ATTEMPTS) => {
-            DomainError::AuthenticationError(TOTP_TOO_MANY_ATTEMPTS.to_owned())
-        }
-        _ => DomainError::AuthenticationError("Invalid credentials".to_owned()),
-    }
-}
-
-// Never skip MFA because the status could not be read.
-async fn get_mfa_requirement<Backend>(
-    data: &web::Data<AppState<Backend>>,
-    user: &UserId,
-) -> TcpResult<MfaRequirement>
-where
-    Backend: TcpBackendHandler + BackendHandler + 'static,
-{
-    if data.mfa_policy == MfaPolicy::Disabled {
-        return Ok(MfaRequirement::None);
-    }
-    let status = match mfa_enrollment_status(data.get_readonly_handler(), user).await {
-        Ok(status) => Some(status),
-        // Unknown users bind as before, and fail there.
-        Err(DomainError::EntityNotFound(_)) => None,
-        Err(e) => {
-            warn!("Could not read the MFA status, refusing the login: {:#}", e);
-            return Err(DomainError::AuthenticationError("Invalid credentials".to_owned()).into());
-        }
-    };
-    Ok(mfa_requirement(data.mfa_policy, status.as_ref()))
 }
 
 #[instrument(skip_all, level = "debug")]
@@ -790,24 +751,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_totp_error() {
-        assert!(matches!(
-            totp_error(DomainError::AuthenticationError(format!(
-                "{TOTP_CODE_ALREADY_USED} for bob"
-            ))),
-            DomainError::AuthenticationError(m) if m == TOTP_CODE_ALREADY_USED
-        ));
-        assert!(matches!(
-            totp_error(DomainError::AuthenticationError("wrong code".to_owned())),
-            DomainError::AuthenticationError(m) if m == "Invalid credentials"
-        ));
-        assert!(matches!(
-            totp_error(DomainError::InternalError("db down".to_owned())),
-            DomainError::AuthenticationError(m) if m == "Invalid credentials"
-        ));
-    }
 
     #[test]
     fn test_password_reset_claim() {
