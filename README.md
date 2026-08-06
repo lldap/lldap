@@ -94,6 +94,9 @@ create users, set passwords, add them to groups and so on. Users can also
 connect to the web UI and change their information, or request a password reset
 link (if you configured the SMTP client).
 
+Optional TOTP two-factor authentication can be enabled for the web UI and LDAP
+binds. See the [MFA](docs/mfa.md) docs for setup, policies and limitations.
+
 You can create and manage custom attributes through the Web UI, or through the
 community-contributed CLI frontend (
 [Zepmann/lldap-cli](https://github.com/Zepmann/lldap-cli)). This is necessary
