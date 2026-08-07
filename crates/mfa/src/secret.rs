@@ -146,15 +146,9 @@ mod tests {
     const UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
 
     #[test]
-    fn generate_seed_length() {
-        let s = generate_seed();
-        assert_eq!(s.len(), TOTP_SEED_LEN);
-        assert_ne!(s, [0u8; TOTP_SEED_LEN]);
-    }
-
-    #[test]
     fn seal_open_round_trip() {
         let seed = generate_seed();
+        assert_ne!(seed, [0u8; TOTP_SEED_LEN]);
         let sealed = seal_totp_secret(IKM, UUID, &seed).unwrap();
         assert_eq!(sealed.len(), SEALED_BLOB_LEN);
         assert!(sealed.starts_with("v1."));
@@ -173,45 +167,19 @@ mod tests {
             rest.chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         );
+        assert!(matches!(
+            seal_totp_secret(IKM, UUID, &[0u8; TOTP_SEED_LEN - 1]),
+            Err(MfaError::InvalidSecretLength)
+        ));
     }
 
     #[test]
-    fn wrong_ikm_fails() {
-        let seed = generate_seed();
-        let sealed = seal_totp_secret(IKM, UUID, &seed).unwrap();
-        let bad_ikm = b"ff23456789abcdef0123456789abcdef";
-        assert!(open_totp_secret(bad_ikm, UUID, &sealed).is_err());
-    }
-
-    #[test]
-    fn wrong_uuid_fails() {
-        let seed = generate_seed();
-        let sealed = seal_totp_secret(IKM, UUID, &seed).unwrap();
-        assert!(open_totp_secret(IKM, "other-uuid", &sealed).is_err());
-    }
-
-    #[test]
-    fn tampered_blob_fails() {
-        let seed = generate_seed();
-        let sealed = seal_totp_secret(IKM, UUID, &seed).unwrap();
-        let mut bytes = sealed.into_bytes();
-        let i = bytes.len() - 2;
-        bytes[i] = if bytes[i] == b'A' { b'B' } else { b'A' };
-        let sealed = String::from_utf8(bytes).unwrap();
-        assert!(open_totp_secret(IKM, UUID, &sealed).is_err());
-    }
-
-    #[test]
-    fn different_uuid_different_ciphertext() {
+    fn seal_is_randomised() {
         let seed = [9u8; TOTP_SEED_LEN];
-        let a = seal_totp_secret(IKM, "uuid-a", &seed).unwrap();
-        let b = seal_totp_secret(IKM, "uuid-b", &seed).unwrap();
-        assert_ne!(a, b);
-    }
-
-    #[test]
-    fn different_salt_each_seal() {
-        let seed = [3u8; TOTP_SEED_LEN];
+        assert_ne!(
+            seal_totp_secret(IKM, "uuid-a", &seed).unwrap(),
+            seal_totp_secret(IKM, "uuid-b", &seed).unwrap()
+        );
         let a = seal_totp_secret(IKM, UUID, &seed).unwrap();
         let b = seal_totp_secret(IKM, UUID, &seed).unwrap();
         assert_ne!(a, b);
@@ -220,24 +188,27 @@ mod tests {
     }
 
     #[test]
-    fn bad_prefix() {
-        assert!(matches!(
-            open_totp_secret(IKM, UUID, "v0.abc"),
-            Err(MfaError::InvalidSealedFormat)
-        ));
-        assert!(matches!(
-            open_totp_secret(IKM, UUID, "not-sealed"),
-            Err(MfaError::InvalidSealedFormat)
-        ));
+    fn open_rejects_wrong_key_uuid_and_tampering() {
+        let seed = generate_seed();
+        let sealed = seal_totp_secret(IKM, UUID, &seed).unwrap();
+        assert!(open_totp_secret(b"ff23456789abcdef0123456789abcdef", UUID, &sealed).is_err());
+        assert!(open_totp_secret(IKM, "other-uuid", &sealed).is_err());
+        let mut bytes = sealed.into_bytes();
+        let i = bytes.len() - 2;
+        bytes[i] = if bytes[i] == b'A' { b'B' } else { b'A' };
+        let tampered = String::from_utf8(bytes).unwrap();
+        assert!(open_totp_secret(IKM, UUID, &tampered).is_err());
     }
 
     #[test]
-    fn wrong_packed_length_fails() {
+    fn open_rejects_malformed() {
         let short = format!("{SEALED_PREFIX}{}", URL_SAFE_NO_PAD.encode([0u8; 30]));
-        assert!(matches!(
-            open_totp_secret(IKM, UUID, &short),
-            Err(MfaError::InvalidSealedFormat)
-        ));
+        for bad in ["v0.abc", "not-sealed", short.as_str()] {
+            assert!(matches!(
+                open_totp_secret(IKM, UUID, bad),
+                Err(MfaError::InvalidSealedFormat)
+            ));
+        }
     }
 
     #[test]
@@ -270,5 +241,23 @@ mod tests {
         let i = bytes.len() - 2;
         bytes[i] = if bytes[i] == b'A' { b'B' } else { b'A' };
         assert!(open_enrollment(IKM, &String::from_utf8(bytes).unwrap(), 1000).is_err());
+    }
+
+    #[test]
+    fn enrollment_rejects_other_state_kinds() {
+        let state = EnrollmentState {
+            kind: STATE_KIND_ENROLLMENT + 1,
+            user_id: "bob".to_owned(),
+            seed: generate_seed(),
+            replaces_existing: false,
+            expiry_unix: 2000,
+        };
+        let key = derive_enrollment_key(IKM).unwrap();
+        let sealed =
+            URL_SAFE_NO_PAD.encode(aead::seal(&key, &bincode::serialize(&state).unwrap()).unwrap());
+        assert!(matches!(
+            open_enrollment(IKM, &sealed, 1000),
+            Err(MfaError::InvalidSealedFormat)
+        ));
     }
 }

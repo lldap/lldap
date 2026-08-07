@@ -58,6 +58,12 @@ mod tests {
             DomainError::AuthenticationError(m) if m == TOTP_CODE_ALREADY_USED
         ));
         assert!(matches!(
+            totp_error(DomainError::AuthenticationError(format!(
+                "{TOTP_TOO_MANY_ATTEMPTS} for bob"
+            ))),
+            DomainError::AuthenticationError(m) if m == TOTP_TOO_MANY_ATTEMPTS
+        ));
+        assert!(matches!(
             totp_error(DomainError::AuthenticationError("wrong code".to_owned())),
             DomainError::AuthenticationError(m) if m == "Invalid credentials"
         ));

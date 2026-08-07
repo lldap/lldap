@@ -240,7 +240,7 @@ impl Component for UserDetails {
                           <Link
                             to={AppRoute::RegisterMfa{user_id: u.id.clone()}}
                             classes="btn btn-secondary me-2">
-                            <i class="bi-shield-lock me-2"></i>
+                            <i class="bi-phone me-2"></i>
                             { if mfa_enrolled {
                                 "Reconfigure two-factor"
                               } else {

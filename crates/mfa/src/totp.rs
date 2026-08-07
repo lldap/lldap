@@ -31,11 +31,11 @@ pub fn format_code(code: u32) -> String {
     format!("{:0width$}", code, width = TOTP_DIGITS as usize)
 }
 
-fn parse_code(code: &str) -> Result<u32> {
+fn parse_code(code: &str) -> Option<u32> {
     if code.len() != TOTP_DIGITS as usize || !code.chars().all(|c| c.is_ascii_digit()) {
-        return Err(MfaError::InvalidCodeFormat);
+        return None;
     }
-    code.parse().map_err(|_| MfaError::InvalidCodeFormat)
+    code.parse().ok()
 }
 
 // Optimizer barrier so windows are not short-circuited. black_box is not constant-time;
@@ -51,10 +51,8 @@ pub fn split_totp_suffix(password: &str) -> Option<(&str, &str)> {
 }
 
 pub fn totp_verify(secret: &[u8], code: &str, unix_secs: u64) -> Result<bool> {
-    let provided = match parse_code(code) {
-        Ok(c) => c,
-        Err(MfaError::InvalidCodeFormat) => return Ok(false),
-        Err(e) => return Err(e),
+    let Some(provided) = parse_code(code) else {
+        return Ok(false);
     };
     let step = unix_secs / TOTP_STEP_SECS;
     let mut ok = false;
@@ -88,30 +86,24 @@ mod tests {
     }
 
     #[test]
-    fn verify_accepts_current_and_skew() {
+    fn verify_accepts_skew_and_rejects_the_rest() {
         let t = 1_111_111_111u64;
         let code = format_code(totp_code(RFC_SEED, t).unwrap());
+        assert_eq!(format_code(42), "000042");
         assert!(totp_verify(RFC_SEED, &code, t).unwrap());
         assert!(totp_verify(RFC_SEED, &code, t + TOTP_STEP_SECS).unwrap());
         assert!(totp_verify(RFC_SEED, &code, t - TOTP_STEP_SECS).unwrap());
-    }
-
-    #[test]
-    fn verify_rejects_wrong_and_malformed() {
-        let t = 1_111_111_111u64;
+        assert!(!totp_verify(RFC_SEED, &code, t + 2 * TOTP_STEP_SECS).unwrap());
         assert!(!totp_verify(RFC_SEED, "000000", t).unwrap());
         assert!(!totp_verify(RFC_SEED, "12345", t).unwrap());
         assert!(!totp_verify(RFC_SEED, "abcdef", t).unwrap());
         assert!(!totp_verify(RFC_SEED, "", t).unwrap());
-        let code = format_code(totp_code(RFC_SEED, t).unwrap());
         assert!(!totp_verify(RFC_SEED, &format!(" {code}"), t).unwrap());
         assert!(!totp_verify(RFC_SEED, &format!("{code} "), t).unwrap());
-    }
-
-    #[test]
-    fn format_code_zero_pads() {
-        assert_eq!(format_code(42), "000042");
-        assert_eq!(format_code(5801), "005801");
+        assert!(matches!(
+            totp_code(&[], t),
+            Err(MfaError::InvalidSecretLength)
+        ));
     }
 
     #[test]

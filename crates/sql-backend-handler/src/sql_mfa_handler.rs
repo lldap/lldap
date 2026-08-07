@@ -209,8 +209,8 @@ mod tests {
     use lldap_auth::opaque::server::{ServerSetup, generate_random_private_key};
     use lldap_mfa::{
         EnrollmentState, SEALED_BLOB_LEN, SEALED_PREFIX, TOTP_ENROLLMENT_EXPIRED,
-        TOTP_ENROLLMENT_TTL_SECS, TOTP_SEED_LEN, format_code, open_totp_secret, seed_base32,
-        totp_code,
+        TOTP_ENROLLMENT_TTL_SECS, TOTP_MAX_ATTEMPTS_PER_STEP, TOTP_SEED_LEN, TOTP_STEP_SECS,
+        format_code, open_totp_secret, seed_base32, totp_code,
     };
     use pretty_assertions::assert_eq;
 
@@ -246,7 +246,8 @@ mod tests {
         (now, format_code(totp_code(seed, now).unwrap()))
     }
 
-    fn wrong_code(seed: &[u8], now: u64) -> String {
+    fn wrong_code(seed: &[u8]) -> String {
+        let now = chrono::Utc::now().timestamp() as u64;
         let valid: Vec<u32> = [now - 30, now, now + 30]
             .iter()
             .map(|t| totp_code(seed, *t).unwrap())
@@ -254,21 +255,27 @@ mod tests {
         format_code((0..).find(|c| !valid.contains(c)).unwrap())
     }
 
+    // Returns the code spent by enrolling and an unused one from the neighbouring step.
     async fn enroll_user(
         handler: &SqlBackendHandler,
         setup: &ServerSetup,
         user: &str,
-    ) -> (UserId, [u8; TOTP_SEED_LEN], String) {
+    ) -> (UserId, [u8; TOTP_SEED_LEN], String, String) {
         insert_user_no_password(handler, user).await;
         let user_id = UserId::new(user);
         let start = handler.start_totp_enrollment(&user_id, None).await.unwrap();
         let state = open_state(setup, &start.state);
-        let (_, code) = current_code(&state.seed);
+        let (now, code) = current_code(&state.seed);
         handler
             .finish_totp_enrollment(&user_id, &start.state, &code)
             .await
             .unwrap();
-        (user_id, state.seed, code)
+        let next = [now + 30, now - 30]
+            .iter()
+            .map(|t| format_code(totp_code(&state.seed, *t).unwrap()))
+            .find(|c| *c != code)
+            .unwrap();
+        (user_id, state.seed, code, next)
     }
 
     #[tokio::test]
@@ -314,7 +321,7 @@ mod tests {
         let (now, code) = current_code(&state.seed);
 
         let err = handler
-            .finish_totp_enrollment(&user_id, &start.state, &wrong_code(&state.seed, now))
+            .finish_totp_enrollment(&user_id, &start.state, &wrong_code(&state.seed))
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
@@ -356,9 +363,8 @@ mod tests {
     #[tokio::test]
     async fn test_start_totp_enrollment_requires_current_code() {
         let (setup, handler) = setup_handler().await;
-        let (user_id, seed, enroll_code) = enroll_user(&handler, &setup, "bob").await;
+        let (user_id, seed, _, current) = enroll_user(&handler, &setup, "bob").await;
         let sealed_before = get_mfa_columns(&handler, "bob").await.0.unwrap();
-        let now = chrono::Utc::now().timestamp() as u64;
 
         let err = handler
             .start_totp_enrollment(&user_id, None)
@@ -367,7 +373,7 @@ mod tests {
         assert!(err.to_string().contains(TOTP_CURRENT_CODE_REQUIRED));
 
         let err = handler
-            .start_totp_enrollment(&user_id, Some(wrong_code(&seed, now)))
+            .start_totp_enrollment(&user_id, Some(wrong_code(&seed)))
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
@@ -376,11 +382,6 @@ mod tests {
             Some(sealed_before)
         );
 
-        let current = [now + 30, now - 30]
-            .iter()
-            .map(|t| format_code(totp_code(&seed, *t).unwrap()))
-            .find(|c| *c != enroll_code)
-            .unwrap();
         let restart = handler
             .start_totp_enrollment(&user_id, Some(current))
             .await
@@ -403,21 +404,15 @@ mod tests {
     #[tokio::test]
     async fn test_reset_own_mfa() {
         let (setup, handler) = setup_handler().await;
-        let (user_id, seed, enroll_code) = enroll_user(&handler, &setup, "bob").await;
-        let now = chrono::Utc::now().timestamp() as u64;
+        let (user_id, seed, _, current) = enroll_user(&handler, &setup, "bob").await;
 
         let err = handler
-            .reset_own_mfa(&user_id, &wrong_code(&seed, now))
+            .reset_own_mfa(&user_id, &wrong_code(&seed))
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
         assert!(get_mfa_columns(&handler, "bob").await.0.is_some());
 
-        let current = [now + 30, now - 30]
-            .iter()
-            .map(|t| format_code(totp_code(&seed, *t).unwrap()))
-            .find(|c| *c != enroll_code)
-            .unwrap();
         handler.reset_own_mfa(&user_id, &current).await.unwrap();
         assert_eq!(get_mfa_columns(&handler, "bob").await, (None, None));
 
@@ -428,7 +423,7 @@ mod tests {
     #[tokio::test]
     async fn test_reset_user_mfa() {
         let (setup, handler) = setup_handler().await;
-        let (user_id, _, _) = enroll_user(&handler, &setup, "bob").await;
+        let (user_id, _, _, _) = enroll_user(&handler, &setup, "bob").await;
         assert!(get_mfa_columns(&handler, "bob").await.0.is_some());
 
         handler.reset_user_mfa(&user_id).await.unwrap();
@@ -444,9 +439,8 @@ mod tests {
     #[tokio::test]
     async fn test_verify_user_totp() {
         let (setup, handler) = setup_handler().await;
-        let (user_id, seed, enroll_code) = enroll_user(&handler, &setup, "bob").await;
+        let (user_id, seed, enroll_code, next_code) = enroll_user(&handler, &setup, "bob").await;
         insert_user_no_password(&handler, "john").await;
-        let now = chrono::Utc::now().timestamp() as u64;
 
         let err = handler
             .verify_user_totp(&user_id, &enroll_code)
@@ -454,11 +448,6 @@ mod tests {
             .unwrap_err();
         assert!(err.to_string().contains(TOTP_CODE_ALREADY_USED));
 
-        let next_code = [now + 30, now - 30]
-            .iter()
-            .map(|t| format_code(totp_code(&seed, *t).unwrap()))
-            .find(|c| *c != enroll_code)
-            .unwrap();
         handler
             .verify_user_totp(&user_id, &next_code)
             .await
@@ -470,7 +459,7 @@ mod tests {
         assert!(err.to_string().contains(TOTP_CODE_ALREADY_USED));
 
         let err = handler
-            .verify_user_totp(&user_id, &wrong_code(&seed, now))
+            .verify_user_totp(&user_id, &wrong_code(&seed))
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
@@ -479,6 +468,25 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
+
+        for _ in 0..TOTP_MAX_ATTEMPTS_PER_STEP {
+            let _ = handler.verify_user_totp(&user_id, &wrong_code(&seed)).await;
+        }
+        // The allowance is keyed per step, so spend the next one too: a step boundary
+        // crossed mid-test would otherwise refill it.
+        let uuid = handler.get_user(&user_id).await.unwrap().uuid;
+        let next_step = chrono::Utc::now().timestamp() as u64 + TOTP_STEP_SECS;
+        for _ in 0..TOTP_MAX_ATTEMPTS_PER_STEP {
+            handler
+                .failed_totp_attempts
+                .record_failure(uuid.as_str(), next_step);
+        }
+        // A wrong code would report "Invalid TOTP code" if the gate ran after verifying.
+        let err = handler
+            .verify_user_totp(&user_id, &wrong_code(&seed))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains(TOTP_TOO_MANY_ATTEMPTS));
 
         handler
             .write_mfa_columns(

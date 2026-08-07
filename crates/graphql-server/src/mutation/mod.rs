@@ -1008,6 +1008,10 @@ mod tests {
     }
 
     const RESET_QUERY: &str = r#"mutation { resetUserMfa(userId: "bob") { ok } }"#;
+    const START_QUERY: &str = r#"mutation { startMfaEnrollment { state } }"#;
+    const FINISH_QUERY: &str =
+        r#"mutation { finishMfaEnrollment(state: "sealed-state", code: "123456") { ok } }"#;
+    const RESET_OWN_QUERY: &str = r#"mutation { resetOwnMfa(code: "123456") { ok } }"#;
 
     fn expect_target_in_admin_group(mock: &mut MockTestBackendHandler, target_is_admin: bool) {
         let mut groups = HashSet::new();
@@ -1052,99 +1056,13 @@ mod tests {
             .returning(|_| Ok(HashSet::new()));
     }
 
-    async fn assert_unauthorized_reset(mock: MockTestBackendHandler, requester: ValidationResults) {
-        let context = Context::<MockTestBackendHandler>::new_for_tests(mock, requester);
-        let schema = mutation_schema(
-            Query::<MockTestBackendHandler>::new(),
-            Mutation::<MockTestBackendHandler>::new(),
-        );
-        let (response, errors) = execute(RESET_QUERY, None, &schema, &Variables::new(), &context)
-            .await
-            .unwrap();
-        assert!(response.is_null());
-        assert!(!errors.is_empty());
-        assert!(
-            errors
-                .iter()
-                .all(|e| e.error().message() == "Unauthorized MFA reset")
-        );
-    }
-
-    async fn assert_authorized_reset(mock: MockTestBackendHandler, requester: ValidationResults) {
-        let context = Context::<MockTestBackendHandler>::new_for_tests(mock, requester);
-        let schema = mutation_schema(
-            Query::<MockTestBackendHandler>::new(),
-            Mutation::<MockTestBackendHandler>::new(),
-        );
-        assert_eq!(
-            execute(RESET_QUERY, None, &schema, &Variables::new(), &context).await,
-            Ok((
-                graphql_value!(
-                {
-                    "resetUserMfa": {
-                        "ok": true
-                    }
-                } ),
-                vec![]
-            ))
-        );
-    }
-
-    #[tokio::test]
-    async fn test_reset_user_mfa_authorized() {
-        for permission in [Permission::Admin, Permission::PasswordManager] {
-            let mut mock = MockTestBackendHandler::new();
-            expect_target_in_admin_group(&mut mock, false);
-            mock.expect_reset_user_mfa()
-                .with(eq(UserId::new("bob")))
-                .return_once(|_| Ok(()));
-            assert_authorized_reset(
-                mock,
-                ValidationResults {
-                    user: UserId::new("manager"),
-                    permission,
-                },
-            )
-            .await;
-        }
-    }
-
-    #[tokio::test]
-    async fn test_reset_user_mfa_unauthorized() {
-        let mut mock = MockTestBackendHandler::new();
-        expect_target_in_admin_group(&mut mock, true);
-        assert_unauthorized_reset(
-            mock,
-            ValidationResults {
-                user: UserId::new("manager"),
-                permission: Permission::PasswordManager,
-            },
-        )
-        .await;
-        for permission in [Permission::Regular, Permission::PasswordManager] {
-            let mut mock = MockTestBackendHandler::new();
-            expect_target_in_admin_group(&mut mock, false);
-            assert_unauthorized_reset(
-                mock,
-                ValidationResults {
-                    user: UserId::new("bob"),
-                    permission,
-                },
-            )
-            .await;
-        }
-    }
-
-    #[tokio::test]
-    async fn test_mfa_enrollment() {
-        const START_QUERY: &str = r#"mutation { startMfaEnrollment(
-            currentCode: "654321") { otpauthUri secretBase32 state } }"#;
-        const FINISH_QUERY: &str =
-            r#"mutation { finishMfaEnrollment(state: "sealed-state", code: "123456") { ok } }"#;
-        let mut mock = MockTestBackendHandler::new();
+    fn expect_enrollment_start(
+        mock: &mut MockTestBackendHandler,
+        current_code: Option<&'static str>,
+    ) {
         mock.expect_start_totp_enrollment()
-            .withf(|user_id, current_code| {
-                user_id == &UserId::new("bob") && *current_code == Some("654321".to_owned())
+            .withf(move |user_id, code| {
+                user_id == &UserId::new("bob") && code.as_deref() == current_code
             })
             .return_once(|_, _| {
                 Ok(TotpEnrollmentStart {
@@ -1153,49 +1071,119 @@ mod tests {
                     state: "sealed-state".to_string(),
                 })
             });
-        mock.expect_finish_totp_enrollment()
-            .withf(|user_id, state, code| {
-                user_id == &UserId::new("bob") && state == "sealed-state" && code == "123456"
-            })
-            .return_once(|_, _, _| Ok(()));
-        let context = Context::<MockTestBackendHandler>::new_for_tests_with_policy(
+    }
+
+    fn mfa_context(
+        mock: MockTestBackendHandler,
+        user: &str,
+        permission: Permission,
+        policy: MfaPolicy,
+    ) -> Context<MockTestBackendHandler> {
+        Context::<MockTestBackendHandler>::new_for_tests_with_policy(
             mock,
             ValidationResults {
-                user: UserId::new("bob"),
-                permission: Permission::Regular,
+                user: UserId::new(user),
+                permission,
             },
-            MfaPolicy::Enrolled,
+            policy,
+        )
+    }
+
+    async fn assert_gql_error(
+        context: &Context<MockTestBackendHandler>,
+        query: &str,
+        message: &str,
+    ) {
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
         );
+        let (response, errors) = execute(query, None, &schema, &Variables::new(), context)
+            .await
+            .unwrap();
+        assert!(response.is_null());
+        assert!(!errors.is_empty());
+        assert!(errors.iter().all(|e| e.error().message() == message));
+    }
+
+    async fn assert_gql_ok(
+        context: &Context<MockTestBackendHandler>,
+        query: &str,
+        expected: juniper::Value,
+    ) {
         let schema = mutation_schema(
             Query::<MockTestBackendHandler>::new(),
             Mutation::<MockTestBackendHandler>::new(),
         );
         assert_eq!(
-            execute(START_QUERY, None, &schema, &Variables::new(), &context).await,
-            Ok((
-                graphql_value!(
-                {
-                    "startMfaEnrollment": {
-                        "otpauthUri": "otpauth://totp/LLDAP:bob",
-                        "secretBase32": "ABC234",
-                        "state": "sealed-state"
-                    }
-                } ),
-                vec![]
-            ))
+            execute(query, None, &schema, &Variables::new(), context).await,
+            Ok((expected, vec![]))
         );
-        assert_eq!(
-            execute(FINISH_QUERY, None, &schema, &Variables::new(), &context).await,
-            Ok((
-                graphql_value!(
-                {
-                    "finishMfaEnrollment": {
-                        "ok": true
-                    }
-                } ),
-                vec![]
-            ))
+    }
+
+    #[tokio::test]
+    async fn test_reset_user_mfa_authorization() {
+        for permission in [Permission::Admin, Permission::PasswordManager] {
+            let mut mock = MockTestBackendHandler::new();
+            expect_target_in_admin_group(&mut mock, false);
+            mock.expect_reset_user_mfa()
+                .with(eq(UserId::new("bob")))
+                .return_once(|_| Ok(()));
+            let context = mfa_context(mock, "manager", permission, MfaPolicy::Disabled);
+            assert_gql_ok(
+                &context,
+                RESET_QUERY,
+                graphql_value!({"resetUserMfa": {"ok": true}}),
+            )
+            .await;
+        }
+
+        let mut mock = MockTestBackendHandler::new();
+        expect_target_in_admin_group(&mut mock, true);
+        let context = mfa_context(
+            mock,
+            "manager",
+            Permission::PasswordManager,
+            MfaPolicy::Disabled,
         );
+        assert_gql_error(&context, RESET_QUERY, "Unauthorized MFA reset").await;
+
+        for permission in [Permission::Regular, Permission::PasswordManager] {
+            let mut mock = MockTestBackendHandler::new();
+            expect_target_in_admin_group(&mut mock, false);
+            let context = mfa_context(mock, "bob", permission, MfaPolicy::Disabled);
+            assert_gql_error(&context, RESET_QUERY, "Unauthorized MFA reset").await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mfa_enrollment() {
+        const START_WITH_CODE: &str = r#"mutation { startMfaEnrollment(
+            currentCode: "654321") { otpauthUri secretBase32 state } }"#;
+        let mut mock = MockTestBackendHandler::new();
+        expect_enrollment_start(&mut mock, Some("654321"));
+        mock.expect_finish_totp_enrollment()
+            .withf(|user_id, state, code| {
+                user_id == &UserId::new("bob") && state == "sealed-state" && code == "123456"
+            })
+            .return_once(|_, _, _| Ok(()));
+        let context = mfa_context(mock, "bob", Permission::Regular, MfaPolicy::Enrolled);
+        assert_gql_ok(
+            &context,
+            START_WITH_CODE,
+            graphql_value!({"startMfaEnrollment": {
+                "otpauthUri": "otpauth://totp/LLDAP:bob",
+                "secretBase32": "ABC234",
+                "state": "sealed-state"
+            }}),
+        )
+        .await;
+        assert_gql_ok(
+            &context,
+            FINISH_QUERY,
+            graphql_value!({"finishMfaEnrollment": {"ok": true}}),
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -1205,175 +1193,97 @@ mod tests {
         let mut mock = MockTestBackendHandler::new();
         expect_bob_with_mfa(&mut mock, Some(MFA_TYPE_TOTP));
         // No expect_reset_user_mfa: reaching the handler must fail the mock.
-        let context = Context::<MockTestBackendHandler>::new_for_tests_with_policy(
-            mock,
-            ValidationResults {
-                user: UserId::new("bob"),
-                permission: Permission::Admin,
-            },
-            MfaPolicy::Always,
-        );
-        let schema = mutation_schema(
-            Query::<MockTestBackendHandler>::new(),
-            Mutation::<MockTestBackendHandler>::new(),
-        );
-        let (response, errors) = execute(SELF_QUERY, None, &schema, &Variables::new(), &context)
-            .await
-            .unwrap();
-        assert!(response.is_null());
-        assert!(!errors.is_empty());
-        assert!(errors.iter().all(|e| {
-            e.error().message()
-                == "Cannot reset your own MFA when it is required by the server configuration"
-        }));
+        let context = mfa_context(mock, "bob", Permission::Admin, MfaPolicy::Always);
+        assert_gql_error(
+            &context,
+            SELF_QUERY,
+            "Cannot reset your own MFA when it is required by the server configuration",
+        )
+        .await;
     }
 
     #[tokio::test]
     async fn test_reset_own_mfa() {
-        const QUERY: &str = r#"mutation { resetOwnMfa(code: "123456") { ok } }"#;
-        let validation = || ValidationResults {
-            user: UserId::new("bob"),
-            permission: Permission::Regular,
-        };
-        let schema = mutation_schema(
-            Query::<MockTestBackendHandler>::new(),
-            Mutation::<MockTestBackendHandler>::new(),
-        );
         let mut mock = MockTestBackendHandler::new();
         mock.expect_reset_own_mfa()
             .withf(|user_id, code| user_id == &UserId::new("bob") && code == "123456")
             .return_once(|_, _| Ok(()));
-        let context = Context::<MockTestBackendHandler>::new_for_tests_with_policy(
-            mock,
-            validation(),
-            MfaPolicy::Enrolled,
-        );
-        assert_eq!(
-            execute(QUERY, None, &schema, &Variables::new(), &context).await,
-            Ok((
-                graphql_value!(
-                {
-                    "resetOwnMfa": {
-                        "ok": true
-                    }
-                } ),
-                vec![]
-            ))
-        );
+        let context = mfa_context(mock, "bob", Permission::Regular, MfaPolicy::Enrolled);
+        assert_gql_ok(
+            &context,
+            RESET_OWN_QUERY,
+            graphql_value!({"resetOwnMfa": {"ok": true}}),
+        )
+        .await;
 
-        let context = Context::<MockTestBackendHandler>::new_for_tests_with_policy(
+        let context = mfa_context(
             MockTestBackendHandler::new(),
-            validation(),
+            "bob",
+            Permission::Regular,
             MfaPolicy::Always,
         );
-        let (response, errors) = execute(QUERY, None, &schema, &Variables::new(), &context)
-            .await
-            .unwrap();
-        assert!(response.is_null());
-        assert!(
-            errors
-                .iter()
-                .all(|e| e.error().message() == "MFA is required by the server configuration")
-        );
+        assert_gql_error(
+            &context,
+            RESET_OWN_QUERY,
+            "MFA is required by the server configuration",
+        )
+        .await;
     }
 
     #[tokio::test]
     async fn test_mfa_mutations_gated_when_disabled() {
-        const START_QUERY: &str = r#"mutation { startMfaEnrollment { state } }"#;
-        const FINISH_QUERY: &str =
-            r#"mutation { finishMfaEnrollment(state: "sealed-state", code: "123456") { ok } }"#;
-        const RESET_OWN_QUERY: &str = r#"mutation { resetOwnMfa(code: "123456") { ok } }"#;
         let mut mock = MockTestBackendHandler::new();
         expect_target_in_admin_group(&mut mock, false);
         mock.expect_reset_user_mfa()
             .with(eq(UserId::new("bob")))
             .return_once(|_| Ok(()));
-        let context = Context::<MockTestBackendHandler>::new_for_tests_with_policy(
-            mock,
-            ValidationResults {
-                user: UserId::new("admin"),
-                permission: Permission::Admin,
-            },
-            MfaPolicy::Disabled,
-        );
-        let schema = mutation_schema(
-            Query::<MockTestBackendHandler>::new(),
-            Mutation::<MockTestBackendHandler>::new(),
-        );
+        let context = mfa_context(mock, "admin", Permission::Admin, MfaPolicy::Disabled);
         for query in [START_QUERY, FINISH_QUERY, RESET_OWN_QUERY] {
-            let (response, errors) = execute(query, None, &schema, &Variables::new(), &context)
-                .await
-                .unwrap();
-            assert!(response.is_null());
-            assert!(!errors.is_empty());
-            assert!(
-                errors
-                    .iter()
-                    .all(|e| e.error().message() == "MFA is disabled by the server configuration")
-            );
+            assert_gql_error(
+                &context,
+                query,
+                "MFA is disabled by the server configuration",
+            )
+            .await;
         }
-        assert_eq!(
-            execute(RESET_QUERY, None, &schema, &Variables::new(), &context).await,
-            Ok((
-                graphql_value!(
-                {
-                    "resetUserMfa": {
-                        "ok": true
-                    }
-                } ),
-                vec![]
-            ))
-        );
+        assert_gql_ok(
+            &context,
+            RESET_QUERY,
+            graphql_value!({"resetUserMfa": {"ok": true}}),
+        )
+        .await;
     }
 
     #[tokio::test]
     async fn test_mutations_gated_until_enrolled_under_always() {
         const UPDATE_QUERY: &str = r#"mutation { updateUser(user: { id: "bob" }) { ok } }"#;
         const USERS_QUERY: &str = r#"{ users { id } }"#;
-        const START_QUERY: &str = r#"mutation { startMfaEnrollment { state } }"#;
         const GATE_ERROR: &str =
             "MFA enrollment required: enroll through the web interface or contact an administrator";
         let mut mock = MockTestBackendHandler::new();
         expect_bob_with_mfa(&mut mock, None);
-        mock.expect_start_totp_enrollment()
-            .with(eq(UserId::new("bob")), eq(None))
-            .return_once(|_, _| {
-                Ok(TotpEnrollmentStart {
-                    otpauth_uri: "otpauth://totp/LLDAP:bob".to_string(),
-                    secret_base32: "ABC234".to_string(),
-                    state: "sealed-state".to_string(),
-                })
-            });
-        let context = Context::<MockTestBackendHandler>::new_for_tests_with_policy(
-            mock,
-            ValidationResults {
-                user: UserId::new("bob"),
-                permission: Permission::Regular,
-            },
-            MfaPolicy::Always,
-        );
-        let schema = mutation_schema(
-            Query::<MockTestBackendHandler>::new(),
-            Mutation::<MockTestBackendHandler>::new(),
-        );
+        expect_enrollment_start(&mut mock, None);
+        mock.expect_finish_totp_enrollment()
+            .withf(|user_id, state, code| {
+                user_id == &UserId::new("bob") && state == "sealed-state" && code == "123456"
+            })
+            .return_once(|_, _, _| Ok(()));
+        let context = mfa_context(mock, "bob", Permission::Regular, MfaPolicy::Always);
         for query in [UPDATE_QUERY, USERS_QUERY] {
-            let (response, errors) = execute(query, None, &schema, &Variables::new(), &context)
-                .await
-                .unwrap();
-            assert!(response.is_null());
-            assert!(errors.iter().all(|e| e.error().message() == GATE_ERROR));
+            assert_gql_error(&context, query, GATE_ERROR).await;
         }
-        assert_eq!(
-            execute(START_QUERY, None, &schema, &Variables::new(), &context).await,
-            Ok((
-                graphql_value!(
-                {
-                    "startMfaEnrollment": {
-                        "state": "sealed-state"
-                    }
-                } ),
-                vec![]
-            ))
-        );
+        // Both halves of enrollment stay exempt, or an unenrolled user could never enroll.
+        assert_gql_ok(
+            &context,
+            START_QUERY,
+            graphql_value!({"startMfaEnrollment": {"state": "sealed-state"}}),
+        )
+        .await;
+        assert_gql_ok(
+            &context,
+            FINISH_QUERY,
+            graphql_value!({"finishMfaEnrollment": {"ok": true}}),
+        )
+        .await;
     }
 }

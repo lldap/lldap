@@ -13,8 +13,6 @@ pub enum MfaError {
     #[cfg(feature = "seal")]
     #[error("Serialization error")]
     Serialization(#[from] bincode::Error),
-    #[error("Invalid TOTP code format")]
-    InvalidCodeFormat,
     #[error("Invalid secret length")]
     InvalidSecretLength,
     #[error("Invalid base32 encoding")]

@@ -111,7 +111,6 @@ fn mfa_enrollment_and_ldap_bind() {
     .start_mfa_enrollment;
     let seed = seed_from_base32(&start.secret_base32).expect("invalid enrollment secret");
 
-    // A wrong code does not enroll.
     post::<FinishMfaEnrollment>(
         &client,
         &user_token,
@@ -138,7 +137,6 @@ fn mfa_enrollment_and_ldap_bind() {
     )
     .expect("failed to finish MFA enrollment");
 
-    // Enrolled: a correct password without a code teaches the format.
     let (success, message) = ldap_bind(&bind_dn, user_password);
     assert!(!success);
     assert!(
@@ -160,7 +158,6 @@ fn mfa_enrollment_and_ldap_bind() {
     let combined = format!("{user_password}{TOTP_SEPARATOR}{bind_code}");
     let (success, message) = ldap_bind(&bind_dn, &combined);
     assert!(success, "bind with a fresh code failed: {message}");
-    // Codes are single-use: the same bind replayed is refused, by name.
     let (success, message) = ldap_bind(&bind_dn, &combined);
     assert!(!success);
     assert!(
@@ -168,7 +165,6 @@ fn mfa_enrollment_and_ldap_bind() {
         "unexpected diagnostic: {message}"
     );
 
-    // Members of the exemption group bind with the password alone.
     let groups = post::<ListGroups>(&client, &admin_token, list_groups::Variables {})
         .expect("failed to list groups")
         .groups;
@@ -203,7 +199,6 @@ fn mfa_always_gates_api_and_ldap() {
         format!("{error:#}").contains("MFA enrollment required"),
         "unexpected error: {error:#}"
     );
-    // The enrollment pair is exempt from the gate.
     post::<StartMfaEnrollment>(
         &client,
         &token,

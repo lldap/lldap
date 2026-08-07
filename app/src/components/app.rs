@@ -291,7 +291,7 @@ impl App {
                 html! {
                   <div>
                     { user_button("top-create-user") }
-                    <UserTable />
+                    <UserTable mfa_enabled={mfa_enabled.unwrap_or(false)} />
                     { user_button("bottom-create-user") }
                   </div>
                 }
