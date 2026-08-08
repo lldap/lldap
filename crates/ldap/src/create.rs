@@ -66,6 +66,13 @@ fn undefined_attribute_type(name: &str) -> LdapError {
     }
 }
 
+fn constraint_violation(message: impl Into<String>) -> LdapError {
+    LdapError {
+        code: LdapResultCode::ConstraintViolation,
+        message: message.into(),
+    }
+}
+
 fn make_encoded_attribute(
     name: AttributeName,
     typ: AttributeType,
@@ -145,10 +152,17 @@ async fn create_user(
             code: LdapResultCode::OperationsError,
             message: format!("Unable to get schema: {e:#}"),
         })?;
-    let raw_ldap_attributes: HashMap<String, Vec<Vec<u8>>> =
-        attributes.into_iter().map(attribute_to_bytes).collect();
+    let mut raw_ldap_attributes = HashMap::new();
+    for attribute in attributes {
+        let (name, values) = attribute_to_bytes(attribute);
+        if raw_ldap_attributes.insert(name.clone(), values).is_some() {
+            return Err(LdapError {
+                code: LdapResultCode::ProtocolError,
+                message: format!("Duplicate attribute {name}"),
+            });
+        }
+    }
     let mut new_user_attributes: Vec<Attribute> = Vec::new();
-    let mut mail = None;
     let mut email = None;
     let mut display_name = None;
     for (ldap_attribute_name, raw_values) in raw_ldap_attributes {
@@ -160,10 +174,8 @@ async fn create_user(
             UserFieldType::PrimaryField(UserColumn::Email) => {
                 let value =
                     single_primary_field_value(&schema, &ldap_attribute_name, "mail", &raw_values)?;
-                if ldap_attribute_name == "mail" {
-                    mail = Some(value);
-                } else if email.is_none() {
-                    email = Some(value);
+                if email.replace(value).is_some() {
+                    return Err(constraint_violation("Multiple email attributes provided"));
                 }
             }
             UserFieldType::PrimaryField(UserColumn::DisplayName) => {
@@ -173,17 +185,24 @@ async fn create_user(
                     "display_name",
                     &raw_values,
                 )?;
-                if ldap_attribute_name == "cn" || display_name.is_none() {
-                    display_name = Some(value);
+                if display_name.replace(value).is_some() {
+                    return Err(constraint_violation("Multiple display names provided"));
                 }
             }
             UserFieldType::PrimaryField(UserColumn::UserId) => {
-                single_primary_field_value(&schema, &ldap_attribute_name, "user_id", &raw_values)?;
+                let value = single_primary_field_value(
+                    &schema,
+                    &ldap_attribute_name,
+                    "user_id",
+                    &raw_values,
+                )?;
+                if value != user_id.as_str() {
+                    return Err(constraint_violation(format!(
+                        "Attribute {ldap_attribute_name} does not match the DN"
+                    )));
+                }
             }
-            UserFieldType::Attribute(attribute_name, _, _) => {
-                let (typ, is_list) =
-                    schema_attribute_type(&schema, &attribute_name, &ldap_attribute_name)?;
-                validate_attribute_arity(&ldap_attribute_name, raw_values.len(), is_list)?;
+            UserFieldType::Attribute(attribute_name, typ, is_list) => {
                 let values = decode_attribute_values(&ldap_attribute_name, &raw_values)?;
                 new_user_attributes.push(make_encoded_attribute(
                     attribute_name,
@@ -205,7 +224,7 @@ async fn create_user(
     backend_handler
         .create_user(CreateUserRequest {
             user_id,
-            email: Email::from(mail.or(email).unwrap_or_default()),
+            email: Email::from(email.unwrap_or_default()),
             display_name,
             attributes: new_user_attributes,
         })
