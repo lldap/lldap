@@ -205,6 +205,9 @@ service that seems definitely incompatible with LLDAP.
 - [Does lldap provide commercial support contracts?](docs/faq.md#does-lldap-provide-commercial-support-contracts)
 - [Can I make a donation to fund development?](docs/faq.md#can-i-make-a-donation-to-fund-development)
 - [Is lldap sustainable? Can we depend on it for our infrastructure?](docs/faq.md#is-lldap-sustainable-can-we-depend-on-it-for-our-infrastructure)
+- [Does LLDAP need Internet access?](docs/faq.md#does-lldap-need-internet-access)
+- [Why does my browser make requests to external HTTP services?](docs/faq.md#why-does-my-browser-make-requests-to-external-http-services)
+- [What is LLDAP's privacy policy?](docs/faq.md#what-is-lldaps-privacy-policy)
 
 ## Contributions
 
