@@ -1,0 +1,5 @@
+mutation AddUserObjectClass($name: String!) {
+  addUserObjectClass(name: $name) {
+    ok
+  }
+}
