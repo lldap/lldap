@@ -88,6 +88,15 @@
 ## Alternatively, you can set it to "always" to reset every time the server starts.
 # force_ldap_user_pass_reset = false
 
+## Run schema migrations automatically on startup.
+## Defaults to on for SQLite and off for networked databases (PostgreSQL/MySQL):
+## when several instances share one database, running migrations on startup can
+## race, so migrate out of band with the `create_schema` subcommand instead.
+## Set this to true to migrate on startup anyway (e.g. a single instance on a
+## networked database), or false to always require the explicit step.
+## Env variable: LLDAP_AUTO_MIGRATE
+# auto_migrate = true
+
 ## Database URL.
 ## This encodes the type of database (SQlite, MySQL, or PostgreSQL)
 ## , the path, the user, password, and sometimes the mode (when

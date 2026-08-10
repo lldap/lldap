@@ -169,6 +169,13 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_FORCE_UPDATE_PRIVATE_KEY")]
     pub force_update_private_key: Option<bool>,
 
+    /// Run schema migrations automatically on startup. Defaults to enabled for
+    /// SQLite and disabled for networked databases (PostgreSQL/MySQL), where
+    /// migrations should be run with the `create_schema` subcommand to avoid
+    /// races between multiple instances.
+    #[clap(long, env = "LLDAP_AUTO_MIGRATE")]
+    pub auto_migrate: Option<bool>,
+
     #[clap(flatten)]
     pub smtp_opts: SmtpOpts,
 
