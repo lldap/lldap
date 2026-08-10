@@ -1,4 +1,6 @@
 pub mod add_group_member;
+pub mod add_group_object_class;
+pub mod add_user_object_class;
 pub mod add_user_to_group;
 pub mod app;
 pub mod avatar;
@@ -20,6 +22,8 @@ pub mod group_schema_table;
 pub mod group_table;
 pub mod login;
 pub mod logout;
+pub mod object_class_table;
+pub mod object_classes;
 pub mod remove_user_from_group;
 pub mod reset_password_step1;
 pub mod reset_password_step2;
