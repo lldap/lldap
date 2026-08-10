@@ -1,32 +1,307 @@
-header h2 {
-  font-family: 'Bebas Neue', cursive;
+/* ==========================================================================
+   LLDAP design system
+   All visual values are defined once as design tokens (CSS custom properties)
+   and referenced by name below. Avoid hard-coded colors / sizes in rules;
+   add or reuse a token instead.
+   ========================================================================== */
+
+:root {
+  /* Brand accent */
+  --lldap-accent: #4f46e5;
+  --lldap-accent-hover: #4338ca;
+  --lldap-accent-contrast: #ffffff;
+
+  /* Spacing scale */
+  --lldap-space-xs: 0.25rem;
+  --lldap-space-sm: 0.5rem;
+  --lldap-space-md: 1rem;
+  --lldap-space-lg: 1.5rem;
+  --lldap-space-xl: 2.5rem;
+
+  /* Corner radii */
+  --lldap-radius-sm: 0.375rem;
+  --lldap-radius-md: 0.625rem;
+  --lldap-radius-lg: 1rem;
+  --lldap-radius-pill: 50rem;
+
+  /* Elevation */
+  --lldap-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --lldap-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.10);
+  --lldap-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.14);
+
+  /* Typography */
+  --lldap-font-brand: 'Bebas Neue', system-ui, sans-serif;
+  --lldap-brand-size: 1.75rem;
+  --lldap-brand-letter-spacing: 0.08em;
+
+  /* Layout */
+  --lldap-content-max-width: 72rem;
+  --lldap-footer-height: 5rem;
+
+  /* Motion */
+  --lldap-transition: 0.15s ease-in-out;
+
+  /* Surfaces & text (light theme defaults; overridden for dark below) */
+  --lldap-bg: #f4f5fb;
+  --lldap-surface: #ffffff;
+  --lldap-surface-muted: #f8f9fc;
+  --lldap-border: #e5e7eb;
+  --lldap-text: #1f2937;
+  --lldap-text-muted: #6b7280;
+  --lldap-header-bg: rgba(255, 255, 255, 0.85);
+  --lldap-row-hover: rgba(79, 70, 229, 0.06);
 }
 
-.table>tbody {
-    vertical-align: middle;
+/* Dark theme token overrides. Driven by Bootstrap 5.3 color modes. */
+[data-bs-theme="dark"] {
+  --lldap-accent: #818cf8;
+  --lldap-accent-hover: #a5b4fc;
+  --lldap-accent-contrast: #0b1020;
+
+  --lldap-bg: #0f1420;
+  --lldap-surface: #171d2b;
+  --lldap-surface-muted: #1d2432;
+  --lldap-border: #2a3346;
+  --lldap-text: #e5e7eb;
+  --lldap-text-muted: #9aa4b8;
+  --lldap-header-bg: rgba(23, 29, 43, 0.85);
+  --lldap-row-hover: rgba(129, 140, 248, 0.10);
+
+  --lldap-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --lldap-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --lldap-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
 
-.table>tbody a {
-  font-weight: 700;
-  text-decoration: none;
-}
+/* --------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
 
-html.dark .bg-light {
-  background-color: rgba(59,59,59,1) !important;
-}
-
-html.dark a {
-  color: #e1e1e1
+body {
+  background-color: var(--lldap-bg);
+  color: var(--lldap-text);
+  min-height: 100vh;
 }
 
 a {
-  color: #212529
+  color: var(--lldap-accent);
+  text-decoration: none;
 }
 
-html.dark .nav-link {
-  color: #e1e1e1
+a:hover {
+  color: var(--lldap-accent-hover);
 }
 
-.nav-link {
-  color: #212529
+/* Map Bootstrap's primary onto the brand accent so buttons/links stay on-brand. */
+.btn-primary {
+  --bs-btn-bg: var(--lldap-accent);
+  --bs-btn-border-color: var(--lldap-accent);
+  --bs-btn-hover-bg: var(--lldap-accent-hover);
+  --bs-btn-hover-border-color: var(--lldap-accent-hover);
+  --bs-btn-active-bg: var(--lldap-accent-hover);
+  --bs-btn-active-border-color: var(--lldap-accent-hover);
+  --bs-btn-disabled-bg: var(--lldap-accent);
+  --bs-btn-disabled-border-color: var(--lldap-accent);
+  --bs-btn-color: var(--lldap-accent-contrast);
+  --bs-btn-hover-color: var(--lldap-accent-contrast);
+  --bs-btn-active-color: var(--lldap-accent-contrast);
+  --bs-btn-disabled-color: var(--lldap-accent-contrast);
+}
+
+/* --------------------------------------------------------------------------
+   Header / navigation
+   -------------------------------------------------------------------------- */
+
+.app-header {
+  background-color: var(--lldap-header-bg);
+  backdrop-filter: blur(8px);
+  border-color: var(--lldap-border) !important;
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+}
+
+.app-brand {
+  color: var(--lldap-text);
+  gap: var(--lldap-space-sm);
+}
+
+.app-brand:hover {
+  color: var(--lldap-text);
+}
+
+.app-brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--lldap-radius-md);
+  background-color: var(--lldap-accent);
+  color: var(--lldap-accent-contrast);
+  font-size: 1.25rem;
+}
+
+.app-brand-name {
+  font-family: var(--lldap-font-brand);
+  font-size: var(--lldap-brand-size);
+  letter-spacing: var(--lldap-brand-letter-spacing);
+  line-height: 1;
+}
+
+.app-nav .nav-link {
+  color: var(--lldap-text-muted);
+  border-radius: var(--lldap-radius-pill);
+  padding: var(--lldap-space-xs) var(--lldap-space-md);
+  font-weight: 500;
+  transition: color var(--lldap-transition), background-color var(--lldap-transition);
+}
+
+.app-nav .nav-link:hover,
+.app-nav .nav-link:focus {
+  color: var(--lldap-accent);
+  background-color: var(--lldap-row-hover);
+}
+
+.app-user-menu {
+  color: var(--lldap-text);
+}
+
+.app-user-menu:hover,
+.app-user-menu:focus {
+  color: var(--lldap-accent);
+}
+
+/* --------------------------------------------------------------------------
+   Icon button (e.g. theme toggle)
+   -------------------------------------------------------------------------- */
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--lldap-radius-md);
+  padding: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Content shell
+   -------------------------------------------------------------------------- */
+
+.app-content {
+  max-width: var(--lldap-content-max-width);
+  padding-bottom: var(--lldap-footer-height);
+}
+
+/* Surface wrapper used to group page content into a card-like panel. */
+.app-panel {
+  background-color: var(--lldap-surface);
+  border: 1px solid var(--lldap-border);
+  border-radius: var(--lldap-radius-lg);
+  box-shadow: var(--lldap-shadow-sm);
+  padding: var(--lldap-space-lg);
+}
+
+/* --------------------------------------------------------------------------
+   Tables
+   -------------------------------------------------------------------------- */
+
+.table {
+  --bs-table-bg: transparent;
+  margin-bottom: 0;
+}
+
+.table > thead th {
+  color: var(--lldap-text-muted);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--lldap-border);
+}
+
+.table > tbody {
+  vertical-align: middle;
+}
+
+.table > tbody tr {
+  transition: background-color var(--lldap-transition);
+}
+
+.table > tbody tr:hover {
+  background-color: var(--lldap-row-hover);
+}
+
+.table > tbody a {
+  font-weight: 600;
+  color: var(--lldap-accent);
+}
+
+/* --------------------------------------------------------------------------
+   Cards / forms
+   -------------------------------------------------------------------------- */
+
+.card {
+  border: 1px solid var(--lldap-border);
+  border-radius: var(--lldap-radius-lg);
+  box-shadow: var(--lldap-shadow-sm);
+}
+
+.form-control,
+.form-select {
+  border-radius: var(--lldap-radius-sm);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--lldap-accent);
+  box-shadow: 0 0 0 0.2rem var(--lldap-row-hover);
+}
+
+.input-group-text {
+  border-radius: var(--lldap-radius-sm);
+}
+
+/* --------------------------------------------------------------------------
+   Auth screens (login / password reset)
+   -------------------------------------------------------------------------- */
+
+.auth-card {
+  max-width: 26rem;
+  margin: var(--lldap-space-xl) auto;
+  background-color: var(--lldap-surface);
+  border: 1px solid var(--lldap-border);
+  border-radius: var(--lldap-radius-lg);
+  box-shadow: var(--lldap-shadow-md);
+  padding: var(--lldap-space-xl);
+}
+
+.auth-card .form-title {
+  text-align: center;
+  margin-bottom: var(--lldap-space-lg);
+}
+
+.auth-card .input-group {
+  margin-bottom: var(--lldap-space-md);
+}
+
+/* --------------------------------------------------------------------------
+   Footer
+   -------------------------------------------------------------------------- */
+
+.app-footer {
+  background-color: var(--lldap-surface);
+  border-top: 1px solid var(--lldap-border);
+  color: var(--lldap-text-muted);
+  padding: var(--lldap-space-md) 0;
+}
+
+.app-footer a {
+  color: var(--lldap-text-muted);
+  margin: 0 var(--lldap-space-sm);
+  transition: color var(--lldap-transition);
+}
+
+.app-footer a:hover {
+  color: var(--lldap-accent);
 }

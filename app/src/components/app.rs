@@ -118,18 +118,14 @@ impl Component for App {
         let username = self.user_info.clone().map(|(username, _)| username);
         let password_reset_enabled = self.password_reset_enabled;
         html! {
-          <div>
+          <div class="d-flex flex-column min-vh-100">
             <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
-            <div class="container py-3 bg-kug">
-              <div class="row justify-content-center" style="padding-bottom: 80px;">
-                <main class="py-3">
-                  <Switch<AppRoute>
-                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled))}
-                  />
-                </main>
-              </div>
-              {self.view_footer()}
-            </div>
+            <main class="container app-content flex-grow-1">
+              <Switch<AppRoute>
+                render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled))}
+              />
+            </main>
+            {self.view_footer()}
           </div>
         }
     }
@@ -200,26 +196,35 @@ impl App {
         password_reset_enabled: Option<bool>,
     ) -> Html {
         match switch {
-            AppRoute::Login => html! {
-                <LoginForm on_logged_in={link.callback(Msg::Login)} password_reset_enabled={password_reset_enabled.unwrap_or(false)}/>
-            },
+            AppRoute::Login => {
+                html! {
+                    <LoginForm
+                        on_logged_in={link.callback(Msg::Login)}
+                        password_reset_enabled={password_reset_enabled.unwrap_or(false)}
+                    />
+                }
+            }
             AppRoute::CreateUser => html! {
                 <CreateUserForm/>
             },
             AppRoute::Index | AppRoute::ListUsers => {
-                let user_button = |key| {
-                    html! {
-                      <Link classes="btn btn-primary" key={key} to={AppRoute::CreateUser}>
+                html! {
+                  <div>
+                    <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+                      <h1 class="h3 mb-0">{"Users"}</h1>
+                      <Link classes="btn btn-primary" to={AppRoute::CreateUser}>
                         <i class="bi-person-plus me-2"></i>
                         {"Create a user"}
                       </Link>
-                    }
-                };
-                html! {
-                  <div>
-                    { user_button("top-create-user") }
+                    </div>
                     <UserTable />
-                    { user_button("bottom-create-user") }
+                    <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2 mt-3">
+                      <div></div>
+                      <Link classes="btn btn-primary" to={AppRoute::CreateUser}>
+                        <i class="bi-person-plus me-2"></i>
+                        {"Create a user"}
+                      </Link>
+                    </div>
                   </div>
                 }
             }
@@ -233,19 +238,23 @@ impl App {
                 <CreateGroupAttributeForm/>
             },
             AppRoute::ListGroups => {
-                let group_button = |key| {
-                    html! {
-                      <Link classes="btn btn-primary" key={key} to={AppRoute::CreateGroup}>
+                html! {
+                  <div>
+                    <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+                      <h1 class="h3 mb-0">{"Groups"}</h1>
+                      <Link classes="btn btn-primary" to={AppRoute::CreateGroup}>
                         <i class="bi-plus-circle me-2"></i>
                         {"Create a group"}
                       </Link>
-                    }
-                };
-                html! {
-                  <div>
-                    { group_button("top-create-group") }
+                    </div>
                     <GroupTable />
-                    { group_button("bottom-create-group") }
+                    <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2 mt-3">
+                      <div></div>
+                      <Link classes="btn btn-primary" to={AppRoute::CreateGroup}>
+                        <i class="bi-plus-circle me-2"></i>
+                        {"Create a group"}
+                      </Link>
+                    </div>
                   </div>
                 }
             }
@@ -290,23 +299,23 @@ impl App {
 
     fn view_footer(&self) -> Html {
         html! {
-          <footer class="text-center fixed-bottom text-muted bg-light py-2">
+          <footer class="app-footer text-center mt-4">
             <div>
               <span>{format!("LLDAP version {}", env!("CARGO_PKG_VERSION"))}</span>
             </div>
             <div>
-              <a href="https://github.com/lldap/lldap" class="me-4 text-reset">
+              <a href="https://github.com/lldap/lldap" aria-label="GitHub">
                 <i class="bi-github"></i>
               </a>
-              <a href="https://discord.gg/h5PEdRMNyP" class="me-4 text-reset">
+              <a href="https://discord.gg/h5PEdRMNyP" aria-label="Discord">
                 <i class="bi-discord"></i>
               </a>
-              <a href="https://twitter.com/nitnelave1?ref_src=twsrc%5Etfw" class="me-4 text-reset">
+              <a href="https://twitter.com/nitnelave1?ref_src=twsrc%5Etfw" aria-label="Twitter">
                 <i class="bi-twitter"></i>
               </a>
             </div>
             <div>
-              <span>{"License "}<a href="https://github.com/lldap/lldap/blob/main/LICENSE" class="link-secondary">{"GNU GPL"}</a></span>
+              <span>{"License "}<a href="https://github.com/lldap/lldap/blob/main/LICENSE">{"GNU GPL"}</a></span>
             </div>
           </footer>
         }

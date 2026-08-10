@@ -96,8 +96,8 @@ impl UserTable {
     fn view_users(&self, ctx: &Context<Self>) -> Html {
         let make_table = |users: &Vec<User>| {
             html! {
-                <div class="table-responsive">
-                  <table class="table table-hover">
+                <div class="app-panel table-responsive">
+                  <table class="table table-hover align-middle">
                     <thead>
                       <tr>
                         <th>{"User ID"}</th>
