@@ -522,13 +522,13 @@ jobs:
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v4
       - name: Setup buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
         with:
           driver-opts: network=host
 
       - name: Docker ${{ matrix.container }} Base meta
         id: meta-base
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -536,7 +536,7 @@ jobs:
           tags: ${{ matrix.container }}-base
 
       - name: Build ${{ matrix.container }} Base Docker Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           # On PR will fail, force fully uncomment push: true, or docker image will fail for next steps
@@ -556,7 +556,7 @@ jobs:
 
       - name: Docker ${{ matrix.container }}-rootless meta
         id: meta-rootless
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -589,7 +589,7 @@ jobs:
 
       - name: Docker ${{ matrix.container }} meta
         id: meta-standard
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -623,21 +623,21 @@ jobs:
       # Docker login to nitnelave/lldap and lldap/lldap
       - name: Login to Nitnelave/LLDAP Docker Hub
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: nitnelave
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build ${{ matrix.container }}-rootless Docker Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -651,7 +651,7 @@ jobs:
 
 ### This docker build always the last, due :latest tag pushed multiple times, for whatever variants may added in future add docker build above this
       - name: Build ${{ matrix.container }} Docker Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
