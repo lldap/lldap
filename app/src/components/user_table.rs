@@ -65,9 +65,14 @@ impl UserTable {
     }
 }
 
+#[derive(Properties, PartialEq)]
+pub struct Props {
+    pub mfa_enabled: bool,
+}
+
 impl Component for UserTable {
     type Message = Msg;
-    type Properties = ();
+    type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
         let mut table = UserTable {
@@ -106,6 +111,7 @@ impl UserTable {
                         <th>{"First name"}</th>
                         <th>{"Last name"}</th>
                         <th>{"Creation date"}</th>
+                        { if ctx.props().mfa_enabled { html! { <th>{"MFA"}</th> } } else { html! {} }}
                         <th>{"Delete"}</th>
                       </tr>
                     </thead>
@@ -132,6 +138,15 @@ impl UserTable {
               <td>{&user.first_name}</td>
               <td>{&user.last_name}</td>
               <td>{&user.creation_date.naive_local().date()}</td>
+              { if ctx.props().mfa_enabled {
+                html! {
+                  <td>
+                    { if user.mfa_enrolled.unwrap_or(false) {
+                        html! { <span class="border rounded px-1"><i class="bi-phone"></i></span> }
+                      } else { html! {} }}
+                  </td>
+                }
+              } else { html! {} }}
               <td>
                 <DeleteUser
                   username={user.id.clone()}

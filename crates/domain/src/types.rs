@@ -529,6 +529,9 @@ pub struct Attribute {
     pub value: AttributeValue,
 }
 
+/// Value stored in `mfa_type` when TOTP is enrolled.
+pub const MFA_TYPE_TOTP: &str = "totp";
+
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub user_id: UserId,
@@ -539,6 +542,7 @@ pub struct User {
     pub attributes: Vec<Attribute>,
     pub modified_date: NaiveDateTime,
     pub password_modified_date: NaiveDateTime,
+    pub mfa_type: Option<String>,
 }
 
 #[cfg(feature = "test")]
@@ -554,6 +558,7 @@ impl Default for User {
             attributes: Vec::new(),
             modified_date: epoch,
             password_modified_date: epoch,
+            mfa_type: None,
         }
     }
 }
@@ -666,6 +671,18 @@ pub struct GroupDetails {
 pub struct UserAndGroups {
     pub user: User,
     pub groups: Option<Vec<GroupDetails>>,
+}
+
+// Pending TOTP enrollment: `state` is a server-sealed blob echoed back on finish.
+// Every field carries the secret (the URI embeds the seed), so Debug prints none.
+#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
+pub struct TotpEnrollmentStart {
+    #[debug(skip)]
+    pub otpauth_uri: String,
+    #[debug(skip)]
+    pub secret_base32: String,
+    #[debug(skip)]
+    pub state: String,
 }
 
 #[cfg(test)]

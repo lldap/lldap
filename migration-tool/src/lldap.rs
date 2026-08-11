@@ -155,6 +155,7 @@ fn try_login(
     let req = ClientLoginFinishRequest {
         server_data: login_start_response.server_data,
         credential_finalization: login_finish.message,
+        totp_code: None,
     };
     let response = client
         .post(format!("{}/auth/opaque/login/finish", lldap_server))
@@ -166,8 +167,18 @@ fn try_login(
             response.status().as_str()
         );
     }
-    let json = serde_json::from_str::<lldap_auth::login::ServerLoginResponse>(&response.text()?)
-        .context("Could not parse response")?;
+    // Both bodies are 200 and the MFA one has no token, so name it rather than fail
+    // to parse. It is tried first: its required marker cannot match a token response.
+    let body = response.text()?;
+    if serde_json::from_str::<ServerMfaRequiredResponse>(&body).is_ok_and(|res| res.mfa_required) {
+        bail!(
+            "{} has two-factor authentication enabled, which this tool does not support. \
+             Migrate with an admin that is unenrolled, or in the lldap_mfa_disabled group.",
+            username
+        );
+    }
+    let json =
+        serde_json::from_str::<ServerLoginResponse>(&body).context("Could not parse response")?;
     Ok(json.token)
 }
 

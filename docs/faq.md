@@ -1,6 +1,7 @@
 # Frequently Asked Questions
 
 - [I can't login](#i-cant-log-in)
+- [Login fails after enabling two-factor](#login-fails-after-enabling-two-factor)
 - [Discord Integration](#discord-integration)
 - [Migrating from SQLite](#migrating-from-sqlite)
 - How does LLDAP compare [with OpenLDAP](#how-does-lldap-compare-with-openldap)? [With FreeIPA](#how-does-lldap-compare-with-freeipa)? [With Kanidm](#how-does-lldap-compare-with-kanidm)?
@@ -31,6 +32,16 @@ set isn't working, try the following:
 - Make sure you restart the server.
 - If it's still not working, join the
   [Discord server](https://discord.gg/h5PEdRMNyP) to ask for help.
+
+## Login fails after enabling two-factor
+
+If MFA is enabled and the account is enrolled, the password field must use
+the combined format `yourpassword:123456` (password, a colon, then the
+current 6-digit code). A plain password alone is rejected for enrolled
+users. Service accounts that cannot type a code should not be enrolled —
+put them in the `lldap_mfa_disabled` group instead.
+
+See the [MFA](mfa.md) docs for policies, enrollment, reset, and limitations.
 
 ## Discord Integration
 

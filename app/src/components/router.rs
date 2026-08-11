@@ -14,6 +14,10 @@ pub enum AppRoute {
     ListUsers,
     #[at("/user/:user_id/password")]
     ChangePassword { user_id: String },
+    #[at("/user/:user_id/mfa/reset")]
+    ResetOwnMfa { user_id: String },
+    #[at("/user/:user_id/mfa")]
+    RegisterMfa { user_id: String },
     #[at("/user/:user_id")]
     UserDetails { user_id: String },
     #[at("/groups/create")]
