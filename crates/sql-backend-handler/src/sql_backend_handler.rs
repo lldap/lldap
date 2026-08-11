@@ -85,13 +85,14 @@ pub mod tests {
             &mut rng,
         )
         .unwrap();
-        handler
+        let registered = handler
             .registration_finish(registration::ClientRegistrationFinishRequest {
                 server_data: response.server_data,
                 registration_upload: registration_upload.message,
             })
             .await
             .unwrap();
+        assert_eq!(registered, UserId::new(name));
     }
 
     pub async fn insert_user_no_password(handler: &SqlBackendHandler, name: &str) {
