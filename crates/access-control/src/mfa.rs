@@ -7,6 +7,9 @@ use crate::UserReadableBackendHandler;
 pub const MFA_ENROLLMENT_REQUIRED: &str =
     "MFA enrollment required: enroll through the web interface or contact an administrator";
 
+// The web client repeats the literal; it cannot depend on this crate.
+pub const MFA_DISABLED_GROUP: &str = "lldap_mfa_disabled";
+
 pub struct MfaEnrollmentStatus {
     pub enrolled: bool,
     pub exempt: bool,
@@ -29,7 +32,7 @@ pub async fn mfa_enrollment_status(
         .get_user_groups(user_id)
         .await?
         .iter()
-        .any(|g| g.display_name == "lldap_mfa_disabled".into());
+        .any(|g| g.display_name == MFA_DISABLED_GROUP.into());
     Ok(MfaEnrollmentStatus { enrolled, exempt })
 }
 

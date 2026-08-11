@@ -25,6 +25,17 @@ pub fn field_error_callback<'a>(
     }
 }
 
+pub(crate) fn reject_if_mfa_disabled<Handler: BackendHandler>(
+    context: &Context<Handler>,
+    span: &tracing::Span,
+) -> FieldResult<()> {
+    if context.mfa_policy == MfaPolicy::Disabled {
+        span.in_scope(|| debug!("MFA is disabled by the server configuration"));
+        return Err("MFA is disabled by the server configuration".into());
+    }
+    Ok(())
+}
+
 pub(crate) async fn check_mfa_enrollment<Handler: BackendHandler>(
     context: &Context<Handler>,
     span: &tracing::Span,

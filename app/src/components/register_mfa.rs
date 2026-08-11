@@ -148,6 +148,12 @@ impl CommonComponent<RegisterMfa> for RegisterMfa {
             Msg::EnrollmentStartResponse(res) => match res {
                 Ok(res) => {
                     let start = res.start_mfa_enrollment;
+                    // Not in create(): the gate's code entry would eat the server's TTL.
+                    let link = ctx.link().clone();
+                    self.expiry_timer = Some(Timeout::new(
+                        (TOTP_ENROLLMENT_TTL_SECS * 1000) as u32,
+                        move || link.send_message(Msg::EnrollmentExpired),
+                    ));
                     let qr_svg = qrcode::QrCode::new(start.otpauth_uri.as_bytes())
                         .map_err(|e| anyhow!("Could not render the QR code: {}", e))?
                         .render::<qrcode::render::svg::Color>()
@@ -287,7 +293,6 @@ impl Component for RegisterMfa {
     type Properties = Props;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let link = ctx.link().clone();
         let mut component = RegisterMfa {
             common: CommonComponentParts::<Self>::create(),
             form: Form::<ConfirmationModel>::new(ConfirmationModel::default()),
@@ -296,10 +301,7 @@ impl Component for RegisterMfa {
             phase: Phase::Loading,
             hint: CodeHint::None,
             mfa_exempt: get_cookie("mfa_exempt").ok().flatten().as_deref() == Some("true"),
-            expiry_timer: Some(Timeout::new(
-                (TOTP_ENROLLMENT_TTL_SECS * 1000) as u32,
-                move || link.send_message(Msg::EnrollmentExpired),
-            )),
+            expiry_timer: None,
             node_ref: NodeRef::default(),
             modal: None,
         };

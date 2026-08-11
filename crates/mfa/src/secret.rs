@@ -130,7 +130,7 @@ pub fn open_enrollment(ikm: &[u8], sealed: &str, now_unix: i64) -> Result<Enroll
     if state.kind != STATE_KIND_ENROLLMENT {
         return Err(MfaError::InvalidSealedFormat);
     }
-    if state.expiry_unix < now_unix {
+    if state.expiry_unix <= now_unix {
         return Err(MfaError::EnrollmentExpired);
     }
     Ok(state)
@@ -230,11 +230,12 @@ mod tests {
     fn enrollment_rejects_expired_wrong_key_and_tampered() {
         let seed = generate_seed();
         let sealed = seal_enrollment(IKM, "bob", &seed, false, 1000).unwrap();
-        let expired = 1001 + TOTP_ENROLLMENT_TTL_SECS as i64;
+        let expired = 1000 + TOTP_ENROLLMENT_TTL_SECS as i64;
         assert!(matches!(
             open_enrollment(IKM, &sealed, expired),
             Err(MfaError::EnrollmentExpired)
         ));
+        assert!(open_enrollment(IKM, &sealed, expired - 1).is_ok());
         let bad_ikm = b"ff23456789abcdef0123456789abcdef";
         assert!(open_enrollment(bad_ikm, &sealed, 1000).is_err());
         let mut bytes = sealed.into_bytes();

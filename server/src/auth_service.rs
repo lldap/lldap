@@ -590,10 +590,18 @@ where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
     let reset_user = password_reset_user(&data, &http_request).await;
-    data.get_opaque_handler()
+    let registered_user = data
+        .get_opaque_handler()
         .registration_finish(request.into_inner())
         .await?;
+    // The token names the recovery; the sealed server data names the account actually
+    // written. Clearing the factor of a third user is not a recovery.
     if let Some(user_id) = reset_user {
+        if user_id != registered_user {
+            return Err(TcpError::UnauthorizedError(
+                "Password reset token does not match the registered user".to_string(),
+            ));
+        }
         data.get_mfa_handler().reset_user_mfa(&user_id).await?;
     }
     Ok(HttpResponse::Ok().finish())

@@ -9,6 +9,7 @@ use crate::common::{
     },
 };
 use ldap3::LdapConn;
+use lldap_access_control::MFA_DISABLED_GROUP;
 use lldap_mfa::{TOTP_SEPARATOR, format_code, seed_from_base32, totp_code};
 use reqwest::blocking::{Client, ClientBuilder};
 use serial_test::file_serial;
@@ -170,8 +171,8 @@ fn mfa_enrollment_and_ldap_bind() {
         .groups;
     let exempt_group_id = groups
         .iter()
-        .find(|group| group.display_name == "lldap_mfa_disabled")
-        .expect("lldap_mfa_disabled group was not bootstrapped")
+        .find(|group| group.display_name == MFA_DISABLED_GROUP)
+        .expect("the MFA exemption group was not bootstrapped")
         .id;
     post::<AddUserToGroup>(
         &client,

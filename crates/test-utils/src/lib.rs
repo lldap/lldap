@@ -92,7 +92,7 @@ mockall::mock! {
         async fn registration_finish(
             &self,
             request: registration::ClientRegistrationFinishRequest
-        ) -> Result<()>;
+        ) -> Result<UserId>;
     }
 }
 

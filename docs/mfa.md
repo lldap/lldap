@@ -170,9 +170,9 @@ The parameters are hardcoded to the values below; none of them is configurable.
 
 | Requirement | Source | Status |
 | --- | --- | --- |
-| HMAC-SHA-1, 6 digits, 30 second step | RFC 6238 §4–5 | Met. The RFC's Appendix B vectors are unit tests. |
+| HMAC-SHA-1, 6 digits, 30-second step | RFC 6238 §4–5 | Met. The RFC's Appendix B vectors are unit tests. |
 | Validation window of at most one step either side | RFC 6238 §5.2 | Met: ±1 step, so a code is accepted for 90 seconds. |
-| Throttle failed verification attempts | RFC 4226 §7.3 | Met: 5 attempts per 30 second step, per account. |
+| Throttle failed verification attempts | RFC 4226 §7.3 | Met: 5 attempts per 30-second step, per account. |
 | Resynchronisation for counter drift | RFC 4226 §7.4 | Not applicable to time-based codes; the ±1 step window absorbs clock drift. |
 | Authenticator secrets stored in encrypted form | NIST SP 800-63B §5.1.4.2 | Met: sealed with AEAD under a key HKDF-derived from the server's private key, with a per-enrollment salt and the user UUID as associated data. Never returned on any interface. |
 | Replay resistance | NIST SP 800-63B §5.2.8 | Met: a verified code is refused for the rest of its acceptance window, at every door. |
@@ -183,8 +183,8 @@ The parameters are hardcoded to the values below; none of them is configurable.
 
 ### Known limitations
 
-**No cap on consecutive failures, and no lockout.** The limiter paces guessing (5 per 30
-second step) instead of counting failures toward a ceiling, so it does not meet NIST
+**No cap on consecutive failures, and no lockout.** The limiter paces guessing (5 per
+30-second step) instead of counting failures toward a ceiling, so it does not meet NIST
 SP 800-63B §5.2.2. This is deliberate: locking accounts turns a wrong digit into a denial
 of service, and RFC 4226 §7.3 explicitly offers the delay scheme as an alternative. Note
 that verification is only reachable **after the password is correct**, so an attacker who
@@ -218,6 +218,12 @@ so a caller driving the GraphQL API directly can skip it. Every code check is se
 false` the `password:code` suffix is no longer split, so the whole string is treated as the
 password and the login fails. Enrolled users must go back to a plain password.
 
+**The issuer shown in the authenticator is fixed.** Enrollment URIs always carry
+`issuer=LLDAP`, so someone enrolled with two LLDAP servers sees two entries under the same
+name, told apart only by the account. There is no setting for it — `TOTP_ISSUER` in
+`crates/sql-backend-handler/src/sql_mfa_handler.rs` needs a rebuild, and existing entries
+keep the old label until the user re-enrolls.
+
 **Rotating the server key orphans sealed secrets.** See the deployment checklist below.
 
 ## Deployment checklist
@@ -237,5 +243,8 @@ password and the login fails. Enrolled users must go back to a plain password.
   `mfa_type` set but an undecryptable secret: login demands a code that
   can never verify, and they cannot re-enroll themselves. An
   administrator must `resetUserMfa` for each affected user first.
-- The migration tool does not support MFA logins; run it with an
-  unenrolled or exempt admin.
+- The migration tool does not support MFA logins, and refuses an enrolled
+  account by name rather than failing to parse the response. Run it as an
+  unenrolled admin under `true`. Under `"always"` that is not enough — an
+  unenrolled account receives a token but is gated out of the API the tool
+  needs — so put the account in `lldap_mfa_disabled` first.

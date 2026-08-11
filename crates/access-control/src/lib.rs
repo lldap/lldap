@@ -24,8 +24,8 @@ use tracing::info;
 mod mfa;
 
 pub use mfa::{
-    MFA_ENROLLMENT_REQUIRED, MfaEnrollmentStatus, MfaRequirement, mfa_enrollment_status,
-    mfa_requirement,
+    MFA_DISABLED_GROUP, MFA_ENROLLMENT_REQUIRED, MfaEnrollmentStatus, MfaRequirement,
+    mfa_enrollment_status, mfa_requirement,
 };
 
 #[async_trait]

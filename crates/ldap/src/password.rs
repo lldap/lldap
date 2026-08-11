@@ -246,6 +246,7 @@ pub mod tests {
         LdapResult as LdapResultOp,
     };
     use ldap3_proto::{LdapPartialAttribute, proto::LdapExtendedRequest};
+    use lldap_access_control::MFA_DISABLED_GROUP;
     use lldap_domain::{types::*, uuid};
     use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
@@ -291,9 +292,10 @@ pub mod tests {
                 registration_response: start_response.message,
             })
         });
+        let user_id = UserId::new(user);
         mock.expect_registration_finish()
             .times(1)
-            .return_once(|_| Ok(()));
+            .return_once(move |_| Ok(user_id));
     }
 
     #[tokio::test]
@@ -392,7 +394,7 @@ pub mod tests {
         let mut set = HashSet::new();
         set.insert(GroupDetails {
             group_id: GroupId(7),
-            display_name: "lldap_mfa_disabled".into(),
+            display_name: MFA_DISABLED_GROUP.into(),
             creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
             uuid: uuid!("a1a2a3a4b1b2c1c2d1d2d3d4d5d6d7d8"),
             attributes: Vec::new(),
@@ -653,7 +655,7 @@ pub mod tests {
         });
         mock.expect_registration_finish()
             .times(1)
-            .return_once(|_| Ok(()));
+            .return_once(|_| Ok(UserId::new("bob")));
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
         let request = LdapOp::ModifyRequest(LdapModifyRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
@@ -703,7 +705,7 @@ pub mod tests {
         });
         mock.expect_registration_finish()
             .times(1)
-            .return_once(|_| Ok(()));
+            .return_once(|_| Ok(UserId::new("bob")));
         let mut ldap_handler = setup_bound_password_manager_handler(mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {

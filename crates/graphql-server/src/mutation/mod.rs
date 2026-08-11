@@ -7,7 +7,7 @@ pub use inputs::{
     UpdateGroupInput, UpdateUserInput,
 };
 
-use crate::api::{Context, check_mfa_enrollment, field_error_callback};
+use crate::api::{Context, check_mfa_enrollment, field_error_callback, reject_if_mfa_disabled};
 use anyhow::anyhow;
 use juniper::{FieldError, FieldResult, graphql_object};
 use lldap_access_control::{
@@ -358,16 +358,10 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id);
         });
-        match context.mfa_policy {
-            MfaPolicy::Disabled => {
-                span.in_scope(|| debug!("MFA is disabled by the server configuration"));
-                return Err("MFA is disabled by the server configuration".into());
-            }
-            MfaPolicy::Always => {
-                span.in_scope(|| debug!("MFA is required by the server configuration"));
-                return Err("MFA is required by the server configuration".into());
-            }
-            MfaPolicy::Enrolled => {}
+        reject_if_mfa_disabled(context, &span)?;
+        if context.mfa_policy == MfaPolicy::Always {
+            span.in_scope(|| debug!("MFA is required by the server configuration"));
+            return Err("MFA is required by the server configuration".into());
         }
         context
             .get_mfa_self_handler()
@@ -387,10 +381,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id);
         });
-        if context.mfa_policy == MfaPolicy::Disabled {
-            span.in_scope(|| debug!("MFA is disabled by the server configuration"));
-            return Err("MFA is disabled by the server configuration".into());
-        }
+        reject_if_mfa_disabled(context, &span)?;
         let start = context
             .get_mfa_self_handler()
             .start_totp_enrollment(&user_id, current_code)
@@ -410,10 +401,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id);
         });
-        if context.mfa_policy == MfaPolicy::Disabled {
-            span.in_scope(|| debug!("MFA is disabled by the server configuration"));
-            return Err("MFA is disabled by the server configuration".into());
-        }
+        reject_if_mfa_disabled(context, &span)?;
         context
             .get_mfa_self_handler()
             .finish_totp_enrollment(&user_id, &state, &code)

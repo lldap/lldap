@@ -182,8 +182,8 @@ impl MfaBackendHandler for SqlBackendHandler {
                 ))
             })?;
         let now = chrono::Utc::now().timestamp() as u64;
-        // Gate before verifying, so a spent allowance cannot keep testing codes.
-        if !self.failed_totp_attempts.allowed(user.uuid.as_str(), now) {
+        // Reserve before verifying, so a spent allowance cannot keep testing codes.
+        if !self.failed_totp_attempts.reserve(user.uuid.as_str(), now) {
             return Err(DomainError::AuthenticationError(format!(
                 "{TOTP_TOO_MANY_ATTEMPTS} for {user_id}"
             )));
@@ -191,12 +191,11 @@ impl MfaBackendHandler for SqlBackendHandler {
         if !lldap_mfa::totp_verify(&seed, code, now)
             .map_err(|e| DomainError::InternalError(format!("TOTP verification failed: {e}")))?
         {
-            self.failed_totp_attempts
-                .record_failure(user.uuid.as_str(), now);
             return Err(DomainError::AuthenticationError(format!(
                 "Invalid TOTP code for {user_id}"
             )));
         }
+        self.failed_totp_attempts.refund(user.uuid.as_str(), now);
         self.mark_code_used(user_id, &user.uuid, code)?;
         Ok(())
     }
@@ -469,17 +468,19 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, DomainError::AuthenticationError(_)));
 
-        for _ in 0..TOTP_MAX_ATTEMPTS_PER_STEP {
-            let _ = handler.verify_user_totp(&user_id, &wrong_code(&seed)).await;
-        }
-        // The allowance is keyed per step, so spend the next one too: a step boundary
-        // crossed mid-test would otherwise refill it.
+        // Spend the next step too, or a boundary crossed mid-test refills the allowance.
+        // It goes first: reserving prunes older steps, dropping the wrong codes below.
         let uuid = handler.get_user(&user_id).await.unwrap().uuid;
         let next_step = chrono::Utc::now().timestamp() as u64 + TOTP_STEP_SECS;
         for _ in 0..TOTP_MAX_ATTEMPTS_PER_STEP {
-            handler
-                .failed_totp_attempts
-                .record_failure(uuid.as_str(), next_step);
+            assert!(
+                handler
+                    .failed_totp_attempts
+                    .reserve(uuid.as_str(), next_step)
+            );
+        }
+        for _ in 0..TOTP_MAX_ATTEMPTS_PER_STEP {
+            let _ = handler.verify_user_totp(&user_id, &wrong_code(&seed)).await;
         }
         // A wrong code would report "Invalid TOTP code" if the gate ran after verifying.
         let err = handler
