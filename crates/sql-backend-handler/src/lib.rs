@@ -6,6 +6,6 @@ pub(crate) mod sql_schema_backend_handler;
 pub(crate) mod sql_user_backend_handler;
 
 pub use sql_backend_handler::SqlBackendHandler;
-pub use sql_opaque_handler::register_password;
+pub use sql_opaque_handler::{OpaqueProtocolVersion, register_password};
 pub mod sql_migrations;
 pub mod sql_tables;

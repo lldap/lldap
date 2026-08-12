@@ -5,6 +5,82 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+ - **OPAQUE protocol upgraded from `opaque-ke` 0.7 to 4.0 (RFC 9807).** This is
+   a backward-compatible progressive migration: existing passwords keep working
+   and are automatically upgraded to the new format on the next successful
+   login (LDAP bind, simple HTTP login, or OPAQUE web login). No password reset
+   is required.
+ - As part of the upgrade, the way the server's private key hash is computed
+   in `Configuration::get_private_key_info()` changed: it now hashes the
+   serialized bytes of the private key (`stable_hash(private_key.serialize().as_slice())`)
+   instead of dereferencing the key as `&[u8]`. The old API does not exist on
+   `opaque-ke` 4.0. As a result, the `private_key_hash` stored in the database
+   will not match the one recomputed from the rotated key on first start of
+   the upgraded server; the startup check recognises this specific mismatch
+   and accepts it automatically (see Migration below).
+
+### Migration
+
+**No admin action is needed**: the upgrade happens automatically on the first
+start of the new version, whether the server key comes from a `server_key`
+**file** or from a **`key_seed`**. On startup the server detects that the key
+is still in the `opaque-ke` 0.7 format (by parsing it) and verifies against
+the `private_key_hash` recorded in the database that it is the key from the
+last successful startup. Only then does it switch to a 4.0 key:
+
+ - **Key file:** atomically rotates the on-disk key file to a fresh
+   `opaque-ke` 4.0 key. The previous key is first copied to a `<keyfile>.v07`
+   sidecar, then the file is replaced via a temp file + `rename`. The sidecar
+   lets v0.7 password files keep validating across restarts and is removed
+   automatically once every user has been upgraded. The rotation is only
+   persisted by the actual server startup, after the database check — commands
+   that merely load the configuration (`healthcheck`, `test-email`, …) never
+   touch the key file.
+ - **Key seed:** nothing is written to disk. The old v0.7 key is reconstructed
+   in memory from the same `key_seed` on every startup — no sidecar, no key
+   file.
+ - In both cases the old key bytes are kept in memory (`v07_server_key_bytes`)
+   to validate legacy passwords, and the stored `private_key_hash` is updated
+   to the new format.
+
+As users log in (via LDAP bind, simple login, or OPAQUE web login), their
+passwords are silently re-registered in the v4.0 format. Failed
+re-registrations are logged but do not block the login — the upgrade is
+retried on the next successful login.
+
+The server refuses to start — without touching the key file — if the key
+parses as neither the 4.0 nor the 0.7 format (corruption), or if it is a 0.7
+key that does not match the hash recorded in the database (wrong file
+restored). Silently generating a new key in those cases would unrecoverably
+invalidate every password. `--force-update-private-key` keeps its existing
+meaning as the deliberate opt-in for an *intentional* key change that
+invalidates all passwords; it is not needed for this upgrade.
+
+### Added
+
+ - New `password_version` column on the `users` table (schema migration v12).
+   Value `0` means a legacy `opaque-ke` 0.7 password file, value `1` means
+   the current `opaque-ke` 4.0 format. Existing rows default to `0` and are
+   upgraded to `1` on first successful login.
+ - New v0.7 OPAQUE login HTTP endpoints for backward compatibility:
+   `POST /auth/opaque/v07/login/start` and `POST /auth/opaque/v07/login/finish`.
+   Clients try the v4.0 endpoint first; if the server replies with
+   HTTP `409 {"error_code":"opaque_v07_version"}`, they fall back to the v0.7
+   endpoints and silently re-register the password in v4.0 format on success.
+   Both the WASM web UI and the migration tool implement this fallback.
+ - Startup warning listing the count of users still on a legacy password
+   format.
+ - Admins can see which users still have a legacy password: the user list in
+   the web UI shows a "Password upgrade pending" badge next to affected users
+   and a count of how many remain, backed by a new admin-only
+   `hasLegacyPassword` field on the GraphQL `User` type (`null` for
+   non-admins). This tells admins when it will be safe to upgrade to a future
+   version that drops legacy-password support.
+
 ## [0.6.3] 2026-05-01
 
 Small release, focused on LDAP compatibility, TLS maintenance, dependency upgrades and documentation/examples.

@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 pub mod access_control;
 pub mod opaque;
+pub mod v07;
 
 /// The messages for the 3-step OPAQUE and simple login process.
 pub mod login {
@@ -22,6 +23,8 @@ pub mod login {
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ClientLoginStartRequest {
         pub username: UserId,
+        /// Base64-encoded OPAQUE CredentialRequest bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub login_start_request: opaque::server::login::CredentialRequest,
     }
 
@@ -29,6 +32,8 @@ pub mod login {
     pub struct ServerLoginStartResponse {
         /// Base64, encrypted ServerData to be passed back to the server.
         pub server_data: String,
+        /// Base64-encoded OPAQUE CredentialResponse bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub credential_response: opaque::client::login::CredentialResponse,
     }
 
@@ -36,6 +41,8 @@ pub mod login {
     pub struct ClientLoginFinishRequest {
         /// Encrypted ServerData from the previous step.
         pub server_data: String,
+        /// Base64-encoded OPAQUE CredentialFinalization bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub credential_finalization: opaque::client::login::CredentialFinalization,
     }
 
@@ -75,6 +82,8 @@ pub mod registration {
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ClientRegistrationStartRequest {
         pub username: UserId,
+        /// Base64-encoded OPAQUE RegistrationRequest bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub registration_start_request: opaque::server::registration::RegistrationRequest,
     }
 
@@ -82,6 +91,8 @@ pub mod registration {
     pub struct ServerRegistrationStartResponse {
         /// Base64, encrypted ServerData to be passed back to the server.
         pub server_data: String,
+        /// Base64-encoded OPAQUE RegistrationResponse bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub registration_response: opaque::client::registration::RegistrationResponse,
     }
 
@@ -89,7 +100,43 @@ pub mod registration {
     pub struct ClientRegistrationFinishRequest {
         /// Encrypted ServerData from the previous step.
         pub server_data: String,
+        /// Base64-encoded OPAQUE RegistrationUpload bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub registration_upload: opaque::server::registration::RegistrationUpload,
+    }
+}
+
+/// Base64-encoded OPAQUE login messages.
+/// Used for opaque-ke 0.7 login during progressive migration.
+/// Clients encode their protocol messages as base64 strings instead of
+/// serde JSON, keeping the wire format decoupled from the opaque-ke
+/// Rust types. This avoids forcing other crates to depend on a specific
+/// opaque-ke version.
+pub mod login_base64 {
+    use super::types::UserId;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientLoginStartRequest {
+        pub username: UserId,
+        /// Base64-encoded CredentialRequest bytes.
+        pub login_start_request: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerLoginStartResponse {
+        /// Base64-encoded encrypted ServerData.
+        pub server_data: String,
+        /// Base64-encoded CredentialResponse bytes.
+        pub credential_response: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientLoginFinishRequest {
+        /// Encrypted ServerData from the previous step.
+        pub server_data: String,
+        /// Base64-encoded CredentialFinalization bytes.
+        pub credential_finalization: String,
     }
 }
 

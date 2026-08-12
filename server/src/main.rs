@@ -102,6 +102,22 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
     Ok(())
 }
 
+/// Count users whose password is still in the opaque-ke v0.7 format.
+async fn count_v07_passwords(sql_pool: &DatabaseConnection) -> Result<u64> {
+    use lldap_domain_model::model::users;
+    use lldap_sql_backend_handler::OpaqueProtocolVersion;
+    use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
+    let count = users::Entity::find()
+        .filter(ColumnTrait::eq(
+            &users::Column::PasswordVersion,
+            OpaqueProtocolVersion::V07.db_value(),
+        ))
+        .filter(users::Column::PasswordHash.is_not_null())
+        .count(sql_pool)
+        .await?;
+    Ok(count)
+}
+
 async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnection> {
     let sql_pool = {
         let num_connections = if database_url.db_type() == "sqlite" {
@@ -132,11 +148,9 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
     let sql_pool = setup_sql_tables(&config.database_url).await?;
     let private_key_info = config.get_private_key_info();
     let force_update_private_key = config.force_update_private_key;
+    let stored_key_info = get_private_key_info(&sql_pool).await?;
     match (
-        compare_private_key_hashes(
-            get_private_key_info(&sql_pool).await?.as_ref(),
-            &private_key_info,
-        ),
+        compare_private_key_hashes(stored_key_info.as_ref(), &private_key_info),
         force_update_private_key,
     ) {
         (Ok(false), true) => {
@@ -145,15 +159,80 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
             );
         }
         (Ok(true), _) | (Err(_), true) => {
+            configuration::persist_v07_key_rotation(&config)?;
             set_private_key_info(&sql_pool, private_key_info).await?;
         }
         (Ok(false), false) => {}
         (Err(e), false) => {
-            return Err(anyhow!("The private key encoding the passwords has changed since last successful startup. Changing the private key will invalidate all existing passwords. If you want to proceed, restart the server with the CLI arg --force-update-private-key=true or the env variable LLDAP_FORCE_UPDATE_PRIVATE_KEY=true. You probably also want --force-ldap-user-pass-reset / LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password to the value in the configuration.").context(e));
+            let stored_hash = stored_key_info.as_ref().map(|info| &info.private_key_hash);
+            if stored_hash.is_some() && stored_hash == config.get_v07_private_key_hash().as_ref() {
+                // The key recorded at the last successful startup is exactly
+                // the preserved v0.7 key (from the key file or re-derived from
+                // the key_seed): this is the automatic opaque-ke 0.7 -> 4.0
+                // upgrade, not an accidental key change. Existing passwords
+                // stay valid (checked against the v0.7 key) and are
+                // re-registered under the new key on each user's next login.
+                info!(
+                    "Detected the opaque-ke 0.7 -> 4.0 upgrade: the server key from the \
+                     last startup matches the preserved v0.7 key. Existing passwords are \
+                     kept and will be upgraded automatically on each user's next login."
+                );
+                configuration::persist_v07_key_rotation(&config)
+                    .context("while persisting the new opaque-ke 4.0 server key")?;
+                set_private_key_info(&sql_pool, private_key_info).await?;
+            } else if config.has_pending_key_rotation() {
+                // The key file is a valid opaque-ke 0.7 key, but not the one
+                // this database was last used with. Nothing has been written
+                // to disk at this point.
+                return Err(anyhow!(
+                    "The key file holds a valid opaque-ke 0.7 (pre-upgrade) key, but it does \
+                     not match the key from the last successful startup. This usually means \
+                     the wrong key file was restored. Restore the matching key file, or, to \
+                     proceed anyway and invalidate all existing passwords, restart with \
+                     --force-update-private-key=true (LLDAP_FORCE_UPDATE_PRIVATE_KEY=true), \
+                     probably together with --force-ldap-user-pass-reset / \
+                     LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password."
+                )
+                .context(e));
+            } else {
+                return Err(anyhow!("The private key encoding the passwords has changed since last successful startup. Changing the private key will invalidate all existing passwords. If you want to proceed, restart the server with the CLI arg --force-update-private-key=true or the env variable LLDAP_FORCE_UPDATE_PRIVATE_KEY=true. You probably also want --force-ldap-user-pass-reset / LLDAP_FORCE_LDAP_USER_PASS_RESET=true to reset the admin password to the value in the configuration.").context(e));
+            }
         }
     }
-    let backend_handler =
-        SqlBackendHandler::new(config.get_server_setup().clone(), sql_pool.clone());
+    let backend_handler = SqlBackendHandler::new(
+        config.get_server_setup().clone(),
+        config.get_v07_server_key_bytes().map(|b| b.to_vec()),
+        sql_pool.clone(),
+    );
+
+    // Warn about users still using OPAQUE v0.7 passwords. If all users
+    // have been upgraded, clean up the v0.7 key sidecar file so it doesn't
+    // linger with sensitive key material.
+    match count_v07_passwords(&sql_pool).await {
+        Ok(0) => {
+            configuration::cleanup_v07_key_sidecar(&config);
+        }
+        Ok(v07_count) => {
+            if config.get_v07_server_key_bytes().is_some() {
+                warn!(
+                    "{} user(s) still have OPAQUE v0.7 passwords. \
+                     They will be automatically upgraded to v4.0 on next login.",
+                    v07_count
+                );
+            } else {
+                warn!(
+                    "{} user(s) have OPAQUE v0.7 passwords but no v0.7 \
+                     server key is available. These users will NOT be able to log in \
+                     until they reset their passwords.",
+                    v07_count
+                );
+            }
+        }
+        Err(e) => {
+            warn!("Failed to count OPAQUE v0.7 passwords at startup: {:#}", e);
+        }
+    }
+
     ensure_group_exists(&backend_handler, "lldap_admin").await?;
     ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
     ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;

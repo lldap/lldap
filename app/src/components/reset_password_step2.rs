@@ -32,7 +32,7 @@ pub struct ResetPasswordStep2Form {
     common: CommonComponentParts<Self>,
     form: Form<FormModel>,
     username: Option<String>,
-    opaque_data: Option<opaque_registration::ClientRegistration>,
+    opaque_data: Option<(opaque_registration::ClientRegistration, String)>,
 }
 
 #[derive(Clone, PartialEq, Eq, Properties)]
@@ -74,7 +74,7 @@ impl CommonComponent<ResetPasswordStep2Form> for ResetPasswordStep2Form {
                     username: self.username.as_ref().unwrap().into(),
                     registration_start_request: registration_start_request.message,
                 };
-                self.opaque_data = Some(registration_start_request.state);
+                self.opaque_data = Some((registration_start_request.state, new_password.clone()));
                 self.common.call_backend(
                     ctx,
                     HostService::register_start(req),
@@ -84,11 +84,13 @@ impl CommonComponent<ResetPasswordStep2Form> for ResetPasswordStep2Form {
             }
             Msg::RegistrationStartResponse(res) => {
                 let res = res.context("Could not initiate password change")?;
-                let registration = self.opaque_data.take().expect("Missing registration data");
+                let (registration, password) =
+                    self.opaque_data.take().expect("Missing registration data");
                 let mut rng = rand::rngs::OsRng;
                 let registration_finish = opaque_registration::finish_registration(
                     registration,
                     res.registration_response,
+                    password.as_bytes(),
                     &mut rng,
                 )
                 .context("Error during password change")?;

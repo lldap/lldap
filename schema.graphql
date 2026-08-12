@@ -210,6 +210,14 @@ type User {
   avatar: String
   creationDate: DateTime!
   uuid: String!
+  """
+    Whether the user's password is still stored in the legacy
+    (opaque-ke 0.7) format, i.e. the user hasn't logged in since the
+    OPAQUE protocol upgrade. Only visible to admins (`null` otherwise);
+    it tells them when it is safe to upgrade to a version that drops
+    legacy-password support.
+  """
+  hasLegacyPassword: Boolean
   "User-defined attributes."
   attributes: [AttributeValue!]!
   "The groups to which this user belongs."

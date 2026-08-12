@@ -6,13 +6,21 @@ use lldap_domain_handlers::handler::BackendHandler;
 #[derive(Clone)]
 pub struct SqlBackendHandler {
     pub(crate) opaque_setup: ServerSetup,
+    /// Raw bytes of the v0.7 (opaque-ke 0.7) ServerSetup, if available.
+    /// Used for backward-compatible password validation during progressive migration.
+    pub(crate) v07_server_key_bytes: Option<Vec<u8>>,
     pub(crate) sql_pool: DbConnection,
 }
 
 impl SqlBackendHandler {
-    pub fn new(opaque_setup: ServerSetup, sql_pool: DbConnection) -> Self {
+    pub fn new(
+        opaque_setup: ServerSetup,
+        v07_server_key_bytes: Option<Vec<u8>>,
+        sql_pool: DbConnection,
+    ) -> Self {
         SqlBackendHandler {
             opaque_setup,
+            v07_server_key_bytes,
             sql_pool,
         }
     }
@@ -75,6 +83,7 @@ pub mod tests {
         let registration_upload = opaque::client::registration::finish_registration(
             client_registration_start.state,
             response.registration_response,
+            pass.as_bytes(),
             &mut rng,
         )
         .unwrap();
@@ -146,7 +155,7 @@ pub mod tests {
     impl TestFixture {
         pub async fn new() -> Self {
             let sql_pool = get_initialized_db().await;
-            let handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool);
+            let handler = SqlBackendHandler::new(generate_random_private_key(), None, sql_pool);
             insert_user_no_password(&handler, "bob").await;
             insert_user_no_password(&handler, "patrick").await;
             insert_user_no_password(&handler, "John").await;
@@ -166,7 +175,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_sql_injection() {
         let sql_pool = get_initialized_db().await;
-        let handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool);
+        let handler = SqlBackendHandler::new(generate_random_private_key(), None, sql_pool);
         let user_name = UserId::new(r#"bob"e"i'o;aü"#);
         insert_user_no_password(&handler, user_name.as_str()).await;
         {

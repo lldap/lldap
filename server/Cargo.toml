@@ -31,6 +31,7 @@ figment_file_provider_adapter = "0.1"
 futures = "0"
 futures-util = "0"
 hmac = "0.12"
+base64 = { workspace = true }
 juniper = { workspace = true }
 jwt = { workspace = true }
 ldap3_proto = { workspace = true }

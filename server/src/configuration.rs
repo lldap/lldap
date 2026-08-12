@@ -190,13 +190,40 @@ impl Configuration {
         &self.server_setup.as_ref().unwrap().server_setup
     }
 
+    /// Returns the raw bytes of the v0.7 (opaque-ke 0.7) ServerSetup, if available.
+    /// Used for backward-compatible password validation during progressive migration.
+    pub fn get_v07_server_key_bytes(&self) -> Option<&[u8]> {
+        self.server_setup.as_ref()?.v07_server_key_bytes.as_deref()
+    }
+
+    /// Hash of the preserved v0.7 private key, computed exactly the way
+    /// pre-4.0 servers stored it in the database
+    /// (`stable_hash(&*keypair.private())`). Comparing it against the stored
+    /// hash proves that a detected v0.7 key is the one the server was using
+    /// at its last successful startup, which is what makes the opaque-ke
+    /// 0.7 → 4.0 upgrade safe to perform automatically.
+    pub fn get_v07_private_key_hash(&self) -> Option<PrivateKeyHash> {
+        let setup = lldap_auth::v07::V07ServerSetup::deserialize(self.get_v07_server_key_bytes()?)?;
+        Some(PrivateKeyHash(stable_hash(setup.private_key_bytes())))
+    }
+
+    /// Whether the key file was detected as a v0.7 key whose replacement by
+    /// the new in-memory 4.0 key has not been written to disk yet.
+    pub fn has_pending_key_rotation(&self) -> bool {
+        self.server_setup
+            .as_ref()
+            .is_some_and(|setup| setup.pending_key_rotation)
+    }
+
     pub fn get_server_keys(&self) -> &KeyPair {
         self.get_server_setup().keypair()
     }
 
     pub fn get_private_key_info(&self) -> PrivateKeyInfo {
         PrivateKeyInfo {
-            private_key_hash: PrivateKeyHash(stable_hash(self.get_server_keys().private())),
+            private_key_hash: PrivateKeyHash(stable_hash(
+                self.get_server_keys().private().serialize().as_slice(),
+            )),
             private_key_location: self
                 .server_setup
                 .as_ref()
@@ -283,10 +310,121 @@ fn write_to_readonly_file(path: &std::path::Path, buffer: &[u8]) -> Result<()> {
     Ok(file.write_all(buffer)?)
 }
 
+/// Replace `path` with `new_bytes` atomically.
+///
+/// Writes to a sibling temporary file first (`.{name}.tmp.{pid}`), then
+/// renames it over `path`. The temp file is cleaned up on rename failure
+/// so we never leak a partial file in the data directory.
+fn rotate_key_file_atomically(path: &std::path::Path, new_bytes: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("Key file path `{}` has no file name", path.display()))?;
+    let mut tmp_path = parent.to_path_buf();
+    tmp_path.push(format!(
+        ".{}.tmp.{}",
+        file_name.to_string_lossy(),
+        std::process::id()
+    ));
+
+    write_to_readonly_file(&tmp_path, new_bytes).context(format!(
+        "Could not write new server setup to temporary file `{}`",
+        tmp_path.display()
+    ))?;
+    if let Err(rename_err) = std::fs::rename(&tmp_path, path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(anyhow::anyhow!(rename_err)).context(format!(
+            "Could not atomically replace key file `{}` with new server setup",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+/// Return the path of the v0.7 key sidecar file for a given key file path.
+fn v07_sidecar_path(key_file: &std::path::Path) -> std::path::PathBuf {
+    let mut p = key_file.as_os_str().to_owned();
+    p.push(".v07");
+    std::path::PathBuf::from(p)
+}
+
+/// Persist the pre-rotation key bytes to a sidecar file so they survive
+/// process restarts. The file is created with restrictive permissions
+/// (same as the main key file) because it contains sensitive key material.
+fn save_v07_key_sidecar(key_file: &std::path::Path, v07_bytes: &[u8]) -> Result<()> {
+    let sidecar = v07_sidecar_path(key_file);
+    // Remove any stale sidecar first (write_to_readonly_file asserts !exists).
+    let _ = std::fs::remove_file(&sidecar);
+    write_to_readonly_file(&sidecar, v07_bytes).context(format!(
+        "Could not write v0.7 key sidecar to `{}`",
+        sidecar.display()
+    ))
+}
+
+/// Load the v0.7 key sidecar if it exists. Returns `None` if there is no
+/// sidecar — the caller can still serve, just without v0.7 password support.
+fn load_v07_key_sidecar(key_file: &std::path::Path) -> Option<Vec<u8>> {
+    let sidecar = v07_sidecar_path(key_file);
+    match std::fs::read(&sidecar) {
+        Ok(bytes) => {
+            eprintln!(
+                "Loaded v0.7 server key from `{}` for backward-compatible \
+                 password validation.",
+                sidecar.display()
+            );
+            Some(bytes)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            // Don't silently degrade to "no v0.7 support" on a real IO
+            // error: the startup warning would misdiagnose it as a missing
+            // key when the file is there but unreadable.
+            eprintln!(
+                "WARNING: v0.7 key sidecar `{}` exists but could not be read: {e}. \
+                 Users still on v0.7 passwords will not be able to log in \
+                 until it is readable.",
+                sidecar.display()
+            );
+            None
+        }
+    }
+}
+
+/// Remove the v0.7 key sidecar once all users have been upgraded.
+/// Called from main.rs after confirming `count_v07_passwords() == 0`.
+pub fn cleanup_v07_key_sidecar(config: &Configuration) {
+    let sidecar = v07_sidecar_path(std::path::Path::new(&config.key_file));
+    if sidecar.exists() {
+        match std::fs::remove_file(&sidecar) {
+            Ok(()) => eprintln!(
+                "All users upgraded to opaque-ke 4.0. Removed v0.7 key sidecar `{}`.",
+                sidecar.display()
+            ),
+            Err(e) => eprintln!(
+                "WARNING: Could not remove v0.7 key sidecar `{}`: {}",
+                sidecar.display(),
+                e
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ServerSetupConfig {
     server_setup: ServerSetup,
     private_key_location: PrivateKeyLocation,
+    /// Raw bytes of the v0.7 (opaque-ke 0.7) ServerSetup, if available.
+    /// Preserved when upgrading from an older opaque-ke version.
+    v07_server_key_bytes: Option<Vec<u8>>,
+    /// True when the on-disk key file was detected to be a v0.7 key:
+    /// `server_setup` is a freshly generated 4.0 key that only lives in
+    /// memory until `persist_v07_key_rotation` writes it to disk. The
+    /// write is deferred to server startup, after the database confirmed
+    /// that the v0.7 key matches the one from the last successful startup.
+    pending_key_rotation: bool,
 }
 
 #[derive(derive_more::From)]
@@ -384,19 +522,75 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
             println!("Generating the private key from the key_seed");
         }
         use rand::SeedableRng;
-        let mut rng = rand_chacha::ChaCha20Rng::from_seed(stable_hash(key_seed.as_bytes()));
+        let seed = stable_hash(key_seed.as_bytes());
+        let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
         Ok(ServerSetupConfig {
             server_setup: ServerSetup::new(&mut rng),
             private_key_location: private_key_location.for_key_seed(),
+            // Reconstruct the pre-4.0 v0.7 key from the *same* seed so passwords
+            // registered under opaque-ke 0.7 can still be validated and
+            // progressively upgraded. Unlike the file-based path this writes
+            // nothing to disk and needs no `.v07` sidecar: the v0.7 key is
+            // re-derived from the seed on every startup. (Harmless for fresh
+            // installs — it is only consulted when a stored password is still
+            // in the v0.7 format.)
+            v07_server_key_bytes: Some(lldap_auth::v07::v07_server_setup_bytes_from_seed(seed)),
+            pending_key_rotation: false,
         })
     } else if path.exists() {
         let bytes = read(file_path).context(format!("Could not read key file `{file_path}`"))?;
-        Ok(ServerSetupConfig {
-            server_setup: ServerSetup::deserialize(&bytes).context(format!(
-                "while parsing the contents of the `{file_path}` file"
-            ))?,
-            private_key_location: private_key_location.for_key_file(file_path),
-        })
+        match ServerSetup::deserialize(&bytes) {
+            Ok(server_setup) => {
+                // If a previous rotation left a `<keyfile>.v07` sidecar,
+                // load it so the v0.7 OPAQUE handshake can still validate
+                // users who haven't logged in since the key rotation.
+                let v07_bytes = load_v07_key_sidecar(path);
+                Ok(ServerSetupConfig {
+                    server_setup,
+                    private_key_location: private_key_location.for_key_file(file_path),
+                    v07_server_key_bytes: v07_bytes,
+                    pending_key_rotation: false,
+                })
+            }
+            Err(deserialize_err) => {
+                // The on-disk key file does not parse as the current opaque-ke
+                // version. This could be:
+                //   a) a legitimate version upgrade (opaque-ke 0.7 → 4.0), or
+                //   b) corruption (bit-rot, partial write, wrong file).
+                //
+                // The two cases are told apart by parsing the bytes as an
+                // opaque-ke 0.7 ServerSetup: a corrupted file won't parse as
+                // either version. On a positive v0.7 match, a fresh 4.0 key is
+                // generated in memory but NOT written to disk yet — commands
+                // like `lldap healthcheck` must not rotate the key, and the
+                // rotation should only be persisted once the database confirms
+                // this v0.7 key is the one from the last successful startup
+                // (see `persist_v07_key_rotation`, called from main.rs).
+                if lldap_auth::v07::V07ServerSetup::deserialize(&bytes).is_some() {
+                    println!(
+                        "Key file `{file_path}` holds an opaque-ke 0.7 (pre-upgrade) key. \
+                         It will be migrated to the 4.0 format automatically; existing \
+                         passwords are preserved and upgraded on each user's next login."
+                    );
+                    Ok(ServerSetupConfig {
+                        server_setup: generate_random_private_key(),
+                        private_key_location: private_key_location.for_key_file(file_path),
+                        v07_server_key_bytes: Some(bytes),
+                        pending_key_rotation: true,
+                    })
+                } else {
+                    Err(anyhow::anyhow!(deserialize_err)).context(format!(
+                        "The contents of the key file `{file_path}` are not a valid \
+                         server key (neither the current opaque-ke 4.0 format nor the \
+                         pre-upgrade 0.7 format). The file is likely corrupted or not a \
+                         key file at all; restore it from a backup. Generating a new key \
+                         instead would unrecoverably invalidate every password. If you \
+                         have no backup, delete the file to generate a new key, then \
+                         follow the instructions printed on the next startup."
+                    ))
+                }
+            }
+        }
     } else {
         let server_setup = generate_random_private_key();
         write_to_readonly_file(path, &server_setup.serialize()).context(format!(
@@ -405,8 +599,49 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
         Ok(ServerSetupConfig {
             server_setup,
             private_key_location: private_key_location.for_key_file(file_path),
+            v07_server_key_bytes: None,
+            pending_key_rotation: false,
         })
     }
+}
+
+/// Persist a pending opaque-ke 0.7 → 4.0 key rotation: save the old v0.7 key
+/// to the `<keyfile>.v07` sidecar, then atomically replace the key file with
+/// the new 4.0 key held in memory. No-op if no rotation is pending.
+///
+/// Called from server startup once the database confirmed that the v0.7 key
+/// matches the key from the last successful startup, and always before the
+/// new key's hash is recorded in the database or any password is registered
+/// under it.
+pub fn persist_v07_key_rotation(config: &Configuration) -> Result<()> {
+    let Some(setup) = config.server_setup.as_ref() else {
+        return Ok(());
+    };
+    persist_pending_rotation(&config.key_file, setup)
+}
+
+fn persist_pending_rotation(key_file: &str, setup: &ServerSetupConfig) -> Result<()> {
+    if !setup.pending_key_rotation {
+        return Ok(());
+    }
+    let path = std::path::Path::new(key_file);
+    let v07_bytes = setup
+        .v07_server_key_bytes
+        .as_deref()
+        .expect("a pending key rotation always preserves the v0.7 key bytes");
+    // Persist the old key to the sidecar BEFORE overwriting it. If the
+    // sidecar write fails (disk full, read-only dir, …) we must still have
+    // the original key on disk — otherwise the old key would be destroyed
+    // and unrecoverable, permanently locking out every user who has not yet
+    // logged in.
+    save_v07_key_sidecar(path, v07_bytes)?;
+    rotate_key_file_atomically(path, &setup.server_setup.serialize())?;
+    eprintln!(
+        "Key file `{key_file}` was migrated to the opaque-ke 4.0 format. The previous \
+         key was saved to `{key_file}.v07` so existing passwords keep working; they are \
+         upgraded automatically on each user's next login."
+    );
+    Ok(())
 }
 
 pub trait ConfigOverrider {
@@ -687,32 +922,125 @@ mod tests {
 
     #[test]
     fn check_generated_server_key() {
+        // Verify that seed-based key generation is deterministic: same seed → same key.
+        // (The exact byte representation depends on the opaque-ke version and is not
+        // asserted here, since the upgrade changes the binary format.)
+        let setup1 = get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests)
+            .unwrap()
+            .server_setup;
+        let setup2 = get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests)
+            .unwrap()
+            .server_setup;
         assert_eq!(
-            bincode::serialize(
-                &get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests)
-                    .unwrap()
-                    .server_setup
-            )
-            .unwrap(),
-            [
-                255, 206, 202, 50, 247, 13, 59, 191, 69, 244, 148, 187, 150, 227, 12, 250, 20, 207,
-                211, 151, 147, 33, 107, 132, 2, 252, 121, 94, 97, 6, 97, 232, 163, 168, 86, 246,
-                249, 186, 31, 204, 59, 75, 65, 134, 108, 159, 15, 70, 246, 250, 150, 195, 54, 197,
-                195, 176, 150, 200, 157, 119, 13, 173, 119, 8, 32, 0, 0, 0, 0, 0, 0, 0, 248, 123,
-                35, 91, 194, 51, 52, 57, 191, 210, 68, 227, 107, 166, 232, 37, 195, 244, 100, 84,
-                88, 212, 190, 12, 195, 57, 83, 72, 127, 189, 179, 16, 32, 0, 0, 0, 0, 0, 0, 0, 128,
-                112, 60, 207, 205, 69, 67, 73, 24, 175, 187, 62, 16, 45, 59, 136, 78, 40, 187, 54,
-                159, 94, 116, 33, 133, 119, 231, 43, 199, 164, 141, 7, 32, 0, 0, 0, 0, 0, 0, 0,
-                212, 134, 53, 203, 131, 24, 138, 211, 162, 28, 23, 233, 251, 82, 34, 66, 98, 12,
-                249, 205, 35, 208, 241, 50, 128, 131, 46, 189, 211, 51, 56, 109, 32, 0, 0, 0, 0, 0,
-                0, 0, 84, 20, 147, 25, 50, 5, 243, 203, 216, 180, 175, 121, 159, 96, 123, 183, 146,
-                251, 22, 44, 98, 168, 67, 224, 255, 139, 159, 25, 24, 254, 88, 3
-            ]
+            bincode::serialize(&setup1).unwrap(),
+            bincode::serialize(&setup2).unwrap(),
+            "Seed-based key generation must be deterministic"
         );
     }
 
     fn default_run_opts() -> RunOpts {
         RunOpts::parse_from::<_, std::ffi::OsString>([])
+    }
+
+    /// Valid opaque-ke 0.7 ServerSetup bytes, as a pre-upgrade server would
+    /// have written to its key file.
+    fn v07_key_bytes() -> Vec<u8> {
+        lldap_auth::v07::v07_server_setup_bytes_from_seed([42u8; 32])
+    }
+
+    /// Regression test for the silent-key-rotation issue.
+    ///
+    /// If `get_server_setup` encounters a key file that parses as neither
+    /// opaque-ke 4.0 nor 0.7 (corruption, partial write, wrong file), it MUST
+    /// fail without touching the file: rotating would unrecoverably
+    /// invalidate every password.
+    #[test]
+    fn unparseable_key_file_is_not_silently_rotated() {
+        Jail::expect_with(|jail| {
+            // Drop a deliberately bogus blob in place of a server_key file.
+            std::fs::write(
+                jail.directory().join("server_key"),
+                b"not a real opaque-ke key",
+            )
+            .unwrap();
+            let path_str = jail
+                .directory()
+                .join("server_key")
+                .to_string_lossy()
+                .into_owned();
+            let original_bytes = std::fs::read(jail.directory().join("server_key")).unwrap();
+
+            let err = get_server_setup(&path_str, "", PrivateKeyLocation::Tests)
+                .expect_err("Unparseable key file must not silently rotate");
+            // The error must identify the file as corrupted, not as a version
+            // upgrade.
+            let msg = format!("{:#}", err);
+            assert!(
+                msg.contains("not a valid"),
+                "Error message should call out the corrupted key file. Got: {msg}"
+            );
+
+            // The on-disk file MUST be untouched.
+            let after = std::fs::read(jail.directory().join("server_key")).unwrap();
+            assert_eq!(
+                after, original_bytes,
+                "Key file must not be touched on failure"
+            );
+            Ok(())
+        });
+    }
+
+    /// A key file holding a valid opaque-ke 0.7 key is detected as the
+    /// version upgrade: the v0.7 bytes are preserved in memory, a rotation is
+    /// marked pending, and nothing is written to disk until
+    /// `persist_pending_rotation` runs (from server startup, after the DB
+    /// confirmed the key).
+    #[test]
+    fn v07_key_file_is_detected_without_touching_disk() {
+        Jail::expect_with(|jail| {
+            let original = v07_key_bytes();
+            std::fs::write(jail.directory().join("server_key"), &original).unwrap();
+            let path_str = jail
+                .directory()
+                .join("server_key")
+                .to_string_lossy()
+                .into_owned();
+
+            let setup = get_server_setup(&path_str, "", PrivateKeyLocation::Tests)
+                .expect("A valid v0.7 key file must be accepted");
+
+            assert!(setup.pending_key_rotation, "rotation should be pending");
+            assert_eq!(
+                setup.v07_server_key_bytes.as_deref(),
+                Some(original.as_slice()),
+                "v0.7 bytes should be preserved for progressive migration"
+            );
+
+            // Config loading alone (healthcheck, test-email, …) must not
+            // modify the key file or write a sidecar.
+            let after = std::fs::read(jail.directory().join("server_key")).unwrap();
+            assert_eq!(after, original, "Key file must be untouched at load time");
+            assert!(
+                !jail.directory().join("server_key.v07").exists(),
+                "No sidecar should be written at load time"
+            );
+
+            // Persisting the rotation replaces the file with the new 4.0 key
+            // and saves the old key to the sidecar.
+            persist_pending_rotation(&path_str, &setup).expect("persisting should succeed");
+            let after = std::fs::read(jail.directory().join("server_key")).unwrap();
+            assert_ne!(after, original, "Key file should have been rotated");
+            assert!(
+                ServerSetup::deserialize(&after).is_ok(),
+                "New on-disk key must be a valid opaque-ke 4.0 ServerSetup"
+            );
+            assert_eq!(
+                std::fs::read(jail.directory().join("server_key.v07")).unwrap(),
+                original,
+                "Sidecar must hold the original v0.7 key"
+            );
+            Ok(())
+        });
     }
 
     fn write_random_key(jail: &Jail, file: &str) {
@@ -872,6 +1200,90 @@ mod tests {
                 error_message.contains("but it used to come from default key file",),
                 "{error_message}"
             );
+            Ok(())
+        });
+    }
+
+    /// After a persisted rotation, the `<keyfile>.v07` sidecar must be
+    /// reloaded on the next startup (when the key file already parses) so the
+    /// v0.7 OPAQUE handshake keeps working for users who have not logged in
+    /// since the rotation.
+    #[test]
+    fn persisted_rotation_writes_sidecar_and_reloads_it() {
+        Jail::expect_with(|jail| {
+            let original = v07_key_bytes();
+            let key_path = jail.directory().join("server_key");
+            std::fs::write(&key_path, &original).unwrap();
+            let path_str = key_path.to_string_lossy().into_owned();
+
+            // First load detects the v0.7 key; persisting rotates the file
+            // and writes the sidecar.
+            let setup = get_server_setup(&path_str, "", PrivateKeyLocation::Tests)
+                .expect("A valid v0.7 key file must be accepted");
+            persist_pending_rotation(&path_str, &setup).expect("persisting should succeed");
+
+            // The sidecar sits next to the key file and holds the old bytes.
+            let sidecar = jail.directory().join("server_key.v07");
+            assert!(sidecar.exists(), "rotation must write the v0.7 sidecar");
+            assert_eq!(std::fs::read(&sidecar).unwrap(), original);
+
+            // Second load (the key file now parses as 4.0): the sidecar is
+            // reloaded so v0.7 bytes remain available, no rotation pending.
+            let reloaded = get_server_setup(&path_str, "", PrivateKeyLocation::Tests)
+                .expect("Reload with a valid key file should succeed");
+            assert!(!reloaded.pending_key_rotation);
+            assert_eq!(
+                reloaded.v07_server_key_bytes.as_deref(),
+                Some(original.as_slice()),
+                "v0.7 sidecar must be reloaded on subsequent startups"
+            );
+            Ok(())
+        });
+    }
+
+    /// `get_v07_server_key_bytes` / `get_v07_private_key_hash` expose the
+    /// preserved key through the full `Configuration`, and
+    /// `cleanup_v07_key_sidecar` removes the sidecar once migration is
+    /// complete (and is a no-op if called again).
+    #[test]
+    fn v07_accessors_and_sidecar_cleanup() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
+            jail.create_file("lldap_config.toml", r#"key_file = "server_key""#)?;
+            // Plant a valid v0.7 key so init() detects the upgrade.
+            let original = v07_key_bytes();
+            std::fs::write(jail.directory().join("server_key"), &original).unwrap();
+
+            let config = init(default_run_opts()).unwrap();
+
+            // The accessors surface the preserved v0.7 key and its hash in
+            // the pre-4.0 database format.
+            assert!(config.has_pending_key_rotation());
+            assert_eq!(
+                config.get_v07_server_key_bytes(),
+                Some(original.as_slice()),
+                "accessor should expose the preserved v0.7 key bytes"
+            );
+            let v07_setup = lldap_auth::v07::V07ServerSetup::deserialize(&original).unwrap();
+            assert_eq!(
+                config.get_v07_private_key_hash(),
+                Some(PrivateKeyHash(stable_hash(v07_setup.private_key_bytes()))),
+                "the v0.7 key hash must match the pre-4.0 hash format"
+            );
+
+            // Persist the rotation (as server startup does), then clean up
+            // the sidecar (simulating "all users upgraded").
+            persist_v07_key_rotation(&config).unwrap();
+            let sidecar = jail.directory().join("server_key.v07");
+            assert!(sidecar.exists(), "persisting should write the sidecar");
+
+            cleanup_v07_key_sidecar(&config);
+            assert!(!sidecar.exists(), "cleanup must remove the sidecar");
+
+            // Calling cleanup again with the sidecar already gone is a no-op.
+            cleanup_v07_key_sidecar(&config);
+            assert!(!sidecar.exists());
             Ok(())
         });
     }
