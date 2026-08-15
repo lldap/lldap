@@ -42,9 +42,15 @@ pub struct LLDAPFixture {
 const MAX_HEALTHCHECK_ATTEMPS: u8 = 10;
 
 impl LLDAPFixture {
+    #[allow(dead_code)] // The shared fixture is compiled separately for each integration test binary.
     pub fn new() -> Self {
+        Self::new_with_server_args(&[])
+    }
+
+    pub fn new_with_server_args(server_args: &[&str]) -> Self {
         let child = create_lldap_command("run")
             .arg("--verbose")
+            .args(server_args)
             .spawn()
             .expect("Unable to start server");
         let mut started = false;
@@ -73,6 +79,16 @@ impl LLDAPFixture {
             users: HashSet::new(),
             groups: HashMap::new(),
         }
+    }
+
+    #[allow(dead_code)] // The shared fixture is compiled separately for each integration test binary.
+    pub fn client(&self) -> &Client {
+        &self.client
+    }
+
+    #[allow(dead_code)] // The shared fixture is compiled separately for each integration test binary.
+    pub fn token(&self) -> &str {
+        &self.token
     }
 
     pub fn load_state(&mut self, state: &Vec<User>) {
