@@ -3,10 +3,11 @@ use crate::{
     tcp_server::{AppState, TcpError, TcpResult, error_to_http_response},
 };
 use actix_web::{
-    HttpRequest, HttpResponse,
+    FromRequest, HttpRequest, HttpResponse,
     cookie::{Cookie, SameSite},
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
     error::{ErrorBadRequest, ErrorUnauthorized},
+    http::header::HeaderValue,
     web,
 };
 use actix_web_httpauth::extractors::bearer::BearerAuth;
@@ -30,6 +31,7 @@ use sha2::Sha512;
 use std::{
     collections::HashSet,
     hash::Hash,
+    net::IpAddr,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -105,8 +107,25 @@ async fn get_refresh<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + 'static,
 {
+    if data.trusted_header_options.enabled
+        && let Some(header_value) = request
+            .headers()
+            .get(&data.trusted_header_options.header_name)
+    {
+        return get_trusted_header_refresh_response(&data, &request, header_value).await;
+    }
+    try_refresh_token(&data, &request).await
+}
+
+async fn try_refresh_token<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + 'static,
+{
     let jwt_key = &data.jwt_key;
-    let (refresh_token_hash, user) = get_refresh_token(request)?;
+    let (refresh_token_hash, user) = get_refresh_token(request.clone())?;
     let found = data
         .get_tcp_handler()
         .check_token(refresh_token_hash, &user)
@@ -131,10 +150,85 @@ where
                 .same_site(SameSite::Strict)
                 .finish(),
         )
-        .json(&login::ServerLoginResponse {
-            token: token.as_str().to_owned(),
-            refresh_token: None,
-        }))
+        .json(login::ServerAuthResponse::Token(
+            login::ServerLoginResponse {
+                token: token.as_str().to_owned(),
+                refresh_token: None,
+            },
+        )))
+}
+
+async fn validate_trusted_header<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+    header_value: &HeaderValue,
+) -> TcpResult<(UserId, HashSet<GroupDetails>)>
+where
+    Backend: BackendHandler,
+{
+    // Validate client IP is in trusted CIDRs
+    let client_ip = request
+        .peer_addr()
+        .map(|peer_addr| peer_addr.ip())
+        .ok_or_else(|| TcpError::UnauthorizedError("Could not determine client IP".to_string()))?;
+
+    validate_trusted_proxy(client_ip, &data.trusted_header_options.trusted_proxies)?;
+
+    // Get the username from the trusted header value selected by the caller.
+    let header_name = &data.trusted_header_options.header_name;
+    let username = header_value.to_str().map_err(|_| {
+        TcpError::UnauthorizedError(format!(
+            "Trusted header `{}` is not valid UTF-8",
+            header_name
+        ))
+    })?;
+
+    // Validate the username is not empty
+    if username.trim().is_empty() {
+        return Err(TcpError::UnauthorizedError(
+            "Empty username in trusted header".to_string(),
+        ));
+    }
+
+    let user_id = UserId::new(username);
+    let groups = data
+        .get_readonly_handler()
+        .get_user_groups(&user_id)
+        .await?;
+
+    Ok((user_id, groups))
+}
+
+fn validate_trusted_proxy(client_ip: IpAddr, trusted_proxies: &[ipnet::IpNet]) -> TcpResult<()> {
+    if trusted_proxies.iter().any(|cidr| cidr.contains(&client_ip)) {
+        return Ok(());
+    }
+
+    Err(TcpError::UnauthorizedError(format!(
+        "Request arrived from untrusted client IP {client_ip}. When trusted header authentication is enabled, LLDAP must only be reachable through a trusted proxy. Configure the proxy's address or network in `trusted_proxies` and prevent direct client access to LLDAP"
+    )))
+}
+
+async fn get_trusted_header_refresh_response<Backend>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+    header_value: &HeaderValue,
+) -> TcpResult<HttpResponse>
+where
+    Backend: BackendHandler,
+{
+    let (user_id, groups) = validate_trusted_header(data, request, header_value).await?;
+    let is_admin = groups
+        .iter()
+        .any(|g| g.display_name == "lldap_admin".into());
+
+    Ok(gen_clear_session_cookies_response(&data.server_url).json(
+        login::ServerAuthResponse::TrustedHeader(login::ServerTrustedHeaderResponse {
+            user_id: user_id.to_string(),
+            is_admin,
+            logout_url: data.trusted_header_options.logout_url.clone(),
+        }),
+    ))
 }
 
 async fn get_refresh_handler<Backend>(
@@ -296,28 +390,7 @@ where
     for jwt_hash in new_blacklisted_jwt_hashes {
         jwt_blacklist.insert(jwt_hash);
     }
-    let mut path = data.server_url.path().to_string();
-    if !path.ends_with('/') {
-        path.push('/');
-    };
-    Ok(HttpResponse::Ok()
-        .cookie(
-            Cookie::build("token", "")
-                .max_age(0.days())
-                .path(&path)
-                .http_only(true)
-                .same_site(SameSite::Strict)
-                .finish(),
-        )
-        .cookie(
-            Cookie::build("refresh_token", "")
-                .max_age(0.days())
-                .path(format!("{path}auth"))
-                .http_only(true)
-                .same_site(SameSite::Strict)
-                .finish(),
-        )
-        .finish())
+    Ok(gen_clear_session_cookies_response(&data.server_url).finish())
 }
 
 async fn get_logout_handler<Backend>(
@@ -464,11 +537,9 @@ where
 {
     use actix_web::FromRequest;
     let inner_payload = &mut payload.into_inner();
-    let validation_result = BearerAuth::from_request(&request, inner_payload)
+    let validation_result = get_validation_results(&data, &request, inner_payload)
         .await
-        .ok()
-        .and_then(|bearer| check_if_token_is_valid(&data, bearer.token()).ok())
-        .ok_or_else(|| {
+        .map_err(|_| {
             TcpError::UnauthorizedError("Not authorized to change the user's password".to_string())
         })?;
     let registration_start_request =
@@ -594,6 +665,24 @@ where
 }
 
 #[instrument(skip_all, level = "debug", err, ret)]
+pub(crate) async fn get_validation_results<Backend: BackendHandler>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+    payload: &mut actix_http::Payload,
+) -> Result<ValidationResults, actix_web::Error> {
+    if data.trusted_header_options.enabled
+        && let Some(header_value) = request
+            .headers()
+            .get(&data.trusted_header_options.header_name)
+    {
+        return check_if_trusted_header_is_valid(data, request, header_value).await;
+    }
+    BearerAuth::from_request(request, payload)
+        .await
+        .map(|bearer| check_if_token_is_valid(data.get_ref(), bearer.token()))?
+}
+
+#[instrument(skip_all, level = "debug", err, ret)]
 pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
     state: &AppState<Backend>,
     token_str: &str,
@@ -621,6 +710,50 @@ pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
             .iter()
             .map(|s| GroupName::from(s.as_str())),
     ))
+}
+
+#[instrument(skip_all, level = "debug", err, ret)]
+pub(crate) async fn check_if_trusted_header_is_valid<Backend: BackendHandler>(
+    data: &web::Data<AppState<Backend>>,
+    request: &HttpRequest,
+    header_value: &HeaderValue,
+) -> Result<ValidationResults, actix_web::Error> {
+    let (user_id, groups) = validate_trusted_header(data, request, header_value)
+        .await
+        .map_err(actix_web::Error::from)?;
+
+    Ok(data.backend_handler.get_permissions_from_groups(
+        user_id,
+        groups
+            .iter()
+            .map(|g| GroupName::from(g.display_name.as_str())),
+    ))
+}
+
+fn gen_clear_session_cookies_response(server_url: &url::Url) -> actix_web::HttpResponseBuilder {
+    let mut path = server_url.path().to_string();
+    if !path.ends_with('/') {
+        path.push('/');
+    };
+    let mut builder = HttpResponse::Ok();
+    builder
+        .cookie(
+            Cookie::build("token", "")
+                .max_age(0.days())
+                .path(&path)
+                .http_only(true)
+                .same_site(SameSite::Strict)
+                .finish(),
+        )
+        .cookie(
+            Cookie::build("refresh_token", "")
+                .max_age(0.days())
+                .path(format!("{path}auth"))
+                .http_only(true)
+                .same_site(SameSite::Strict)
+                .finish(),
+        );
+    builder
 }
 
 pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig, enable_password_reset: bool)
@@ -661,6 +794,116 @@ where
     } else {
         cfg.service(
             web::resource("/reset/step1/{user_id}").route(web::post().to(HttpResponse::NotFound)),
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::configuration::{MailOptions, TrustedHeaderOptions};
+    use actix_web::{http::StatusCode, test as actix_test};
+    use lldap_access_control::AccessControlledBackendHandler;
+    use lldap_auth::opaque::server::generate_random_private_key;
+    use lldap_domain::requests::CreateUserRequest;
+    use lldap_domain_handlers::handler::UserBackendHandler;
+    use lldap_sql_backend_handler::{SqlBackendHandler, sql_tables::init_table};
+    use sea_orm::{ConnectOptions, Database};
+    use std::{path::PathBuf, sync::RwLock};
+
+    const HEADER_USER: &str = "header-user";
+
+    struct AuthTestFixture {
+        data: web::Data<AppState<SqlBackendHandler>>,
+    }
+
+    impl AuthTestFixture {
+        async fn new() -> Self {
+            let mut connect_options = ConnectOptions::new("sqlite::memory:");
+            connect_options.max_connections(1);
+            let pool = Database::connect(connect_options).await.unwrap();
+            init_table(&pool).await.unwrap();
+
+            let backend = SqlBackendHandler::new(generate_random_private_key(), pool);
+            backend
+                .create_user(CreateUserRequest {
+                    user_id: UserId::new(HEADER_USER),
+                    email: format!("{HEADER_USER}@example.com").into(),
+                    display_name: None,
+                    attributes: Vec::new(),
+                })
+                .await
+                .unwrap();
+
+            let trusted_header_options = TrustedHeaderOptions {
+                enabled: true,
+                header_name: "Remote-User".to_owned(),
+                logout_url: None,
+                trusted_proxies: vec!["127.0.0.0/8".parse().unwrap()],
+            };
+            let data = web::Data::new(AppState {
+                backend_handler: AccessControlledBackendHandler::new(backend),
+                jwt_key: hmac::Mac::new_from_slice(b"test-jwt-secret").unwrap(),
+                jwt_blacklist: RwLock::new(HashSet::new()),
+                server_url: "http://localhost/".parse().unwrap(),
+                assets_path: PathBuf::new(),
+                mail_options: MailOptions::default(),
+                trusted_header_options,
+            });
+            Self { data }
+        }
+    }
+
+    fn trusted_header_request() -> (HttpRequest, actix_http::Payload) {
+        actix_test::TestRequest::default()
+            .peer_addr("127.0.0.1:12345".parse().unwrap())
+            .insert_header(("Remote-User", HEADER_USER))
+            .to_http_parts()
+    }
+
+    #[test]
+    fn untrusted_proxy_error_explains_how_to_fix_the_configuration() {
+        let client_ip = "192.0.2.10".parse().unwrap();
+        let trusted_proxies = ["127.0.0.0/8".parse().unwrap()];
+
+        let error = validate_trusted_proxy(client_ip, &trusted_proxies).unwrap_err();
+        let message = error.to_string();
+
+        assert!(matches!(error, TcpError::UnauthorizedError(_)));
+        assert!(message.contains("untrusted client IP 192.0.2.10"));
+        assert!(message.contains("trusted_proxies"));
+        assert!(message.contains("prevent direct client access"));
+    }
+
+    #[test]
+    fn trusted_proxy_is_accepted() {
+        let client_ip = "192.0.2.10".parse().unwrap();
+        let trusted_proxies = ["192.0.2.0/24".parse().unwrap()];
+
+        assert!(validate_trusted_proxy(client_ip, &trusted_proxies).is_ok());
+    }
+
+    #[actix_web::test]
+    async fn trusted_header_backend_failure_remains_500() {
+        let fixture = AuthTestFixture::new().await;
+        fixture
+            .data
+            .backend_handler
+            .unsafe_get_handler()
+            .pool()
+            .clone()
+            .close()
+            .await
+            .unwrap();
+        let (request, mut payload) = trusted_header_request();
+
+        let error = get_validation_results(&fixture.data, &request, &mut payload)
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.as_response_error().status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR
         );
     }
 }
