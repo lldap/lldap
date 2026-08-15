@@ -31,7 +31,7 @@ figment_file_provider_adapter = "0.1"
 futures = "0"
 futures-util = "0"
 hmac = "0.12"
-http = "*"
+http = "1"
 ipnet = { version = "2.5", features = ["serde"] }
 juniper = { workspace = true }
 jwt = { workspace = true }
