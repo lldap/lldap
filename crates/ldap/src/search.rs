@@ -28,6 +28,9 @@ enum SearchScope {
     Group(LdapFilter),
     UserOuOnly,
     GroupOuOnly,
+    // The base object is a leaf (a user or a group) and the requested scope only covers its
+    // children, of which it has none.
+    LeafChildren,
     Unknown,
     Invalid,
 }
@@ -36,6 +39,15 @@ enum InternalSearchResults {
     UsersAndGroups(Vec<UserAndGroups>, Vec<Group>),
     Raw(Vec<LdapOp>),
     Empty,
+}
+
+// Whether the scope covers only the entries below the base object, excluding the base object
+// itself. RFC 4511 4.5.1.2 for singleLevel, RFC 3673 for the subordinate subtree.
+fn scope_excludes_base_object(ldap_scope: &LdapSearchScope) -> bool {
+    matches!(
+        ldap_scope,
+        LdapSearchScope::OneLevel | LdapSearchScope::Children
+    )
 }
 
 fn get_search_scope(
@@ -67,17 +79,25 @@ fn get_search_scope(
     } else if dn_parts.len() == base_dn_len + 2
         && dn_parts[1] == ("ou".to_string(), "people".to_string())
     {
-        SearchScope::User(LdapFilter::Equality(
-            dn_parts[0].0.clone(),
-            dn_parts[0].1.clone(),
-        ))
+        if scope_excludes_base_object(ldap_scope) {
+            SearchScope::LeafChildren
+        } else {
+            SearchScope::User(LdapFilter::Equality(
+                dn_parts[0].0.clone(),
+                dn_parts[0].1.clone(),
+            ))
+        }
     } else if dn_parts.len() == base_dn_len + 2
         && dn_parts[1] == ("ou".to_string(), "groups".to_string())
     {
-        SearchScope::Group(LdapFilter::Equality(
-            dn_parts[0].0.clone(),
-            dn_parts[0].1.clone(),
-        ))
+        if scope_excludes_base_object(ldap_scope) {
+            SearchScope::LeafChildren
+        } else {
+            SearchScope::Group(LdapFilter::Equality(
+                dn_parts[0].0.clone(),
+                dn_parts[0].1.clone(),
+            ))
+        }
     } else {
         SearchScope::Unknown
     }
@@ -378,6 +398,7 @@ async fn do_search_internal(
                 }],
             })])
         }
+        SearchScope::LeafChildren => InternalSearchResults::Empty,
         SearchScope::Unknown => {
             warn!(
                 r#"The requested search tree "{}" matches neither the user subtree "ou=people,{}" nor the group subtree "ou=groups,{}""#,
@@ -1498,6 +1519,88 @@ mod tests {
                 message: "".to_string(),
             })
         );
+    }
+
+    #[tokio::test]
+    async fn test_search_one_level_scope_under_user_is_empty() {
+        // A user is a leaf: it has no children, so a singleLevel search based on it must not
+        // return the user itself. The mock has no expectations, so this also checks that we
+        // don't hit the backend at all.
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let request = LdapSearchRequest {
+            scope: LdapSearchScope::OneLevel,
+            ..make_search_request(
+                "uid=bob,ou=people,dc=example,dc=com",
+                LdapFilter::And(vec![]),
+                vec!["objectClass".to_string()],
+            )
+        };
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_one_level_scope_under_group_is_empty() {
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let request = LdapSearchRequest {
+            scope: LdapSearchScope::OneLevel,
+            ..make_search_request(
+                "cn=group_1,ou=groups,dc=example,dc=com",
+                LdapFilter::And(vec![]),
+                vec!["objectClass".to_string()],
+            )
+        };
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_children_scope_under_user_is_empty() {
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let request = LdapSearchRequest {
+            scope: LdapSearchScope::Children,
+            ..make_search_request(
+                "uid=bob,ou=people,dc=example,dc=com",
+                LdapFilter::And(vec![]),
+                vec!["objectClass".to_string()],
+            )
+        };
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_subtree_scope_on_user_returns_the_user() {
+        // The subtree scope includes the base object, so this one must keep working.
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users().returning(|_, _| {
+            Ok(vec![UserAndGroups {
+                user: User {
+                    user_id: UserId::new("bob"),
+                    ..Default::default()
+                },
+                groups: None,
+            }])
+        });
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = LdapSearchRequest {
+            scope: LdapSearchScope::Subtree,
+            ..make_search_request(
+                "uid=bob,ou=people,dc=example,dc=com",
+                LdapFilter::And(vec![]),
+                vec!["objectClass".to_string()],
+            )
+        };
+        let results = ldap_handler.do_search_or_dse(&request).await.unwrap();
+        assert_eq!(results.len(), 2);
+        assert!(matches!(results[0], LdapOp::SearchResultEntry(_)));
+        assert!(matches!(results[1], LdapOp::SearchResultDone(_)));
     }
 
     #[tokio::test]
