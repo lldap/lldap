@@ -1524,8 +1524,8 @@ mod tests {
     #[tokio::test]
     async fn test_search_one_level_scope_under_user_is_empty() {
         // A user is a leaf: it has no children, so a singleLevel search based on it must not
-        // return the user itself. The mock has no expectations, so this also checks that we
-        // don't hit the backend at all.
+        // return the user itself. No list expectation is set on the mock, so this also checks
+        // that we never reach a list operation.
         let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
         let request = LdapSearchRequest {
             scope: LdapSearchScope::OneLevel,
@@ -1565,6 +1565,23 @@ mod tests {
             scope: LdapSearchScope::Children,
             ..make_search_request(
                 "uid=bob,ou=people,dc=example,dc=com",
+                LdapFilter::And(vec![]),
+                vec!["objectClass".to_string()],
+            )
+        };
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_children_scope_under_group_is_empty() {
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let request = LdapSearchRequest {
+            scope: LdapSearchScope::Children,
+            ..make_search_request(
+                "cn=group_1,ou=groups,dc=example,dc=com",
                 LdapFilter::And(vec![]),
                 vec!["objectClass".to_string()],
             )
