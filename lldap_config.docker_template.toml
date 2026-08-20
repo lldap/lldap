@@ -174,3 +174,9 @@ key_seed = "RanD0m STR1ng"
 ## If "ldap_host" is set to a specific IP address, this must be set to match if the built-in
 ## healthcheck command is used.
 #ldap_host = "localhost"
+
+## Advanced options.
+#[advanced]
+## The number of threads that handle the HTTP, LDAP and LDAPS connections.
+## Each thread runs a single-threaded async runtime.
+#connection_handler_threads = 1
