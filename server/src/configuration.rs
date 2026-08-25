@@ -149,6 +149,8 @@ pub struct Configuration {
     pub ldaps_options: LdapsOptions,
     #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
     pub http_url: HttpUrl,
+    #[builder(default = r#"String::from("token")"#)]
+    pub token_cookie_name: String,
     #[debug(skip)]
     #[serde(skip)]
     #[builder(field(private), default = "None")]
@@ -449,6 +451,10 @@ impl ConfigOverrider for RunOpts {
             .as_ref()
             .inspect(|&url| config.http_url = HttpUrl(url.clone()));
 
+        self.token_cookie_name
+            .as_ref()
+            .inspect(|name| config.token_cookie_name = name.to_string());
+
         self.database_url
             .as_ref()
             .inspect(|&database_url| config.database_url = database_url.clone());
@@ -713,6 +719,43 @@ mod tests {
 
     fn default_run_opts() -> RunOpts {
         RunOpts::parse_from::<_, std::ffi::OsString>([])
+    }
+
+    #[test]
+    fn token_cookie_name_defaults_to_token() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
+            jail.create_file("lldap_config.toml", "")?;
+            let config = init(default_run_opts()).unwrap();
+            assert_eq!(config.token_cookie_name, "token");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn token_cookie_name_from_env() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
+            jail.set_env("LLDAP_TOKEN_COOKIE_NAME", "lldap_token");
+            jail.create_file("lldap_config.toml", "")?;
+            let config = init(default_run_opts()).unwrap();
+            assert_eq!(config.token_cookie_name, "lldap_token");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn token_cookie_name_from_config_file() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
+            jail.create_file("lldap_config.toml", r#"token_cookie_name = "custom_token""#)?;
+            let config = init(default_run_opts()).unwrap();
+            assert_eq!(config.token_cookie_name, "custom_token");
+            Ok(())
+        });
     }
 
     fn write_random_key(jail: &Jail, file: &str) {

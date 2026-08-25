@@ -124,7 +124,7 @@ where
     let token = create_jwt(data.get_tcp_handler(), jwt_key, &user, groups).await;
     Ok(HttpResponse::Ok()
         .cookie(
-            Cookie::build("token", token.as_str())
+            Cookie::build(data.token_cookie_name.as_str(), token.as_str())
                 .max_age(1.days())
                 .path(&path)
                 .http_only(true)
@@ -253,7 +253,7 @@ where
     };
     Ok(HttpResponse::Ok()
         .cookie(
-            Cookie::build("token", token.as_str())
+            Cookie::build(data.token_cookie_name.as_str(), token.as_str())
                 .max_age(5.minutes())
                 // Cookie is only valid to reset the password.
                 .path(format!("{path}auth"))
@@ -302,7 +302,7 @@ where
     };
     Ok(HttpResponse::Ok()
         .cookie(
-            Cookie::build("token", "")
+            Cookie::build(data.token_cookie_name.as_str(), "")
                 .max_age(0.days())
                 .path(&path)
                 .http_only(true)
@@ -373,7 +373,7 @@ where
     };
     Ok(HttpResponse::Ok()
         .cookie(
-            Cookie::build("token", token.as_str())
+            Cookie::build(data.token_cookie_name.as_str(), token.as_str())
                 .max_age(1.days())
                 .path(&path)
                 .http_only(true)
@@ -537,7 +537,9 @@ where
         .unwrap_or_else(error_to_http_response)
 }
 
-pub struct CookieToHeaderTranslatorFactory;
+pub struct CookieToHeaderTranslatorFactory {
+    pub cookie_name: String,
+}
 
 impl<S> Transform<S, ServiceRequest> for CookieToHeaderTranslatorFactory
 where
@@ -551,12 +553,16 @@ where
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ok(CookieToHeaderTranslator { service })
+        ok(CookieToHeaderTranslator {
+            service,
+            cookie_name: self.cookie_name.clone(),
+        })
     }
 }
 
 pub struct CookieToHeaderTranslator<S> {
     service: S,
+    cookie_name: String,
 }
 
 impl<S> Service<ServiceRequest> for CookieToHeaderTranslator<S>
@@ -574,7 +580,7 @@ where
     }
 
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
-        if let Some(token_cookie) = req.cookie("token") {
+        if let Some(token_cookie) = req.cookie(&self.cookie_name) {
             if let Ok(header_value) = actix_http::header::HeaderValue::from_str(&format!(
                 "Bearer {}",
                 token_cookie.value()
@@ -623,8 +629,11 @@ pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
     ))
 }
 
-pub fn configure_server<Backend>(cfg: &mut web::ServiceConfig, enable_password_reset: bool)
-where
+pub fn configure_server<Backend>(
+    cfg: &mut web::ServiceConfig,
+    enable_password_reset: bool,
+    token_cookie_name: String,
+) where
     Backend: TcpBackendHandler + LoginHandler + OpaqueHandler + BackendHandler + 'static,
 {
     cfg.service(
@@ -639,7 +648,9 @@ where
     .service(web::resource("/logout").route(web::get().to(get_logout_handler::<Backend>)))
     .service(
         web::scope("/opaque/register")
-            .wrap(CookieToHeaderTranslatorFactory)
+            .wrap(CookieToHeaderTranslatorFactory {
+                cookie_name: token_cookie_name,
+            })
             .service(
                 web::resource("/start")
                     .route(web::post().to(opaque_register_start_handler::<Backend>)),
