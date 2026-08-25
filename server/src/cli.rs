@@ -258,6 +258,11 @@ pub struct SmtpOpts {
 
     #[clap(long, env = "LLDAP_SMTP_OPTIONS__SMTP_ENCRYPTION", value_parser = EnumValueParser::<SmtpEncryption>::new(), ignore_case = true)]
     pub smtp_encryption: Option<SmtpEncryption>,
+
+    /// Path to a PEM file with an extra certificate authority to trust for the
+    /// SMTP TLS/STARTTLS connection.
+    #[clap(long, env = "LLDAP_SMTP_OPTIONS__CERTIFICATE_AUTHORITY_FILE")]
+    pub smtp_certificate_authority_file: Option<String>,
 }
 
 #[derive(Debug, Parser, Clone)]
