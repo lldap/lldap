@@ -10,10 +10,17 @@ env:
   CARGO_TERM_COLOR: always
   MSRV: "1.91.0"
 
+permissions:
+  contents: read
+
 jobs:
   pre_job:
     continue-on-error: true
     runs-on: ubuntu-latest
+    permissions:
+      # skip-duplicate-actions cancels outdated runs with the job token.
+      actions: write
+      contents: read
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:

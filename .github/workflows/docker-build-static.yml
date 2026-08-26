@@ -63,10 +63,17 @@ env:
 
 # cache based on Cargo.lock per cargo target
 
+permissions:
+  contents: read
+
 jobs:
   pre_job:
     continue-on-error: true
     runs-on: ubuntu-latest
+    permissions:
+      # skip-duplicate-actions cancels outdated runs with the job token.
+      actions: write
+      contents: read
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
