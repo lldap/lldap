@@ -91,7 +91,8 @@ jobs:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.event_name == 'release' }}
     container:
-      image: lldap/rust-dev:latest
+      # latest as of 2026-08-26, the digest freezes the toolchain image.
+      image: lldap/rust-dev:latest@sha256:f2ae7ba3c8a0c2f71b67642ca0a3440757b7753fbf94cb2796d029b13fe4216d
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6.0.2
@@ -138,7 +139,8 @@ jobs:
       matrix:
         target: [armv7-unknown-linux-musleabihf, aarch64-unknown-linux-musl, x86_64-unknown-linux-musl]
     container:
-      image: lldap/rust-dev:latest
+      # latest as of 2026-08-26, the digest freezes the toolchain image.
+      image: lldap/rust-dev:latest@sha256:f2ae7ba3c8a0c2f71b67642ca0a3440757b7753fbf94cb2796d029b13fe4216d
       env:
         CARGO_TERM_COLOR: always
         RUSTFLAGS: -Ctarget-feature=+crt-static
