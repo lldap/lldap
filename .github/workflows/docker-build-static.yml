@@ -71,7 +71,7 @@ jobs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
       - id: skip_check
-        uses: fkirc/skip-duplicate-actions@master
+        uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578 # v5.3.2
         with:
           concurrent_skipping: 'outdated_runs'
           skip_after_successful_duplicate: ${{ github.ref != 'refs/heads/main' }}
@@ -90,7 +90,7 @@ jobs:
         uses: actions/checkout@v6.0.2
       - name: Install Rust
         id: toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
             toolchain: "${{ env.MSRV }}"
             targets: "wasm32-unknown-unknown"
@@ -139,7 +139,7 @@ jobs:
         uses: actions/checkout@v6.0.2
       - name: Install Rust
         id: toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
             toolchain: "${{ env.MSRV }}"
             targets: "${{ matrix.target }}"
@@ -520,15 +520,15 @@ jobs:
           path: web
 
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
       - name: Setup buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
         with:
           driver-opts: network=host
 
       - name: Docker ${{ matrix.container }} Base meta
         id: meta-base
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -536,7 +536,7 @@ jobs:
           tags: ${{ matrix.container }}-base
 
       - name: Build ${{ matrix.container }} Base Docker Image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           # On PR will fail, force fully uncomment push: true, or docker image will fail for next steps
@@ -556,7 +556,7 @@ jobs:
 
       - name: Docker ${{ matrix.container }}-rootless meta
         id: meta-rootless
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -589,7 +589,7 @@ jobs:
 
       - name: Docker ${{ matrix.container }} meta
         id: meta-standard
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -623,21 +623,21 @@ jobs:
       # Docker login to nitnelave/lldap and lldap/lldap
       - name: Login to Nitnelave/LLDAP Docker Hub
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: nitnelave
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build ${{ matrix.container }}-rootless Docker Image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -651,7 +651,7 @@ jobs:
 
 ### This docker build always the last, due :latest tag pushed multiple times, for whatever variants may added in future add docker build above this
       - name: Build ${{ matrix.container }} Docker Image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -665,7 +665,7 @@ jobs:
 
       - name: Update repo description
         if: github.event_name != 'pull_request'
-        uses: peter-evans/dockerhub-description@v4
+        uses: peter-evans/dockerhub-description@432a30c9e07499fd01da9f8a49f0faf9e0ca5b77 # v4.0.2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
@@ -673,7 +673,7 @@ jobs:
 
       - name: Update lldap repo description
         if: github.event_name != 'pull_request'
-        uses: peter-evans/dockerhub-description@v4
+        uses: peter-evans/dockerhub-description@432a30c9e07499fd01da9f8a49f0faf9e0ca5b77 # v4.0.2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
@@ -755,7 +755,7 @@ jobs:
 
 
       - name: Upload compressed release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
         id: create_release
         with:
           allowUpdates: true
