@@ -109,9 +109,11 @@ jobs:
             /usr/local/cargo/registry/cache
             /usr/local/cargo/git/db
             target
-          key: lldap-ui-${{ hashFiles('**/Cargo.lock') }}
+          # Ref-scoped so a cache primed on one branch can never feed a
+          # build another ref releases.
+          key: lldap-ui-${{ github.ref_name }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            lldap-ui-
+            lldap-ui-${{ github.ref_name }}-
       - name: Install wasm-pack with cargo
         run: cargo install --locked wasm-pack || true
         env:
@@ -158,9 +160,10 @@ jobs:
             .cargo/registry/cache
             .cargo/git/db
             target
-          key: lldap-bin-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          # Ref-scoped for the same reason as the ui cache.
+          key: lldap-bin-${{ matrix.target }}-${{ github.ref_name }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            lldap-bin-${{ matrix.target }}-
+            lldap-bin-${{ matrix.target }}-${{ github.ref_name }}-
       - name: Compile ${{ matrix.target }} lldap and tools
         run: cargo build --target=${{ matrix.target }} --release -p lldap -p lldap_migration_tool -p lldap_set_password
       - name: Check path
@@ -554,8 +557,6 @@ jobs:
           tags: |
                 ${{ steps.meta-base.outputs.tags }}
           labels: ${{ steps.meta-base.outputs.labels }}
-          cache-from: type=gha,mode=max
-          cache-to: type=gha,mode=max
 
 #####################################
 #### build variants docker image ####
@@ -653,8 +654,6 @@ jobs:
           tags: |
                 ${{ steps.meta-rootless.outputs.tags }}
           labels: ${{ steps.meta-rootless.outputs.labels }}
-          cache-from: type=gha,mode=max
-          cache-to: type=gha,mode=max
 
 ### This docker build always the last, due :latest tag pushed multiple times, for whatever variants may added in future add docker build above this
       - name: Build ${{ matrix.container }} Docker Image
@@ -667,8 +666,6 @@ jobs:
           tags: |
                 ${{ steps.meta-standard.outputs.tags }}
           labels: ${{ steps.meta-standard.outputs.labels }}
-          cache-from: type=gha,mode=max
-          cache-to: type=gha,mode=max
 
       - name: Update repo description
         if: github.event_name != 'pull_request'
