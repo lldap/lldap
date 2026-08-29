@@ -717,7 +717,7 @@ jobs:
           name: ui
           path: web
       - name: UI (web) artifacts cleanup
-        run: mkdir app && mv web/index.html app/index.html && mv web/static app/static && mv web/pkg app/pkg
+        run: mkdir app && mv web/index_local.html app/index.html && mv web/static app/static && mv web/pkg app/pkg
       - name: Fetch web components
         run: |
              sudo apt update
