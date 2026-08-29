@@ -33,6 +33,11 @@
 ## The public URL of the server, for password reset links.
 #http_url = "http://localhost"
 
+## Name of the cookie that holds the authentication token.
+## Change it if another service on a parent domain sets a cookie called "token"
+## and the two collide.
+#token_cookie_name = "token"
+
 ## The path to the front-end assets (relative to the working directory).
 #assets_path = "./app"
 
