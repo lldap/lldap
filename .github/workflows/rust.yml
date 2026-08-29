@@ -10,15 +10,22 @@ env:
   CARGO_TERM_COLOR: always
   MSRV: "1.91.0"
 
+permissions:
+  contents: read
+
 jobs:
   pre_job:
     continue-on-error: true
     runs-on: ubuntu-latest
+    permissions:
+      # skip-duplicate-actions cancels outdated runs with the job token.
+      actions: write
+      contents: read
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
       - id: skip_check
-        uses: fkirc/skip-duplicate-actions@master
+        uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578 # v5.3.2
         with:
           concurrent_skipping: 'outdated_runs'
           skip_after_successful_duplicate: 'true'
@@ -37,10 +44,10 @@ jobs:
         uses: actions/checkout@v6.0.2
       - name: Install Rust
         id: toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
             toolchain: "${{ env.MSRV }}"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Build
         run: cargo +${{steps.toolchain.outputs.name}} build --verbose --workspace
       - name: Run tests
@@ -61,11 +68,11 @@ jobs:
         uses: actions/checkout@v6.0.2
       - name: Install Rust
         id: toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
             toolchain: "${{ env.MSRV }}"
             components: clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo +${{steps.toolchain.outputs.name}} clippy --tests --workspace -- -D warnings
 
   format:
@@ -78,11 +85,11 @@ jobs:
         uses: actions/checkout@v6.0.2
       - name: Install Rust
         id: toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
             toolchain: "${{ env.MSRV }}"
             components: rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo +${{steps.toolchain.outputs.name}} fmt --check --all
 
   coverage:
@@ -99,16 +106,18 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install nightly --component llvm-tools-preview && rustup component add llvm-tools-preview --toolchain stable-x86_64-unknown-linux-gnu
 
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
+        with:
+          tool: cargo-llvm-cov
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Generate code coverage for unit test
         run: cargo llvm-cov  --workspace --no-report
       - name: Aggregate reports
         run: cargo llvm-cov --no-run --lcov --output-path lcov.info
       - name: Upload coverage to Codecov (main)
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
         with:
           files: lcov.info
           fail_ci_if_error: true
