@@ -112,7 +112,7 @@ impl GroupDetails {
             html! {
               <tr>
                 <td>
-                  <Link to={AppRoute::UserDetails{user_id: user_id.clone()}}>
+                  <Link to={AppRoute::user_details(&user_id)}>
                     {user_id.clone()}
                   </Link>
                 </td>
