@@ -41,17 +41,23 @@ impl From<PrivateKeyHash> for Value {
     }
 }
 
-pub async fn init_table(pool: &DbConnection) -> anyhow::Result<()> {
-    let version = {
-        if let Some(version) = get_schema_version(pool).await {
-            version
-        } else {
+/// Create or migrate the schema up to `LAST_SCHEMA_VERSION`.
+///
+/// Returns the version the existing schema was at *before* this call
+/// migrated it, so the caller knows which migrations it just applied.
+/// `None` means nothing was migrated: the database was fresh (or had no
+/// version metadata at all), or it was already up to date.
+pub async fn init_table(pool: &DbConnection) -> anyhow::Result<Option<SchemaVersion>> {
+    let previous_version = get_schema_version(pool).await;
+    let version = match previous_version {
+        Some(version) => version,
+        None => {
             upgrade_to_v1(pool).await?;
             SchemaVersion(1)
         }
     };
     migrate_from_version(pool, version, LAST_SCHEMA_VERSION).await?;
-    Ok(())
+    Ok(previous_version.filter(|&version| version < LAST_SCHEMA_VERSION))
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -184,8 +190,32 @@ mod tests {
     async fn test_already_init_table() {
         crate::logging::init_for_tests();
         let sql_pool = get_in_memory_db().await;
-        init_table(&sql_pool).await.unwrap();
-        init_table(&sql_pool).await.unwrap();
+        assert_eq!(
+            init_table(&sql_pool).await.unwrap(),
+            None,
+            "a fresh database migrates from nothing"
+        );
+        assert_eq!(
+            init_table(&sql_pool).await.unwrap(),
+            None,
+            "an up-to-date database migrates nothing"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_init_table_reports_the_version_it_migrated_from() {
+        crate::logging::init_for_tests();
+        let sql_pool = get_in_memory_db().await;
+        sql_migrations::upgrade_to_v1(&sql_pool).await.unwrap();
+        sql_migrations::migrate_from_version(&sql_pool, SchemaVersion(1), SchemaVersion(11))
+            .await
+            .unwrap();
+        assert_eq!(
+            init_table(&sql_pool).await.unwrap(),
+            Some(SchemaVersion(11)),
+            "the pre-migration version is reported"
+        );
+        assert_eq!(init_table(&sql_pool).await.unwrap(), None);
     }
 
     #[tokio::test]

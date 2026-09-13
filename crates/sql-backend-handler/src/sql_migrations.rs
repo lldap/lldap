@@ -1162,6 +1162,12 @@ async fn migrate_to_v11(transaction: DatabaseTransaction) -> Result<DatabaseTran
     Ok(transaction)
 }
 
+/// The schema version that introduced `password_version`, i.e. the
+/// opaque-ke 0.7 -> 4.0 upgrade. Migrating from below this version is what
+/// the server uses to decide that every pre-upgrade session must be
+/// invalidated (see `setup_sql_tables` in the server crate).
+pub const OPAQUE_V4_SCHEMA_VERSION: SchemaVersion = SchemaVersion(12);
+
 async fn migrate_to_v12(transaction: DatabaseTransaction) -> Result<DatabaseTransaction, DbErr> {
     let builder = transaction.get_database_backend();
     // Add password_version (0 = legacy opaque-ke 0.7, 1 = current opaque-ke 4.0).

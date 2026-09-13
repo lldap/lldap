@@ -31,6 +31,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use futures_util::TryFutureExt;
 use lldap_sql_backend_handler::{
     SqlBackendHandler, register_password,
+    sql_migrations::OPAQUE_V4_SCHEMA_VERSION,
     sql_tables::{self, get_private_key_info, set_private_key_info},
 };
 use sea_orm::{Database, DatabaseConnection};
@@ -132,12 +133,30 @@ async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnecti
             .sqlx_logging_level(log::LevelFilter::Debug);
         Database::connect(sql_opt).await?
     };
-    sql_tables::init_table(&sql_pool)
+    let migrated_from = sql_tables::init_table(&sql_pool)
         .await
         .context("while creating base tables")?;
     jwt_sql_tables::init_table(&sql_pool)
         .await
         .context("while creating jwt tables")?;
+    // Sessions issued before the opaque-ke 4.0 upgrade must not outlive it:
+    // a password reset through a pre-upgrade session could otherwise race
+    // the lazy password upgrade. This runs only in the process that applied
+    // the migration (`run`, or the explicit `create_schema` subcommand),
+    // after the JWT tables exist. It cannot live inside the v12 migration
+    // transaction: those tables belong to this crate and do not exist yet
+    // on a fresh database. A crash between the migration commit and this
+    // step is not retried; the web client's change-password flow refusing
+    // to run against a v0.7 password is the backstop.
+    if migrated_from.is_some_and(|version| version < OPAQUE_V4_SCHEMA_VERSION) {
+        info!(
+            "Schema migrated across the opaque-ke 4.0 upgrade: invalidating every existing \
+             session, users will have to log in again."
+        );
+        jwt_sql_tables::invalidate_all_sessions(&sql_pool)
+            .await
+            .context("while invalidating pre-upgrade sessions")?;
+    }
     Ok(sql_pool)
 }
 
