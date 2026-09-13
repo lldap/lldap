@@ -2849,6 +2849,7 @@ dependencies = [
  "lldap_validation",
  "percent-encoding",
  "rand 0.8.5",
+ "secstr",
  "serde",
  "serde_json",
  "strum 0.28.0",

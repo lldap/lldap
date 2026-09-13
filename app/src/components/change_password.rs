@@ -11,6 +11,7 @@ use crate::{
 use anyhow::{Result, anyhow, bail};
 use gloo_console::error;
 use lldap_auth::*;
+use secstr::SecUtf8;
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -21,8 +22,8 @@ use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 enum OpaqueData {
     #[default]
     None,
-    Login(Box<opaque::client::login::ClientLogin>, String),
-    Registration(opaque::client::registration::ClientRegistration, String),
+    Login(Box<opaque::client::login::ClientLogin>, SecUtf8),
+    Registration(opaque::client::registration::ClientRegistration, SecUtf8),
 }
 
 impl OpaqueData {
@@ -94,9 +95,10 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                     if old_password.is_empty() {
                         bail!("Current password should not be empty");
                     }
+                    let old_password = SecUtf8::from(old_password);
                     let mut rng = rand::rngs::OsRng;
                     let login_start_request =
-                        opaque::client::login::start_login(&old_password, &mut rng)
+                        opaque::client::login::start_login(old_password.unsecure(), &mut rng)
                             .context("Could not initialize login")?;
                     self.opaque_data =
                         OpaqueData::Login(Box::new(login_start_request.state), old_password);
@@ -127,7 +129,7 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                         opaque::client::login::finish_login(
                             *l,
                             res.credential_response,
-                            &password,
+                            password.unsecure(),
                             &mut rng,
                         )
                         .map_err(|e| {
@@ -143,9 +145,9 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
             }
             Msg::SubmitNewPassword => {
                 let mut rng = rand::rngs::OsRng;
-                let new_password = self.form.model().password;
+                let new_password = SecUtf8::from(self.form.model().password);
                 let registration_start_request = opaque::client::registration::start_registration(
-                    new_password.as_bytes(),
+                    new_password.unsecure().as_bytes(),
                     &mut rng,
                 )
                 .context("Could not initiate password change")?;
@@ -171,7 +173,7 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                             opaque::client::registration::finish_registration(
                                 registration,
                                 res.registration_response,
-                                password.as_bytes(),
+                                password.unsecure().as_bytes(),
                                 &mut rng,
                             )
                             .context("Error during password change")?;
