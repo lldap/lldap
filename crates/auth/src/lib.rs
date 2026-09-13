@@ -66,6 +66,16 @@ pub mod login {
         pub token: String,
         #[serde(rename = "refreshToken", skip_serializing_if = "Option::is_none")]
         pub refresh_token: Option<String>,
+        /// Only set after a successful v0.7 login: a server-sealed grant the
+        /// client hands back in `ClientRegistrationStartRequest::upgrade_token`
+        /// so the follow-up re-registration only replaces the password that
+        /// was just validated (a concurrent reset wins).
+        #[serde(
+            rename = "upgradeToken",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        pub upgrade_token: Option<String>,
     }
 }
 
@@ -77,6 +87,9 @@ pub mod registration {
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ServerData {
         pub username: UserId,
+        /// When set, this registration is a v0.7 -> current upgrade and must
+        /// only replace this exact stored password file (compare-and-swap).
+        pub upgrade_from: Option<Vec<u8>>,
     }
 
     #[derive(Serialize, Deserialize, Clone)]
@@ -85,6 +98,10 @@ pub mod registration {
         /// Base64-encoded OPAQUE RegistrationRequest bytes on the wire.
         #[serde(with = "crate::opaque::base64_wire")]
         pub registration_start_request: opaque::server::registration::RegistrationRequest,
+        /// Upgrade grant from a v0.7 login (`login::ServerLoginResponse::upgrade_token`).
+        /// Absent for ordinary registrations and password resets.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub upgrade_token: Option<String>,
     }
 
     #[derive(Serialize, Deserialize, Clone)]
@@ -137,6 +154,15 @@ pub mod login_base64 {
         pub server_data: String,
         /// Base64-encoded CredentialFinalization bytes.
         pub credential_finalization: String,
+    }
+
+    /// Outcome of a successful v0.7 login.
+    #[derive(Clone, Debug)]
+    pub struct V07LoginSuccess {
+        pub username: UserId,
+        /// Server-sealed grant binding the follow-up re-registration to the
+        /// password file that was just validated.
+        pub upgrade_token: String,
     }
 }
 

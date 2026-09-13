@@ -22,7 +22,7 @@ pub trait OpaqueHandler: Send + Sync {
     async fn login_finish_v07(
         &self,
         request: login_base64::ClientLoginFinishRequest,
-    ) -> Result<UserId>;
+    ) -> Result<login_base64::V07LoginSuccess>;
     async fn registration_start(
         &self,
         request: registration::ClientRegistrationStartRequest,
@@ -53,7 +53,7 @@ mockall::mock! {
         async fn login_finish_v07(
             &self,
             request: login_base64::ClientLoginFinishRequest
-        ) -> Result<UserId>;
+        ) -> Result<login_base64::V07LoginSuccess>;
         async fn registration_start(
             &self,
             request: registration::ClientRegistrationStartRequest

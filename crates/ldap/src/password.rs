@@ -74,6 +74,7 @@ pub(crate) async fn change_password<B: OpaqueHandler>(
     let req = registration::ClientRegistrationStartRequest {
         username: user.clone(),
         registration_start_request: registration_start_request.message,
+        upgrade_token: None,
     };
     let registration_start_response = backend_handler.registration_start(req).await?;
     let registration_finish = opaque::client::registration::finish_registration(
@@ -201,6 +202,7 @@ pub mod tests {
         let request = registration::ClientRegistrationStartRequest {
             username: user.into(),
             registration_start_request: registration_start_request.message,
+            upgrade_token: None,
         };
         let start_response = opaque::server::registration::start_registration(
             &opaque::server::ServerSetup::new(&mut rng),
@@ -378,6 +380,7 @@ pub mod tests {
         let request = registration::ClientRegistrationStartRequest {
             username: "bob".into(),
             registration_start_request: registration_start_request.message,
+            upgrade_token: None,
         };
         let start_response = opaque::server::registration::start_registration(
             &opaque::server::ServerSetup::new(&mut rng),
@@ -428,6 +431,7 @@ pub mod tests {
         let request = registration::ClientRegistrationStartRequest {
             username: "bob".into(),
             registration_start_request: registration_start_request.message,
+            upgrade_token: None,
         };
         let start_response = opaque::server::registration::start_registration(
             &opaque::server::ServerSetup::new(&mut rng),

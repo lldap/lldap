@@ -76,6 +76,7 @@ impl CommonComponent<ResetPasswordStep2Form> for ResetPasswordStep2Form {
                 let req = registration::ClientRegistrationStartRequest {
                     username: self.username.as_ref().unwrap().into(),
                     registration_start_request: registration_start_request.message,
+                    upgrade_token: None,
                 };
                 self.opaque_data = Some((registration_start_request.state, new_password));
                 self.common.call_backend(

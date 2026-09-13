@@ -154,6 +154,7 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                 let req = registration::ClientRegistrationStartRequest {
                     username: ctx.props().username.clone().into(),
                     registration_start_request: registration_start_request.message,
+                    upgrade_token: None,
                 };
                 self.opaque_data =
                     OpaqueData::Registration(registration_start_request.state, new_password);

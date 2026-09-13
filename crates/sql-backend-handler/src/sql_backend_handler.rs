@@ -77,6 +77,7 @@ pub mod tests {
             .registration_start(registration::ClientRegistrationStartRequest {
                 username: name.into(),
                 registration_start_request: client_registration_start.message,
+                upgrade_token: None,
             })
             .await
             .unwrap();

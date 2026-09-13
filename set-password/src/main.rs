@@ -131,6 +131,7 @@ fn main() -> Result<()> {
     let start_request = registration::ClientRegistrationStartRequest {
         username: opts.username.clone().into(),
         registration_start_request: registration_start_request.message,
+        upgrade_token: None,
     };
     let res = register_start(&opts.base_url, &token, start_request)?;
 

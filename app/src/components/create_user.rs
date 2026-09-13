@@ -185,6 +185,7 @@ impl CommonComponent<CreateUserForm> for CreateUserForm {
                     let req = registration::ClientRegistrationStartRequest {
                         username: user_id.into(),
                         registration_start_request: message,
+                        upgrade_token: None,
                     };
                     self.common
                         .call_backend(ctx, HostService::register_start(req), move |r| {

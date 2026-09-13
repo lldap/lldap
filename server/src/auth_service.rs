@@ -134,6 +134,7 @@ where
         .json(&login::ServerLoginResponse {
             token: token.as_str().to_owned(),
             refresh_token: None,
+            upgrade_token: None,
         }))
 }
 
@@ -357,6 +358,7 @@ where
 async fn get_login_successful_response<Backend>(
     data: &web::Data<AppState<Backend>>,
     name: &UserId,
+    upgrade_token: Option<String>,
 ) -> TcpResult<HttpResponse>
 where
     Backend: TcpBackendHandler + BackendHandler,
@@ -391,6 +393,7 @@ where
         .json(&login::ServerLoginResponse {
             token: token.as_str().to_owned(),
             refresh_token: Some(refresh_token_plus_name),
+            upgrade_token,
         }))
 }
 
@@ -407,7 +410,7 @@ where
         .login_finish(request.into_inner())
         .await
     {
-        Ok(name) => get_login_successful_response(&data, &name).await,
+        Ok(name) => get_login_successful_response(&data, &name, None).await,
         Err(e) => Err(e.into()),
     }
 }
@@ -452,7 +455,10 @@ where
         .login_finish_v07(request.into_inner())
         .await
     {
-        Ok(name) => get_login_successful_response(&data, &name).await,
+        Ok(success) => {
+            get_login_successful_response(&data, &success.username, Some(success.upgrade_token))
+                .await
+        }
         Err(e) => Err(e.into()),
     }
 }
@@ -483,7 +489,7 @@ where
         password,
     };
     data.get_login_handler().bind(bind_request).await?;
-    get_login_successful_response(&data, &username).await
+    get_login_successful_response(&data, &username, None).await
 }
 
 async fn simple_login_handler<Backend>(

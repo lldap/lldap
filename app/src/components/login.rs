@@ -4,7 +4,7 @@ use crate::{
         router::{AppRoute, Link},
     },
     infra::{
-        api::{HostService, LoginStartError},
+        api::{HostService, LoginStartError, V07LoginResult},
         common_component::{CommonComponent, CommonComponentParts},
     },
 };
@@ -65,7 +65,7 @@ pub struct V07AuthStart {
 pub struct V07AuthFinish {
     pub username: String,
     pub password: SecUtf8,
-    pub response: Result<(String, bool)>,
+    pub response: Result<V07LoginResult>,
 }
 
 /// State for the silent password upgrade that runs immediately after a
@@ -262,7 +262,11 @@ impl CommonComponent<LoginForm> for LoginForm {
                 password,
                 response: res,
             }) => {
-                let (_logged_in_user, is_admin) = res.context("Could not finish v0.7 login")?;
+                let V07LoginResult {
+                    is_admin,
+                    upgrade_token,
+                    ..
+                } = res.context("Could not finish v0.7 login")?;
                 // v0.7 login succeeded — the JWT cookies are set and the
                 // user is effectively logged in. Now silently upgrade the
                 // password to v4.0. If this fails, we still report success.
@@ -284,6 +288,9 @@ impl CommonComponent<LoginForm> for LoginForm {
                 let req = registration::ClientRegistrationStartRequest {
                     username: username.clone().into(),
                     registration_start_request: registration_start.message,
+                    // Makes the server-side write conditional on the password
+                    // file the v0.7 login just validated.
+                    upgrade_token,
                 };
                 let password_clone = password.clone();
                 self.common

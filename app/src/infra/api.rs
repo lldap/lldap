@@ -106,6 +106,15 @@ async fn call_server_empty_response_with_error_message<Body: Serialize>(
     call_server(url, request, error_message).await.map(|_| ())
 }
 
+/// Outcome of a successful v0.7 login. The JWT cookies are set exactly like
+/// the v4.0 finish; `upgrade_token` is the server-sealed grant that makes the
+/// follow-up re-registration conditional on the password just validated.
+pub struct V07LoginResult {
+    pub username: String,
+    pub is_admin: bool,
+    pub upgrade_token: Option<String>,
+}
+
 fn set_cookies_from_jwt(response: login::ServerLoginResponse) -> Result<(String, bool)> {
     let jwt_claims = get_claims_from_jwt(response.token.as_str()).context("Could not parse JWT")?;
     let is_admin = jwt_claims.groups.contains("lldap_admin");
@@ -221,14 +230,21 @@ impl HostService {
     /// and sets the auth cookies exactly like the v4.0 finish.
     pub async fn login_finish_v07(
         request: login_base64::ClientLoginFinishRequest,
-    ) -> Result<(String, bool)> {
+    ) -> Result<V07LoginResult> {
         call_server_json_with_error_message::<login::ServerLoginResponse, _>(
             &(base_url() + "/auth/opaque/v07/login/finish"),
             RequestType::Post(request),
             "Could not finish v0.7 authentication",
         )
         .await
-        .and_then(set_cookies_from_jwt)
+        .and_then(|response| {
+            let upgrade_token = response.upgrade_token.clone();
+            set_cookies_from_jwt(response).map(|(username, is_admin)| V07LoginResult {
+                username,
+                is_admin,
+                upgrade_token,
+            })
+        })
     }
 
     pub async fn get_settings() -> Result<Options> {
