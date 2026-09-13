@@ -7,13 +7,13 @@
 #
 #   * file  — the key lives in a `server_key` file. HEAD detects that the file
 #             is a valid opaque-ke 0.7 key, confirms against the DB that it is
-#             the key from the last successful startup, then rotates the file
-#             to the v4.0 format and drops a `<keyfile>.v07` sidecar holding
-#             the old key for backward-compatible validation.
+#             the key from the last successful startup, and derives the v4.0
+#             key from the file's bytes. The file is never rewritten and no
+#             sidecar is created; the v0.7 key stays available for
+#             backward-compatible validation.
 #   * seed  — the key is derived from LLDAP_KEY_SEED. HEAD reconstructs the
-#             old v0.7 key from the SAME seed in memory (no sidecar, no key
-#             file on disk), confirms it against the DB, and records the new
-#             key hash.
+#             old v0.7 key from the SAME seed in memory (no key file on
+#             disk), confirms it against the DB, and records the new key hash.
 #
 # Both variants run baseline + HEAD sequentially against the SAME SQLite DB,
 # exercising the schema migration (v11 -> v12) and the credential auto-upgrade.
@@ -27,15 +27,19 @@
 #   4. Stop baseline. Assert the schema is at v11 (no `password_version`).
 #   5. Start HEAD directly (no flag). Assert it detects the opaque-ke
 #      0.7 -> 4.0 upgrade automatically:
-#        - file: rotates the on-disk key file to v4.0 + writes the sidecar.
+#        - file: the key file is byte-identical, no `<keyfile>.v07` sidecar.
 #        - seed: records the new key hash, writes NO file and NO sidecar.
 #      Assert the v12 migration added `password_version` and the test user
-#      defaulted to 0 (legacy).
+#      defaulted to 0 (legacy), and that the admin token issued by the
+#      baseline is rejected (every pre-upgrade session is invalidated).
 #   6. Bind to HEAD with the same password. The legacy bind path validates
 #      against the opaque-ke 0.7 credential AND silently re-writes it as
 #      opaque-ke 4.0 (`password_version` flips to 1).
 #   7. Bind again to confirm the upgraded credential keeps working.
 #   8. Bind with a wrong password to confirm it's still rejected.
+#   9. Restart HEAD: the same key is derived again (no key-change error, no
+#      second "upgrade"), the key file is still untouched, and the upgraded
+#      credential still binds.
 #
 # Required commands: cargo, git, curl, jq, sqlite3, ldapsearch.
 #
@@ -124,8 +128,7 @@ export LLDAP_VERBOSE="false"
 
 wait_for_http() {
   local label="$1" pid="$2" log_file="$3" http_port="$4"
-  local i
-  for i in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     if ! kill -0 "$pid" 2>/dev/null; then
       tail -50 "$log_file" >&2 || true
       die "$label exited before becoming ready"
@@ -250,8 +253,8 @@ run_variant() {
 
   # Retry the grep briefly: /health readiness doesn't strictly guarantee the
   # startup log line has been flushed to the file yet.
-  local i grep_ok=""
-  for i in $(seq 1 10); do
+  local grep_ok=""
+  for _ in $(seq 1 10); do
     if grep -q "Detected the opaque-ke 0.7 -> 4.0 upgrade" "$WORKDIR/$mode-head.log"; then
       grep_ok=1
       break
@@ -263,12 +266,11 @@ run_variant() {
     die "[$mode] HEAD did not report the automatic opaque-ke upgrade"
   }
   if [ "$mode" = "file" ]; then
-    [ -f "$key_file.v07" ] || die "[$mode] HEAD did not write the v0.7 sidecar"
-    cmp -s "$key_file.v07" "$WORKDIR/$mode-original-key" || \
-      die "[$mode] v0.7 sidecar does not hold the original key"
-    cmp -s "$key_file" "$WORKDIR/$mode-original-key" && \
-      die "[$mode] key file was not rotated to the 4.0 format"
-    log "[$mode] Key file rotated to opaque-ke 4.0 + sidecar written ✓"
+    # The 4.0 key is derived from the v0.7 file: nothing may be written.
+    cmp -s "$key_file" "$WORKDIR/$mode-original-key" || \
+      die "[$mode] key file was modified; it must stay byte-identical"
+    [ ! -f "$key_file.v07" ] || die "[$mode] HEAD wrote a v0.7 sidecar"
+    log "[$mode] Key file untouched, 4.0 key derived from it, no sidecar ✓"
   else
     # Seed mode derives the key from the seed: no file is written and no
     # sidecar is created — the v0.7 key is reconstructed in memory each start.
@@ -284,6 +286,18 @@ run_variant() {
   pre_version=$(pv_value "$db_path")
   [ "$pre_version" = "0" ] || die "[$mode] expected pre-bind password_version=0, got '$pre_version'"
   log "[$mode] Pre-bind password_version = 0 (legacy) ✓"
+
+  # The schema migration across v12 invalidates every session issued before
+  # the upgrade (JWTs blacklisted, refresh tokens deleted).
+  log "[$mode] Token issued by the baseline must be rejected after the upgrade"
+  local old_token_status
+  old_token_status=$(curl -s -o /dev/null -w '%{http_code}' \
+    "http://localhost:$http_port/api/graphql" \
+    -H "Content-Type: application/json" -H "Authorization: Bearer $token" \
+    --data-binary '{"query":"query{users{id}}"}')
+  [ "$old_token_status" = "401" ] || \
+    die "[$mode] pre-upgrade token still accepted (HTTP $old_token_status); sessions were not invalidated"
+  log "[$mode] Pre-upgrade session invalidated ✓"
 
   # Admin login (which also auto-upgrades the ADMIN's own password — the
   # test user's stays legacy) to check the hasLegacyPassword GraphQL field.
@@ -339,6 +353,30 @@ run_variant() {
     die "[$mode] wrong password unexpectedly succeeded"
   fi
   log "[$mode] Wrong password rejected ✓"
+
+  # --- Phase 3: a restart derives the very same key ------------------------
+  log "[$mode] Restarting HEAD: the key must be derived identically"
+  kill "$RUNNING_PID"
+  wait "$RUNNING_PID" 2>/dev/null || true
+  RUNNING_PID=""
+  ( cd "$REPO_ROOT" && exec "$HEAD_LLDAP" run >"$WORKDIR/$mode-head2.log" 2>&1 ) &
+  RUNNING_PID=$!
+  wait_for_http "head-restart($mode)" "$RUNNING_PID" "$WORKDIR/$mode-head2.log" "$http_port"
+  if grep -q "Detected the opaque-ke 0.7 -> 4.0 upgrade" "$WORKDIR/$mode-head2.log"; then
+    die "[$mode] second HEAD start re-ran the key upgrade: the recorded key hash is not stable"
+  fi
+  if [ "$mode" = "file" ]; then
+    cmp -s "$key_file" "$WORKDIR/$mode-original-key" || \
+      die "[$mode] key file changed across a restart"
+  fi
+  ldapsearch -LLL -H "ldap://localhost:$ldap_port" \
+    -D "uid=$TEST_USER,ou=people,$LDAP_BASE_DN" -w "$TEST_PASSWORD" \
+    -b "ou=people,$LDAP_BASE_DN" "(uid=$TEST_USER)" dn \
+    >"$WORKDIR/$mode-head-bind3.log" 2>&1 || {
+      tail -40 "$WORKDIR/$mode-head2.log" >&2
+      die "[$mode] bind after HEAD restart failed: $(cat "$WORKDIR/$mode-head-bind3.log")"
+    }
+  log "[$mode] Restart derived the same key; upgraded credential still binds ✓"
 
   log "[$mode] Stopping HEAD lldap"
   kill "$RUNNING_PID"

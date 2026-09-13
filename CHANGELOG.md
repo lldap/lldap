@@ -19,9 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    serialized bytes of the private key (`stable_hash(private_key.serialize().as_slice())`)
    instead of dereferencing the key as `&[u8]`. The old API does not exist on
    `opaque-ke` 4.0. As a result, the `private_key_hash` stored in the database
-   will not match the one recomputed from the rotated key on first start of
-   the upgraded server; the startup check recognises this specific mismatch
-   and accepts it automatically (see Migration below).
+   will not match the one computed from the new key on first start of the
+   upgraded server; the startup check recognises this specific mismatch and
+   accepts it automatically (see Migration below).
+ - **All sessions are invalidated once** when the schema is migrated across
+   this upgrade: every unexpired JWT is blacklisted and every refresh token
+   deleted, so no session issued before the upgrade can be used to reset a
+   password while that password's own upgrade is in flight. Users log in
+   again.
 
 ### Migration
 
@@ -30,27 +35,32 @@ start of the new version, whether the server key comes from a `server_key`
 **file** or from a **`key_seed`**. On startup the server detects that the key
 is still in the `opaque-ke` 0.7 format (by parsing it) and verifies against
 the `private_key_hash` recorded in the database that it is the key from the
-last successful startup. Only then does it switch to a 4.0 key:
+last successful startup. Only then does it start using a 4.0 key. Nothing is
+ever written to disk:
 
- - **Key file:** atomically rotates the on-disk key file to a fresh
-   `opaque-ke` 4.0 key. The previous key is first copied to a `<keyfile>.v07`
-   sidecar, then the file is replaced via a temp file + `rename`. The sidecar
-   lets v0.7 password files keep validating across restarts and is removed
-   automatically once every user has been upgraded. The rotation is only
-   persisted by the actual server startup, after the database check — commands
-   that merely load the configuration (`healthcheck`, `test-email`, …) never
-   touch the key file.
- - **Key seed:** nothing is written to disk. The old v0.7 key is reconstructed
-   in memory from the same `key_seed` on every startup — no sidecar, no key
-   file.
+ - **Key file:** the 4.0 key is *derived* from the existing v0.7 key file: its
+   raw bytes are hashed with a fixed label and used as the seed of the key
+   generation, exactly like `key_seed`. The file is never rewritten, every
+   startup and every instance sharing the file derives the same key, and the
+   v0.7 key stays available to validate passwords that have not been upgraded
+   yet. Keep the file: it remains the only copy of the server key.
+ - **Key seed:** the old v0.7 key is reconstructed in memory from the same
+   `key_seed` on every startup.
  - In both cases the old key bytes are kept in memory (`v07_server_key_bytes`)
    to validate legacy passwords, and the stored `private_key_hash` is updated
-   to the new format.
+   to the new format. Several instances starting at the same time all record
+   the same hash.
 
 As users log in (via LDAP bind, simple login, or OPAQUE web login), their
-passwords are silently re-registered in the v4.0 format. Failed
-re-registrations are logged but do not block the login — the upgrade is
-retried on the next successful login.
+passwords are silently re-registered in the v4.0 format. The write is a
+conditional update on the exact password file that was validated and on
+`password_version = 0`, so a password reset that lands between validation and
+the write always wins. Failed or skipped re-registrations are logged but do
+not block the login — the upgrade is retried on the next successful login.
+
+Rolling back requires a database backup taken before the upgrade. Running
+pre-4.0 and 4.0 instances side by side is not supported: stop all instances,
+upgrade, start.
 
 The server refuses to start — without touching the key file — if the key
 parses as neither the 4.0 nor the 0.7 format (corruption), or if it is a 0.7
@@ -72,6 +82,9 @@ invalidates all passwords; it is not needed for this upgrade.
    HTTP `409 {"error_code":"opaque_v07_version"}`, they fall back to the v0.7
    endpoints and silently re-register the password in v4.0 format on success.
    Both the WASM web UI and the migration tool implement this fallback.
+ - The v0.7 login finish response carries an `upgradeToken`; the client passes
+   it back as `upgrade_token` in the registration start request so that the
+   re-registration only replaces the password file the login validated.
  - Startup warning listing the count of users still on a legacy password
    format.
  - Admins can see which users still have a legacy password: the user list in
