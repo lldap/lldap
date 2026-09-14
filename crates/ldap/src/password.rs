@@ -14,6 +14,7 @@ use lldap_auth::access_control::ValidationResults;
 use lldap_domain::types::UserId;
 use lldap_domain_handlers::handler::{BackendHandler, BindRequest, LoginHandler};
 use lldap_opaque_handler::OpaqueHandler;
+use secstr::SecUtf8;
 
 pub(crate) async fn do_bind(
     ldap_info: &LdapInfo,
@@ -50,7 +51,7 @@ pub(crate) async fn do_bind(
     match login_handler
         .bind(BindRequest {
             name: user_id.clone(),
-            password: password.clone(),
+            password: SecUtf8::from(password.clone()),
         })
         .await
     {
@@ -74,11 +75,13 @@ pub(crate) async fn change_password<B: OpaqueHandler>(
     let req = registration::ClientRegistrationStartRequest {
         username: user.clone(),
         registration_start_request: registration_start_request.message,
+        upgrade_token: None,
     };
     let registration_start_response = backend_handler.registration_start(req).await?;
     let registration_finish = opaque::client::registration::finish_registration(
         registration_start_request.state,
         registration_start_response.registration_response,
+        password,
         &mut rng,
     )?;
     let req = registration::ClientRegistrationFinishRequest {
@@ -206,6 +209,7 @@ pub mod tests {
         let request = registration::ClientRegistrationStartRequest {
             username: user.into(),
             registration_start_request: registration_start_request.message,
+            upgrade_token: None,
         };
         let start_response = opaque::server::registration::start_registration(
             &opaque::server::ServerSetup::new(&mut rng),
@@ -230,7 +234,7 @@ pub mod tests {
         mock.expect_bind()
             .with(eq(lldap_domain_handlers::handler::BindRequest {
                 name: UserId::new("bob"),
-                password: "pass".to_string(),
+                password: SecUtf8::from("pass"),
             }))
             .times(1)
             .return_once(|_| Ok(()));
@@ -255,7 +259,7 @@ pub mod tests {
         mock.expect_bind()
             .with(eq(lldap_domain_handlers::handler::BindRequest {
                 name: UserId::new("test"),
-                password: "pass".to_string(),
+                password: SecUtf8::from("pass"),
             }))
             .times(1)
             .return_once(|_| Ok(()));
@@ -383,6 +387,7 @@ pub mod tests {
         let request = registration::ClientRegistrationStartRequest {
             username: "bob".into(),
             registration_start_request: registration_start_request.message,
+            upgrade_token: None,
         };
         let start_response = opaque::server::registration::start_registration(
             &opaque::server::ServerSetup::new(&mut rng),
@@ -433,6 +438,7 @@ pub mod tests {
         let request = registration::ClientRegistrationStartRequest {
             username: "bob".into(),
             registration_start_request: registration_start_request.message,
+            upgrade_token: None,
         };
         let start_response = opaque::server::registration::start_registration(
             &opaque::server::ServerSetup::new(&mut rng),

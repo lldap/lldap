@@ -289,6 +289,7 @@ mod tests {
                             value: "Bobberson".to_string().into(),
                         },
                     ],
+                    has_legacy_password: false,
                 })
             });
         let mut groups = HashSet::new();
@@ -354,6 +355,7 @@ mod tests {
             ]}) {
             id
             email
+            hasLegacyPassword
           }
         }"#;
 
@@ -396,6 +398,7 @@ mod tests {
                                 &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                             ),
                             attributes: Vec::new(),
+                            has_legacy_password: false,
                         },
                         groups: None,
                     },
@@ -415,6 +418,7 @@ mod tests {
                                 &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                             ),
                             attributes: Vec::new(),
+                            has_legacy_password: true,
                         },
                         groups: None,
                     },
@@ -438,11 +442,75 @@ mod tests {
                     "users": [
                         {
                             "id": "bob",
-                            "email": "bob@bobbers.on"
+                            "email": "bob@bobbers.on",
+                            "hasLegacyPassword": false,
                         },
                         {
                             "id": "robert",
-                            "email": "robert@bobbers.on"
+                            "email": "robert@bobbers.on",
+                            "hasLegacyPassword": true,
+                        },
+                    ]
+                }),
+                vec![]
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn list_users_hides_legacy_password_from_non_admin() {
+        const QUERY: &str = r#"{
+          users {
+            id
+            hasLegacyPassword
+          }
+        }"#;
+
+        let mut mock = MockTestBackendHandler::new();
+        setup_default_schema(&mut mock);
+        mock.expect_list_users()
+            .with(eq(None), eq(false))
+            .return_once(|_, _| {
+                Ok(vec![lldap_domain::types::UserAndGroups {
+                    user: DomainUser {
+                        user_id: UserId::new("robert"),
+                        email: "robert@bobbers.on".into(),
+                        display_name: None,
+                        creation_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+                        modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+                        password_modified_date: chrono::Utc
+                            .timestamp_opt(0, 0)
+                            .unwrap()
+                            .naive_utc(),
+                        uuid: lldap_domain::types::Uuid::from_name_and_date(
+                            "robert",
+                            &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+                        ),
+                        attributes: Vec::new(),
+                        has_legacy_password: true,
+                    },
+                    groups: None,
+                }])
+            });
+
+        let context = Context::<MockTestBackendHandler>::new_for_tests(
+            mock,
+            ValidationResults {
+                user: UserId::new("readonly"),
+                permission: Permission::Readonly,
+            },
+        );
+
+        let schema = schema(Query::<MockTestBackendHandler>::new());
+        assert_eq!(
+            execute(QUERY, None, &schema, &Variables::new(), &context).await,
+            Ok((
+                graphql_value!(
+                {
+                    "users": [
+                        {
+                            "id": "robert",
+                            "hasLegacyPassword": None,
                         },
                     ]
                 }),

@@ -15,6 +15,7 @@ test = []
 async-trait = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
+secstr = { workspace = true }
 derive_more = { workspace = true }
 ldap3_proto = { workspace = true }
 serde = { workspace = true }

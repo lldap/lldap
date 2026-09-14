@@ -11,6 +11,7 @@ rust-version.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+secstr = { workspace = true }
 tracing = { workspace = true }
 itertools = { workspace = true }
 
