@@ -14,6 +14,7 @@ use lldap_auth::access_control::ValidationResults;
 use lldap_domain::types::UserId;
 use lldap_domain_handlers::handler::{BackendHandler, BindRequest, LoginHandler};
 use lldap_opaque_handler::OpaqueHandler;
+use secstr::SecUtf8;
 
 pub(crate) async fn do_bind(
     ldap_info: &LdapInfo,
@@ -50,7 +51,7 @@ pub(crate) async fn do_bind(
     match login_handler
         .bind(BindRequest {
             name: user_id.clone(),
-            password: password.clone(),
+            password: SecUtf8::from(password.clone()),
         })
         .await
     {
@@ -227,7 +228,7 @@ pub mod tests {
         mock.expect_bind()
             .with(eq(lldap_domain_handlers::handler::BindRequest {
                 name: UserId::new("bob"),
-                password: "pass".to_string(),
+                password: SecUtf8::from("pass"),
             }))
             .times(1)
             .return_once(|_| Ok(()));
@@ -252,7 +253,7 @@ pub mod tests {
         mock.expect_bind()
             .with(eq(lldap_domain_handlers::handler::BindRequest {
                 name: UserId::new("test"),
-                password: "pass".to_string(),
+                password: SecUtf8::from("pass"),
             }))
             .times(1)
             .return_once(|_| Ok(()));

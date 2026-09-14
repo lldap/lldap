@@ -22,6 +22,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 derive_more = { workspace = true }
 opaque-ke = { workspace = true }
+secstr = { workspace = true }
 serde = { workspace = true }
 argon2 = "0.5"
 rand = { workspace = true }

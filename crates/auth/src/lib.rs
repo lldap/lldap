@@ -1,9 +1,9 @@
 #![forbid(non_ascii_idents)]
 #![allow(clippy::nonstandard_macro_braces)]
 use chrono::prelude::*;
+use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::fmt;
 use uuid::Uuid;
 
 pub mod access_control;
@@ -46,19 +46,11 @@ pub mod login {
         pub credential_finalization: opaque::client::login::CredentialFinalization,
     }
 
-    #[derive(Serialize, Deserialize, Clone)]
+    #[derive(Serialize, Deserialize, Clone, Debug)]
     pub struct ClientSimpleLoginRequest {
         pub username: UserId,
-        pub password: String,
-    }
-
-    impl fmt::Debug for ClientSimpleLoginRequest {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.debug_struct("ClientSimpleLoginRequest")
-                .field("username", &self.username.as_str())
-                .field("password", &"***********")
-                .finish()
-        }
+        /// Zeroed on drop; `Debug` prints a placeholder.
+        pub password: SecUtf8,
     }
 
     #[derive(Serialize, Deserialize, Clone)]

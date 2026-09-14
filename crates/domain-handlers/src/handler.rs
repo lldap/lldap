@@ -12,13 +12,15 @@ use lldap_domain::{
     },
 };
 use lldap_domain_model::{error::Result, model::UserColumn};
+use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct BindRequest {
     pub name: UserId,
-    pub password: String,
+    /// Zeroed on drop and redacted in `Debug`.
+    pub password: SecUtf8,
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]

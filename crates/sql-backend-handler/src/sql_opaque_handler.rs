@@ -307,7 +307,7 @@ impl LoginHandler for SqlBackendHandler {
         // password, corrupted file, …) is collapsed into a generic auth
         // error so we don't leak which version the user has.
         validator
-            .validate(&password_hash, &request.password, &request.name)
+            .validate(&password_hash, request.password.unsecure(), &request.name)
             .map_err(|_| auth_error())?;
 
         // On a successful v0.7 validation, opportunistically re-register
@@ -318,7 +318,7 @@ impl LoginHandler for SqlBackendHandler {
         // a concurrent password reset can never be overwritten.
         if version.is_v07() {
             match self
-                .upgrade_password(&request.name, &request.password, &password_hash)
+                .upgrade_password(&request.name, request.password.unsecure(), &password_hash)
                 .await
             {
                 Ok(true) => info!(
@@ -717,21 +717,21 @@ mod tests {
         handler
             .bind(BindRequest {
                 name: UserId::new("bob"),
-                password: "bob00".to_string(),
+                password: SecUtf8::from("bob00"),
             })
             .await
             .unwrap();
         handler
             .bind(BindRequest {
                 name: UserId::new("andrew"),
-                password: "bob00".to_string(),
+                password: SecUtf8::from("bob00"),
             })
             .await
             .unwrap_err();
         handler
             .bind(BindRequest {
                 name: UserId::new("bob"),
-                password: "wrong_password".to_string(),
+                password: SecUtf8::from("wrong_password"),
             })
             .await
             .unwrap_err();
@@ -746,7 +746,7 @@ mod tests {
         handler
             .bind(BindRequest {
                 name: UserId::new("bob"),
-                password: "bob00".to_string(),
+                password: SecUtf8::from("bob00"),
             })
             .await
             .unwrap_err();
@@ -898,7 +898,7 @@ mod tests {
         handler
             .bind(BindRequest {
                 name: UserId::new("legacy_user"),
-                password: "my_legacy_password".to_string(),
+                password: SecUtf8::from("my_legacy_password"),
             })
             .await
             .expect("v0.7 bind should succeed");
@@ -919,7 +919,7 @@ mod tests {
         handler
             .bind(BindRequest {
                 name: UserId::new("legacy_user"),
-                password: "my_legacy_password".to_string(),
+                password: SecUtf8::from("my_legacy_password"),
             })
             .await
             .expect("Bind with upgraded v4.0 password should succeed");
@@ -928,7 +928,7 @@ mod tests {
         handler
             .bind(BindRequest {
                 name: UserId::new("legacy_user"),
-                password: "wrong_password".to_string(),
+                password: SecUtf8::from("wrong_password"),
             })
             .await
             .expect_err("Wrong password should fail");
@@ -961,7 +961,7 @@ mod tests {
         handler
             .bind(BindRequest {
                 name: UserId::new("legacy_user"),
-                password: "wrong_password".to_string(),
+                password: SecUtf8::from("wrong_password"),
             })
             .await
             .expect_err("Wrong v0.7 password should fail");
@@ -1010,7 +1010,7 @@ mod tests {
         handler
             .bind(BindRequest {
                 name: UserId::new("fresh_user"),
-                password: "fresh_password".to_string(),
+                password: SecUtf8::from("fresh_password"),
             })
             .await
             .unwrap();
@@ -1057,14 +1057,14 @@ mod tests {
         handler
             .bind(BindRequest {
                 name: UserId::new("legacy_alice"),
-                password: "alice_password".to_string(),
+                password: SecUtf8::from("alice_password"),
             })
             .await
             .expect("v0.7 user should bind");
         handler
             .bind(BindRequest {
                 name: UserId::new("new_bob"),
-                password: "bob_password".to_string(),
+                password: SecUtf8::from("bob_password"),
             })
             .await
             .expect("New user should bind");
@@ -1312,7 +1312,7 @@ mod tests {
         handler
             .bind(BindRequest {
                 name: UserId::new(user),
-                password: password.to_string(),
+                password: SecUtf8::from(password),
             })
             .await
             .is_ok()

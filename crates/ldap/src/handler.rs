@@ -374,7 +374,7 @@ pub mod tests {
         mock.expect_bind()
             .with(eq(BindRequest {
                 name: UserId::new("test"),
-                password: "pass".to_string(),
+                password: secstr::SecUtf8::from("pass"),
             }))
             .return_once(|_| Ok(()));
         let group = group.to_string();
