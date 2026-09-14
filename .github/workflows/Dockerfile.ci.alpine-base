@@ -1,4 +1,4 @@
-FROM debian:bullseye AS lldap
+FROM debian:bookworm AS lldap
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TARGETPLATFORM
 RUN apt update && apt install -y wget
