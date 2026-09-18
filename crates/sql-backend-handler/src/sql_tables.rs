@@ -189,6 +189,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_init_table_primary_keys() {
+        crate::logging::init_for_tests();
+        let sql_pool = get_in_memory_db().await;
+        init_table(&sql_pool).await.unwrap();
+
+        #[derive(FromQueryResult, PartialEq, Eq, Debug)]
+        struct ColumnInfo {
+            name: String,
+            pk: i64,
+        }
+
+        assert_eq!(
+            ColumnInfo::find_by_statement(raw_statement(
+                r#"SELECT name, pk FROM pragma_table_info('metadata') WHERE pk > 0 ORDER BY pk"#,
+            ))
+            .all(&sql_pool)
+            .await
+            .unwrap(),
+            vec![ColumnInfo {
+                name: "version".to_owned(),
+                pk: 1,
+            }]
+        );
+
+        assert_eq!(
+            ColumnInfo::find_by_statement(raw_statement(
+                r#"SELECT name, pk FROM pragma_table_info('memberships') WHERE pk > 0 ORDER BY pk"#,
+            ))
+            .all(&sql_pool)
+            .await
+            .unwrap(),
+            vec![
+                ColumnInfo {
+                    name: "user_id".to_owned(),
+                    pk: 1,
+                },
+                ColumnInfo {
+                    name: "group_id".to_owned(),
+                    pk: 2,
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn test_migrate_tables() {
         crate::logging::init_for_tests();
         // Test that we add the column creation_date to groups and uuid to users and groups.
