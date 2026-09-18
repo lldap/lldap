@@ -51,6 +51,16 @@ impl ValidationResults {
             || &self.user == user
     }
 
+    // A password manager cannot drop its own factor, and under "always" nobody can.
+    // An admin session could already mint a new admin, so blocking it there buys nothing.
+    #[must_use]
+    pub fn can_reset_mfa(&self, user: &UserId, user_is_admin: bool) -> bool {
+        self.permission == Permission::Admin
+            || (self.permission == Permission::PasswordManager
+                && !user_is_admin
+                && &self.user != user)
+    }
+
     #[must_use]
     pub fn can_write(&self, user: &UserId) -> bool {
         self.permission == Permission::Admin || &self.user == user

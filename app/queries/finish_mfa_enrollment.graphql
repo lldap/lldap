@@ -1,0 +1,5 @@
+mutation FinishMfaEnrollment($state: String!, $code: String!) {
+  finishMfaEnrollment(state: $state, code: $code) {
+    ok
+  }
+}
