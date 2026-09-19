@@ -1,0 +1,23 @@
+ldap {
+        server = 'ldaps://ldap.example.org'
+
+        identity = 'uid=freeradius,ou=people,dc=example,dc=org'
+        password = 'freeradiuspassword'
+
+        base_dn = 'dc=example,dc=org'
+        user_dn = "uid"
+
+        user {
+                base_dn = "ou=people,${..base_dn}"
+                filter = "(uid=%{%{Stripped-User-Name}:-%{User-Name}})"
+        }
+
+        group {
+                base_dn = "ou=groups,${..base_dn}"
+                filter = '(objectClass=groupOfUniqueNames)'
+
+                name_attribute = cn
+
+                membership_attribute = 'memberOf'
+        }
+}
