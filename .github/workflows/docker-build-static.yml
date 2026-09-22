@@ -542,13 +542,14 @@ jobs:
           # On PR will fail, force fully uncomment push: true, or docker image will fail for next steps
           #push: ${{ github.event_name != 'pull_request' }}
           push: true
+          pull: true
           platforms: ${{ matrix.platforms }}
           file: ./.github/workflows/Dockerfile.ci.${{ matrix.container }}-base
           tags: |
                 ${{ steps.meta-base.outputs.tags }}
           labels: ${{ steps.meta-base.outputs.labels }}
-          cache-from: type=gha,mode=max
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.container }}-base
+          cache-to: type=gha,mode=max,scope=${{ matrix.container }}-base
 
 #####################################
 #### build variants docker image ####

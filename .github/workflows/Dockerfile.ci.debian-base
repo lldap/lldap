@@ -1,7 +1,10 @@
-FROM debian:bullseye AS lldap
+FROM debian:trixie AS lldap
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TARGETPLATFORM
-RUN apt update && apt install -y wget
+RUN rm -rf /var/lib/apt/lists/* \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends wget ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /dim
 COPY bin/ bin/
 COPY web/ web/
@@ -60,13 +63,14 @@ RUN set -x \
     && for file in $(cat /lldap/app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
     && chmod a+r -R .
 
-FROM debian:bullseye-slim
+FROM debian:trixie-slim
 ENV UID=1000
 ENV GID=1000
 ENV USER=lldap
-RUN apt update && \
-    apt install -y --no-install-recommends tini openssl ca-certificates tzdata jq curl jo && \
-    apt clean && \
+RUN rm -rf /var/lib/apt/lists/* && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends tini openssl ca-certificates tzdata jq curl jo && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -g $GID $USER && useradd --system -m -g $USER --uid $UID $USER && \
     mkdir -p /data && chown $USER:$USER /data
