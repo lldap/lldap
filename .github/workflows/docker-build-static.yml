@@ -543,7 +543,6 @@ jobs:
           #push: ${{ github.event_name != 'pull_request' }}
           push: true
           pull: true
-          no-cache: true
           platforms: ${{ matrix.platforms }}
           file: ./.github/workflows/Dockerfile.ci.${{ matrix.container }}-base
           tags: |
