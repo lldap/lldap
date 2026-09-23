@@ -126,7 +126,7 @@ impl UserTable {
         let link = &ctx.link();
         html! {
           <tr key={user.id.clone()}>
-              <td><Link to={AppRoute::UserDetails{user_id: user.id.clone()}}>{&user.id}</Link></td>
+              <td><Link to={AppRoute::user_details(&user.id)}>{&user.id}</Link></td>
               <td>{&user.email}</td>
               <td>{&user.display_name}</td>
               <td>{&user.first_name}</td>
