@@ -49,6 +49,10 @@ jobs:
         run: cargo +${{steps.toolchain.outputs.name}} run -- export_graphql_schema -o generated_schema.graphql
       - name: Check schema
         run: diff schema.graphql generated_schema.graphql || (echo "The schema file is out of date. Please run `./export_schema.sh`" && false)
+      - name: Generate configuration schema
+        run: cargo +${{steps.toolchain.outputs.name}} run -- export_config_schema -o generated_config.schema.json
+      - name: Check configuration schema
+        run: diff lldap_config.schema.json generated_config.schema.json || (echo "The configuration schema file is out of date. Please run `./export_schema.sh`" && false)
 
 
   clippy:

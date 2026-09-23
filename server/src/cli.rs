@@ -10,6 +10,7 @@ use crate::database_string::DatabaseUrl;
 
 // Can be deserialized from either a boolean or a string, to facilitate migration.
 #[derive(Copy, Clone, Debug, Serialize, Default, EnumString, IntoStaticStr)]
+#[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive)]
 pub enum TrueFalseAlways {
     #[default]
@@ -25,6 +26,22 @@ impl TrueFalseAlways {
 
     pub fn is_yes(&self) -> bool {
         matches!(self, TrueFalseAlways::True)
+    }
+}
+
+impl schemars::JsonSchema for TrueFalseAlways {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "TrueFalseAlways".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "A boolean, or one of the strings \"false\", \"true\" and \"always\" (case-insensitive).",
+            "anyOf": [
+                { "type": "boolean" },
+                { "type": "string", "enum": ["false", "true", "always"] }
+            ]
+        })
     }
 }
 
@@ -88,6 +105,9 @@ pub enum Command {
     /// Export the GraphQL schema to *.graphql.
     #[clap(name = "export_graphql_schema")]
     ExportGraphQLSchema(ExportGraphQLSchemaOpts),
+    /// Export the JSON Schema of the configuration file.
+    #[clap(name = "export_config_schema")]
+    ExportConfigSchema(ExportConfigSchemaOpts),
     /// Run the LDAP and GraphQL server.
     #[clap(name = "run")]
     Run(RunOpts),
@@ -212,7 +232,7 @@ pub struct LdapsOpts {
     pub ldaps_key_file: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, clap::ValueEnum)]
+#[derive(Clone, Debug, Deserialize, Serialize, clap::ValueEnum, schemars::JsonSchema)]
 #[serde(rename_all = "UPPERCASE")]
 #[clap(rename_all = "UPPERCASE")]
 pub enum SmtpEncryption {
@@ -258,6 +278,13 @@ pub struct SmtpOpts {
 
     #[clap(long, env = "LLDAP_SMTP_OPTIONS__SMTP_ENCRYPTION", value_parser = EnumValueParser::<SmtpEncryption>::new(), ignore_case = true)]
     pub smtp_encryption: Option<SmtpEncryption>,
+}
+
+#[derive(Debug, Parser, Clone)]
+pub struct ExportConfigSchemaOpts {
+    /// Output to a file. If not specified, the schema is printed to the standard output.
+    #[clap(short, long)]
+    pub output_file: Option<String>,
 }
 
 #[derive(Debug, Parser, Clone)]

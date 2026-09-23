@@ -298,6 +298,15 @@ async fn create_schema_command(opts: RunOpts) -> Result<()> {
     Ok(())
 }
 
+fn export_config_schema(output_file: Option<String>) -> Result<()> {
+    let output = serde_json::to_string_pretty(&configuration::config_schema())? + "\n";
+    match output_file {
+        None => print!("{output}"),
+        Some(path) => std::fs::write(&path, output).context(format!("unable to write '{path}'"))?,
+    }
+    Ok(())
+}
+
 #[actix::main]
 async fn main() -> Result<()> {
     let cli_opts = cli::init();
@@ -305,6 +314,7 @@ async fn main() -> Result<()> {
         Command::ExportGraphQLSchema(opts) => {
             lldap_graphql_server::api::export_schema(opts.output_file)
         }
+        Command::ExportConfigSchema(opts) => export_config_schema(opts.output_file),
         Command::Run(opts) => run_server_command(opts).await,
         Command::HealthCheck(opts) => run_healthcheck(opts).await,
         Command::SendTestEmail(opts) => send_test_email_command(opts).await,
