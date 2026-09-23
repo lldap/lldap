@@ -14,10 +14,6 @@
           "type": "string"
         }
       },
-      "required": [
-        "http_host",
-        "ldap_host"
-      ],
       "type": "object"
     },
     "LdapsOptions": {
@@ -47,12 +43,6 @@
           "type": "integer"
         }
       },
-      "required": [
-        "enabled",
-        "port",
-        "cert_file",
-        "key_file"
-      ],
       "type": "object"
     },
     "MailOptions": {
@@ -108,14 +98,6 @@
           "type": "string"
         }
       },
-      "required": [
-        "enable_password_reset",
-        "server",
-        "port",
-        "user",
-        "password",
-        "smtp_encryption"
-      ],
       "type": "object"
     },
     "SmtpEncryption": {
@@ -293,27 +275,6 @@
       "type": "boolean"
     }
   },
-  "required": [
-    "ldap_host",
-    "ldap_port",
-    "http_host",
-    "http_port",
-    "ldap_base_dn",
-    "ldap_user_dn",
-    "ldap_user_email",
-    "force_ldap_user_pass_reset",
-    "force_update_private_key",
-    "database_url",
-    "ignored_user_attributes",
-    "ignored_group_attributes",
-    "verbose",
-    "key_file",
-    "assets_path",
-    "smtp_options",
-    "ldaps_options",
-    "http_url",
-    "healthcheck_options"
-  ],
   "title": "Configuration",
   "type": "object"
 }

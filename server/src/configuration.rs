@@ -801,6 +801,9 @@ pub fn config_schema() -> serde_json::Value {
 
 /// Set the "default" of each property of `schema` from the value in `defaults`,
 /// also in the definitions that the properties refer to.
+///
+/// A property with a default is not required: the configuration file is
+/// merged over the defaults, so the file can leave out any of these keys.
 fn add_defaults(
     schema: &mut serde_json::Value,
     defaults: &serde_json::Value,
@@ -809,10 +812,12 @@ fn add_defaults(
     let Some(serde_json::Value::Object(properties)) = schema.get_mut("properties") else {
         return;
     };
+    let mut defaulted = Vec::new();
     for (key, property) in properties.iter_mut() {
         let Some(default) = defaults.get(key) else {
             continue;
         };
+        defaulted.push(key.clone());
         if let Some(name) = property
             .get("$ref")
             .and_then(|r| r.as_str())
@@ -825,6 +830,17 @@ fn add_defaults(
         }
         if let serde_json::Value::Object(property) = property {
             property.insert("default".to_string(), default.clone());
+        }
+    }
+    let schema = schema.as_object_mut().unwrap();
+    if let Some(serde_json::Value::Array(required)) = schema.get_mut("required") {
+        required.retain(|name| {
+            !name
+                .as_str()
+                .is_some_and(|name| defaulted.iter().any(|key| key == name))
+        });
+        if required.is_empty() {
+            schema.remove("required");
         }
     }
 }
