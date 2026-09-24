@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use base64::Engine;
 use lldap_auth::opaque;
 use lldap_domain::types::UserId;
-use lldap_domain_handlers::handler::{BindRequest, LoginHandler};
+use lldap_domain_handlers::handler::{BindRequest, LoginHandler, UserRequestFilter, UserListerBackendHandler};
 use lldap_domain_model::{
     error::{DomainError, Result},
     model::{self, UserColumn},
@@ -60,6 +60,26 @@ impl SqlBackendHandler {
             .await?
             .and_then(|u| u.0))
     }
+
+    #[instrument(skip(self), level = "debug", err)]
+    async fn find_user_id_by_email(&self, email: &str) -> Result<Option<UserId>> {
+        // Find user ID by email address
+        let users = self
+            .list_users(
+                Some(UserRequestFilter::Equality(UserColumn::Email, email.to_owned())),
+                false,
+            )
+            .await?;
+        
+        if users.len() > 1 {
+            warn!("Multiple users found with email '{}', login ambiguous", email);
+            return Ok(None);
+        }
+        
+        Ok(users.first().map(|user_and_groups| user_and_groups.user.user_id.clone()))
+    }
+
+
 }
 
 #[async_trait]
@@ -101,14 +121,33 @@ impl OpaqueHandler for SqlOpaqueHandler {
         &self,
         request: login::ClientLoginStartRequest,
     ) -> Result<login::ServerLoginStartResponse> {
-        let user_id = request.username;
-        info!(r#"OPAQUE login attempt for "{}""#, &user_id);
-        let maybe_password_file = self
-            .get_password_file_for_user(user_id.clone())
-            .await?
+        // First try to authenticate with the provided name as a user ID
+        let mut actual_user_id = request.username.clone();
+        let mut maybe_password_file = self
+            .get_password_file_for_user(request.username.clone())
+            .await?;
+        
+        // If no user found by user ID, try to find by email for web UI login
+        if maybe_password_file.is_none() {
+            debug!(r#"User "{}" not found by user ID, trying email lookup for web login"#, &request.username);
+            if let Some(user_id_by_email) = self
+                .find_user_id_by_email(request.username.as_str())
+                .await?
+            {
+                debug!(r#"Found user by email: "{}""#, &user_id_by_email);
+                actual_user_id = user_id_by_email;
+                maybe_password_file = self
+                    .get_password_file_for_user(actual_user_id.clone())
+                    .await?;
+            }
+        }
+
+        info!(r#"OPAQUE login attempt for "{}" (input: "{}")"#, &actual_user_id, &request.username);
+        
+        let maybe_password_file = maybe_password_file
             .map(|bytes| {
                 opaque::server::ServerRegistration::deserialize(&bytes).map_err(|_| {
-                    DomainError::InternalError(format!("Corrupted password file for {}", &user_id))
+                    DomainError::InternalError(format!("Corrupted password file for {}", &actual_user_id))
                 })
             })
             .transpose()?;
@@ -120,11 +159,11 @@ impl OpaqueHandler for SqlOpaqueHandler {
             &self.opaque_setup,
             maybe_password_file,
             request.login_start_request,
-            &user_id,
+            &actual_user_id,
         )?;
         let secret_key = self.get_orion_secret_key()?;
         let server_data = login::ServerData {
-            username: user_id,
+            username: actual_user_id,
             server_login: start_response.state,
         };
         let encrypted_state = orion::aead::seal(&secret_key, &bincode::serialize(&server_data)?)?;
@@ -306,6 +345,7 @@ mod tests {
         let handler = SqlOpaqueHandler::new(generate_random_private_key(), sql_pool.clone());
         insert_user(&handler, "bob", "bob00").await;
 
+        // Test login with username (should work)
         handler
             .bind(BindRequest {
                 name: UserId::new("bob"),
@@ -313,6 +353,8 @@ mod tests {
             })
             .await
             .unwrap();
+        
+        // Test login with non-existent user
         handler
             .bind(BindRequest {
                 name: UserId::new("andrew"),
@@ -320,11 +362,46 @@ mod tests {
             })
             .await
             .unwrap_err();
+        
+        // Test login with wrong password
         handler
             .bind(BindRequest {
                 name: UserId::new("bob"),
                 password: "wrong_password".to_string(),
             })
+            .await
+            .unwrap_err();
+
+        // Test that email login is NOT supported for LDAP bind
+        handler
+            .bind(BindRequest {
+                name: UserId::new("bob@bob.bob"),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn test_opaque_login_with_email() {
+        let sql_pool = get_initialized_db().await;
+        crate::logging::init_for_tests();
+        let backend_handler = SqlBackendHandler::new(generate_random_private_key(), sql_pool);
+        insert_user(&backend_handler, "bob", "bob00").await;
+        
+        // Test OPAQUE login with username (should work as before)
+        attempt_login(&backend_handler, "bob", "bob00").await.unwrap();
+        
+        // Test OPAQUE login with email (new functionality)
+        attempt_login(&backend_handler, "bob@bob.bob", "bob00").await.unwrap();
+        
+        // Test OPAQUE login with non-existent email
+        attempt_login(&backend_handler, "nonexistent@bob.bob", "bob00")
+            .await
+            .unwrap_err();
+        
+        // Test OPAQUE login with wrong password using email
+        attempt_login(&backend_handler, "bob@bob.bob", "wrong_password")
             .await
             .unwrap_err();
     }
