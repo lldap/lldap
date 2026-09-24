@@ -1,0 +1,280 @@
+{
+  "$defs": {
+    "HealthcheckOptions": {
+      "description": "Options to configure the healthcheck command.\n\nTo set these options from environment variables, use the following format\n(example with \"http_host\"): LLDAP_HEALTHCHECK_OPTIONS__HTTP_HOST",
+      "properties": {
+        "http_host": {
+          "default": "localhost",
+          "description": "The host address that the healthcheck checks for the HTTP server.\nIf \"http_host\" is set to a specific IP address, set this to the same\naddress. Wrap an IPv6 address in [].",
+          "type": "string"
+        },
+        "ldap_host": {
+          "default": "localhost",
+          "description": "The host address that the healthcheck checks for the LDAP server.\nIf \"ldap_host\" is set to a specific IP address, set this to the same\naddress.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "LdapsOptions": {
+      "description": "Options to configure LDAPS.\n\nTo set these options from environment variables, use the following format\n(example with \"port\"): LLDAP_LDAPS_OPTIONS__PORT",
+      "properties": {
+        "cert_file": {
+          "default": "cert.pem",
+          "description": "The certificate file.",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Whether to enable LDAPS.",
+          "type": "boolean"
+        },
+        "key_file": {
+          "default": "key.pem",
+          "description": "The certificate key file.",
+          "type": "string"
+        },
+        "port": {
+          "default": 6360,
+          "description": "The port on which to listen for LDAPS.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "MailOptions": {
+      "description": "Options to send emails, for example password reset emails.\n\nTo set these options from environment variables, use the following format\n(example with \"password\"): LLDAP_SMTP_OPTIONS__PASSWORD",
+      "properties": {
+        "enable_password_reset": {
+          "default": false,
+          "description": "Whether to enable password reset via email.",
+          "type": "boolean"
+        },
+        "from": {
+          "default": null,
+          "description": "How the sender appears in the email: a free-form name, followed by an\nemail between <>. For example \"LLDAP Admin <sender@example.com>\".",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "password": {
+          "default": "",
+          "description": "The SMTP password.",
+          "type": "string"
+        },
+        "port": {
+          "default": 587,
+          "description": "The SMTP port.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reply_to": {
+          "default": null,
+          "description": "The reply-to address, in the same format as \"from\".",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "server": {
+          "default": "localhost",
+          "description": "The SMTP server.",
+          "type": "string"
+        },
+        "smtp_encryption": {
+          "$ref": "#/$defs/SmtpEncryption",
+          "default": "TLS",
+          "description": "How the connection is encrypted."
+        },
+        "user": {
+          "default": "",
+          "description": "The SMTP user, usually your email address.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SmtpEncryption": {
+      "enum": [
+        "NONE",
+        "TLS",
+        "STARTTLS"
+      ],
+      "type": "string"
+    },
+    "TrueFalseAlways": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "enum": [
+            "false",
+            "true",
+            "always"
+          ],
+          "type": "string"
+        }
+      ],
+      "description": "A boolean, or one of the strings \"false\", \"true\" and \"always\" (case-insensitive)."
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The LLDAP configuration file.\n\nYou can override all the values through environment variables, prefixed\nwith \"LLDAP_\". For example, \"LLDAP_LDAP_PORT\" overrides \"ldap_port\".\nA double underscore separates the levels of a nested option, for example\n\"LLDAP_SMTP_OPTIONS__PORT\".",
+  "properties": {
+    "assets_path": {
+      "default": "./app",
+      "description": "The path to the front-end assets, relative to the working directory.",
+      "type": "string"
+    },
+    "database_url": {
+      "default": "sqlite://users.db?mode=rwc",
+      "description": "The database URL. It encodes the type of database (SQLite, MySQL or\nPostgreSQL), the path, the user, the password and the mode.\nFor SQLite, add \"?mode=rwc\" to create the database if it does not exist.\nExamples: \"postgres://postgres-user:password@postgres-server/my-database\",\n\"mysql://mysql-user:password@mysql-server/my-database\".",
+      "type": "string"
+    },
+    "force_ldap_user_pass_reset": {
+      "$ref": "#/$defs/TrueFalseAlways",
+      "default": "false",
+      "description": "Whether to reset the admin password to the value of \"ldap_user_pass\".\nUse it if you lost the admin password.\nWith true, the server stops after the reset: set it to false again, then\nrestart the server. With \"always\", LLDAP resets the password each time\nthe server starts."
+    },
+    "force_update_private_key": {
+      "default": false,
+      "description": "Whether to accept a change of the private key (\"key_file\" or\n\"key_seed\"). A changed private key makes all existing passwords invalid.\nThe server stops after the update: set it to false again, then restart\nthe server.",
+      "type": "boolean"
+    },
+    "healthcheck_options": {
+      "$ref": "#/$defs/HealthcheckOptions",
+      "default": {
+        "http_host": "localhost",
+        "ldap_host": "localhost"
+      }
+    },
+    "http_host": {
+      "default": "::",
+      "description": "The host address that the HTTP server binds to.\nSet it to \"127.0.0.1\" (\"::1\" for IPv6) to only allow connections from\nlocalhost.",
+      "type": "string"
+    },
+    "http_port": {
+      "default": 17170,
+      "description": "The port of the HTTP server, for user login and administration.",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "http_url": {
+      "default": "http://localhost/",
+      "description": "The public URL of the server, for password reset links.",
+      "format": "uri",
+      "type": "string"
+    },
+    "ignored_group_attributes": {
+      "default": [],
+      "description": "Group attributes that LLDAP does not warn about when a service requests\nthem.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "ignored_user_attributes": {
+      "default": [],
+      "description": "User attributes that LLDAP does not warn about when a service requests\nthem.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "jwt_secret": {
+      "default": null,
+      "description": "The random secret for the JWT signature.\nShare it with the application servers that consume the JWTs.\nA change of this secret makes all user sessions invalid.\nYou can also set it with the LLDAP_JWT_SECRET environment variable, or\nfrom the contents of the file in LLDAP_JWT_SECRET_FILE.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "key_file": {
+      "default": "server_key",
+      "description": "The file with the private key that LLDAP uses to store the passwords.\nLLDAP generates it on the first start if it does not exist.\nWe recommend \"key_seed\" instead.",
+      "type": "string"
+    },
+    "key_seed": {
+      "default": null,
+      "description": "The seed that LLDAP uses to generate the private key, see \"key_file\".\nUse a random string of at least 12 characters.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ldap_base_dn": {
+      "default": "dc=example,dc=com",
+      "description": "The base DN for LDAP, usually from your domain name.\nIt is the namespace for your users.",
+      "type": "string"
+    },
+    "ldap_host": {
+      "default": "::",
+      "description": "The host address that the LDAP server binds to.\nSet it to \"127.0.0.1\" (\"::1\" for IPv6) to only allow connections from\nlocalhost.",
+      "type": "string"
+    },
+    "ldap_port": {
+      "default": 3890,
+      "description": "The port of the LDAP server.",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ldap_user_dn": {
+      "default": "admin",
+      "description": "The username of the admin.\nFor the value \"admin\", the LDAP user is\n\"cn=admin,ou=people,<ldap_base_dn>\".",
+      "type": "string"
+    },
+    "ldap_user_email": {
+      "default": "",
+      "description": "The email of the admin.\nLLDAP only uses it when it creates the admin user.",
+      "type": "string"
+    },
+    "ldap_user_pass": {
+      "default": null,
+      "description": "The password of the admin, for the LDAP bind and for the administration\ninterface. LLDAP only uses it when it creates the admin user.\nUse a minimum of 8 characters.\nYou can also set it with the LLDAP_LDAP_USER_PASS environment variable,\nor from the contents of the file in LLDAP_LDAP_USER_PASS_FILE.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ldaps_options": {
+      "$ref": "#/$defs/LdapsOptions",
+      "default": {
+        "cert_file": "cert.pem",
+        "enabled": false,
+        "key_file": "key.pem",
+        "port": 6360
+      }
+    },
+    "smtp_options": {
+      "$ref": "#/$defs/MailOptions",
+      "default": {
+        "enable_password_reset": false,
+        "from": null,
+        "password": "",
+        "port": 587,
+        "reply_to": null,
+        "server": "localhost",
+        "smtp_encryption": "TLS",
+        "user": ""
+      }
+    },
+    "verbose": {
+      "default": false,
+      "description": "Whether to log more verbosely.",
+      "type": "boolean"
+    }
+  },
+  "title": "Configuration",
+  "type": "object"
+}
