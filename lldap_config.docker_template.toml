@@ -172,3 +172,22 @@ key_seed = "RanD0m STR1ng"
 ## If "ldap_host" is set to a specific IP address, this must be set to match if the built-in
 ## healthcheck command is used.
 #ldap_host = "localhost"
+
+## Options to configure trusted header authentication.
+## To set these options from environment variables, use the following format
+## (example with "enabled"): LLDAP_TRUSTED_HEADER_OPTIONS__ENABLED
+[trusted_header_options]
+## Whether to enable trusted header authentication.
+## When enabled, users can be authenticated via a trusted header (e.g. from a reverse proxy).
+## The existing username/password login will remain available as fallback.
+#enabled=false
+## Name of the header containing the username.
+#header_name="Remote-User"
+## Optional logout URL to redirect to when using trusted header authentication.
+## If not specified, users will be redirected to the regular login page.
+#logout_url="https://example.com/logout"
+## List of trusted proxy IP addresses/networks that are allowed to send trusted headers.
+## Only requests from these IPs will be authenticated via trusted headers.
+## Use CIDR notation. For a single IP, use /32 for IPv4 or /128 for IPv6.
+## Default: ["127.0.0.0/8", "::1/128"] (localhost only)
+#trusted_proxies=["127.0.0.0/8", "::1/128", "192.168.1.1/32", "10.0.0.0/8"]

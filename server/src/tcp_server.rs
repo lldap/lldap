@@ -1,6 +1,6 @@
 use crate::{
     auth_service,
-    configuration::{Configuration, MailOptions},
+    configuration::{Configuration, MailOptions, TrustedHeaderOptions},
     logging::CustomRootSpanBuilder,
     tcp_backend_handler::*,
 };
@@ -8,7 +8,9 @@ use actix_files::Files;
 use actix_http::{HttpServiceBuilder, header};
 use actix_server::ServerBuilder;
 use actix_service::map_config;
-use actix_web::{App, HttpResponse, Responder, dev::AppConfig, guard, web};
+use actix_web::{
+    App, HttpResponse, Responder, ResponseError, dev::AppConfig, guard, http::StatusCode, web,
+};
 use anyhow::{Context, Result};
 use hmac::Hmac;
 use lldap_access_control::{AccessControlledBackendHandler, ReadonlyBackendHandler};
@@ -52,26 +54,34 @@ pub enum TcpError {
 
 pub type TcpResult<T> = std::result::Result<T, TcpError>;
 
-pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
-    match error {
-        TcpError::DomainError(ref de) => match de {
-            DomainError::AuthenticationError(_) | DomainError::AuthenticationProtocolError(_) => {
-                HttpResponse::Unauthorized()
-            }
-            DomainError::DatabaseError(_)
-            | DomainError::DatabaseTransactionError(_)
-            | DomainError::InternalError(_)
-            | DomainError::UnknownCryptoError(_) => HttpResponse::InternalServerError(),
-            DomainError::Base64DecodeError(_)
-            | DomainError::BinarySerializationError(_)
-            | DomainError::EntityNotFound(_) => HttpResponse::BadRequest(),
-        },
-        TcpError::BadRequest(_) => HttpResponse::BadRequest(),
-        TcpError::NotFoundError(_) => HttpResponse::NotFound(),
-        TcpError::InternalServerError(_) => HttpResponse::InternalServerError(),
-        TcpError::UnauthorizedError(_) => HttpResponse::Unauthorized(),
+impl ResponseError for TcpError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            TcpError::DomainError(de) => match de {
+                DomainError::AuthenticationError(_)
+                | DomainError::AuthenticationProtocolError(_) => StatusCode::UNAUTHORIZED,
+                DomainError::DatabaseError(_)
+                | DomainError::DatabaseTransactionError(_)
+                | DomainError::InternalError(_)
+                | DomainError::UnknownCryptoError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+                DomainError::Base64DecodeError(_)
+                | DomainError::BinarySerializationError(_)
+                | DomainError::EntityNotFound(_) => StatusCode::BAD_REQUEST,
+            },
+            TcpError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            TcpError::NotFoundError(_) => StatusCode::NOT_FOUND,
+            TcpError::InternalServerError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            TcpError::UnauthorizedError(_) => StatusCode::UNAUTHORIZED,
+        }
     }
-    .body(error.to_string())
+
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).body(self.to_string())
+    }
+}
+
+pub(crate) fn error_to_http_response(error: TcpError) -> HttpResponse {
+    error.error_response()
 }
 
 async fn main_js_handler<Backend>(
@@ -112,6 +122,7 @@ async fn get_settings<Backend>(data: web::Data<AppState<Backend>>) -> HttpRespon
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn http_config<Backend>(
     cfg: &mut web::ServiceConfig,
     backend_handler: Backend,
@@ -120,6 +131,7 @@ fn http_config<Backend>(
     server_url: url::Url,
     assets_path: PathBuf,
     mail_options: MailOptions,
+    trusted_header_options: TrustedHeaderOptions,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
@@ -131,6 +143,7 @@ fn http_config<Backend>(
         server_url,
         assets_path: assets_path.clone(),
         mail_options,
+        trusted_header_options,
     }))
     .route(
         "/health",
@@ -175,6 +188,7 @@ pub(crate) struct AppState<Backend> {
     pub server_url: url::Url,
     pub assets_path: PathBuf,
     pub mail_options: MailOptions,
+    pub trusted_header_options: TrustedHeaderOptions,
 }
 
 impl<Backend: BackendHandler> AppState<Backend> {
@@ -214,6 +228,7 @@ where
     let server_url = config.http_url.0.clone();
     let assets_path = config.assets_path.clone();
     let mail_options = config.smtp_options.clone();
+    let trusted_header_options = config.trusted_header_options.clone();
     let verbose = config.verbose;
     if !assets_path.join("index.html").exists() {
         warn!(
@@ -233,6 +248,7 @@ where
                 let server_url = server_url.clone();
                 let assets_path = assets_path.clone();
                 let mail_options = mail_options.clone();
+                let trusted_header_options = trusted_header_options.clone();
                 HttpServiceBuilder::default()
                     .finish(map_config(
                         App::new()
@@ -249,6 +265,7 @@ where
                                     server_url,
                                     assets_path,
                                     mail_options,
+                                    trusted_header_options,
                                 )
                             }),
                         |_| AppConfig::default(),
