@@ -137,6 +137,9 @@ key_seed = "RanD0m STR1ng"
 #port=587
 ## How the connection is encrypted, either "NONE" (no encryption), "TLS" or "STARTTLS".
 #smtp_encryption = "TLS"
+## Optional path to a PEM file with an extra certificate authority to trust for
+## the TLS/STARTTLS connection. Useful when the SMTP server uses a private CA.
+#certificate_authority_file = "/path/to/ca.pem"
 ## The SMTP user, usually your email address.
 #user="sender@gmail.com"
 ## The SMTP password.
