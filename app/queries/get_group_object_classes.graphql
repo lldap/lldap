@@ -1,0 +1,10 @@
+query GetGroupObjectClasses {
+  schema {
+    groupSchema {
+      ldapObjectClasses {
+        objectClass
+        isHardcoded
+      }
+    }
+  }
+}

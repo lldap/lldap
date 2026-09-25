@@ -1,0 +1,5 @@
+mutation DeleteGroupObjectClassQuery($name: String!) {
+  deleteGroupObjectClass(name: $name) {
+    ok
+  }
+}
