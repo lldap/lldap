@@ -10,6 +10,8 @@ use crate::{
         group_schema_table::ListGroupSchema,
         group_table::GroupTable,
         login::LoginForm,
+        register_mfa::RegisterMfa,
+        reset_own_mfa::ResetOwnMfaForm,
         reset_password_step1::ResetPasswordStep1Form,
         reset_password_step2::ResetPasswordStep2Form,
         router::{AppRoute, Link, Redirect},
@@ -46,12 +48,25 @@ pub struct App {
     user_info: Option<(String, bool)>,
     redirect_to: Option<AppRoute>,
     password_reset_enabled: Option<bool>,
+    mfa_enabled: Option<bool>,
+    mfa_required: bool,
+    mfa_enrollment_pending: bool,
+}
+
+// Session state the routes need, kept together so dispatch_route keeps a readable signature.
+struct SessionRouting {
+    user: Option<String>,
+    mfa_enabled: Option<bool>,
+    mfa_required: bool,
+    mfa_enrollment_pending: bool,
 }
 
 pub enum Msg {
-    Login((String, bool)),
+    Login((String, bool, bool)),
     Logout,
     SettingsReceived(anyhow::Result<Options>),
+    SessionRefreshed(anyhow::Result<(String, bool, bool)>),
+    MfaEnrolled,
 }
 
 impl Component for App {
@@ -75,9 +90,16 @@ impl Component for App {
                 }),
             redirect_to: Self::get_redirect_route(ctx),
             password_reset_enabled: None,
+            mfa_enabled: None,
+            mfa_required: false,
+            mfa_enrollment_pending: false,
         };
         ctx.link()
             .send_future(async move { Msg::SettingsReceived(HostService::get_settings().await) });
+        if app.user_info.is_some() {
+            ctx.link()
+                .send_future(async move { Msg::SessionRefreshed(HostService::refresh().await) });
+        }
         app.apply_initial_redirections(ctx);
         app
     }
@@ -85,28 +107,47 @@ impl Component for App {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         let history = ctx.link().history().unwrap();
         match msg {
-            Msg::Login((user_name, is_admin)) => {
+            Msg::Login((user_name, is_admin, mfa_enrollment_required)) => {
                 self.user_info = Some((user_name.clone(), is_admin));
-                history.push(self.redirect_to.take().unwrap_or_else(|| {
-                    if is_admin {
-                        AppRoute::ListUsers
-                    } else {
-                        AppRoute::UserDetails {
-                            user_id: user_name.clone(),
+                self.mfa_enrollment_pending = mfa_enrollment_required;
+                if mfa_enrollment_required {
+                    self.redirect_to = None;
+                    history.push(AppRoute::RegisterMfa { user_id: user_name });
+                } else {
+                    history.push(self.redirect_to.take().unwrap_or_else(|| {
+                        if is_admin {
+                            AppRoute::ListUsers
+                        } else {
+                            AppRoute::UserDetails {
+                                user_id: user_name.clone(),
+                            }
                         }
-                    }
-                }));
+                    }));
+                }
             }
             Msg::Logout => {
                 self.user_info = None;
                 self.redirect_to = None;
+                self.mfa_enrollment_pending = false;
                 history.push(AppRoute::Login);
             }
             Msg::SettingsReceived(Ok(settings)) => {
                 self.password_reset_enabled = Some(settings.password_reset_enabled);
+                self.mfa_enabled = Some(settings.mfa_enabled);
+                self.mfa_required = settings.mfa_required;
             }
             Msg::SettingsReceived(Err(err)) => {
                 error!(err.to_string());
+            }
+            Msg::SessionRefreshed(Ok((user_name, is_admin, mfa_enrollment_required))) => {
+                self.user_info = Some((user_name, is_admin));
+                self.mfa_enrollment_pending = mfa_enrollment_required;
+            }
+            Msg::SessionRefreshed(Err(err)) => {
+                error!(err.to_string());
+            }
+            Msg::MfaEnrolled => {
+                self.mfa_enrollment_pending = false;
             }
         }
         true
@@ -117,6 +158,12 @@ impl Component for App {
         let is_admin = self.is_admin();
         let username = self.user_info.clone().map(|(username, _)| username);
         let password_reset_enabled = self.password_reset_enabled;
+        let session = SessionRouting {
+            user: username.clone(),
+            mfa_enabled: self.mfa_enabled,
+            mfa_required: self.mfa_required,
+            mfa_enrollment_pending: self.mfa_enrollment_pending,
+        };
         html! {
           <div>
             <Banner is_admin={is_admin} username={username} on_logged_out={link.callback(|_| Msg::Logout)} />
@@ -124,7 +171,7 @@ impl Component for App {
               <div class="row justify-content-center" style="padding-bottom: 80px;">
                 <main class="py-3">
                   <Switch<AppRoute>
-                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled))}
+                    render={Switch::render(move |routes| Self::dispatch_route(routes, &link, is_admin, password_reset_enabled, &session))}
                   />
                 </main>
               </div>
@@ -198,7 +245,33 @@ impl App {
         link: &Scope<Self>,
         is_admin: bool,
         password_reset_enabled: Option<bool>,
+        session: &SessionRouting,
     ) -> Html {
+        let logged_in_user = session.user.as_deref();
+        let SessionRouting {
+            mfa_enabled,
+            mfa_required,
+            mfa_enrollment_pending,
+            ..
+        } = *session;
+        if mfa_enrollment_pending
+            && mfa_enabled != Some(false)
+            && let Some(user) = logged_in_user
+        {
+            let on_own_enrollment = matches!(
+                switch,
+                AppRoute::RegisterMfa { user_id }
+                    if user.eq_ignore_ascii_case(user_id)
+                        || Self::decode_user_id(user_id)
+                            .as_deref()
+                            .is_some_and(|d| user.eq_ignore_ascii_case(d))
+            );
+            if !on_own_enrollment {
+                return html! {
+                    <Redirect to={AppRoute::RegisterMfa { user_id: user.to_owned() }} />
+                };
+            }
+        }
         match switch {
             AppRoute::Login => html! {
                 <LoginForm on_logged_in={link.callback(Msg::Login)} password_reset_enabled={password_reset_enabled.unwrap_or(false)}/>
@@ -218,7 +291,7 @@ impl App {
                 html! {
                   <div>
                     { user_button("top-create-user") }
-                    <UserTable />
+                    <UserTable mfa_enabled={mfa_enabled.unwrap_or(false)} />
                     { user_button("bottom-create-user") }
                   </div>
                 }
@@ -259,9 +332,18 @@ impl App {
                 <GroupDetails group_id={*group_id} is_admin={is_admin} />
             },
             AppRoute::UserDetails { user_id } => match Self::decode_user_id(user_id) {
-                Some(decoded_id) => html! {
-                    <UserDetails username={decoded_id} is_admin={is_admin} />
-                },
+                Some(decoded_id) => {
+                    let is_self =
+                        logged_in_user.is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id));
+                    html! {
+                        <UserDetails
+                            username={decoded_id}
+                            is_admin={is_admin}
+                            is_self={is_self}
+                            mfa_enabled={mfa_enabled.unwrap_or(false)}
+                            mfa_required={mfa_required} />
+                    }
+                }
                 None => html! { <Redirect to={AppRoute::Login} /> },
             },
             AppRoute::ChangePassword { user_id } => match Self::decode_user_id(user_id) {
@@ -269,6 +351,44 @@ impl App {
                     <ChangePasswordForm username={decoded_id} is_admin={is_admin} />
                 },
                 None => html! { <Redirect to={AppRoute::Login} /> },
+            },
+            AppRoute::RegisterMfa { user_id } => match (Self::decode_user_id(user_id), mfa_enabled)
+            {
+                (Some(decoded_id), Some(false)) => html! {
+                    <Redirect to={AppRoute::UserDetails { user_id: decoded_id }} />
+                },
+                (Some(_), None) => html! {},
+                (Some(decoded_id), Some(true))
+                    if logged_in_user.is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id)) =>
+                {
+                    html! {
+                        <RegisterMfa
+                            username={decoded_id}
+                            enrollment_required={mfa_enrollment_pending}
+                            on_enrolled={link.callback(|_| Msg::MfaEnrolled)}
+                            on_logged_out={link.callback(|_| Msg::Logout)} />
+                    }
+                }
+                (Some(decoded_id), Some(true)) => html! {
+                    <Redirect to={AppRoute::UserDetails { user_id: decoded_id }} />
+                },
+                (None, _) => html! { <Redirect to={AppRoute::Login} /> },
+            },
+            AppRoute::ResetOwnMfa { user_id } => match (Self::decode_user_id(user_id), mfa_enabled)
+            {
+                (Some(_), None) => html! {},
+                (Some(decoded_id), Some(true))
+                    if !mfa_required
+                        && logged_in_user.is_some_and(|u| u.eq_ignore_ascii_case(&decoded_id)) =>
+                {
+                    html! {
+                        <ResetOwnMfaForm username={decoded_id} />
+                    }
+                }
+                (Some(decoded_id), _) => html! {
+                    <Redirect to={AppRoute::UserDetails { user_id: decoded_id }} />
+                },
+                (None, _) => html! { <Redirect to={AppRoute::Login} /> },
             },
             AppRoute::StartResetPassword => match password_reset_enabled {
                 Some(true) => html! { <ResetPasswordStep1Form /> },

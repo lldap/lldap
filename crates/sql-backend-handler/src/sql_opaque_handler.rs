@@ -187,7 +187,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
     async fn registration_finish(
         &self,
         request: registration::ClientRegistrationFinishRequest,
-    ) -> Result<()> {
+    ) -> Result<UserId> {
         let secret_key = self.get_orion_secret_key()?;
         let registration::ServerData { username } = bincode::deserialize(&orion::aead::open(
             &secret_key,
@@ -207,7 +207,7 @@ impl OpaqueHandler for SqlOpaqueHandler {
         };
         user_update.update(&self.sql_pool).await?;
         info!(r#"Successfully (re)set password for "{}""#, &username);
-        Ok(())
+        Ok(username)
     }
 }
 
@@ -239,6 +239,7 @@ pub async fn register_password(
             registration_upload: registration_finish.message,
         })
         .await
+        .map(|_| ())
 }
 
 #[cfg(test)]
@@ -272,6 +273,7 @@ mod tests {
             .login_finish(ClientLoginFinishRequest {
                 server_data: start_response.server_data,
                 credential_finalization: login_finish.message,
+                totp_code: None,
             })
             .await?;
         Ok(())

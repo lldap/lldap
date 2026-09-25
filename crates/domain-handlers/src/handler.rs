@@ -8,7 +8,7 @@ use lldap_domain::{
     schema::Schema,
     types::{
         AttributeName, AttributeValue, Group, GroupDetails, GroupId, GroupName, LdapObjectClass,
-        User, UserAndGroups, UserId, Uuid,
+        TotpEnrollmentStart, User, UserAndGroups, UserId, Uuid,
     },
 };
 use lldap_domain_model::{error::Result, model::UserColumn};
@@ -154,6 +154,28 @@ pub trait UserBackendHandler: ReadSchemaBackendHandler {
     async fn get_user_groups(&self, user_id: &UserId) -> Result<HashSet<GroupDetails>>;
 }
 
+// MFA policy from the enable_mfa configuration: never, enrolled users only, or everyone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MfaPolicy {
+    Disabled,
+    Enrolled,
+    Always,
+}
+
+#[async_trait]
+pub trait MfaBackendHandler {
+    async fn reset_user_mfa(&self, user_id: &UserId) -> Result<()>;
+    async fn reset_own_mfa(&self, user_id: &UserId, code: &str) -> Result<()>;
+    async fn start_totp_enrollment(
+        &self,
+        user_id: &UserId,
+        current_code: Option<String>,
+    ) -> Result<TotpEnrollmentStart>;
+    async fn finish_totp_enrollment(&self, user_id: &UserId, state: &str, code: &str)
+    -> Result<()>;
+    async fn verify_user_totp(&self, user_id: &UserId, code: &str) -> Result<()>;
+}
+
 #[async_trait]
 pub trait ReadSchemaBackendHandler {
     async fn get_schema(&self) -> Result<Schema>;
@@ -179,6 +201,7 @@ pub trait BackendHandler:
     + Sync
     + GroupBackendHandler
     + UserBackendHandler
+    + MfaBackendHandler
     + UserListerBackendHandler
     + GroupListerBackendHandler
     + ReadSchemaBackendHandler

@@ -19,7 +19,7 @@ use lldap_domain_handlers::handler::{BackendHandler, ReadSchemaBackendHandler};
 use std::sync::Arc;
 use tracing::{Instrument, Span, debug, debug_span};
 
-use crate::api::{Context, field_error_callback};
+use crate::api::{Context, check_mfa_enrollment, field_error_callback};
 
 #[derive(PartialEq, Eq, Debug)]
 /// The top-level GraphQL query type.
@@ -57,6 +57,7 @@ impl<Handler: BackendHandler> Query<Handler> {
         span.in_scope(|| {
             debug!(?user_id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let user_id = urlencoding::decode(&user_id).context("Invalid user parameter")?;
         let user_id = UserId::new(&user_id);
         let handler = context
@@ -79,6 +80,7 @@ impl<Handler: BackendHandler> Query<Handler> {
         span.in_scope(|| {
             debug!(?filters);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_readonly_handler()
             .ok_or_else(field_error_callback(
@@ -103,6 +105,7 @@ impl<Handler: BackendHandler> Query<Handler> {
 
     async fn groups(&self, context: &Context<Handler>) -> FieldResult<Vec<Group<Handler>>> {
         let span = debug_span!("[GraphQL query] groups");
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_readonly_handler()
             .ok_or_else(field_error_callback(
@@ -126,6 +129,7 @@ impl<Handler: BackendHandler> Query<Handler> {
         span.in_scope(|| {
             debug!(?group_id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_readonly_handler()
             .ok_or_else(field_error_callback(
@@ -142,6 +146,7 @@ impl<Handler: BackendHandler> Query<Handler> {
 
     async fn schema(&self, context: &Context<Handler>) -> FieldResult<Schema<Handler>> {
         let span = debug_span!("[GraphQL query] get_schema");
+        check_mfa_enrollment(context, &span).await?;
         self.get_schema(context, span).await.map(Into::into)
     }
 }
@@ -289,6 +294,7 @@ mod tests {
                             value: "Bobberson".to_string().into(),
                         },
                     ],
+                    mfa_type: None,
                 })
             });
         let mut groups = HashSet::new();
@@ -396,6 +402,7 @@ mod tests {
                                 &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                             ),
                             attributes: Vec::new(),
+                            mfa_type: None,
                         },
                         groups: None,
                     },
@@ -415,6 +422,7 @@ mod tests {
                                 &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
                             ),
                             attributes: Vec::new(),
+                            mfa_type: None,
                         },
                         groups: None,
                     },
@@ -544,5 +552,75 @@ mod tests {
         let schema = schema(Query::<MockTestBackendHandler>::new());
         let result = execute(QUERY, None, &schema, &Variables::new(), &context).await;
         assert!(result.is_ok(), "Query failed: {:?}", result);
+    }
+
+    fn get_mfa_enrolled_user() -> DomainUser {
+        DomainUser {
+            user_id: UserId::new("bob"),
+            email: "bob@bobbers.on".into(),
+            display_name: None,
+            creation_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+            modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+            password_modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+            uuid: lldap_domain::types::Uuid::from_name_and_date(
+                "bob",
+                &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+            ),
+            attributes: Vec::new(),
+            mfa_type: Some(lldap_domain::types::MFA_TYPE_TOTP.to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn mfa_enrolled_field_gated_to_admin_or_self() {
+        const QUERY: &str = r#"{
+          user(userId: "bob") {
+            mfaEnrolled
+          }
+        }"#;
+
+        let expect_mfa_enrolled = |validation_result, expected: &'static str| async move {
+            let mut mock = MockTestBackendHandler::new();
+            setup_default_schema(&mut mock);
+            mock.expect_get_user_details()
+                .with(eq(UserId::new("bob")))
+                .return_once(|_| Ok(get_mfa_enrolled_user()));
+            let context = Context::<MockTestBackendHandler>::new_for_tests(mock, validation_result);
+            let schema = schema(Query::<MockTestBackendHandler>::new());
+            let (data, errors) = execute(QUERY, None, &schema, &Variables::new(), &context)
+                .await
+                .unwrap();
+            assert_eq!(errors, vec![]);
+            let json = serde_json::to_string(&data).unwrap();
+            assert!(
+                json.contains(&format!(r#""mfaEnrolled":{expected}"#)),
+                "unexpected response: {json}"
+            );
+        };
+
+        expect_mfa_enrolled(
+            ValidationResults {
+                user: UserId::new("admin"),
+                permission: Permission::Admin,
+            },
+            "true",
+        )
+        .await;
+        expect_mfa_enrolled(
+            ValidationResults {
+                user: UserId::new("bob"),
+                permission: Permission::Regular,
+            },
+            "true",
+        )
+        .await;
+        expect_mfa_enrolled(
+            ValidationResults {
+                user: UserId::new("rose"),
+                permission: Permission::Readonly,
+            },
+            "null",
+        )
+        .await;
     }
 }

@@ -37,6 +37,9 @@ pub mod login {
         /// Encrypted ServerData from the previous step.
         pub server_data: String,
         pub credential_finalization: opaque::client::login::CredentialFinalization,
+        /// TOTP code when the account requires MFA.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub totp_code: Option<String>,
     }
 
     #[derive(Serialize, Deserialize, Clone)]
@@ -59,6 +62,21 @@ pub mod login {
         pub token: String,
         #[serde(rename = "refreshToken", skip_serializing_if = "Option::is_none")]
         pub refresh_token: Option<String>,
+        /// Set when the server's policy requires MFA but the user is not enrolled yet.
+        #[serde(
+            rename = "mfaEnrollmentRequired",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        pub mfa_enrollment_required: Option<bool>,
+    }
+
+    /// Returned instead of tokens when the password was correct but the TOTP
+    /// code was missing: retry with `password:123456` in the password field.
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerMfaRequiredResponse {
+        #[serde(rename = "mfaRequired")]
+        pub mfa_required: bool,
     }
 }
 
@@ -216,4 +234,7 @@ pub struct JWTClaims {
     pub jti: Uuid,
     pub user: String,
     pub groups: HashSet<String>,
+    // Defaulted so tokens issued before this field existed still parse.
+    #[serde(default)]
+    pub password_reset: bool,
 }

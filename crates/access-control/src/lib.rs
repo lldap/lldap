@@ -14,12 +14,19 @@ use lldap_domain::{
 };
 use lldap_domain_handlers::handler::{
     BackendHandler, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
-    ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler, UserListerBackendHandler,
-    UserRequestFilter,
+    MfaBackendHandler, ReadSchemaBackendHandler, SchemaBackendHandler, UserBackendHandler,
+    UserListerBackendHandler, UserRequestFilter,
 };
 use lldap_domain_model::error::Result;
 use std::collections::HashSet;
 use tracing::info;
+
+mod mfa;
+
+pub use mfa::{
+    MFA_DISABLED_GROUP, MFA_ENROLLMENT_REQUIRED, MfaEnrollmentStatus, MfaRequirement,
+    mfa_enrollment_status, mfa_requirement,
+};
 
 #[async_trait]
 pub trait UserReadableBackendHandler: ReadSchemaBackendHandler {
@@ -215,6 +222,22 @@ impl<Handler: BackendHandler> AccessControlledBackendHandler<Handler> {
         user_id: &UserId,
     ) -> Option<&(impl UserReadableBackendHandler + use<Handler>)> {
         validation_result.can_read(user_id).then_some(&self.handler)
+    }
+
+    pub fn get_mfa_reset_handler(
+        &self,
+        validation_result: &ValidationResults,
+        user_id: &UserId,
+        user_is_admin: bool,
+    ) -> Option<&(impl MfaBackendHandler + use<Handler>)> {
+        validation_result
+            .can_reset_mfa(user_id, user_is_admin)
+            .then_some(&self.handler)
+    }
+
+    // These only ever target the authenticated user, so there is no check.
+    pub fn get_mfa_self_handler(&self) -> &(impl MfaBackendHandler + use<Handler>) {
+        &self.handler
     }
 
     pub fn get_user_restricted_lister_handler(

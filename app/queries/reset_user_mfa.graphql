@@ -1,0 +1,5 @@
+mutation ResetUserMfa($user: String!) {
+  resetUserMfa(userId: $user) {
+    ok
+  }
+}

@@ -83,6 +83,26 @@ pub struct DeleteGroupQuery;
 )]
 pub struct DeleteUserQuery;
 
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
+    query_path = "tests/queries/start_mfa_enrollment.graphql",
+    response_derives = "Debug",
+    variables_derives = "Debug,Clone",
+    custom_scalars_module = "crate::common::graphql"
+)]
+pub struct StartMfaEnrollment;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "../schema.graphql",
+    query_path = "tests/queries/finish_mfa_enrollment.graphql",
+    response_derives = "Debug",
+    variables_derives = "Debug,Clone",
+    custom_scalars_module = "crate::common::graphql"
+)]
+pub struct FinishMfaEnrollment;
+
 pub fn post<QueryType>(
     client: &Client,
     token: &String,
