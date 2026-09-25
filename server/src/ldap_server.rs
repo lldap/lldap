@@ -1,6 +1,6 @@
 use crate::configuration::{Configuration, LdapsOptions};
 use crate::tls;
-use actix_rt::net::TcpStream;
+use actix_rt::net::{TcpStream, UnixStream};
 use actix_server::ServerBuilder;
 use actix_service::{ServiceFactoryExt, fn_service};
 use anyhow::{Context, Result};
@@ -144,7 +144,28 @@ where
     );
 
     let context_for_tls = context.clone();
+    if let Some(socket) = &config.ldap_socket {
+        // Here is a separate declaration of binder because of concrete type
+        // confusion from the compiler.
+        let binder = move || {
+            let context = context.clone();
+            fn_service(move |stream: UnixStream| {
+                let context = context.clone();
+                async move {
+                    let (handler, ldap_info) = context;
+                    handle_ldap_stream(stream, handler, ldap_info).await
+                }
+            })
+            .map_err(|err: anyhow::Error| error!("[LDAP] Service Error: {:#}", err))
+        };
 
+        info!("Starting the LDAP server on socket {}", socket);
+        return server_builder
+            .bind_uds("ldap", socket, binder)
+            .with_context(|| format!("while binding to socket {}", socket));
+    }
+
+    info!("Starting the LDAP server on port {}", config.ldap_port);
     let binder = move || {
         let context = context.clone();
         fn_service(move |stream: TcpStream| {
@@ -156,8 +177,6 @@ where
         })
         .map_err(|err: anyhow::Error| error!("[LDAP] Service Error: {:#}", err))
     };
-
-    info!("Starting the LDAP server on port {}", config.ldap_port);
     let server_builder = server_builder
         .bind("ldap", (config.ldap_host.clone(), config.ldap_port), binder)
         .with_context(|| format!("while binding to the port {}", config.ldap_port));
