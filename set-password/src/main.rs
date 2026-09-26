@@ -52,7 +52,7 @@ fn get_token(base_url: &Url, username: &str, password: &str) -> Result<String> {
         .body(
             serde_json::to_string(&lldap_auth::login::ClientSimpleLoginRequest {
                 username: username.into(),
-                password: password.to_string(),
+                password: secstr::SecUtf8::from(password),
             })
             .expect("Failed to encode the username/password as json to log in"),
         )
@@ -131,12 +131,14 @@ fn main() -> Result<()> {
     let start_request = registration::ClientRegistrationStartRequest {
         username: opts.username.clone().into(),
         registration_start_request: registration_start_request.message,
+        upgrade_token: None,
     };
     let res = register_start(&opts.base_url, &token, start_request)?;
 
     let registration_finish = opaque::client::registration::finish_registration(
         registration_start_request.state,
         res.registration_response,
+        password.as_bytes(),
         &mut rng,
     )
     .context("Error during password change")?;

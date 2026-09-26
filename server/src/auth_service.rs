@@ -18,7 +18,7 @@ use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
 use lldap_access_control::{ReadonlyBackendHandler, UserReadableBackendHandler};
 use lldap_auth::{
-    JWTClaims, access_control::ValidationResults, login, password_reset, registration,
+    JWTClaims, access_control::ValidationResults, login, login_base64, password_reset, registration,
 };
 use lldap_domain::types::{GroupDetails, GroupName, UserId};
 use lldap_domain_handlers::handler::{
@@ -134,6 +134,7 @@ where
         .json(&login::ServerLoginResponse {
             token: token.as_str().to_owned(),
             refresh_token: None,
+            upgrade_token: None,
         }))
 }
 
@@ -357,6 +358,7 @@ where
 async fn get_login_successful_response<Backend>(
     data: &web::Data<AppState<Backend>>,
     name: &UserId,
+    upgrade_token: Option<String>,
 ) -> TcpResult<HttpResponse>
 where
     Backend: TcpBackendHandler + BackendHandler,
@@ -391,6 +393,7 @@ where
         .json(&login::ServerLoginResponse {
             token: token.as_str().to_owned(),
             refresh_token: Some(refresh_token_plus_name),
+            upgrade_token,
         }))
 }
 
@@ -407,7 +410,7 @@ where
         .login_finish(request.into_inner())
         .await
     {
-        Ok(name) => get_login_successful_response(&data, &name).await,
+        Ok(name) => get_login_successful_response(&data, &name, None).await,
         Err(e) => Err(e.into()),
     }
 }
@@ -420,6 +423,54 @@ where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
     opaque_login_finish(data, request)
+        .await
+        .unwrap_or_else(error_to_http_response)
+}
+
+#[instrument(skip_all, level = "debug")]
+async fn opaque_login_start_v07<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login_base64::ClientLoginStartRequest>,
+) -> ApiResult<login_base64::ServerLoginStartResponse>
+where
+    Backend: OpaqueHandler + 'static,
+{
+    data.get_opaque_handler()
+        .login_start_v07(request.into_inner())
+        .await
+        .map(|res| ApiResult::Left(web::Json(res)))
+        .unwrap_or_else(error_to_api_response)
+}
+
+#[instrument(skip_all, level = "debug")]
+async fn opaque_login_finish_v07<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login_base64::ClientLoginFinishRequest>,
+) -> TcpResult<HttpResponse>
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    match data
+        .get_opaque_handler()
+        .login_finish_v07(request.into_inner())
+        .await
+    {
+        Ok(success) => {
+            get_login_successful_response(&data, &success.username, Some(success.upgrade_token))
+                .await
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+async fn opaque_login_finish_v07_handler<Backend>(
+    data: web::Data<AppState<Backend>>,
+    request: web::Json<login_base64::ClientLoginFinishRequest>,
+) -> HttpResponse
+where
+    Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
+{
+    opaque_login_finish_v07(data, request)
         .await
         .unwrap_or_else(error_to_http_response)
 }
@@ -438,7 +489,7 @@ where
         password,
     };
     data.get_login_handler().bind(bind_request).await?;
-    get_login_successful_response(&data, &username).await
+    get_login_successful_response(&data, &username, None).await
 }
 
 async fn simple_login_handler<Backend>(
@@ -633,6 +684,18 @@ where
     .service(
         web::resource("/opaque/login/finish")
             .route(web::post().to(opaque_login_finish_handler::<Backend>)),
+    )
+    // Opaque-ke 0.7 login endpoints for progressive migration.
+    // Clients fall back here after receiving HTTP 409 "opaque_v07_version"
+    // from the v4.0 login endpoint. On successful v0.7 login, the client
+    // should re-register the password via /opaque/register/{start,finish}.
+    .service(
+        web::resource("/opaque/v07/login/start")
+            .route(web::post().to(opaque_login_start_v07::<Backend>)),
+    )
+    .service(
+        web::resource("/opaque/v07/login/finish")
+            .route(web::post().to(opaque_login_finish_v07_handler::<Backend>)),
     )
     .service(web::resource("/simple/login").route(web::post().to(simple_login_handler::<Backend>)))
     .service(web::resource("/refresh").route(web::get().to(get_refresh_handler::<Backend>)))

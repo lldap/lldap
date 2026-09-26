@@ -11,6 +11,7 @@ use crate::{
 use anyhow::{Result, anyhow, bail};
 use gloo_console::error;
 use lldap_auth::*;
+use secstr::SecUtf8;
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -21,8 +22,8 @@ use yew_router::{prelude::History, scope_ext::RouterScopeExt};
 enum OpaqueData {
     #[default]
     None,
-    Login(opaque::client::login::ClientLogin),
-    Registration(opaque::client::registration::ClientRegistration),
+    Login(Box<opaque::client::login::ClientLogin>, SecUtf8),
+    Registration(opaque::client::registration::ClientRegistration, SecUtf8),
 }
 
 impl OpaqueData {
@@ -94,18 +95,27 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
                     if old_password.is_empty() {
                         bail!("Current password should not be empty");
                     }
+                    let old_password = SecUtf8::from(old_password);
                     let mut rng = rand::rngs::OsRng;
                     let login_start_request =
-                        opaque::client::login::start_login(&old_password, &mut rng)
+                        opaque::client::login::start_login(old_password.unsecure(), &mut rng)
                             .context("Could not initialize login")?;
-                    self.opaque_data = OpaqueData::Login(login_start_request.state);
+                    self.opaque_data =
+                        OpaqueData::Login(Box::new(login_start_request.state), old_password);
                     let req = login::ClientLoginStartRequest {
                         username: ctx.props().username.clone().into(),
                         login_start_request: login_start_request.message,
                     };
                     self.common.call_backend(
                         ctx,
-                        HostService::login_start(req),
+                        async move {
+                            HostService::login_start(req).await.map_err(|e| match e {
+                                crate::infra::api::LoginStartError::OpaqueV07Version => anyhow!(
+                                    "Your password is still in the v0.7 format. Please log out and log in again first; this will automatically upgrade it."
+                                ),
+                                crate::infra::api::LoginStartError::Other(e) => e,
+                            })
+                        },
                         Msg::AuthenticationStartResponse,
                     );
                     Ok(true)
@@ -114,15 +124,20 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
             Msg::AuthenticationStartResponse(res) => {
                 let res = res.context("Could not initiate login")?;
                 match self.opaque_data.take() {
-                    OpaqueData::Login(l) => {
-                        opaque::client::login::finish_login(l, res.credential_response).map_err(
-                            |e| {
-                                // Common error, we want to print a full error to the console but only a
-                                // simple one to the user.
-                                error!(&format!("Invalid username or password: {}", e));
-                                anyhow!("Invalid username or password")
-                            },
-                        )?;
+                    OpaqueData::Login(l, password) => {
+                        let mut rng = rand::rngs::OsRng;
+                        opaque::client::login::finish_login(
+                            *l,
+                            res.credential_response,
+                            password.unsecure(),
+                            &mut rng,
+                        )
+                        .map_err(|e| {
+                            // Common error, we want to print a full error to the console but only a
+                            // simple one to the user.
+                            error!(&format!("Invalid username or password: {}", e));
+                            anyhow!("Invalid username or password")
+                        })?;
                     }
                     _ => panic!("Unexpected data in opaque_data field"),
                 };
@@ -130,17 +145,19 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
             }
             Msg::SubmitNewPassword => {
                 let mut rng = rand::rngs::OsRng;
-                let new_password = self.form.model().password;
+                let new_password = SecUtf8::from(self.form.model().password);
                 let registration_start_request = opaque::client::registration::start_registration(
-                    new_password.as_bytes(),
+                    new_password.unsecure().as_bytes(),
                     &mut rng,
                 )
                 .context("Could not initiate password change")?;
                 let req = registration::ClientRegistrationStartRequest {
                     username: ctx.props().username.clone().into(),
                     registration_start_request: registration_start_request.message,
+                    upgrade_token: None,
                 };
-                self.opaque_data = OpaqueData::Registration(registration_start_request.state);
+                self.opaque_data =
+                    OpaqueData::Registration(registration_start_request.state, new_password);
                 self.common.call_backend(
                     ctx,
                     HostService::register_start(req),
@@ -151,12 +168,13 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
             Msg::RegistrationStartResponse(res) => {
                 let res = res.context("Could not initiate password change")?;
                 match self.opaque_data.take() {
-                    OpaqueData::Registration(registration) => {
+                    OpaqueData::Registration(registration, password) => {
                         let mut rng = rand::rngs::OsRng;
                         let registration_finish =
                             opaque::client::registration::finish_registration(
                                 registration,
                                 res.registration_response,
+                                password.unsecure().as_bytes(),
                                 &mut rng,
                             )
                             .context("Error during password change")?;

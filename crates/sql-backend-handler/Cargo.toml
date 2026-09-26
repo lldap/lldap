@@ -64,6 +64,10 @@ features = ["test"]
 [dev-dependencies.lldap_test_utils]
 path = "../test-utils"
 
+[dev-dependencies.lldap_auth]
+path = "../auth"
+features = ["opaque_server", "opaque_client", "sea_orm", "test"]
+
 [dev-dependencies]
 log = { workspace = true }
 mockall = { workspace = true }
