@@ -102,7 +102,10 @@ async fn ensure_group_exists(handler: &SqlBackendHandler, group_name: &str) -> R
     Ok(())
 }
 
-async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnection> {
+async fn setup_sql_tables(
+    database_url: &DatabaseUrl,
+    auto_migrate: Option<bool>,
+) -> Result<DatabaseConnection> {
     let sql_pool = {
         let num_connections = if database_url.db_type() == "sqlite" {
             1
@@ -116,6 +119,7 @@ async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnecti
             .sqlx_logging_level(log::LevelFilter::Debug);
         Database::connect(sql_opt).await?
     };
+    sql_tables::check_migration_allowed(&sql_pool, auto_migrate).await?;
     sql_tables::init_table(&sql_pool)
         .await
         .context("while creating base tables")?;
@@ -129,7 +133,7 @@ async fn setup_sql_tables(database_url: &DatabaseUrl) -> Result<DatabaseConnecti
 async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, DatabaseConnection)> {
     info!("Starting LLDAP version {}", env!("CARGO_PKG_VERSION"));
 
-    let sql_pool = setup_sql_tables(&config.database_url).await?;
+    let sql_pool = setup_sql_tables(&config.database_url, config.auto_migrate).await?;
     let private_key_info = config.get_private_key_info();
     let force_update_private_key = config.force_update_private_key;
     match (
@@ -290,7 +294,8 @@ async fn create_schema_command(opts: RunOpts) -> Result<()> {
     debug!("CLI: {:#?}", &opts);
     let config = configuration::init(opts)?;
     logging::init(&config)?;
-    let sql_pool = setup_sql_tables(&config.database_url).await?;
+    // `create_schema` is the explicit migration entry point, so always migrate.
+    let sql_pool = setup_sql_tables(&config.database_url, Some(true)).await?;
     info!("Schema created successfully.");
     if let Err(e) = sql_pool.close().await {
         error!("Error closing database connection pool: {}", e);
