@@ -25,6 +25,18 @@ pub struct CliOpts {
     #[clap(short, long)]
     pub token: Option<String>,
 
+    /// Use trusted-header authentication instead of JWT/admin password.
+    #[clap(long)]
+    pub use_trusted_header: bool,
+
+    /// Trusted header name carrying the authenticated username.
+    #[clap(long, default_value = "Remote-User")]
+    pub trusted_header_name: String,
+
+    /// Trusted header value carrying the authenticated username.
+    #[clap(long, default_value = "admin")]
+    pub trusted_header_value: String,
+
     /// Username.
     #[clap(short, long)]
     pub username: String,
@@ -61,26 +73,41 @@ fn get_token(base_url: &Url, username: &str, password: &str) -> Result<String> {
     Ok(serde_json::from_str::<lldap_auth::login::ServerLoginResponse>(&response.text()?)?.token)
 }
 
-fn call_server(url: Url, token: &str, body: impl Serialize) -> Result<String> {
+#[derive(Debug, Clone)]
+pub struct TrustedHeaderAuth {
+    name: String,
+    value: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum Auth {
+    BearerToken(String),
+    TrustedHeader(TrustedHeaderAuth),
+}
+
+fn call_server(url: Url, auth: &Auth, body: impl Serialize) -> Result<String> {
     let client = reqwest::blocking::Client::new();
     let request = client
         .post(url)
         .header("Content-Type", "application/json")
-        .bearer_auth(token)
         .body(serde_json::to_string(&body)?);
+    let request = match auth {
+        Auth::BearerToken(token) => request.bearer_auth(token),
+        Auth::TrustedHeader(header) => request.header(&header.name, &header.value),
+    };
     let response = request.send()?.error_for_status()?;
     Ok(response.text()?)
 }
 
 pub fn register_start(
     base_url: &Url,
-    token: &str,
+    auth: &Auth,
     request: registration::ClientRegistrationStartRequest,
 ) -> Result<registration::ServerRegistrationStartResponse> {
     let request = Some(request);
     let data = call_server(
         append_to_url(base_url, "auth/opaque/register/start"),
-        token,
+        auth,
         request,
     )?;
     serde_json::from_str(&data).context("Could not parse response")
@@ -88,13 +115,13 @@ pub fn register_start(
 
 pub fn register_finish(
     base_url: &Url,
-    token: &str,
+    auth: &Auth,
     request: registration::ClientRegistrationFinishRequest,
 ) -> Result<()> {
     let request = Some(request);
     call_server(
         append_to_url(base_url, "auth/opaque/register/finish"),
-        token,
+        auth,
         request,
     )
     .map(|_| ())
@@ -103,10 +130,9 @@ pub fn register_finish(
 fn main() -> Result<()> {
     let opts = CliOpts::parse();
 
-    let password = match opts.password {
-        Some(v) => v,
-        None => env::var("LLDAP_USER_PASSWORD").unwrap_or_default(),
-    };
+    let password = opts
+        .password
+        .unwrap_or_else(|| env::var("LLDAP_USER_PASSWORD").unwrap_or_default());
 
     ensure!(
         opts.bypass_password_policy || password.len() >= 8,
@@ -116,12 +142,21 @@ fn main() -> Result<()> {
         opts.base_url.scheme() == "http" || opts.base_url.scheme() == "https",
         "Base URL should start with `http://` or `https://`"
     );
-    let token = match (opts.token.as_ref(), opts.admin_password.as_ref()) {
-        (Some(token), _) => token.clone(),
-        (None, Some(password)) => {
-            get_token(&opts.base_url, &opts.admin_username, password).context("While logging in")?
-        }
-        (None, None) => bail!("Either the token or the admin password is required"),
+    let auth = if opts.use_trusted_header {
+        Auth::TrustedHeader(TrustedHeaderAuth {
+            name: opts.trusted_header_name.clone(),
+            value: opts.trusted_header_value.clone(),
+        })
+    } else {
+        let token = match (opts.token.as_ref(), opts.admin_password.as_ref()) {
+            (Some(token), _) => token.clone(),
+            (None, Some(password)) => get_token(&opts.base_url, &opts.admin_username, password)
+                .context("While logging in")?,
+            (None, None) => bail!(
+                "Either the token or the admin password is required unless --use-trusted-header is set"
+            ),
+        };
+        Auth::BearerToken(token)
     };
 
     let mut rng = rand::rngs::OsRng;
@@ -132,7 +167,7 @@ fn main() -> Result<()> {
         username: opts.username.clone().into(),
         registration_start_request: registration_start_request.message,
     };
-    let res = register_start(&opts.base_url, &token, start_request)?;
+    let res = register_start(&opts.base_url, &auth, start_request)?;
 
     let registration_finish = opaque::client::registration::finish_registration(
         registration_start_request.state,
@@ -145,7 +180,7 @@ fn main() -> Result<()> {
         registration_upload: registration_finish.message,
     };
 
-    register_finish(&opts.base_url, &token, req)?;
+    register_finish(&opts.base_url, &auth, req)?;
 
     println!("Successfully changed {}'s password", &opts.username);
     Ok(())

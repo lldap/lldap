@@ -1,4 +1,4 @@
-use super::cookies::set_cookie;
+use super::cookies::{delete_cookie, set_cookie, set_session_cookie};
 use anyhow::{Context, Result, anyhow};
 use gloo_net::http::{Method, RequestBuilder};
 use graphql_client::GraphQLQuery;
@@ -80,10 +80,28 @@ async fn call_server_empty_response_with_error_message<Body: Serialize>(
 fn set_cookies_from_jwt(response: login::ServerLoginResponse) -> Result<(String, bool)> {
     let jwt_claims = get_claims_from_jwt(response.token.as_str()).context("Could not parse JWT")?;
     let is_admin = jwt_claims.groups.contains("lldap_admin");
+    let _ = delete_cookie("trusted_header_logout_url");
     set_cookie("user_id", &jwt_claims.user, &jwt_claims.exp)
         .map(|_| set_cookie("is_admin", &is_admin.to_string(), &jwt_claims.exp))
         .map(|_| (jwt_claims.user.clone(), is_admin))
         .context("Error setting cookie")
+}
+
+fn extract_user_info_from_auth_response(
+    response: login::ServerAuthResponse,
+) -> Result<(String, bool)> {
+    match response {
+        login::ServerAuthResponse::Token(token_response) => set_cookies_from_jwt(token_response),
+        login::ServerAuthResponse::TrustedHeader(header_response) => {
+            let logout_url = header_response
+                .logout_url
+                .unwrap_or_else(|| base_url() + "/login");
+            let _ = delete_cookie("user_id");
+            let _ = delete_cookie("is_admin");
+            set_session_cookie("trusted_header_logout_url", &logout_url)?;
+            Ok((header_response.user_id, header_response.is_admin))
+        }
+    }
 }
 
 impl HostService {
@@ -170,13 +188,13 @@ impl HostService {
     }
 
     pub async fn refresh() -> Result<(String, bool)> {
-        call_server_json_with_error_message::<login::ServerLoginResponse, _>(
+        call_server_json_with_error_message::<login::ServerAuthResponse, _>(
             &(base_url() + "/auth/refresh"),
             GET_REQUEST,
             "Could not start authentication: ",
         )
         .await
-        .and_then(set_cookies_from_jwt)
+        .and_then(extract_user_info_from_auth_response)
     }
 
     // The `_request` parameter is to make it the same shape as the other functions.
