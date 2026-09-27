@@ -51,6 +51,11 @@ pub struct MailOptions {
     pub password: SecUtf8,
     #[builder(default = "SmtpEncryption::Tls")]
     pub smtp_encryption: SmtpEncryption,
+    /// Path to a PEM file with an extra certificate authority to trust when
+    /// connecting to the SMTP server over TLS or STARTTLS. Useful for servers
+    /// with a certificate signed by a private CA.
+    #[builder(default = "None")]
+    pub certificate_authority_file: Option<String>,
     /// Deprecated.
     #[debug(skip)]
     #[serde(skip)]
@@ -529,6 +534,12 @@ impl ConfigOverrider for SmtpOpts {
         self.smtp_encryption.as_ref().inspect(|&smtp_encryption| {
             config.smtp_options.smtp_encryption = smtp_encryption.clone();
         });
+
+        self.smtp_certificate_authority_file
+            .as_ref()
+            .inspect(|ca_file| {
+                config.smtp_options.certificate_authority_file = Some((*ca_file).clone());
+            });
 
         self.smtp_tls_required
             .inspect(|&tls_required| config.smtp_options.tls_required = Some(tls_required));
