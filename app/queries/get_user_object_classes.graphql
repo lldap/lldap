@@ -1,0 +1,10 @@
+query GetUserObjectClasses {
+  schema {
+    userSchema {
+      ldapObjectClasses {
+        objectClass
+        isHardcoded
+      }
+    }
+  }
+}

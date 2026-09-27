@@ -10,6 +10,7 @@ use crate::{
         group_schema_table::ListGroupSchema,
         group_table::GroupTable,
         login::LoginForm,
+        object_classes::ObjectClasses,
         reset_password_step1::ResetPasswordStep1Form,
         reset_password_step2::ResetPasswordStep2Form,
         router::{AppRoute, Link, Redirect},
@@ -251,6 +252,9 @@ impl App {
             }
             AppRoute::ListUserSchema => html! {
                 <ListUserSchema />
+            },
+            AppRoute::ObjectClasses => html! {
+                <ObjectClasses />
             },
             AppRoute::ListGroupSchema => html! {
                 <ListGroupSchema />

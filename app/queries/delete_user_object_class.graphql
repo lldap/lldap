@@ -1,0 +1,5 @@
+mutation DeleteUserObjectClassQuery($name: String!) {
+  deleteUserObjectClass(name: $name) {
+    ok
+  }
+}

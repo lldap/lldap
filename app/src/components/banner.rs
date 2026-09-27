@@ -53,6 +53,14 @@ pub fn banner(props: &Props) -> Html {
                   <li>
                     <Link
                       classes="nav-link px-2 h6"
+                      to={AppRoute::ObjectClasses}>
+                      <i class="bi-list-ul me-2"></i>
+                      {"Object classes"}
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      classes="nav-link px-2 h6"
                       to={AppRoute::ListGroupSchema}>
                       <i class="bi-list-ul me-2"></i>
                       {"Group schema"}
