@@ -218,7 +218,7 @@ impl Component for UserDetails {
                     <h3>{u.id.to_string()}</h3>
                     <div class="d-flex flex-row-reverse">
                       <Link
-                        to={AppRoute::ChangePassword{user_id: u.id.clone()}}
+                        to={AppRoute::change_password(&u.id)}
                         classes="btn btn-secondary">
                         <i class="bi-key me-2"></i>
                         {"Modify password"}

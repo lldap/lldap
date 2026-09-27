@@ -36,3 +36,17 @@ pub enum AppRoute {
 
 pub type Link = yew_router::components::Link<AppRoute>;
 pub type Redirect = yew_router::components::Redirect<AppRoute>;
+
+impl AppRoute {
+    pub fn user_details(user_id: &str) -> Self {
+        AppRoute::UserDetails {
+            user_id: url_escape::encode_component(user_id).to_string(),
+        }
+    }
+
+    pub fn change_password(user_id: &str) -> Self {
+        AppRoute::ChangePassword {
+            user_id: url_escape::encode_component(user_id).to_string(),
+        }
+    }
+}

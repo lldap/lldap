@@ -176,9 +176,9 @@ impl CommonComponent<ChangePasswordForm> for ChangePasswordForm {
             }
             Msg::RegistrationFinishResponse(response) => {
                 if response.is_ok() {
-                    ctx.link().history().unwrap().push(AppRoute::UserDetails {
-                        user_id: ctx.props().username.clone(),
-                    });
+                    ctx.link().history().unwrap().push(AppRoute::user_details(
+                        &ctx.props().username
+                    ));
                 }
                 response?;
                 Ok(true)
@@ -259,7 +259,7 @@ impl Component for ChangePasswordForm {
                 text="Save changes" >
                 <Link
                   classes="btn btn-secondary ms-2 col-auto col-form-label"
-                  to={AppRoute::UserDetails{user_id: ctx.props().username.clone()}}>
+                  to={AppRoute::user_details(&ctx.props().username)}>
                   <i class="bi-arrow-return-left me-2"></i>
                   {"Back"}
                 </Link>

@@ -97,7 +97,7 @@ fn user_menu(props: &UserMenuProps) -> Html {
               <li>
                 <Link
                   classes="dropdown-item"
-                  to={AppRoute::UserDetails{ user_id: username.to_string() }}>
+                  to={AppRoute::user_details(username)}>
                   {"View details"}
                 </Link>
               </li>

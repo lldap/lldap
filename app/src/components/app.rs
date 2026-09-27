@@ -91,9 +91,7 @@ impl Component for App {
                     if is_admin {
                         AppRoute::ListUsers
                     } else {
-                        AppRoute::UserDetails {
-                            user_id: user_name.clone(),
-                        }
+                        AppRoute::user_details(&user_name)
                     }
                 }));
             }
@@ -172,9 +170,7 @@ impl App {
                 if *is_admin {
                     Some(AppRoute::ListUsers)
                 } else {
-                    Some(AppRoute::UserDetails {
-                        user_id: user_name.clone(),
-                    })
+                    Some(AppRoute::user_details(user_name))
                 }
             }
         };
