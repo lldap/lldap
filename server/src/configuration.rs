@@ -537,12 +537,10 @@ impl ConfigOverrider for TrustedHeaderOpts {
         self.trusted_header_trusted_proxies
             .as_ref()
             .inspect(|trusted_proxies| {
-                config.trusted_header_options.trusted_proxies = trusted_proxies
-                    .split(',')
-                    .map(str::trim)
-                    .map(str::parse)
-                    .collect::<std::result::Result<_, _>>()
-                    .expect("Invalid trusted proxy CIDR");
+                config
+                    .trusted_header_options
+                    .trusted_proxies
+                    .clone_from(trusted_proxies);
             });
     }
 }
@@ -931,27 +929,53 @@ mod tests {
     }
 
     #[test]
-    fn trusted_proxies_override_parses_ipv4_and_ipv6() {
+    fn trusted_proxies_env_uses_array_syntax() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            jail.set_env("LLDAP_KEY_SEED", "test-key-seed");
+            jail.set_env("LLDAP_JWT_SECRET", "test-jwt-secret");
+            jail.create_file("lldap_config.toml", "")?;
             jail.set_env(
                 "LLDAP_TRUSTED_HEADER_OPTIONS__TRUSTED_PROXIES",
-                "10.0.0.0/8,  192.168.1.42/32,\t2001:db8::/32, ::1/128",
+                r#"["127.0.0.1/32", "::1/128"]"#,
             );
-
-            let opts = default_run_opts();
-            let mut config = Configuration::default();
-            opts.override_config(&mut config);
-
             assert_eq!(
-                config.trusted_header_options.trusted_proxies,
+                init(default_run_opts())
+                    .unwrap()
+                    .trusted_header_options
+                    .trusted_proxies,
                 vec![
-                    "10.0.0.0/8".parse::<IpNet>().unwrap(),
-                    "192.168.1.42/32".parse::<IpNet>().unwrap(),
-                    "2001:db8::/32".parse::<IpNet>().unwrap(),
-                    "::1/128".parse::<IpNet>().unwrap(),
+                    "127.0.0.1/32".parse::<IpNet>().unwrap(),
+                    "::1/128".parse::<IpNet>().unwrap()
                 ]
             );
+            jail.set_env(
+                "LLDAP_TRUSTED_HEADER_OPTIONS__TRUSTED_PROXIES",
+                "127.0.0.1/32,::1/128",
+            );
+            assert!(init(default_run_opts()).is_err());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn trusted_proxies_cli_validates_cidrs() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            let parse = |value| {
+                RunOpts::try_parse_from(["lldap", "--trusted-header-trusted-proxies", value])
+            };
+            assert_eq!(
+                parse("127.0.0.1/32, ::1/128")
+                    .unwrap()
+                    .trusted_header_opts
+                    .trusted_header_trusted_proxies,
+                Some(vec![
+                    "127.0.0.1/32".parse::<IpNet>().unwrap(),
+                    "::1/128".parse::<IpNet>().unwrap()
+                ])
+            );
+            assert!(parse("not-a-cidr").is_err());
             Ok(())
         });
     }

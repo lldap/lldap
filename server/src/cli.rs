@@ -231,8 +231,9 @@ pub struct TrustedHeaderOpts {
     pub trusted_header_logout_url: Option<String>,
 
     /// Trusted proxy CIDR ranges (comma-separated). Use /32 for a single IPv4 and /128 for a single IPv6.
-    #[clap(long, env = "LLDAP_TRUSTED_HEADER_OPTIONS__TRUSTED_PROXIES")]
-    pub trusted_header_trusted_proxies: Option<String>,
+    // Environment values are handled by Figment.
+    #[clap(long, value_delimiter = ',', value_parser = |value: &str| value.trim().parse::<ipnet::IpNet>())]
+    pub trusted_header_trusted_proxies: Option<Vec<ipnet::IpNet>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, clap::ValueEnum)]
