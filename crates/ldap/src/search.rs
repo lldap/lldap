@@ -207,6 +207,7 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
                 b"( 1.3.6.1.4.1.1466.115.121.1.12 DESC 'Distinguished Name' )".to_vec(),
                 b"( 1.3.6.1.4.1.1466.115.121.1.15 DESC 'Directory String' )".to_vec(),
                 b"( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.115.121.1.26 DESC 'IA5 String' )".to_vec(),
                 b"( 1.3.6.1.4.1.1466.115.121.1.27 DESC 'Integer' )".to_vec(),
                 b"( 1.3.6.1.4.1.1466.115.121.1.28 DESC 'JPEG' X-NOT-HUMAN-READABLE 'TRUE' )".to_vec(),
                 b"( 1.3.6.1.4.1.1466.115.121.1.34 DESC 'Name And Optional UID' )".to_vec(),
@@ -221,6 +222,7 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
             vals: vec![
                 b"( 1.3.6.1.1.16.2 NAME 'UUIDMatch' SYNTAX 1.3.6.1.1.16.1 )".to_vec(),
                 b"( 1.3.6.1.1.16.3 NAME 'UUIDOrderingMatch' SYNTAX 1.3.6.1.1.16.1 )".to_vec(),
+                b"( 1.3.6.1.4.1.1466.109.114.1 NAME 'caseExactIA5Match' SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )".to_vec(),
                 b"( 2.5.13.0 NAME 'objectIdentifierMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
                 b"( 2.5.13.1 NAME 'distinguishedNameMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 )".to_vec(),
                 b"( 2.5.13.2 NAME 'caseIgnoreMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
@@ -238,6 +240,7 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
                     b"( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' 'user_id' ) DESC 'RFC4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} SINGLE-VALUE NO-USER-MODIFICATION )".to_vec(),
                     b"( 1.2.840.113556.1.2.102 NAME 'memberOf' DESC 'Group that the entry belongs to' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 NO-USER-MODIFICATION USAGE dSAOperation X-ORIGIN 'iPlanet Delegated Administrator' )".to_vec(),
                     b"( 1.3.6.1.1.16.4 NAME ( 'entryUUID' 'uuid' ) DESC 'UUID of the entry' EQUALITY UUIDMatch ORDERING UUIDOrderingMatch SYNTAX 1.3.6.1.1.16.1 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
+                    b"( 1.3.6.1.1.1.1.12 NAME 'memberUid' DESC 'RFC2307: member of a posixGroup' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 NO-USER-MODIFICATION )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.101.120.16 NAME 'ldapSyntaxes' DESC 'RFC4512: LDAP syntaxes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.54 USAGE directoryOperation )".to_vec(),
                     b"( 2.5.4.0 NAME 'objectClass' DESC 'RFC4512: object classes of the entity' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
                     b"( 2.5.4.3 NAME ( 'cn' 'commonName' 'display_name' ) DESC 'RFC4519: common name(s) for which the entity is known by' SUP name SINGLE-VALUE )".to_vec(),
@@ -260,7 +263,7 @@ pub fn make_ldap_subschema_entry(schema: PublicSchema) -> LdapOp {
                     ldap_schema_description
                         .formatted_attribute_list(
                             4, // The number of hardcoded attributes starting with "10." (LLDAP custom range)
-                            vec!["creation_date", "display_name", "last_name", "user_id", "uuid"]
+                            vec!["creation_date", "display_name", "last_name", "memberuid", "user_id", "uuid"]
                         )
                 ).collect()
             }
@@ -577,6 +580,7 @@ mod tests {
                     b"( 1.3.6.1.4.1.1466.115.121.1.12 DESC 'Distinguished Name' )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.115.121.1.15 DESC 'Directory String' )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' )".to_vec(),
+                    b"( 1.3.6.1.4.1.1466.115.121.1.26 DESC 'IA5 String' )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.115.121.1.27 DESC 'Integer' )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.115.121.1.28 DESC 'JPEG' X-NOT-HUMAN-READABLE 'TRUE' )"
                         .to_vec(),
@@ -596,6 +600,7 @@ mod tests {
                 vals: vec![
                     b"( 1.3.6.1.1.16.2 NAME 'UUIDMatch' SYNTAX 1.3.6.1.1.16.1 )".to_vec(),
                     b"( 1.3.6.1.1.16.3 NAME 'UUIDOrderingMatch' SYNTAX 1.3.6.1.1.16.1 )".to_vec(),
+                    b"( 1.3.6.1.4.1.1466.109.114.1 NAME 'caseExactIA5Match' SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )".to_vec(),
                     b"( 2.5.13.0 NAME 'objectIdentifierMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
                     b"( 2.5.13.1 NAME 'distinguishedNameMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 )".to_vec(),
                     b"( 2.5.13.2 NAME 'caseIgnoreMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )".to_vec(),
@@ -616,6 +621,7 @@ mod tests {
                     b"( 0.9.2342.19200300.100.1.1 NAME ( 'uid' 'userid' 'user_id' ) DESC 'RFC4519: user identifier' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256} SINGLE-VALUE NO-USER-MODIFICATION )".to_vec(),
                     b"( 1.2.840.113556.1.2.102 NAME 'memberOf' DESC 'Group that the entry belongs to' EQUALITY distinguishedNameMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 NO-USER-MODIFICATION USAGE dSAOperation X-ORIGIN 'iPlanet Delegated Administrator' )".to_vec(),
                     b"( 1.3.6.1.1.16.4 NAME ( 'entryUUID' 'uuid' ) DESC 'UUID of the entry' EQUALITY UUIDMatch ORDERING UUIDOrderingMatch SYNTAX 1.3.6.1.1.16.1 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )".to_vec(),
+                    b"( 1.3.6.1.1.1.1.12 NAME 'memberUid' DESC 'RFC2307: member of a posixGroup' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 NO-USER-MODIFICATION )".to_vec(),
                     b"( 1.3.6.1.4.1.1466.101.120.16 NAME 'ldapSyntaxes' DESC 'RFC4512: LDAP syntaxes' EQUALITY objectIdentifierFirstComponentMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.54 USAGE directoryOperation )".to_vec(),
                     b"( 2.5.4.0 NAME 'objectClass' DESC 'RFC4512: object classes of the entity' EQUALITY objectIdentifierMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.38 )".to_vec(),
                     b"( 2.5.4.3 NAME ( 'cn' 'commonName' 'display_name' ) DESC 'RFC4519: common name(s) for which the entity is known by' SUP name SINGLE-VALUE )".to_vec(),
@@ -651,7 +657,7 @@ mod tests {
                 atype: "objectClasses".to_owned(),
                 vals: vec![
                     b"( 3.0 NAME ( 'inetOrgPerson' 'posixAccount' 'mailAccount' 'person' 'customUserClass' ) DESC 'LLDAP builtin: a person' STRUCTURAL MUST ( mail $ user_id ) MAY ( avatar $ creation_date $ display_name $ first_name $ last_name $ modified_date $ password_modified_date $ uuid ) )".to_vec(),
-                    b"( 3.1 NAME ( 'groupOfUniqueNames' 'groupOfNames' ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( display_name ) MAY ( creation_date $ group_id $ modified_date $ uuid ) )".to_vec(),
+                    b"( 3.1 NAME ( 'groupOfUniqueNames' 'groupOfNames' ) DESC 'LLDAP builtin: a group' STRUCTURAL MUST ( display_name ) MAY ( creation_date $ group_id $ memberuid $ modified_date $ uuid ) )".to_vec(),
                 ]
             }
         );

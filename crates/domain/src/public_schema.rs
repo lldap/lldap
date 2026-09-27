@@ -84,6 +84,13 @@ impl From<Schema> for PublicSchema {
             .user_attributes
             .attributes
             .sort_by(|a, b| a.name.cmp(&b.name));
+        // `memberUid` is computed from the canonical group membership by the LDAP
+        // frontend. Hide a legacy custom attribute with the same name from the
+        // public LDAP schema so clients see only the derived, read-only value.
+        schema
+            .group_attributes
+            .attributes
+            .retain(|a| a.name.as_str() != "memberuid");
         schema.group_attributes.attributes.extend_from_slice(&[
             AttributeSchema {
                 name: "group_id".into(),
@@ -129,6 +136,15 @@ impl From<Schema> for PublicSchema {
                 is_editable: true,
                 is_hardcoded: true,
                 is_readonly: false,
+            },
+            AttributeSchema {
+                name: "memberuid".into(),
+                attribute_type: AttributeType::String,
+                is_list: true,
+                is_visible: true,
+                is_editable: false,
+                is_hardcoded: true,
+                is_readonly: true,
             },
         ]);
         schema

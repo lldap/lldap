@@ -279,6 +279,7 @@ pub enum GroupFieldType {
     // Like Dn, but returned as part of the attributes.
     EntryDn,
     Member,
+    MemberUid,
     Uuid,
     Attribute(AttributeName, AttributeType, bool),
 }
@@ -292,6 +293,7 @@ pub fn map_group_field(field: &AttributeName, schema: &PublicSchema) -> GroupFie
         "creationdate" | "createtimestamp" | "creation_date" => GroupFieldType::CreationDate,
         "modifytimestamp" | "modifydate" | "modified_date" => GroupFieldType::ModifiedDate,
         "member" | "uniquemember" => GroupFieldType::Member,
+        "memberuid" => GroupFieldType::MemberUid,
         "entryuuid" | "uuid" => GroupFieldType::Uuid,
         "group_id" | "groupid" => GroupFieldType::GroupId,
         _ => schema

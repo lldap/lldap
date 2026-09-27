@@ -210,7 +210,7 @@ mod tests {
     async fn test_compare_group_member() {
         let mut mock = MockTestBackendHandler::new();
         mock.expect_list_users().returning(|_, _| Ok(vec![]));
-        mock.expect_list_groups().returning(|f| {
+        mock.expect_list_groups().times(2).returning(|f| {
             assert_eq!(f, Some(GroupRequestFilter::DisplayName("group".into())));
             Ok(vec![Group {
                 id: GroupId(1),
@@ -228,6 +228,21 @@ mod tests {
             dn: dn.to_string(),
             atype: "uniqueMember".to_owned(),
             val: b"uid=bob,ou=people,dc=example,dc=com".to_vec(),
+        };
+        assert_eq!(
+            ldap_handler.do_compare(request).await,
+            Ok(vec![LdapOp::CompareResult(LdapResultOp {
+                code: LdapResultCode::CompareTrue,
+                matcheddn: dn.to_owned(),
+                message: "".to_string(),
+                referral: vec![],
+            })])
+        );
+
+        let request = LdapCompareRequest {
+            dn: dn.to_string(),
+            atype: "memberUid".to_owned(),
+            val: b"bob".to_vec(),
         };
         assert_eq!(
             ldap_handler.do_compare(request).await,

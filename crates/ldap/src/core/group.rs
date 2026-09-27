@@ -84,6 +84,12 @@ pub fn get_group_attribute(
             .filter(|u| user_filter.as_ref().map(|f| *u == f).unwrap_or(true))
             .map(|u| format!("uid={u},ou=people,{base_dn_str}").into_bytes())
             .collect(),
+        GroupFieldType::MemberUid => group
+            .users
+            .iter()
+            .filter(|u| user_filter.as_ref().map(|f| *u == f).unwrap_or(true))
+            .map(|u| u.to_string().into_bytes())
+            .collect(),
         GroupFieldType::Uuid => vec![group.uuid.to_string().into_bytes()],
         GroupFieldType::Attribute(attr, _, _) => get_custom_attribute(&group.attributes, &attr)?,
         GroupFieldType::NoMatch => match attribute.as_str() {
@@ -121,6 +127,7 @@ const ALL_GROUP_ATTRIBUTE_KEYS: &[&str] = &[
     "uid",
     "cn",
     "member",
+    "memberuid",
     "uniquemember",
     "entryuuid",
 ];
@@ -237,6 +244,9 @@ fn convert_group_filter(
                     warn!("Invalid member filter on group: {}", e);
                     GroupRequestFilter::False
                 })),
+                GroupFieldType::MemberUid => {
+                    Ok(GroupRequestFilter::Member(UserId::new(value_lc)))
+                }
                 GroupFieldType::ObjectClass => Ok(GroupRequestFilter::from(
                     get_default_group_object_classes()
                         .iter()
@@ -450,6 +460,7 @@ mod tests {
                 "objectClass",
                 "dn",
                 "cn",
+                "memberUid",
                 "uniqueMember",
                 "entryUuid",
                 "entryDN",
@@ -472,6 +483,10 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
                             vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
+                        },
+                        LdapPartialAttribute {
+                            atype: "memberUid".to_string(),
+                            vals: vec![b"bob".to_vec(), b"john".to_vec()],
                         },
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
@@ -500,6 +515,10 @@ mod tests {
                         LdapPartialAttribute {
                             atype: "entryUuid".to_string(),
                             vals: vec![b"04ac75e0-2900-3e21-926c-2f732c26b3fc".to_vec()],
+                        },
+                        LdapPartialAttribute {
+                            atype: "memberUid".to_string(),
+                            vals: vec![b"john".to_vec()],
                         },
                         LdapPartialAttribute {
                             atype: "objectClass".to_string(),
@@ -557,6 +576,7 @@ mod tests {
             .with(eq(Some(GroupRequestFilter::And(vec![
                 GroupRequestFilter::DisplayName("group_1".into()),
                 GroupRequestFilter::Member(UserId::new("bob")),
+                GroupRequestFilter::Member(UserId::new("john")),
                 GroupRequestFilter::DisplayName("rockstars".into()),
                 false.into(),
                 GroupRequestFilter::Uuid(uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc")),
@@ -587,6 +607,7 @@ mod tests {
                     "uniqueMember".to_string(),
                     "uid=bob,ou=peopLe,Dc=eXample,dc=com".to_string(),
                 ),
+                LdapFilter::Equality("memberUid".to_string(), "John".to_string()),
                 LdapFilter::Equality(
                     "dn".to_string(),
                     "uid=rockstars,ou=groups,dc=example,dc=com".to_string(),
