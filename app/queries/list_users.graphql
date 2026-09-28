@@ -6,6 +6,7 @@ query ListUsersQuery($filters: RequestFilter) {
     firstName
     lastName
     creationDate
+    mfaEnrolled
   }
 }
 query ListUserNames($filters: RequestFilter) {

@@ -2673,6 +2673,7 @@ dependencies = [
  "lldap_frontend_options",
  "lldap_graphql_server",
  "lldap_ldap",
+ "lldap_mfa",
  "lldap_opaque_handler",
  "lldap_sql_backend_handler",
  "lldap_test_utils",
@@ -2736,14 +2737,18 @@ dependencies = [
  "gloo-console 0.4.0",
  "gloo-file 0.4.0",
  "gloo-net",
+ "gloo-timers",
  "graphql_client",
  "image",
  "indexmap 1.6.2",
+ "js-sys",
  "jwt",
  "lldap_auth",
  "lldap_frontend_options",
+ "lldap_mfa",
  "lldap_validation",
  "percent-encoding",
+ "qrcode",
  "rand 0.8.6",
  "serde",
  "serde_json",
@@ -2885,6 +2890,7 @@ dependencies = [
  "lldap_domain",
  "lldap_domain_handlers",
  "lldap_domain_model",
+ "lldap_mfa",
  "lldap_opaque_handler",
  "lldap_test_utils",
  "mockall",
@@ -2893,6 +2899,23 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "lldap_mfa"
+version = "0.1.1"
+dependencies = [
+ "base64 0.22.1",
+ "bincode",
+ "data-encoding",
+ "hmac 0.12.1",
+ "orion",
+ "percent-encoding",
+ "pretty_assertions",
+ "rand 0.8.6",
+ "serde",
+ "sha1 0.10.6",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2952,6 +2975,7 @@ dependencies = [
  "lldap_domain",
  "lldap_domain_handlers",
  "lldap_domain_model",
+ "lldap_mfa",
  "lldap_opaque_handler",
  "lldap_test_utils",
  "log",
@@ -3685,6 +3709,12 @@ name = "pxfm"
 version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quote"

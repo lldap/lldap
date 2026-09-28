@@ -6,14 +6,14 @@ use lldap_domain::{
     },
     schema::{AttributeList, AttributeSchema, Schema},
     types::{
-        AttributeName, AttributeType, Group, GroupDetails, GroupId, LdapObjectClass, User,
-        UserAndGroups, UserId,
+        AttributeName, AttributeType, Group, GroupDetails, GroupId, LdapObjectClass,
+        TotpEnrollmentStart, User, UserAndGroups, UserId,
     },
 };
 use lldap_domain_handlers::handler::{
     BackendHandler, BindRequest, GroupBackendHandler, GroupListerBackendHandler,
-    GroupRequestFilter, LoginHandler, ReadSchemaBackendHandler, SchemaBackendHandler,
-    UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
+    GroupRequestFilter, LoginHandler, MfaBackendHandler, ReadSchemaBackendHandler,
+    SchemaBackendHandler, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
 };
 use lldap_domain_model::error::Result;
 use lldap_opaque_handler::{OpaqueHandler, login, registration};
@@ -54,6 +54,14 @@ mockall::mock! {
         async fn remove_user_from_group(&self, user_id: &UserId, group_id: GroupId) -> Result<()>;
     }
     #[async_trait]
+    impl MfaBackendHandler for TestBackendHandler {
+        async fn reset_user_mfa(&self, user_id: &UserId) -> Result<()>;
+        async fn reset_own_mfa(&self, user_id: &UserId, code: &str) -> Result<()>;
+        async fn start_totp_enrollment(&self, user_id: &UserId, current_code: Option<String>) -> Result<TotpEnrollmentStart>;
+        async fn finish_totp_enrollment(&self, user_id: &UserId, state: &str, code: &str) -> Result<()>;
+        async fn verify_user_totp(&self, user_id: &UserId, code: &str) -> Result<()>;
+    }
+    #[async_trait]
     impl ReadSchemaBackendHandler for TestBackendHandler {
         async fn get_schema(&self) -> Result<Schema>;
     }
@@ -84,7 +92,7 @@ mockall::mock! {
         async fn registration_finish(
             &self,
             request: registration::ClientRegistrationFinishRequest
-        ) -> Result<()>;
+        ) -> Result<UserId>;
     }
 }
 

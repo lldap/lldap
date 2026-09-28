@@ -1,4 +1,5 @@
 use crate::{
+    mfa_login::{get_mfa_requirement, totp_error},
     tcp_backend_handler::*,
     tcp_server::{AppState, TcpError, TcpResult, error_to_http_response},
 };
@@ -16,15 +17,16 @@ use futures::future::{Ready, ok};
 use futures_util::FutureExt;
 use hmac::Hmac;
 use jwt::{SignWithKey, VerifyWithKey};
-use lldap_access_control::{ReadonlyBackendHandler, UserReadableBackendHandler};
+use lldap_access_control::{MfaRequirement, ReadonlyBackendHandler, UserReadableBackendHandler};
 use lldap_auth::{
     JWTClaims, access_control::ValidationResults, login, password_reset, registration,
 };
 use lldap_domain::types::{GroupDetails, GroupName, UserId};
 use lldap_domain_handlers::handler::{
-    BackendHandler, BindRequest, LoginHandler, UserRequestFilter,
+    BackendHandler, BindRequest, LoginHandler, MfaBackendHandler, UserRequestFilter,
 };
 use lldap_domain_model::{error::DomainError, model::UserColumn};
+use lldap_mfa::split_totp_suffix;
 use lldap_opaque_handler::OpaqueHandler;
 use sha2::Sha512;
 use std::{
@@ -53,6 +55,7 @@ async fn create_jwt<Handler: TcpBackendHandler>(
     key: &Hmac<Sha512>,
     user: &UserId,
     groups: HashSet<GroupDetails>,
+    password_reset: bool,
 ) -> SignedToken {
     let claims = JWTClaims {
         exp: Utc::now() + chrono::Duration::days(1),
@@ -63,6 +66,7 @@ async fn create_jwt<Handler: TcpBackendHandler>(
             .into_iter()
             .map(|g| g.display_name.into_string())
             .collect(),
+        password_reset,
     };
     let expiry = claims.exp.naive_utc();
     let header = jwt::Header {
@@ -121,7 +125,10 @@ where
         path.push('/');
     };
     let groups = data.get_readonly_handler().get_user_groups(&user).await?;
-    let token = create_jwt(data.get_tcp_handler(), jwt_key, &user, groups).await;
+    let token = create_jwt(data.get_tcp_handler(), jwt_key, &user, groups, false).await;
+    // Keep guiding unenrolled users to enrollment across page reloads.
+    let mfa_enrollment_required =
+        get_mfa_requirement(&data, &user).await? == MfaRequirement::Enrollment;
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build("token", token.as_str())
@@ -134,6 +141,7 @@ where
         .json(&login::ServerLoginResponse {
             token: token.as_str().to_owned(),
             refresh_token: None,
+            mfa_enrollment_required: mfa_enrollment_required.then_some(true),
         }))
 }
 
@@ -246,7 +254,14 @@ where
         .delete_password_reset_token(token)
         .await;
     let groups = HashSet::new();
-    let token = create_jwt(data.get_tcp_handler(), &data.jwt_key, &user_id, groups).await;
+    let token = create_jwt(
+        data.get_tcp_handler(),
+        &data.jwt_key,
+        &user_id,
+        groups,
+        true,
+    )
+    .await;
     let mut path = data.server_url.path().to_string();
     if !path.ends_with('/') {
         path.push('/');
@@ -357,6 +372,7 @@ where
 async fn get_login_successful_response<Backend>(
     data: &web::Data<AppState<Backend>>,
     name: &UserId,
+    mfa_enrollment_required: bool,
 ) -> TcpResult<HttpResponse>
 where
     Backend: TcpBackendHandler + BackendHandler,
@@ -365,7 +381,7 @@ where
     // token.
     let groups = data.get_readonly_handler().get_user_groups(name).await?;
     let (refresh_token, max_age) = data.get_tcp_handler().create_refresh_token(name).await?;
-    let token = create_jwt(data.get_tcp_handler(), &data.jwt_key, name, groups).await;
+    let token = create_jwt(data.get_tcp_handler(), &data.jwt_key, name, groups, false).await;
     let refresh_token_plus_name = refresh_token + "+" + name.as_str();
     let mut path = data.server_url.path().to_string();
     if !path.ends_with('/') {
@@ -391,6 +407,7 @@ where
         .json(&login::ServerLoginResponse {
             token: token.as_str().to_owned(),
             refresh_token: Some(refresh_token_plus_name),
+            mfa_enrollment_required: mfa_enrollment_required.then_some(true),
         }))
 }
 
@@ -402,12 +419,27 @@ async fn opaque_login_finish<Backend>(
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    match data
-        .get_opaque_handler()
-        .login_finish(request.into_inner())
-        .await
-    {
-        Ok(name) => get_login_successful_response(&data, &name).await,
+    let mut request = request.into_inner();
+    let totp_code = request.totp_code.take();
+    match data.get_opaque_handler().login_finish(request).await {
+        Ok(name) => match get_mfa_requirement(&data, &name).await? {
+            MfaRequirement::Totp => match totp_code {
+                Some(code) => {
+                    data.get_mfa_handler()
+                        .verify_user_totp(&name, &code)
+                        .await
+                        .map_err(totp_error)?;
+                    get_login_successful_response(&data, &name, false).await
+                }
+                None => Ok(HttpResponse::Ok()
+                    .json(&login::ServerMfaRequiredResponse { mfa_required: true })),
+            },
+            // Not enrolled yet: let the web login through, flagged for enrollment.
+            requirement => {
+                let enrollment_required = requirement == MfaRequirement::Enrollment;
+                get_login_successful_response(&data, &name, enrollment_required).await
+            }
+        },
         Err(e) => Err(e.into()),
     }
 }
@@ -433,12 +465,33 @@ where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + LoginHandler + 'static,
 {
     let login::ClientSimpleLoginRequest { username, password } = request.into_inner();
-    let bind_request = BindRequest {
-        name: username.clone(),
-        password,
+    let bind = |password: String| {
+        data.get_login_handler().bind(BindRequest {
+            name: username.clone(),
+            password,
+        })
     };
-    data.get_login_handler().bind(bind_request).await?;
-    get_login_successful_response(&data, &username).await
+    let requirement = get_mfa_requirement(&data, &username).await?;
+    if requirement != MfaRequirement::Totp {
+        // Unknown, unenrolled and exempt users bind with the full string, untouched.
+        bind(password).await?;
+        let enrollment_required = requirement == MfaRequirement::Enrollment;
+        return get_login_successful_response(&data, &username, enrollment_required).await;
+    }
+    match split_totp_suffix(&password).map(|(p, c)| (p.to_owned(), c.to_owned())) {
+        Some((password, code)) => {
+            bind(password).await?;
+            data.get_mfa_handler()
+                .verify_user_totp(&username, &code)
+                .await
+                .map_err(totp_error)?;
+            get_login_successful_response(&data, &username, false).await
+        }
+        None => {
+            bind(password).await?;
+            Ok(HttpResponse::Ok().json(&login::ServerMfaRequiredResponse { mfa_required: true }))
+        }
+    }
 }
 
 async fn simple_login_handler<Backend>(
@@ -511,28 +564,58 @@ where
         .unwrap_or_else(error_to_api_response)
 }
 
+// An absent or non-reset token is an ordinary password change, not a recovery.
+async fn password_reset_user<Backend: BackendHandler>(
+    state: &AppState<Backend>,
+    request: &HttpRequest,
+) -> Option<UserId> {
+    use actix_web::FromRequest;
+    let bearer = BearerAuth::from_request(request, &mut actix_web::dev::Payload::None)
+        .await
+        .ok()?;
+    let token = verify_token(state, bearer.token()).ok()?;
+    token
+        .claims()
+        .password_reset
+        .then(|| UserId::new(&token.claims().user))
+}
+
 #[instrument(skip_all, level = "debug")]
 async fn opaque_register_finish<Backend>(
     data: web::Data<AppState<Backend>>,
+    http_request: HttpRequest,
     request: web::Json<registration::ClientRegistrationFinishRequest>,
 ) -> TcpResult<HttpResponse>
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    data.get_opaque_handler()
+    let reset_user = password_reset_user(&data, &http_request).await;
+    let registered_user = data
+        .get_opaque_handler()
         .registration_finish(request.into_inner())
         .await?;
+    // The token names the recovery; the sealed server data names the account actually
+    // written. Clearing the factor of a third user is not a recovery.
+    if let Some(user_id) = reset_user {
+        if user_id != registered_user {
+            return Err(TcpError::UnauthorizedError(
+                "Password reset token does not match the registered user".to_string(),
+            ));
+        }
+        data.get_mfa_handler().reset_user_mfa(&user_id).await?;
+    }
     Ok(HttpResponse::Ok().finish())
 }
 
 async fn opaque_register_finish_handler<Backend>(
     data: web::Data<AppState<Backend>>,
+    http_request: HttpRequest,
     request: web::Json<registration::ClientRegistrationFinishRequest>,
 ) -> HttpResponse
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    opaque_register_finish(data, request)
+    opaque_register_finish(data, http_request, request)
         .await
         .unwrap_or_else(error_to_http_response)
 }
@@ -593,11 +676,10 @@ where
     }
 }
 
-#[instrument(skip_all, level = "debug", err, ret)]
-pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
+fn verify_token<Backend: BackendHandler>(
     state: &AppState<Backend>,
     token_str: &str,
-) -> Result<ValidationResults, actix_web::Error> {
+) -> Result<Token<jwt::token::Verified>, actix_web::Error> {
     let token: Token<_> = VerifyWithKey::verify_with_key(token_str, &state.jwt_key)
         .map_err(|_| ErrorUnauthorized("Invalid JWT"))?;
     if token.claims().exp.lt(&Utc::now()) {
@@ -613,6 +695,15 @@ pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
     if state.jwt_blacklist.read().unwrap().contains(&jwt_hash) {
         return Err(ErrorUnauthorized("JWT was logged out"));
     }
+    Ok(token)
+}
+
+#[instrument(skip_all, level = "debug", err, ret)]
+pub(crate) fn check_if_token_is_valid<Backend: BackendHandler>(
+    state: &AppState<Backend>,
+    token_str: &str,
+) -> Result<ValidationResults, actix_web::Error> {
+    let token = verify_token(state, token_str)?;
     Ok(state.backend_handler.get_permissions_from_groups(
         UserId::new(&token.claims().user),
         token
@@ -661,6 +752,28 @@ where
     } else {
         cfg.service(
             web::resource("/reset/step1/{user_id}").route(web::post().to(HttpResponse::NotFound)),
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_password_reset_claim() {
+        let without_field = r#"{"exp":1,"iat":1,"jti":"01234567-89ab-cdef-0123-456789abcdef","user":"bob","groups":[]}"#;
+        let claims: JWTClaims = serde_json::from_str(without_field).unwrap();
+        assert!(!claims.password_reset);
+        let reset = serde_json::to_string(&JWTClaims {
+            password_reset: true,
+            ..claims
+        })
+        .unwrap();
+        assert!(
+            serde_json::from_str::<JWTClaims>(&reset)
+                .unwrap()
+                .password_reset
         );
     }
 }

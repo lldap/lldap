@@ -130,6 +130,7 @@ async fn graphql_route<Handler: BackendHandler + Clone>(
     let context = Context::<Handler> {
         handler: data.backend_handler.clone(),
         validation_result,
+        mfa_policy: data.mfa_policy,
     };
     let schema = &schema();
     let context = &context;

@@ -14,6 +14,7 @@ mod jwt_sql_tables;
 mod ldap_server;
 mod logging;
 mod mail;
+mod mfa_login;
 mod sql_tcp_backend_handler;
 mod tcp_backend_handler;
 mod tcp_server;
@@ -29,6 +30,7 @@ use actix::Actor;
 use actix_server::ServerBuilder;
 use anyhow::{Context, Result, anyhow, bail};
 use futures_util::TryFutureExt;
+use lldap_access_control::MFA_DISABLED_GROUP;
 use lldap_sql_backend_handler::{
     SqlBackendHandler, register_password,
     sql_tables::{self, get_private_key_info, set_private_key_info},
@@ -157,6 +159,9 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
     ensure_group_exists(&backend_handler, "lldap_admin").await?;
     ensure_group_exists(&backend_handler, "lldap_password_manager").await?;
     ensure_group_exists(&backend_handler, "lldap_strict_readonly").await?;
+    if config.enable_mfa.is_positive() {
+        ensure_group_exists(&backend_handler, MFA_DISABLED_GROUP).await?;
+    }
     let admin_present = if let Ok(admins) = backend_handler
         .list_users(
             Some(UserRequestFilter::MemberOf("lldap_admin".into())),

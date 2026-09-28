@@ -3,10 +3,11 @@ pub mod inputs;
 
 // Re-export public types
 pub use inputs::{
-    AttributeValue, CreateGroupInput, CreateUserInput, Success, UpdateGroupInput, UpdateUserInput,
+    AttributeValue, CreateGroupInput, CreateUserInput, MfaEnrollmentStart, Success,
+    UpdateGroupInput, UpdateUserInput,
 };
 
-use crate::api::{Context, field_error_callback};
+use crate::api::{Context, check_mfa_enrollment, field_error_callback, reject_if_mfa_disabled};
 use anyhow::anyhow;
 use juniper::{FieldError, FieldResult, graphql_object};
 use lldap_access_control::{
@@ -16,7 +17,7 @@ use lldap_domain::{
     requests::{CreateAttributeRequest, CreateUserRequest, UpdateGroupRequest, UpdateUserRequest},
     types::{AttributeName, AttributeType, Email, GroupId, LdapObjectClass, UserId},
 };
-use lldap_domain_handlers::handler::BackendHandler;
+use lldap_domain_handlers::handler::{BackendHandler, MfaBackendHandler, MfaPolicy};
 use lldap_validation::attributes::{ALLOWED_CHARACTERS_DESCRIPTION, validate_attribute_name};
 use std::sync::Arc;
 use tracing::{Instrument, debug, debug_span};
@@ -45,6 +46,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         }
     }
 }
+
 #[graphql_object(context = Context<Handler>)]
 impl<Handler: BackendHandler> Mutation<Handler> {
     async fn create_user(
@@ -55,6 +57,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!("{:?}", &user.id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized user creation"))?;
@@ -96,6 +99,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
+        check_mfa_enrollment(context, &span).await?;
         create_group_with_details(
             context,
             CreateGroupInput {
@@ -114,6 +118,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?request);
         });
+        check_mfa_enrollment(context, &span).await?;
         create_group_with_details(context, request, span).await
     }
 
@@ -125,6 +130,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user.id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let user_id = UserId::new(&user.id);
         let handler = context
             .get_writeable_handler(&user_id)
@@ -184,6 +190,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?group.id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized group update"))?;
@@ -233,6 +240,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id, ?group_id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -255,6 +263,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id, ?group_id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -278,6 +287,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?user_id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let user_id = UserId::new(&user_id);
         let handler = context
             .get_admin_handler()
@@ -295,6 +305,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?group_id);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(&span, "Unauthorized group deletion"))?;
@@ -304,6 +315,96 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         }
         handler
             .delete_group(GroupId(group_id))
+            .instrument(span)
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn reset_user_mfa(context: &Context<Handler>, user_id: String) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] reset_user_mfa");
+        span.in_scope(|| {
+            debug!(?user_id);
+        });
+        check_mfa_enrollment(context, &span).await?;
+        let user_id = UserId::new(&user_id);
+        // Under "always" nobody gives up their own factor, admins included:
+        // recovery is another admin, or the password reset that clears both.
+        if context.mfa_policy == MfaPolicy::Always && user_id == context.validation_result.user {
+            span.in_scope(|| debug!("MFA is required by the server configuration"));
+            return Err(
+                "Cannot reset your own MFA when it is required by the server configuration".into(),
+            );
+        }
+        let readable_handler = context
+            .get_readable_handler(&user_id)
+            .ok_or_else(field_error_callback(&span, "Unauthorized MFA reset"))?;
+        let user_is_admin = readable_handler
+            .get_user_groups(&user_id)
+            .instrument(span.clone())
+            .await?
+            .iter()
+            .any(|g| g.display_name == "lldap_admin".into());
+        let handler = context
+            .get_mfa_reset_handler(&user_id, user_is_admin)
+            .ok_or_else(field_error_callback(&span, "Unauthorized MFA reset"))?;
+        handler.reset_user_mfa(&user_id).instrument(span).await?;
+        Ok(Success::new())
+    }
+
+    async fn reset_own_mfa(context: &Context<Handler>, code: String) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] reset_own_mfa");
+        let user_id = context.validation_result.user.clone();
+        // The code is deliberately not logged.
+        span.in_scope(|| {
+            debug!(?user_id);
+        });
+        reject_if_mfa_disabled(context, &span)?;
+        if context.mfa_policy == MfaPolicy::Always {
+            span.in_scope(|| debug!("MFA is required by the server configuration"));
+            return Err("MFA is required by the server configuration".into());
+        }
+        context
+            .get_mfa_self_handler()
+            .reset_own_mfa(&user_id, &code)
+            .instrument(span)
+            .await?;
+        Ok(Success::new())
+    }
+
+    async fn start_mfa_enrollment(
+        context: &Context<Handler>,
+        current_code: Option<String>,
+    ) -> FieldResult<MfaEnrollmentStart> {
+        let span = debug_span!("[GraphQL mutation] start_mfa_enrollment");
+        let user_id = context.validation_result.user.clone();
+        // The code is deliberately not logged.
+        span.in_scope(|| {
+            debug!(?user_id);
+        });
+        reject_if_mfa_disabled(context, &span)?;
+        let start = context
+            .get_mfa_self_handler()
+            .start_totp_enrollment(&user_id, current_code)
+            .instrument(span)
+            .await?;
+        Ok(start.into())
+    }
+
+    async fn finish_mfa_enrollment(
+        context: &Context<Handler>,
+        state: String,
+        code: String,
+    ) -> FieldResult<Success> {
+        let span = debug_span!("[GraphQL mutation] finish_mfa_enrollment");
+        let user_id = context.validation_result.user.clone();
+        // The sealed state and the code are deliberately not logged.
+        span.in_scope(|| {
+            debug!(?user_id);
+        });
+        reject_if_mfa_disabled(context, &span)?;
+        context
+            .get_mfa_self_handler()
+            .finish_totp_enrollment(&user_id, &state, &code)
             .instrument(span)
             .await?;
         Ok(Success::new())
@@ -321,6 +422,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name, ?attribute_type, is_list, is_visible, is_editable);
         });
+        check_mfa_enrollment(context, &span).await?;
         validate_attribute_name(&name).map_err(|invalid_chars: Vec<char>| -> FieldError {
             let chars = String::from_iter(invalid_chars);
             span.in_scope(|| {
@@ -368,6 +470,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name, ?attribute_type, is_list, is_visible, is_editable);
         });
+        check_mfa_enrollment(context, &span).await?;
         validate_attribute_name(&name).map_err(|invalid_chars: Vec<char>| -> FieldError {
             let chars = String::from_iter(invalid_chars);
             span.in_scope(|| {
@@ -410,6 +513,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -441,6 +545,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -471,6 +576,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -492,6 +598,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -513,6 +620,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -534,6 +642,7 @@ impl<Handler: BackendHandler> Mutation<Handler> {
         span.in_scope(|| {
             debug!(?name);
         });
+        check_mfa_enrollment(context, &span).await?;
         let handler = context
             .get_admin_handler()
             .ok_or_else(field_error_callback(
@@ -551,15 +660,19 @@ impl<Handler: BackendHandler> Mutation<Handler> {
 mod tests {
     use super::*;
     use crate::query::Query;
+    use chrono::TimeZone;
     use juniper::{
         DefaultScalarValue, EmptySubscription, GraphQLType, InputValue, RootNode, Variables,
         execute, graphql_value,
     };
     use lldap_auth::access_control::{Permission, ValidationResults};
-    use lldap_domain::types::{AttributeName, AttributeType};
+    use lldap_domain::types::{
+        AttributeName, AttributeType, GroupDetails, MFA_TYPE_TOTP, TotpEnrollmentStart, User,
+    };
     use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
     use pretty_assertions::assert_eq;
+    use std::collections::HashSet;
 
     fn mutation_schema<C, Q, M>(
         query_root: Q,
@@ -880,5 +993,285 @@ mod tests {
                 },
             ]
         );
+    }
+
+    const RESET_QUERY: &str = r#"mutation { resetUserMfa(userId: "bob") { ok } }"#;
+    const START_QUERY: &str = r#"mutation { startMfaEnrollment { state } }"#;
+    const FINISH_QUERY: &str =
+        r#"mutation { finishMfaEnrollment(state: "sealed-state", code: "123456") { ok } }"#;
+    const RESET_OWN_QUERY: &str = r#"mutation { resetOwnMfa(code: "123456") { ok } }"#;
+
+    fn expect_target_in_admin_group(mock: &mut MockTestBackendHandler, target_is_admin: bool) {
+        let mut groups = HashSet::new();
+        if target_is_admin {
+            groups.insert(GroupDetails {
+                group_id: GroupId(1),
+                display_name: "lldap_admin".into(),
+                creation_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+                uuid: lldap_domain::types::Uuid::from_name_and_date(
+                    "lldap_admin",
+                    &chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+                ),
+                attributes: Vec::new(),
+                modified_date: chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+            });
+        }
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .return_once(|_| Ok(groups));
+    }
+
+    // What check_mfa_enrollment reads to decide whether "bob" is enrolled.
+    fn expect_bob_with_mfa(mock: &mut MockTestBackendHandler, mfa_type: Option<&'static str>) {
+        mock.expect_get_user_details()
+            .with(eq(UserId::new("bob")))
+            .returning(move |_| {
+                let epoch = chrono::Utc.timestamp_opt(0, 0).unwrap().naive_utc();
+                Ok(User {
+                    user_id: UserId::new("bob"),
+                    email: "bob@bobbers.on".into(),
+                    display_name: None,
+                    creation_date: epoch,
+                    modified_date: epoch,
+                    password_modified_date: epoch,
+                    uuid: lldap_domain::types::Uuid::from_name_and_date("bob", &epoch),
+                    attributes: Vec::new(),
+                    mfa_type: mfa_type.map(str::to_owned),
+                })
+            });
+        mock.expect_get_user_groups()
+            .with(eq(UserId::new("bob")))
+            .returning(|_| Ok(HashSet::new()));
+    }
+
+    fn expect_enrollment_start(
+        mock: &mut MockTestBackendHandler,
+        current_code: Option<&'static str>,
+    ) {
+        mock.expect_start_totp_enrollment()
+            .withf(move |user_id, code| {
+                user_id == &UserId::new("bob") && code.as_deref() == current_code
+            })
+            .return_once(|_, _| {
+                Ok(TotpEnrollmentStart {
+                    otpauth_uri: "otpauth://totp/LLDAP:bob".to_string(),
+                    secret_base32: "ABC234".to_string(),
+                    state: "sealed-state".to_string(),
+                })
+            });
+    }
+
+    fn mfa_context(
+        mock: MockTestBackendHandler,
+        user: &str,
+        permission: Permission,
+        policy: MfaPolicy,
+    ) -> Context<MockTestBackendHandler> {
+        Context::<MockTestBackendHandler>::new_for_tests_with_policy(
+            mock,
+            ValidationResults {
+                user: UserId::new(user),
+                permission,
+            },
+            policy,
+        )
+    }
+
+    async fn assert_gql_error(
+        context: &Context<MockTestBackendHandler>,
+        query: &str,
+        message: &str,
+    ) {
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        let (response, errors) = execute(query, None, &schema, &Variables::new(), context)
+            .await
+            .unwrap();
+        assert!(response.is_null());
+        assert!(!errors.is_empty());
+        assert!(errors.iter().all(|e| e.error().message() == message));
+    }
+
+    async fn assert_gql_ok(
+        context: &Context<MockTestBackendHandler>,
+        query: &str,
+        expected: juniper::Value,
+    ) {
+        let schema = mutation_schema(
+            Query::<MockTestBackendHandler>::new(),
+            Mutation::<MockTestBackendHandler>::new(),
+        );
+        assert_eq!(
+            execute(query, None, &schema, &Variables::new(), context).await,
+            Ok((expected, vec![]))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_reset_user_mfa_authorization() {
+        for permission in [Permission::Admin, Permission::PasswordManager] {
+            let mut mock = MockTestBackendHandler::new();
+            expect_target_in_admin_group(&mut mock, false);
+            mock.expect_reset_user_mfa()
+                .with(eq(UserId::new("bob")))
+                .return_once(|_| Ok(()));
+            let context = mfa_context(mock, "manager", permission, MfaPolicy::Disabled);
+            assert_gql_ok(
+                &context,
+                RESET_QUERY,
+                graphql_value!({"resetUserMfa": {"ok": true}}),
+            )
+            .await;
+        }
+
+        let mut mock = MockTestBackendHandler::new();
+        expect_target_in_admin_group(&mut mock, true);
+        let context = mfa_context(
+            mock,
+            "manager",
+            Permission::PasswordManager,
+            MfaPolicy::Disabled,
+        );
+        assert_gql_error(&context, RESET_QUERY, "Unauthorized MFA reset").await;
+
+        for permission in [Permission::Regular, Permission::PasswordManager] {
+            let mut mock = MockTestBackendHandler::new();
+            expect_target_in_admin_group(&mut mock, false);
+            let context = mfa_context(mock, "bob", permission, MfaPolicy::Disabled);
+            assert_gql_error(&context, RESET_QUERY, "Unauthorized MFA reset").await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mfa_enrollment() {
+        const START_WITH_CODE: &str = r#"mutation { startMfaEnrollment(
+            currentCode: "654321") { otpauthUri secretBase32 state } }"#;
+        let mut mock = MockTestBackendHandler::new();
+        expect_enrollment_start(&mut mock, Some("654321"));
+        mock.expect_finish_totp_enrollment()
+            .withf(|user_id, state, code| {
+                user_id == &UserId::new("bob") && state == "sealed-state" && code == "123456"
+            })
+            .return_once(|_, _, _| Ok(()));
+        let context = mfa_context(mock, "bob", Permission::Regular, MfaPolicy::Enrolled);
+        assert_gql_ok(
+            &context,
+            START_WITH_CODE,
+            graphql_value!({"startMfaEnrollment": {
+                "otpauthUri": "otpauth://totp/LLDAP:bob",
+                "secretBase32": "ABC234",
+                "state": "sealed-state"
+            }}),
+        )
+        .await;
+        assert_gql_ok(
+            &context,
+            FINISH_QUERY,
+            graphql_value!({"finishMfaEnrollment": {"ok": true}}),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_reset_user_mfa_self_refused_under_always() {
+        // Cased differently from the session user: UserId compares case-insensitively.
+        const SELF_QUERY: &str = r#"mutation { resetUserMfa(userId: "Bob") { ok } }"#;
+        let mut mock = MockTestBackendHandler::new();
+        expect_bob_with_mfa(&mut mock, Some(MFA_TYPE_TOTP));
+        // No expect_reset_user_mfa: reaching the handler must fail the mock.
+        let context = mfa_context(mock, "bob", Permission::Admin, MfaPolicy::Always);
+        assert_gql_error(
+            &context,
+            SELF_QUERY,
+            "Cannot reset your own MFA when it is required by the server configuration",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_reset_own_mfa() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_reset_own_mfa()
+            .withf(|user_id, code| user_id == &UserId::new("bob") && code == "123456")
+            .return_once(|_, _| Ok(()));
+        let context = mfa_context(mock, "bob", Permission::Regular, MfaPolicy::Enrolled);
+        assert_gql_ok(
+            &context,
+            RESET_OWN_QUERY,
+            graphql_value!({"resetOwnMfa": {"ok": true}}),
+        )
+        .await;
+
+        let context = mfa_context(
+            MockTestBackendHandler::new(),
+            "bob",
+            Permission::Regular,
+            MfaPolicy::Always,
+        );
+        assert_gql_error(
+            &context,
+            RESET_OWN_QUERY,
+            "MFA is required by the server configuration",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_mfa_mutations_gated_when_disabled() {
+        let mut mock = MockTestBackendHandler::new();
+        expect_target_in_admin_group(&mut mock, false);
+        mock.expect_reset_user_mfa()
+            .with(eq(UserId::new("bob")))
+            .return_once(|_| Ok(()));
+        let context = mfa_context(mock, "admin", Permission::Admin, MfaPolicy::Disabled);
+        for query in [START_QUERY, FINISH_QUERY, RESET_OWN_QUERY] {
+            assert_gql_error(
+                &context,
+                query,
+                "MFA is disabled by the server configuration",
+            )
+            .await;
+        }
+        assert_gql_ok(
+            &context,
+            RESET_QUERY,
+            graphql_value!({"resetUserMfa": {"ok": true}}),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_mutations_gated_until_enrolled_under_always() {
+        const UPDATE_QUERY: &str = r#"mutation { updateUser(user: { id: "bob" }) { ok } }"#;
+        const USERS_QUERY: &str = r#"{ users { id } }"#;
+        const GATE_ERROR: &str =
+            "MFA enrollment required: enroll through the web interface or contact an administrator";
+        let mut mock = MockTestBackendHandler::new();
+        expect_bob_with_mfa(&mut mock, None);
+        expect_enrollment_start(&mut mock, None);
+        mock.expect_finish_totp_enrollment()
+            .withf(|user_id, state, code| {
+                user_id == &UserId::new("bob") && state == "sealed-state" && code == "123456"
+            })
+            .return_once(|_, _, _| Ok(()));
+        let context = mfa_context(mock, "bob", Permission::Regular, MfaPolicy::Always);
+        for query in [UPDATE_QUERY, USERS_QUERY] {
+            assert_gql_error(&context, query, GATE_ERROR).await;
+        }
+        // Both halves of enrollment stay exempt, or an unenrolled user could never enroll.
+        assert_gql_ok(
+            &context,
+            START_QUERY,
+            graphql_value!({"startMfaEnrollment": {"state": "sealed-state"}}),
+        )
+        .await;
+        assert_gql_ok(
+            &context,
+            FINISH_QUERY,
+            graphql_value!({"finishMfaEnrollment": {"ok": true}}),
+        )
+        .await;
     }
 }

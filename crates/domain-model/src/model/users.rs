@@ -129,6 +129,7 @@ impl From<Model> for lldap_domain::types::User {
             attributes: Vec::new(),
             modified_date: user.modified_date,
             password_modified_date: user.password_modified_date,
+            mfa_type: user.mfa_type,
         }
     }
 }

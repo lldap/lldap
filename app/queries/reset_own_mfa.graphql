@@ -1,0 +1,5 @@
+mutation ResetOwnMfa($code: String!) {
+  resetOwnMfa(code: $code) {
+    ok
+  }
+}

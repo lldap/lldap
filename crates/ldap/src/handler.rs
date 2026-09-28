@@ -16,10 +16,14 @@ use ldap3_proto::proto::{
     LdapExtendedResponse, LdapFilter, LdapModifyRequest, LdapOp, LdapPasswordModifyRequest,
     LdapResult as LdapResultOp, LdapResultCode, LdapSearchRequest, OID_PASSWORD_MODIFY, OID_WHOAMI,
 };
-use lldap_access_control::AccessControlledBackendHandler;
+use lldap_access_control::{AccessControlledBackendHandler, UserReadableBackendHandler};
 use lldap_auth::access_control::ValidationResults;
 use lldap_domain::public_schema::PublicSchema;
-use lldap_domain_handlers::handler::{BackendHandler, LoginHandler, ReadSchemaBackendHandler};
+#[cfg(test)]
+use lldap_domain_handlers::handler::MfaPolicy;
+use lldap_domain_handlers::handler::{
+    BackendHandler, LoginHandler, MfaBackendHandler, ReadSchemaBackendHandler,
+};
 use lldap_opaque_handler::OpaqueHandler;
 use tracing::{debug, instrument};
 
@@ -69,8 +73,10 @@ impl<Backend> LdapHandler<Backend> {
     }
 }
 
-impl<Backend: LoginHandler> LdapHandler<Backend> {
-    pub fn get_login_handler(&self) -> &(impl LoginHandler + use<Backend>) {
+impl<Backend: LoginHandler + UserReadableBackendHandler + MfaBackendHandler> LdapHandler<Backend> {
+    pub fn get_login_handler(
+        &self,
+    ) -> &(impl LoginHandler + UserReadableBackendHandler + MfaBackendHandler + use<Backend>) {
         self.backend_handler.unsafe_get_handler()
     }
 }
@@ -102,10 +108,19 @@ impl<Backend: BackendHandler + LoginHandler + OpaqueHandler> LdapHandler<Backend
 
     #[cfg(test)]
     pub fn new_for_tests(backend_handler: Backend, ldap_base_dn: &str) -> Self {
+        Self::new_for_tests_with_policy(backend_handler, ldap_base_dn, MfaPolicy::Disabled)
+    }
+
+    #[cfg(test)]
+    pub fn new_for_tests_with_policy(
+        backend_handler: Backend,
+        ldap_base_dn: &str,
+        mfa_policy: MfaPolicy,
+    ) -> Self {
         Self::new(
             AccessControlledBackendHandler::new(backend_handler),
             Box::leak(Box::new(
-                LdapInfo::new(ldap_base_dn, Vec::new(), Vec::new()).unwrap(),
+                LdapInfo::new(ldap_base_dn, Vec::new(), Vec::new(), mfa_policy).unwrap(),
             )),
             uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
         )

@@ -2,7 +2,9 @@ use chrono::TimeZone;
 use juniper::{FieldResult, graphql_object};
 use lldap_access_control::UserReadableBackendHandler;
 use lldap_domain::public_schema::PublicSchema;
-use lldap_domain::types::{User as DomainUser, UserAndGroups as DomainUserAndGroups};
+use lldap_domain::types::{
+    MFA_TYPE_TOTP, User as DomainUser, UserAndGroups as DomainUserAndGroups,
+};
 use lldap_domain_handlers::handler::BackendHandler;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -103,6 +105,13 @@ impl<Handler: BackendHandler> User<Handler> {
 
     fn uuid(&self) -> &str {
         self.user.uuid.as_str()
+    }
+
+    /// Whether the user has a second factor enrolled (admin or self).
+    fn mfa_enrolled(&self, context: &Context<Handler>) -> Option<bool> {
+        (context.validation_result.is_admin()
+            || context.validation_result.user == self.user.user_id)
+            .then(|| self.user.mfa_type.as_deref() == Some(MFA_TYPE_TOTP))
     }
 
     /// User-defined attributes.

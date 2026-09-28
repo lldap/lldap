@@ -170,6 +170,9 @@ impl Component for ResetPasswordStep2Form {
         html! {
           <>
             <h2>{"Reset your password"}</h2>
+            <p class="text-muted">
+              {"Resetting your password also removes any two-factor authentication on this account; you can set it up again afterwards from your profile."}
+            </p>
             <form class="form">
               <Field<FormModel>
                 label="New password"

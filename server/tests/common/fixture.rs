@@ -43,13 +43,17 @@ const MAX_HEALTHCHECK_ATTEMPS: u8 = 10;
 
 impl LLDAPFixture {
     pub fn new() -> Self {
-        let child = create_lldap_command("run")
+        Self::new_with_env(&[])
+    }
+
+    pub fn new_with_env(extra_env: &[(&str, &str)]) -> Self {
+        let child = create_lldap_command("run", extra_env)
             .arg("--verbose")
             .spawn()
             .expect("Unable to start server");
         let mut started = false;
         for _ in 0..MAX_HEALTHCHECK_ATTEMPS {
-            let status = create_lldap_command("healthcheck")
+            let status = create_lldap_command("healthcheck", extra_env)
                 .status()
                 .expect("healthcheck fail");
             if status.success() {
@@ -225,7 +229,7 @@ pub fn new_id(prefix: Option<&str>) -> String {
     }
 }
 
-fn create_lldap_command(subcommand: &str) -> Command {
+fn create_lldap_command(subcommand: &str, extra_env: &[(&str, &str)]) -> Command {
     let mut cmd = Command::new(cargo_bin!());
     // This gives us the absolute path of the repo base instead of running it in server/
     let path = canonicalize("..").expect("canonical path");
@@ -235,6 +239,9 @@ fn create_lldap_command(subcommand: &str) -> Command {
     cmd.env(env::PRIVATE_KEY_SEED, "Random value");
     cmd.env(env::JWT_SECRET, "Random value");
     cmd.env(env::LDAP_USER_PASSWORD, "password");
+    for (key, value) in extra_env {
+        cmd.env(key, value);
+    }
     cmd.arg(subcommand);
     cmd.arg("--config-file=/dev/null");
     cmd.arg("--server-key-file=''");

@@ -133,6 +133,7 @@ where
                 &config.ldap_base_dn,
                 config.ignored_user_attributes.clone(),
                 config.ignored_group_attributes.clone(),
+                config.mfa_policy(),
             )
             .with_context(|| {
                 format!(

@@ -2,6 +2,7 @@ use crate::{
     components::{
         add_user_to_group::AddUserToGroupComponent,
         remove_user_from_group::RemoveUserFromGroupComponent,
+        reset_mfa::ResetMfa,
         router::{AppRoute, Link},
         user_details_form::UserDetailsForm,
     },
@@ -62,12 +63,16 @@ pub enum Msg {
     OnError(Error),
     OnUserAddedToGroup(Group),
     OnUserRemovedFromGroup((String, i64)),
+    OnMfaReset,
 }
 
 #[derive(yew::Properties, Clone, PartialEq, Eq)]
 pub struct Props {
     pub username: String,
     pub is_admin: bool,
+    pub is_self: bool,
+    pub mfa_enabled: bool,
+    pub mfa_required: bool,
 }
 
 impl CommonComponent<UserDetails> for UserDetails {
@@ -88,6 +93,9 @@ impl CommonComponent<UserDetails> for UserDetails {
             }
             Msg::OnUserRemovedFromGroup((_, group_id)) => {
                 self.mut_groups().retain(|g| g.id != group_id);
+            }
+            Msg::OnMfaReset => {
+                self.user_and_schema.as_mut().unwrap().0.mfa_enrolled = Some(false);
             }
         }
         Ok(true)
@@ -211,8 +219,12 @@ impl Component for UserDetails {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        let link = &ctx.link();
         match (&self.user_and_schema, &self.common.error) {
             (Some((u, schema)), error) => {
+                let mfa_enrolled = u.mfa_enrolled.unwrap_or(false);
+                // Under "always" an account may not be left without a factor.
+                let own_reset_blocked = ctx.props().is_self && ctx.props().mfa_required;
                 html! {
                   <>
                     <h3>{u.id.to_string()}</h3>
@@ -223,9 +235,51 @@ impl Component for UserDetails {
                         <i class="bi-key me-2"></i>
                         {"Modify password"}
                       </Link>
+                      { if ctx.props().is_self && ctx.props().mfa_enabled {
+                        html! {
+                          <Link
+                            to={AppRoute::RegisterMfa{user_id: u.id.clone()}}
+                            classes="btn btn-secondary me-2">
+                            <i class="bi-phone me-2"></i>
+                            { if mfa_enrolled {
+                                "Reconfigure two-factor"
+                              } else {
+                                "Set up two-factor"
+                            }}
+                          </Link>
+                        }
+                      } else { html! {} }}
+                      { if ctx.props().is_admin && ctx.props().mfa_enabled && !own_reset_blocked {
+                        html! {
+                          <ResetMfa
+                            username={u.id.clone()}
+                            disabled={!mfa_enrolled}
+                            on_mfa_reset={link.callback(|_| Msg::OnMfaReset)}
+                            on_error={link.callback(Msg::OnError)} />
+                        }
+                      } else if ctx.props().is_self && mfa_enrolled && !own_reset_blocked {
+                        html! {
+                          <Link
+                            to={AppRoute::ResetOwnMfa{user_id: u.id.clone()}}
+                            classes="btn btn-danger me-2">
+                            <i class="bi-shield-x me-2"></i>
+                            {"Reset two-factor"}
+                          </Link>
+                        }
+                      } else { html! {} }}
                     </div>
-                    <div>
+                    <div class="d-flex justify-content-between align-items-center">
                       <h5 class="row m-3 fw-bold">{"User details"}</h5>
+                      { if ctx.props().mfa_enabled && u.mfa_enrolled.is_some() {
+                        html! {
+                          <span class="my-3">
+                            {"Two-factor: "}
+                            <span class="border rounded px-1">
+                              { if mfa_enrolled { "Enabled" } else { "Disabled" }}
+                            </span>
+                          </span>
+                        }
+                      } else { html! {} }}
                     </div>
                     <UserDetailsForm
                       user={u.clone()}
