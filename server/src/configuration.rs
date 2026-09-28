@@ -19,6 +19,7 @@ use lldap_domain::types::{AttributeName, UserId};
 use lldap_sql_backend_handler::sql_tables::{
     ConfigLocation, PrivateKeyHash, PrivateKeyInfo, PrivateKeyLocation,
 };
+use schemars::JsonSchema;
 use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -32,23 +33,41 @@ use url::Url;
 #[display("{_0}")]
 pub struct Mailbox(pub lettre::message::Mailbox);
 
-#[derive(Clone, derive_more::Debug, Deserialize, Serialize, derive_builder::Builder)]
+/// Options to send emails, for example password reset emails.
+///
+/// To set these options from environment variables, use the following format
+/// (example with "password"): LLDAP_SMTP_OPTIONS__PASSWORD
+#[derive(
+    Clone, derive_more::Debug, Deserialize, Serialize, derive_builder::Builder, JsonSchema,
+)]
 #[builder(pattern = "owned")]
 pub struct MailOptions {
+    /// Whether to enable password reset via email.
     #[builder(default = "false")]
     pub enable_password_reset: bool,
+    /// How the sender appears in the email: a free-form name, followed by an
+    /// email between <>. For example "LLDAP Admin <sender@example.com>".
     #[builder(default)]
+    #[schemars(with = "Option<String>")]
     pub from: Option<Mailbox>,
+    /// The reply-to address, in the same format as "from".
     #[builder(default = "None")]
+    #[schemars(with = "Option<String>")]
     pub reply_to: Option<Mailbox>,
+    /// The SMTP server.
     #[builder(default = r#""localhost".to_string()"#)]
     pub server: String,
+    /// The SMTP port.
     #[builder(default = "587")]
     pub port: u16,
+    /// The SMTP user, usually your email address.
     #[builder(default)]
     pub user: String,
+    /// The SMTP password.
     #[builder(default = r#"SecUtf8::from("")"#)]
+    #[schemars(with = "String")]
     pub password: SecUtf8,
+    /// How the connection is encrypted.
     #[builder(default = "SmtpEncryption::Tls")]
     pub smtp_encryption: SmtpEncryption,
     /// Deprecated.
@@ -64,15 +83,23 @@ impl std::default::Default for MailOptions {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+/// Options to configure LDAPS.
+///
+/// To set these options from environment variables, use the following format
+/// (example with "port"): LLDAP_LDAPS_OPTIONS__PORT
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder, JsonSchema)]
 #[builder(pattern = "owned")]
 pub struct LdapsOptions {
+    /// Whether to enable LDAPS.
     #[builder(default = "false")]
     pub enabled: bool,
+    /// The port on which to listen for LDAPS.
     #[builder(default = "6360")]
     pub port: u16,
+    /// The certificate file.
     #[builder(default = r#"String::from("cert.pem")"#)]
     pub cert_file: String,
+    /// The certificate key file.
     #[builder(default = r#"String::from("key.pem")"#)]
     pub key_file: String,
 }
@@ -83,11 +110,21 @@ impl std::default::Default for LdapsOptions {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+/// Options to configure the healthcheck command.
+///
+/// To set these options from environment variables, use the following format
+/// (example with "http_host"): LLDAP_HEALTHCHECK_OPTIONS__HTTP_HOST
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder, JsonSchema)]
 #[builder(pattern = "owned")]
 pub struct HealthcheckOptions {
+    /// The host address that the healthcheck checks for the HTTP server.
+    /// If "http_host" is set to a specific IP address, set this to the same
+    /// address. Wrap an IPv6 address in [].
     #[builder(default = r#"String::from("localhost")"#)]
     pub http_host: String,
+    /// The host address that the healthcheck checks for the LDAP server.
+    /// If "ldap_host" is set to a specific IP address, set this to the same
+    /// address.
     #[builder(default = r#"String::from("localhost")"#)]
     pub ldap_host: String,
 }
@@ -102,52 +139,119 @@ impl std::default::Default for HealthcheckOptions {
 #[debug(r#""{_0}""#)]
 pub struct HttpUrl(pub Url);
 
-#[derive(Clone, Deserialize, Serialize, derive_builder::Builder, derive_more::Debug)]
+/// The LLDAP configuration file.
+///
+/// You can override all the values through environment variables, prefixed
+/// with "LLDAP_". For example, "LLDAP_LDAP_PORT" overrides "ldap_port".
+/// A double underscore separates the levels of a nested option, for example
+/// "LLDAP_SMTP_OPTIONS__PORT".
+#[derive(
+    Clone, Deserialize, Serialize, derive_builder::Builder, derive_more::Debug, JsonSchema,
+)]
 #[builder(pattern = "owned", build_fn(name = "private_build"))]
 pub struct Configuration {
+    /// The host address that the LDAP server binds to.
+    /// Set it to "127.0.0.1" ("::1" for IPv6) to only allow connections from
+    /// localhost.
     #[builder(default = r#"String::from("::")"#)]
     pub ldap_host: String,
+    /// The port of the LDAP server.
     #[builder(default = "3890")]
     pub ldap_port: u16,
+    /// The host address that the HTTP server binds to.
+    /// Set it to "127.0.0.1" ("::1" for IPv6) to only allow connections from
+    /// localhost.
     #[builder(default = r#"String::from("::")"#)]
     pub http_host: String,
+    /// The port of the HTTP server, for user login and administration.
     #[builder(default = "17170")]
     pub http_port: u16,
+    /// The random secret for the JWT signature.
+    /// Share it with the application servers that consume the JWTs.
+    /// A change of this secret makes all user sessions invalid.
+    /// You can also set it with the LLDAP_JWT_SECRET environment variable, or
+    /// from the contents of the file in LLDAP_JWT_SECRET_FILE.
     #[builder(default)]
+    #[schemars(with = "Option<String>")]
     pub jwt_secret: Option<SecUtf8>,
+    /// The base DN for LDAP, usually from your domain name.
+    /// It is the namespace for your users.
     #[builder(default = r#"String::from("dc=example,dc=com")"#)]
     pub ldap_base_dn: String,
+    /// The username of the admin.
+    /// For the value "admin", the LDAP user is
+    /// "cn=admin,ou=people,<ldap_base_dn>".
     #[builder(default = r#"UserId::new("admin")"#)]
+    #[schemars(with = "String")]
     pub ldap_user_dn: UserId,
+    /// The email of the admin.
+    /// LLDAP only uses it when it creates the admin user.
     #[builder(default)]
     pub ldap_user_email: String,
+    /// The password of the admin, for the LDAP bind and for the administration
+    /// interface. LLDAP only uses it when it creates the admin user.
+    /// Use a minimum of 8 characters.
+    /// You can also set it with the LLDAP_LDAP_USER_PASS environment variable,
+    /// or from the contents of the file in LLDAP_LDAP_USER_PASS_FILE.
     #[builder(default)]
+    #[schemars(with = "Option<String>")]
     pub ldap_user_pass: Option<SecUtf8>,
+    /// Whether to reset the admin password to the value of "ldap_user_pass".
+    /// Use it if you lost the admin password.
+    /// With true, the server stops after the reset: set it to false again, then
+    /// restart the server. With "always", LLDAP resets the password each time
+    /// the server starts.
     #[builder(default)]
     pub force_ldap_user_pass_reset: TrueFalseAlways,
+    /// Whether to accept a change of the private key ("key_file" or
+    /// "key_seed"). A changed private key makes all existing passwords invalid.
+    /// The server stops after the update: set it to false again, then restart
+    /// the server.
     #[builder(default = "false")]
     pub force_update_private_key: bool,
+    /// The database URL. It encodes the type of database (SQLite, MySQL or
+    /// PostgreSQL), the path, the user, the password and the mode.
+    /// For SQLite, add "?mode=rwc" to create the database if it does not exist.
+    /// Examples: "postgres://postgres-user:password@postgres-server/my-database",
+    /// "mysql://mysql-user:password@mysql-server/my-database".
     #[builder(default = r#"DatabaseUrl::from("sqlite://users.db?mode=rwc")"#)]
+    #[schemars(with = "String")]
     pub database_url: DatabaseUrl,
+    /// User attributes that LLDAP does not warn about when a service requests
+    /// them.
     #[builder(default)]
+    #[schemars(with = "Vec<String>")]
     pub ignored_user_attributes: Vec<AttributeName>,
+    /// Group attributes that LLDAP does not warn about when a service requests
+    /// them.
     #[builder(default)]
+    #[schemars(with = "Vec<String>")]
     pub ignored_group_attributes: Vec<AttributeName>,
+    /// Whether to log more verbosely.
     #[builder(default = "false")]
     pub verbose: bool,
+    /// The file with the private key that LLDAP uses to store the passwords.
+    /// LLDAP generates it on the first start if it does not exist.
+    /// We recommend "key_seed" instead.
     #[builder(default = r#"String::from("server_key")"#)]
     pub key_file: String,
     // We want an Option to see whether there is a value or not, since the value is printed as
     // "***SECRET***".
+    /// The seed that LLDAP uses to generate the private key, see "key_file".
+    /// Use a random string of at least 12 characters.
     #[builder(default)]
+    #[schemars(with = "Option<String>")]
     pub key_seed: Option<SecUtf8>,
+    /// The path to the front-end assets, relative to the working directory.
     #[builder(default = r#"PathBuf::from("./app")"#)]
     pub assets_path: PathBuf,
     #[builder(default)]
     pub smtp_options: MailOptions,
     #[builder(default)]
     pub ldaps_options: LdapsOptions,
+    /// The public URL of the server, for password reset links.
     #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
+    #[schemars(with = "String", extend("format" = "uri"))]
     pub http_url: HttpUrl,
     #[debug(skip)]
     #[serde(skip)]
@@ -676,6 +780,69 @@ where
         );
     }
     Ok(config)
+}
+
+/// The JSON Schema of the configuration file, with the default values.
+pub fn config_schema() -> serde_json::Value {
+    let mut schema = serde_json::to_value(schemars::schema_for!(Configuration)).unwrap();
+    let defaults =
+        serde_json::to_value(ConfigurationBuilder::default().private_build().unwrap()).unwrap();
+    let mut definitions = match schema.as_object_mut().unwrap().remove("$defs") {
+        Some(serde_json::Value::Object(definitions)) => definitions,
+        _ => serde_json::Map::new(),
+    };
+    add_defaults(&mut schema, &defaults, &mut definitions);
+    schema
+        .as_object_mut()
+        .unwrap()
+        .insert("$defs".to_string(), serde_json::Value::Object(definitions));
+    schema
+}
+
+/// Set the "default" of each property of `schema` from the value in `defaults`,
+/// also in the definitions that the properties refer to.
+///
+/// A property with a default is not required: the configuration file is
+/// merged over the defaults, so the file can leave out any of these keys.
+fn add_defaults(
+    schema: &mut serde_json::Value,
+    defaults: &serde_json::Value,
+    definitions: &mut serde_json::Map<String, serde_json::Value>,
+) {
+    let Some(serde_json::Value::Object(properties)) = schema.get_mut("properties") else {
+        return;
+    };
+    let mut defaulted = Vec::new();
+    for (key, property) in properties.iter_mut() {
+        let Some(default) = defaults.get(key) else {
+            continue;
+        };
+        defaulted.push(key.clone());
+        if let Some(name) = property
+            .get("$ref")
+            .and_then(|r| r.as_str())
+            .and_then(|r| r.strip_prefix("#/$defs/"))
+        {
+            if let Some(mut definition) = definitions.remove(name) {
+                add_defaults(&mut definition, default, definitions);
+                definitions.insert(name.to_string(), definition);
+            }
+        }
+        if let serde_json::Value::Object(property) = property {
+            property.insert("default".to_string(), default.clone());
+        }
+    }
+    let schema = schema.as_object_mut().unwrap();
+    if let Some(serde_json::Value::Array(required)) = schema.get_mut("required") {
+        required.retain(|name| {
+            !name
+                .as_str()
+                .is_some_and(|name| defaulted.iter().any(|key| key == name))
+        });
+        if required.is_empty() {
+            schema.remove("required");
+        }
+    }
 }
 
 #[cfg(test)]
