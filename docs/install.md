@@ -99,6 +99,12 @@ or using [quadlets](../example_configs/podman-quadlets/). The example quadlets
 include configuration with postgresql and file based secrets, but have comments
 for several other deployment strategies.
 
+### With Easypanel
+
+[Easypanel](https://easypanel.io) is a self-hosted Docker deployment platform, and it maintains a one-click deployment template for LLDAP:
+
+[![Deploy on Easypanel](https://easypanel.io/img/deploy-on-easypanel-40.svg)](https://easypanel.io/templates/lldap)
+
 ### With Kubernetes
 
 See https://github.com/Evantage-WS/lldap-kubernetes for a LLDAP deployment for Kubernetes
