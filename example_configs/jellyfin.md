@@ -34,7 +34,7 @@ uid
 ```
 ### LDAP Username Attribute
 ```
-uid
+cn
 ```
 
 ### LDAP Admin Base DN
