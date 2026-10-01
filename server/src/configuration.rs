@@ -105,6 +105,8 @@ pub struct HttpUrl(pub Url);
 #[derive(Clone, Deserialize, Serialize, derive_builder::Builder, derive_more::Debug)]
 #[builder(pattern = "owned", build_fn(name = "private_build"))]
 pub struct Configuration {
+    #[builder(default)]
+    pub ldap_socket: Option<String>,
     #[builder(default = r#"String::from("::")"#)]
     pub ldap_host: String,
     #[builder(default = "3890")]
@@ -440,6 +442,10 @@ impl ConfigOverrider for RunOpts {
         self.server_key_seed
             .as_ref()
             .inspect(|seed| config.key_seed = Some(SecUtf8::from(seed.as_str())));
+
+        self.ldap_socket
+            .as_ref()
+            .inspect(|socket| config.ldap_socket = Some(socket.to_string()));
 
         self.ldap_port.inspect(|&port| config.ldap_port = port);
 

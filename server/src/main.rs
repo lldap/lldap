@@ -221,6 +221,7 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
 }
 
 async fn run_server_command(opts: RunOpts) -> Result<()> {
+    // TODO: this debug is never printed because logging is not initialized yet
     debug!("CLI: {:#?}", &opts);
 
     let config = configuration::init(opts)?;

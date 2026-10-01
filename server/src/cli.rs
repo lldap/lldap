@@ -135,6 +135,10 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_SERVER_KEY_SEED")]
     pub server_key_seed: Option<String>,
 
+    /// Use ldap unix domain socket instead of ldap_host/ldap_port. Default: None
+    #[clap(long, env = "LLDAP_LDAP_SOCKET")]
+    pub ldap_socket: Option<String>,
+
     /// Change ldap host. Default: "::"
     #[clap(long, env = "LLDAP_LDAP_HOST")]
     pub ldap_host: Option<String>,
