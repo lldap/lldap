@@ -1,7 +1,7 @@
 use crate::core::{
     error::{LdapError, LdapResult},
-    group::{convert_groups_to_ldap_op, get_groups_list},
-    user::{convert_users_to_ldap_op, get_user_list},
+    group::{convert_groups_to_ldap_op, get_default_group_object_classes, get_groups_list},
+    user::{convert_users_to_ldap_op, get_default_user_object_classes, get_user_list},
     utils::{LdapInfo, LdapSchemaDescription, is_subtree, parse_distinguished_name},
 };
 use chrono::Utc;
@@ -15,7 +15,7 @@ use ldap3_proto::{
 use lldap_access_control::UserAndGroupListerBackendHandler;
 use lldap_domain::{
     public_schema::PublicSchema,
-    types::{Group, UserAndGroups},
+    types::{Group, LdapObjectClass, UserAndGroups},
 };
 use tracing::{debug, warn};
 
@@ -299,6 +299,69 @@ pub(crate) fn is_subschema_entry_request(request: &LdapSearchRequest) -> bool {
     request.base == "cn=Subschema" && request.scope == LdapSearchScope::Base
 }
 
+/// Whether `filter` is true of every entry with these classes (`Some(true)`),
+/// true of none of them (`Some(false)`), or not decidable from object class
+/// alone (`None`).
+///
+/// Only `objectClass` equality is decided, using the same case folding as the
+/// user and group filter converters. Every other leaf stays unknown, including
+/// unsupported operators, so those branches still reach the converters. `NOT`
+/// of an unknown result stays unknown. Empty `AND` is true and empty `OR` is
+/// false, matching the converters' identities.
+fn object_class_filter_feasible(
+    filter: &LdapFilter,
+    default_classes: &[LdapObjectClass],
+    extra_classes: &[LdapObjectClass],
+) -> Option<bool> {
+    match filter {
+        LdapFilter::And(filters) => {
+            let mut unknown = false;
+            for child in filters {
+                match object_class_filter_feasible(child, default_classes, extra_classes) {
+                    Some(false) => return Some(false),
+                    None => unknown = true,
+                    Some(true) => {}
+                }
+            }
+            if unknown { None } else { Some(true) }
+        }
+        LdapFilter::Or(filters) => {
+            let mut unknown = false;
+            for child in filters {
+                match object_class_filter_feasible(child, default_classes, extra_classes) {
+                    Some(true) => return Some(true),
+                    None => unknown = true,
+                    Some(false) => {}
+                }
+            }
+            if unknown { None } else { Some(false) }
+        }
+        LdapFilter::Not(child) => {
+            object_class_filter_feasible(child, default_classes, extra_classes).map(|known| !known)
+        }
+        LdapFilter::Equality(attribute, value) if attribute.eq_ignore_ascii_case("objectclass") => {
+            Some(entry_type_has_object_class(
+                value,
+                default_classes,
+                extra_classes,
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn entry_type_has_object_class(
+    value: &str,
+    default_classes: &[LdapObjectClass],
+    extra_classes: &[LdapObjectClass],
+) -> bool {
+    let value_lc = value.to_ascii_lowercase();
+    default_classes
+        .iter()
+        .any(|class| class.as_str().eq_ignore_ascii_case(value_lc.as_str()))
+        || extra_classes.contains(&LdapObjectClass::from(value_lc.as_str()))
+}
+
 async fn do_search_internal(
     ldap_info: &LdapInfo,
     backend_handler: &impl UserAndGroupListerBackendHandler,
@@ -336,22 +399,54 @@ async fn do_search_internal(
     });
     Ok(match scope {
         SearchScope::Global => {
-            let users = get_user_list(&request.filter).await;
-            let groups = get_group_list(&request.filter).await;
-            match (users, groups) {
-                (Ok(users), Err(e)) => {
-                    warn!("Error while getting groups: {:#}", e);
-                    InternalSearchResults::UsersAndGroups(users, Vec::new())
+            // Decide before either converter runs. A group filter that mentions
+            // user attributes logs a warning while it is translated, even when
+            // the object class already makes a group result impossible.
+            let user_classes = get_default_user_object_classes();
+            let group_classes = get_default_group_object_classes();
+            let extra_user_classes = &schema.get_schema().extra_user_object_classes;
+            let extra_group_classes = &schema.get_schema().extra_group_object_classes;
+            let users_can_match =
+                object_class_filter_feasible(&request.filter, &user_classes, extra_user_classes)
+                    != Some(false);
+            let groups_can_match =
+                object_class_filter_feasible(&request.filter, &group_classes, extra_group_classes)
+                    != Some(false);
+            // A skipped branch is not a successful lookup. Folding it into
+            // Ok(empty) would hide a real failure of the only branch that ran.
+            match (users_can_match, groups_can_match) {
+                (false, false) => InternalSearchResults::Empty,
+                (true, false) => InternalSearchResults::UsersAndGroups(
+                    get_user_list(&request.filter).await?,
+                    Vec::new(),
+                ),
+                (false, true) => InternalSearchResults::UsersAndGroups(
+                    Vec::new(),
+                    get_group_list(&request.filter).await?,
+                ),
+                (true, true) => {
+                    let users = get_user_list(&request.filter).await;
+                    let groups = get_group_list(&request.filter).await;
+                    match (users, groups) {
+                        (Ok(users), Err(e)) => {
+                            warn!("Error while getting groups: {:#}", e);
+                            InternalSearchResults::UsersAndGroups(users, Vec::new())
+                        }
+                        (Err(e), Ok(groups)) => {
+                            warn!("Error while getting users: {:#}", e);
+                            InternalSearchResults::UsersAndGroups(Vec::new(), groups)
+                        }
+                        (Err(user_error), Err(_)) => {
+                            InternalSearchResults::Raw(vec![make_search_error(
+                                user_error.code,
+                                user_error.message,
+                            )])
+                        }
+                        (Ok(users), Ok(groups)) => {
+                            InternalSearchResults::UsersAndGroups(users, groups)
+                        }
+                    }
                 }
-                (Err(e), Ok(groups)) => {
-                    warn!("Error while getting users: {:#}", e);
-                    InternalSearchResults::UsersAndGroups(Vec::new(), groups)
-                }
-                (Err(user_error), Err(_)) => InternalSearchResults::Raw(vec![make_search_error(
-                    user_error.code,
-                    user_error.message,
-                )]),
-                (Ok(users), Ok(groups)) => InternalSearchResults::UsersAndGroups(users, groups),
             }
         }
         SearchScope::Users => {
@@ -1526,5 +1621,816 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert!(matches!(results[0], LdapOp::SearchResultEntry(_)));
         assert!(matches!(results[1], LdapOp::SearchResultDone(_)));
+    }
+
+    fn reported_person_search_entry() -> Vec<LdapOp> {
+        vec![
+            LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                dn: "uid=ada,ou=people,dc=example,dc=com".to_string(),
+                attributes: vec![LdapPartialAttribute {
+                    atype: "mail".to_string(),
+                    vals: vec![b"e@ma.il".to_vec()],
+                }],
+            }),
+            make_search_success(),
+        ]
+    }
+
+    fn expect_reported_person_user(mock: &mut MockTestBackendHandler, filter: UserRequestFilter) {
+        mock.expect_list_users()
+            .with(eq(Some(filter)), eq(false))
+            .times(1)
+            .returning(|_, _| {
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("ada"),
+                        email: "e@ma.il".into(),
+                        ..Default::default()
+                    },
+                    groups: None,
+                }])
+            });
+    }
+
+    #[tokio::test]
+    async fn test_global_person_filter_skips_impossible_group_branch() {
+        let mut mock = MockTestBackendHandler::new();
+        let member_of = UserRequestFilter::MemberOf("groupname".into());
+        let mail = UserRequestFilter::Equality(UserColumn::LowercaseEmail, "e@ma.il".to_string());
+        // Class first, class last, then the same predicates with mixed-case names.
+        expect_reported_person_user(
+            &mut mock,
+            UserRequestFilter::And(vec![member_of.clone(), mail.clone()]),
+        );
+        expect_reported_person_user(
+            &mut mock,
+            UserRequestFilter::And(vec![mail.clone(), member_of.clone()]),
+        );
+        expect_reported_person_user(&mut mock, UserRequestFilter::And(vec![member_of, mail]));
+        mock.expect_list_groups().times(0).returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+
+        let member_of_filter = LdapFilter::Equality(
+            "memberOf".to_string(),
+            "cn=groupname,ou=groups,dc=example,dc=com".to_string(),
+        );
+        let mail_filter = LdapFilter::Equality("mail".to_string(), "e@ma.il".to_string());
+        let class_filter = LdapFilter::Equality("objectClass".to_string(), "person".to_string());
+        let requests = [
+            make_search_request(
+                "dc=example,dc=com",
+                LdapFilter::And(vec![
+                    class_filter.clone(),
+                    member_of_filter.clone(),
+                    mail_filter.clone(),
+                ]),
+                vec!["mail"],
+            ),
+            make_search_request(
+                "dc=example,dc=com",
+                LdapFilter::And(vec![mail_filter, member_of_filter, class_filter]),
+                vec!["mail"],
+            ),
+            make_search_request(
+                "dc=example,dc=com",
+                LdapFilter::And(vec![
+                    LdapFilter::Equality("ObJeCtClAsS".to_string(), "PeRsOn".to_string()),
+                    LdapFilter::Equality(
+                        "MemberOf".to_string(),
+                        "CN=GroupName,OU=Groups,DC=Example,DC=com".to_string(),
+                    ),
+                    LdapFilter::Equality("Mail".to_string(), "E@MA.IL".to_string()),
+                ]),
+                vec!["mail"],
+            ),
+        ];
+        for request in requests {
+            assert_eq!(
+                ldap_handler.do_search_or_dse(&request).await,
+                Ok(reported_person_search_entry())
+            );
+        }
+    }
+
+    fn user_lookup_error(message: &str) -> LdapError {
+        LdapError {
+            code: LdapResultCode::Other,
+            message: format!(
+                r#"Error while searching user "dc=example,dc=com": Internal error: `{message}`"#
+            ),
+        }
+    }
+
+    fn group_lookup_error(message: &str) -> LdapError {
+        LdapError {
+            code: LdapResultCode::Other,
+            message: format!(
+                r#"Error while listing groups "dc=example,dc=com": Internal error: `{message}`"#
+            ),
+        }
+    }
+
+    fn domain_internal(message: &str) -> lldap_domain_model::error::DomainError {
+        lldap_domain_model::error::DomainError::InternalError(message.to_string())
+    }
+
+    fn equality(attribute: &str, value: &str) -> LdapFilter {
+        LdapFilter::Equality(attribute.to_string(), value.to_string())
+    }
+
+    fn global_search(filter: LdapFilter) -> LdapSearchRequest {
+        make_search_request("dc=example,dc=com", filter, vec!["1.1"])
+    }
+
+    fn sample_group() -> Group {
+        Group {
+            id: GroupId(1),
+            display_name: "group_1".into(),
+            creation_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+            users: Vec::new(),
+            uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+            attributes: Vec::new(),
+            modified_date: chrono::Utc.timestamp_opt(42, 42).unwrap().naive_utc(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_global_group_class_skips_impossible_user_branch() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .times(0)
+            .returning(|_, _| Ok(vec![]));
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::Member(UserId::new("bob")))))
+            .times(1)
+            .returning(|_| Ok(vec![sample_group()]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_search_request(
+            "dc=example,dc=com",
+            LdapFilter::And(vec![
+                equality("objectClass", "gRouPofNames"),
+                equality("MeMbEr", "uid=bob,ou=people,dc=example,dc=com"),
+            ]),
+            vec!["cn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                    attributes: vec![LdapPartialAttribute {
+                        atype: "cn".to_string(),
+                        vals: vec![b"group_1".to_vec()],
+                    }],
+                }),
+                make_search_success(),
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_global_negated_user_class_queries_only_groups() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .times(0)
+            .returning(|_, _| Ok(vec![]));
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::True)))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = global_search(LdapFilter::Not(Box::new(equality("objectClass", "person"))));
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_global_object_class_branches_follow_nested_constraints() {
+        let mail = UserRequestFilter::Equality(UserColumn::LowercaseEmail, "e@ma.il".to_string());
+        let mut both_classes = MockTestBackendHandler::new();
+        both_classes
+            .expect_list_users()
+            .with(eq(Some(UserRequestFilter::True)), eq(false))
+            .times(1)
+            .returning(|_, _| Ok(vec![]));
+        both_classes
+            .expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::True)))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(both_classes).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(LdapFilter::Or(vec![
+                    equality("objectClass", "person"),
+                    equality("objectClass", "groupOfNames"),
+                ])))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+
+        let mut person_or_mail = MockTestBackendHandler::new();
+        person_or_mail
+            .expect_list_users()
+            .with(
+                eq(Some(UserRequestFilter::Or(vec![
+                    UserRequestFilter::True,
+                    mail.clone(),
+                ]))),
+                eq(false),
+            )
+            .times(1)
+            .returning(|_, _| Ok(vec![]));
+        person_or_mail
+            .expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::False)))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(person_or_mail).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(LdapFilter::Or(vec![
+                    equality("objectClass", "person"),
+                    equality("mail", "e@ma.il"),
+                ])))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+
+        let mut not_unknown = MockTestBackendHandler::new();
+        not_unknown
+            .expect_list_users()
+            .with(eq(Some(UserRequestFilter::True)), eq(false))
+            .times(1)
+            .returning(|_, _| Ok(vec![]));
+        not_unknown
+            .expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::True)))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(not_unknown).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(LdapFilter::Not(Box::new(equality(
+                    "department",
+                    "engineering",
+                )))))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+
+        let mut neither = MockTestBackendHandler::new();
+        neither
+            .expect_list_users()
+            .times(0)
+            .returning(|_, _| Ok(vec![]));
+        neither
+            .expect_list_groups()
+            .times(0)
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(neither).await;
+        for filter in [
+            LdapFilter::And(vec![
+                equality("objectClass", "person"),
+                equality("objectClass", "groupOfNames"),
+            ]),
+            LdapFilter::And(vec![
+                equality("objectClass", "groupOfNames"),
+                equality("objectClass", "person"),
+            ]),
+        ] {
+            assert_eq!(
+                ldap_handler.do_search_or_dse(&global_search(filter)).await,
+                Ok(vec![make_search_success()])
+            );
+        }
+
+        let mut nested = MockTestBackendHandler::new();
+        nested
+            .expect_list_users()
+            .with(eq(Some(mail)), eq(false))
+            .times(1)
+            .returning(|_, _| Ok(vec![]));
+        nested
+            .expect_list_groups()
+            .times(0)
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(nested).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(LdapFilter::And(vec![
+                    equality("objectClass", "person"),
+                    LdapFilter::Or(vec![
+                        equality("mail", "e@ma.il"),
+                        equality("objectClass", "groupOfNames"),
+                    ]),
+                ])))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_global_unrestricted_filters_still_query_both_branches() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::True)), eq(false))
+            .times(1)
+            .returning(|_, _| Ok(vec![]));
+        mock.expect_list_users()
+            .with(
+                eq(Some(UserRequestFilter::Equality(
+                    UserColumn::LowercaseEmail,
+                    "e@ma.il".to_string(),
+                ))),
+                eq(false),
+            )
+            .times(1)
+            .returning(|_, _| Ok(vec![]));
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::True)))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::False)))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(LdapFilter::Present(
+                    "objectClass".to_string()
+                )))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(equality("mail", "e@ma.il")))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_global_builtin_and_extra_object_classes_select_one_branch() {
+        let user_classes = get_default_user_object_classes();
+        let group_classes = get_default_group_object_classes();
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::True)), eq(false))
+            .times(user_classes.len() + 1)
+            .returning(|_, _| Ok(vec![]));
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::True)))
+            .times(group_classes.len())
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        for class in user_classes
+            .iter()
+            .map(|class| class.as_str().to_string())
+            .chain(std::iter::once("CUSTOMuserCLASS".to_string()))
+        {
+            assert_eq!(
+                ldap_handler
+                    .do_search_or_dse(&global_search(equality("objectClass", &class)))
+                    .await,
+                Ok(vec![make_search_success()]),
+                "{class}"
+            );
+        }
+        for class in &group_classes {
+            assert_eq!(
+                ldap_handler
+                    .do_search_or_dse(&global_search(equality("objectClass", class.as_str())))
+                    .await,
+                Ok(vec![make_search_success()]),
+                "{}",
+                class.as_str()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_global_shared_custom_and_unknown_object_classes() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().returning(|| {
+            Ok(Schema {
+                user_attributes: AttributeList {
+                    attributes: Vec::new(),
+                },
+                group_attributes: AttributeList {
+                    attributes: Vec::new(),
+                },
+                extra_user_object_classes: vec![
+                    LdapObjectClass::from("customUserClass"),
+                    LdapObjectClass::from("sharedClass"),
+                ],
+                extra_group_object_classes: vec![
+                    LdapObjectClass::from("customGroupClass"),
+                    LdapObjectClass::from("sharedClass"),
+                ],
+            })
+        });
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::True)), eq(false))
+            .times(2)
+            .returning(|_, _| Ok(vec![]));
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::True)))
+            .times(2)
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(equality("objectClass", "customUserClass")))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(equality("objectClass", "CustomGroupClass")))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(equality("objectClass", "sharedCLASS")))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(equality("objectClass", "noSuchClass")))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_scoped_search_does_not_skip_on_object_class() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(eq(Some(UserRequestFilter::from(false))), eq(false))
+            .times(1)
+            .returning(|_, _| Ok(vec![]));
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::from(false))))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&make_user_search_request(
+                    equality("objectClass", "groupOfNames"),
+                    vec!["1.1"],
+                ))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&make_group_search_request(
+                    equality("objectClass", "person"),
+                    vec!["1.1"],
+                ))
+                .await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_global_sole_eligible_branch_error_is_propagated() {
+        let mut users = MockTestBackendHandler::new();
+        users
+            .expect_list_users()
+            .times(1)
+            .returning(|_, _| Err(domain_internal("user failed")));
+        users
+            .expect_list_groups()
+            .times(0)
+            .returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(users).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(equality("objectClass", "person")))
+                .await,
+            Err(user_lookup_error("user failed"))
+        );
+
+        let mut groups = MockTestBackendHandler::new();
+        groups
+            .expect_list_users()
+            .times(0)
+            .returning(|_, _| Ok(vec![]));
+        groups
+            .expect_list_groups()
+            .times(1)
+            .returning(|_| Err(domain_internal("group failed")));
+        let ldap_handler = setup_bound_admin_handler(groups).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(equality("objectClass", "groupOfNames")))
+                .await,
+            Err(group_lookup_error("group failed"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_global_both_branches_keep_partial_and_double_errors() {
+        let mut users_ok = MockTestBackendHandler::new();
+        users_ok
+            .expect_list_users()
+            .with(eq(Some(UserRequestFilter::True)), eq(false))
+            .times(1)
+            .returning(|_, _| {
+                Ok(vec![UserAndGroups {
+                    user: User {
+                        user_id: UserId::new("ada"),
+                        ..Default::default()
+                    },
+                    groups: None,
+                }])
+            });
+        users_ok
+            .expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::True)))
+            .times(1)
+            .returning(|_| Err(domain_internal("groups failed")));
+        let ldap_handler = setup_bound_admin_handler(users_ok).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(LdapFilter::And(vec![])))
+                .await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "uid=ada,ou=people,dc=example,dc=com".to_string(),
+                    attributes: Vec::new(),
+                }),
+                make_search_success(),
+            ])
+        );
+
+        let mut groups_ok = MockTestBackendHandler::new();
+        groups_ok
+            .expect_list_users()
+            .with(eq(Some(UserRequestFilter::True)), eq(false))
+            .times(1)
+            .returning(|_, _| Err(domain_internal("users failed")));
+        groups_ok
+            .expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::True)))
+            .times(1)
+            .returning(|_| Ok(vec![sample_group()]));
+        let ldap_handler = setup_bound_admin_handler(groups_ok).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(LdapFilter::And(vec![])))
+                .await,
+            Ok(vec![
+                LdapOp::SearchResultEntry(LdapSearchResultEntry {
+                    dn: "cn=group_1,ou=groups,dc=example,dc=com".to_string(),
+                    attributes: Vec::new(),
+                }),
+                make_search_success(),
+            ])
+        );
+
+        let mut both_fail = MockTestBackendHandler::new();
+        both_fail
+            .expect_list_users()
+            .with(eq(Some(UserRequestFilter::True)), eq(false))
+            .times(1)
+            .returning(|_, _| Err(domain_internal("users failed")));
+        both_fail
+            .expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::True)))
+            .times(1)
+            .returning(|_| Err(domain_internal("groups failed")));
+        let ldap_handler = setup_bound_admin_handler(both_fail).await;
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(LdapFilter::Present(
+                    "objectClass".to_string()
+                )))
+                .await,
+            Ok(vec![make_search_error(
+                LdapResultCode::Other,
+                user_lookup_error("users failed").message,
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_global_unsupported_filter_keeps_converter_error() {
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let unsupported = LdapFilter::Approx("uid".to_string(), "value".to_string());
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(unsupported.clone()))
+                .await,
+            Ok(vec![make_search_error(
+                LdapResultCode::UnwillingToPerform,
+                r#"Unsupported user filter: Approx("uid", "value")"#.to_string(),
+            )])
+        );
+        assert_eq!(
+            ldap_handler
+                .do_search_or_dse(&global_search(LdapFilter::And(vec![
+                    equality("objectClass", "person"),
+                    unsupported,
+                ])))
+                .await,
+            Err(LdapError {
+                code: LdapResultCode::UnwillingToPerform,
+                message: r#"Unsupported user filter: Approx("uid", "value")"#.to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn test_object_class_filter_feasible() {
+        let user_defaults = get_default_user_object_classes();
+        let group_defaults = get_default_group_object_classes();
+        let no_extra = Vec::new();
+        let user_extra = vec![
+            LdapObjectClass::from("customUserClass"),
+            LdapObjectClass::from("sharedClass"),
+        ];
+        let group_extra = vec![
+            LdapObjectClass::from("customGroupClass"),
+            LdapObjectClass::from("sharedClass"),
+        ];
+        let feasible =
+            |filter: &LdapFilter, defaults: &[LdapObjectClass], extra: &[LdapObjectClass]| {
+                object_class_filter_feasible(filter, defaults, extra)
+            };
+
+        for class in &user_defaults {
+            let filter = equality("OBJECTCLASS", &class.as_str().to_ascii_uppercase());
+            assert_eq!(
+                feasible(&filter, &user_defaults, &no_extra),
+                Some(true),
+                "{}",
+                class.as_str()
+            );
+            assert_eq!(
+                feasible(&filter, &group_defaults, &no_extra),
+                Some(false),
+                "{}",
+                class.as_str()
+            );
+        }
+        for class in &group_defaults {
+            let filter = equality("objectclass", class.as_str());
+            assert_eq!(feasible(&filter, &user_defaults, &no_extra), Some(false));
+            assert_eq!(feasible(&filter, &group_defaults, &no_extra), Some(true));
+        }
+
+        let custom_user = equality("objectClass", "CUSTOMuserCLASS");
+        let custom_group = equality("objectClass", "customGroupClass");
+        let shared = equality("objectClass", "SHAREDclass");
+        let unknown = equality("objectClass", "noSuchClass");
+        assert_eq!(
+            feasible(&custom_user, &user_defaults, &user_extra),
+            Some(true)
+        );
+        assert_eq!(
+            feasible(&custom_user, &group_defaults, &group_extra),
+            Some(false)
+        );
+        assert_eq!(
+            feasible(&custom_group, &user_defaults, &user_extra),
+            Some(false)
+        );
+        assert_eq!(
+            feasible(&custom_group, &group_defaults, &group_extra),
+            Some(true)
+        );
+        assert_eq!(feasible(&shared, &user_defaults, &user_extra), Some(true));
+        assert_eq!(feasible(&shared, &group_defaults, &group_extra), Some(true));
+        assert_eq!(feasible(&unknown, &user_defaults, &user_extra), Some(false));
+        assert_eq!(
+            feasible(&unknown, &group_defaults, &group_extra),
+            Some(false)
+        );
+
+        let person = equality("objectClass", "person");
+        let group = equality("objectClass", "groupOfNames");
+        let mail = equality("mail", "e@ma.il");
+        assert_eq!(
+            feasible(&LdapFilter::And(vec![]), &user_defaults, &no_extra),
+            Some(true)
+        );
+        assert_eq!(
+            feasible(&LdapFilter::And(vec![]), &group_defaults, &no_extra),
+            Some(true)
+        );
+        assert_eq!(
+            feasible(&LdapFilter::Or(vec![]), &user_defaults, &no_extra),
+            Some(false)
+        );
+        assert_eq!(
+            feasible(&LdapFilter::Or(vec![]), &group_defaults, &no_extra),
+            Some(false)
+        );
+        assert_eq!(
+            feasible(
+                &LdapFilter::And(vec![LdapFilter::And(vec![]), person.clone()]),
+                &user_defaults,
+                &no_extra
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            feasible(
+                &LdapFilter::Or(vec![LdapFilter::Or(vec![]), person.clone()]),
+                &group_defaults,
+                &no_extra
+            ),
+            Some(false)
+        );
+
+        for filter in [
+            LdapFilter::And(vec![mail.clone(), person.clone()]),
+            LdapFilter::And(vec![person.clone(), mail.clone()]),
+        ] {
+            assert_eq!(feasible(&filter, &user_defaults, &no_extra), None);
+            assert_eq!(feasible(&filter, &group_defaults, &no_extra), Some(false));
+        }
+        for filter in [
+            LdapFilter::Or(vec![person.clone(), group.clone()]),
+            LdapFilter::Or(vec![group.clone(), person.clone()]),
+        ] {
+            assert_eq!(feasible(&filter, &user_defaults, &no_extra), Some(true));
+            assert_eq!(feasible(&filter, &group_defaults, &no_extra), Some(true));
+        }
+        for filter in [
+            LdapFilter::Or(vec![person.clone(), mail.clone()]),
+            LdapFilter::Or(vec![mail.clone(), person.clone()]),
+        ] {
+            assert_eq!(feasible(&filter, &user_defaults, &no_extra), Some(true));
+            assert_eq!(feasible(&filter, &group_defaults, &no_extra), None);
+        }
+        let not_mail = LdapFilter::Not(Box::new(mail.clone()));
+        assert_eq!(feasible(&not_mail, &user_defaults, &no_extra), None);
+        assert_eq!(feasible(&not_mail, &group_defaults, &no_extra), None);
+        for filter in [
+            LdapFilter::And(vec![person.clone(), group.clone()]),
+            LdapFilter::And(vec![group.clone(), person.clone()]),
+            LdapFilter::And(vec![
+                person.clone(),
+                LdapFilter::Not(Box::new(person.clone())),
+            ]),
+        ] {
+            assert_eq!(feasible(&filter, &user_defaults, &no_extra), Some(false));
+            assert_eq!(feasible(&filter, &group_defaults, &no_extra), Some(false));
+        }
+        let not_person = LdapFilter::Not(Box::new(person.clone()));
+        assert_eq!(
+            feasible(&not_person, &user_defaults, &no_extra),
+            Some(false)
+        );
+        assert_eq!(
+            feasible(&not_person, &group_defaults, &no_extra),
+            Some(true)
+        );
+        let not_not_person = LdapFilter::Not(Box::new(not_person));
+        assert_eq!(
+            feasible(&not_not_person, &user_defaults, &no_extra),
+            Some(true)
+        );
+        assert_eq!(
+            feasible(&not_not_person, &group_defaults, &no_extra),
+            Some(false)
+        );
+
+        let nested = LdapFilter::Not(Box::new(LdapFilter::Or(vec![
+            LdapFilter::And(vec![person.clone(), mail]),
+            group,
+        ])));
+        assert_eq!(feasible(&nested, &user_defaults, &no_extra), None);
+        assert_eq!(feasible(&nested, &group_defaults, &no_extra), Some(false));
+
+        for filter in [
+            LdapFilter::Present("objectClass".to_string()),
+            LdapFilter::Present("mail".to_string()),
+            LdapFilter::Approx("objectClass".to_string(), "person".to_string()),
+            LdapFilter::Substring(
+                "objectClass".to_string(),
+                LdapSubstringFilter {
+                    initial: Some("per".to_string()),
+                    any: Vec::new(),
+                    final_: None,
+                },
+            ),
+            LdapFilter::GreaterOrEqual("objectClass".to_string(), "person".to_string()),
+            LdapFilter::LessOrEqual("objectClass".to_string(), "person".to_string()),
+        ] {
+            assert_eq!(feasible(&filter, &user_defaults, &no_extra), None);
+            assert_eq!(feasible(&filter, &group_defaults, &no_extra), None);
+        }
     }
 }
