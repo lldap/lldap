@@ -155,6 +155,11 @@ pub struct RunOpts {
     #[clap(long, env = "LLDAP_HTTP_URL")]
     pub http_url: Option<Url>,
 
+    /// Name of the cookie that stores the authentication token. Default: "token".
+    /// Handy if another service on a parent domain sets a cookie with the same name.
+    #[clap(long, env = "LLDAP_TOKEN_COOKIE_NAME")]
+    pub token_cookie_name: Option<String>,
+
     /// Database connection URL
     #[clap(short, long, env = "LLDAP_DATABASE_URL")]
     pub database_url: Option<DatabaseUrl>,

@@ -112,17 +112,29 @@ async fn get_settings<Backend>(data: web::Data<AppState<Backend>>) -> HttpRespon
     })
 }
 
+#[derive(Clone)]
+struct AppStateConfig {
+    server_url: url::Url,
+    assets_path: PathBuf,
+    mail_options: MailOptions,
+    token_cookie_name: String,
+}
+
 fn http_config<Backend>(
     cfg: &mut web::ServiceConfig,
     backend_handler: Backend,
     jwt_secret: secstr::SecUtf8,
     jwt_blacklist: HashSet<u64>,
-    server_url: url::Url,
-    assets_path: PathBuf,
-    mail_options: MailOptions,
+    state_config: AppStateConfig,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
+    let AppStateConfig {
+        server_url,
+        assets_path,
+        mail_options,
+        token_cookie_name,
+    } = state_config;
     let enable_password_reset = mail_options.enable_password_reset;
     cfg.app_data(web::Data::new(AppState::<Backend> {
         backend_handler: AccessControlledBackendHandler::new(backend_handler),
@@ -131,20 +143,26 @@ fn http_config<Backend>(
         server_url,
         assets_path: assets_path.clone(),
         mail_options,
+        token_cookie_name: token_cookie_name.clone(),
     }))
     .route(
         "/health",
         web::get().to(async || HttpResponse::Ok().finish()),
     )
     .route("/settings", web::get().to(get_settings::<Backend>))
-    .service(
-        web::scope("/auth")
-            .configure(|cfg| auth_service::configure_server::<Backend>(cfg, enable_password_reset)),
-    )
+    .service(web::scope("/auth").configure(|cfg| {
+        auth_service::configure_server::<Backend>(
+            cfg,
+            enable_password_reset,
+            token_cookie_name.clone(),
+        )
+    }))
     // API endpoint.
     .service(
         web::scope("/api")
-            .wrap(auth_service::CookieToHeaderTranslatorFactory)
+            .wrap(auth_service::CookieToHeaderTranslatorFactory {
+                cookie_name: token_cookie_name.clone(),
+            })
             .configure(crate::graphql_server::configure_endpoint::<Backend>),
     )
     .service(
@@ -175,6 +193,7 @@ pub(crate) struct AppState<Backend> {
     pub server_url: url::Url,
     pub assets_path: PathBuf,
     pub mail_options: MailOptions,
+    pub token_cookie_name: String,
 }
 
 impl<Backend: BackendHandler> AppState<Backend> {
@@ -211,9 +230,7 @@ where
         .get_jwt_blacklist()
         .await
         .context("while getting the jwt blacklist")?;
-    let server_url = config.http_url.0.clone();
     let assets_path = config.assets_path.clone();
-    let mail_options = config.smtp_options.clone();
     let verbose = config.verbose;
     if !assets_path.join("index.html").exists() {
         warn!(
@@ -221,6 +238,12 @@ where
             assets_path.to_string_lossy()
         )
     }
+    let state_config = AppStateConfig {
+        server_url: config.http_url.0.clone(),
+        assets_path,
+        mail_options: config.smtp_options.clone(),
+        token_cookie_name: config.token_cookie_name.clone(),
+    };
     info!("Starting the API/web server on port {}", config.http_port);
     server_builder
         .bind(
@@ -230,9 +253,7 @@ where
                 let backend_handler = backend_handler.clone();
                 let jwt_secret = jwt_secret.clone();
                 let jwt_blacklist = jwt_blacklist.clone();
-                let server_url = server_url.clone();
-                let assets_path = assets_path.clone();
-                let mail_options = mail_options.clone();
+                let state_config = state_config.clone();
                 HttpServiceBuilder::default()
                     .finish(map_config(
                         App::new()
@@ -246,9 +267,7 @@ where
                                     backend_handler,
                                     jwt_secret,
                                     jwt_blacklist,
-                                    server_url,
-                                    assets_path,
-                                    mail_options,
+                                    state_config,
                                 )
                             }),
                         |_| AppConfig::default(),
