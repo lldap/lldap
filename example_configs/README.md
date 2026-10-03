@@ -32,6 +32,7 @@ configuration files:
 - [HashiCorp Vault](hashicorp-vault.md)
 - [Hedgedoc](hedgedoc.md)
 - [Home Assistant](home-assistant.md)
+- [Issuerd](issuerd.md)
 - [Jellyfin](jellyfin.md)
 - [Jenkins](jenkins.md)
 - [Jitsi Meet](jitsi_meet.conf)
