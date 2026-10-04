@@ -202,14 +202,28 @@ async fn create_user(
                     )));
                 }
             }
+            UserFieldType::PrimaryField(
+                UserColumn::CreationDate
+                | UserColumn::ModifiedDate
+                | UserColumn::PasswordModifiedDate
+                | UserColumn::Uuid,
+            ) => {}
             UserFieldType::Attribute(attribute_name, typ, is_list) => {
                 let values = decode_attribute_values(&ldap_attribute_name, &raw_values)?;
-                new_user_attributes.push(make_encoded_attribute(
-                    attribute_name,
-                    typ,
-                    is_list,
-                    &values,
-                )?);
+                let encoded = make_encoded_attribute(attribute_name, typ, is_list, &values)?;
+                if let Some(existing) = new_user_attributes
+                    .iter()
+                    .find(|attribute| attribute.name == encoded.name)
+                {
+                    if existing.value != encoded.value {
+                        return Err(constraint_violation(format!(
+                            "Conflicting values for attribute {}",
+                            encoded.name
+                        )));
+                    }
+                } else {
+                    new_user_attributes.push(encoded);
+                }
             }
             UserFieldType::NoMatch
             | UserFieldType::ObjectClass
@@ -453,6 +467,169 @@ mod tests {
                 String::new()
             )])
         );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_accepts_ldapsearch_aliased_attributes() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().times(1).returning(|| {
+            Ok(schema_with_user_attributes(vec![
+                user_attribute_schema("first_name", AttributeType::String, false),
+                user_attribute_schema("last_name", AttributeType::String, false),
+            ]))
+        });
+        mock.expect_create_user()
+            .withf(|request| {
+                let first_name = Attribute {
+                    name: AttributeName::from("first_name"),
+                    value: "Alice".to_string().into(),
+                };
+                let last_name = Attribute {
+                    name: AttributeName::from("last_name"),
+                    value: "User".to_string().into(),
+                };
+                request.user_id == UserId::new("alice")
+                    && request.email == Email::from("alice@example.com")
+                    && request.display_name == Some("Alice User".to_string())
+                    && request.attributes.len() == 2
+                    && request.attributes.contains(&first_name)
+                    && request.attributes.contains(&last_name)
+            })
+            .times(1)
+            .return_once(|_| Ok(()));
+        assert_eq!(
+            create_user(
+                &mock,
+                UserId::new("alice"),
+                vec![
+                    LdapPartialAttribute {
+                        atype: "objectClass".to_owned(),
+                        vals: vec![
+                            b"inetOrgPerson".to_vec(),
+                            b"posixAccount".to_vec(),
+                            b"mailAccount".to_vec(),
+                            b"person".to_vec(),
+                        ],
+                    },
+                    LdapPartialAttribute {
+                        atype: "cn".to_owned(),
+                        vals: vec![b"Alice User".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "createTimestamp".to_owned(),
+                        vals: vec![b"20260903214313Z".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "entryUUID".to_owned(),
+                        vals: vec![b"96cecf69-c6d1-3a22-873f-ac19d9ea15d7".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "givenName".to_owned(),
+                        vals: vec![b"Alice".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "first_name".to_owned(),
+                        vals: vec![b"Alice".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "sn".to_owned(),
+                        vals: vec![b"User".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "last_name".to_owned(),
+                        vals: vec![b"User".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "mail".to_owned(),
+                        vals: vec![b"alice@example.com".to_vec()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "uid".to_owned(),
+                        vals: vec![b"alice".to_vec()],
+                    },
+                ],
+            )
+            .await,
+            Ok(vec![make_add_response(
+                LdapResultCode::Success,
+                String::new()
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_collapses_identical_avatar_aliases() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().times(1).returning(|| {
+            Ok(schema_with_user_attributes(vec![user_attribute_schema(
+                "avatar",
+                AttributeType::JpegPhoto,
+                false,
+            )]))
+        });
+        let photo = JpegPhoto::for_tests();
+        let photo_bytes = String::from(&photo).into_bytes();
+        mock.expect_create_user()
+            .withf(move |request| {
+                let avatar = Attribute {
+                    name: AttributeName::from("avatar"),
+                    value: photo.clone().into(),
+                };
+                request.attributes.len() == 1 && request.attributes.contains(&avatar)
+            })
+            .times(1)
+            .return_once(|_| Ok(()));
+        assert_eq!(
+            create_user(
+                &mock,
+                UserId::new("alice"),
+                vec![
+                    LdapPartialAttribute {
+                        atype: "jpegPhoto".to_owned(),
+                        vals: vec![photo_bytes.clone()],
+                    },
+                    LdapPartialAttribute {
+                        atype: "avatar".to_owned(),
+                        vals: vec![photo_bytes],
+                    },
+                ],
+            )
+            .await,
+            Ok(vec![make_add_response(
+                LdapResultCode::Success,
+                String::new()
+            )])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_user_rejects_conflicting_alias_values() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema().times(1).returning(|| {
+            Ok(schema_with_user_attributes(vec![user_attribute_schema(
+                "first_name",
+                AttributeType::String,
+                false,
+            )]))
+        });
+        mock.expect_create_user().times(0);
+        let err = create_user(
+            &mock,
+            UserId::new("alice"),
+            vec![
+                LdapPartialAttribute {
+                    atype: "givenName".to_owned(),
+                    vals: vec![b"Alice".to_vec()],
+                },
+                LdapPartialAttribute {
+                    atype: "first_name".to_owned(),
+                    vals: vec![b"Alicia".to_vec()],
+                },
+            ],
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.code, LdapResultCode::ConstraintViolation);
     }
 
     #[tokio::test]
