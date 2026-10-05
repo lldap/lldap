@@ -53,7 +53,14 @@ where
 }
 
 pub fn parse_distinguished_name(dn: &str) -> LdapResult<Vec<(String, String)>> {
-    assert!(dn == dn.to_ascii_lowercase());
+    // Callers must lowercase the DN. Reject if it doesn't.
+    if dn != dn.to_ascii_lowercase() {
+        warn!(r#"Distinguished name is not lowercase: "{}""#, dn);
+        return Err(LdapError {
+            code: LdapResultCode::InvalidDNSyntax,
+            message: format!(r#"Distinguished name is not lowercase: "{dn}""#),
+        });
+    }
     dn.split(',')
         .map(|s| make_dn_pair(s.split('=').map(str::trim).map(String::from)))
         .collect()
@@ -540,6 +547,19 @@ mod tests {
             parse_distinguished_name(" ou  = people , dc = example , dc =  com ")
                 .expect("parsing failed"),
             parsed_dn
+        );
+    }
+
+    #[test]
+    fn test_parse_distinguished_name_not_lowercase() {
+        assert_eq!(
+            parse_distinguished_name("uid=Bob,ou=people,dc=example,dc=com"),
+            Err(LdapError {
+                code: LdapResultCode::InvalidDNSyntax,
+                message:
+                    r#"Distinguished name is not lowercase: "uid=Bob,ou=people,dc=example,dc=com""#
+                        .to_string(),
+            })
         );
     }
 
