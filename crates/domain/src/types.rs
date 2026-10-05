@@ -539,6 +539,11 @@ pub struct User {
     pub attributes: Vec<Attribute>,
     pub modified_date: NaiveDateTime,
     pub password_modified_date: NaiveDateTime,
+    /// Whether the user's password is still stored in a legacy format
+    /// (opaque-ke 0.7) and hasn't been re-registered since the protocol
+    /// upgrade. Only exposed to admins, so they can tell when it is safe
+    /// to upgrade to a version that drops legacy-password support.
+    pub has_legacy_password: bool,
 }
 
 #[cfg(feature = "test")]
@@ -554,6 +559,7 @@ impl Default for User {
             attributes: Vec::new(),
             modified_date: epoch,
             password_modified_date: epoch,
+            has_legacy_password: false,
         }
     }
 }

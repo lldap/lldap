@@ -13,6 +13,7 @@ use lldap_auth::{
     opaque::client::registration as opaque_registration,
     password_reset::ServerPasswordResetResponse, registration,
 };
+use secstr::SecUtf8;
 use validator_derive::Validate;
 use yew::prelude::*;
 use yew_form::Form;
@@ -32,7 +33,7 @@ pub struct ResetPasswordStep2Form {
     common: CommonComponentParts<Self>,
     form: Form<FormModel>,
     username: Option<String>,
-    opaque_data: Option<opaque_registration::ClientRegistration>,
+    opaque_data: Option<(opaque_registration::ClientRegistration, SecUtf8)>,
 }
 
 #[derive(Clone, PartialEq, Eq, Properties)]
@@ -66,15 +67,18 @@ impl CommonComponent<ResetPasswordStep2Form> for ResetPasswordStep2Form {
                     bail!("Check the form for errors");
                 }
                 let mut rng = rand::rngs::OsRng;
-                let new_password = self.form.model().password;
-                let registration_start_request =
-                    opaque_registration::start_registration(new_password.as_bytes(), &mut rng)
-                        .context("Could not initiate password change")?;
+                let new_password = SecUtf8::from(self.form.model().password);
+                let registration_start_request = opaque_registration::start_registration(
+                    new_password.unsecure().as_bytes(),
+                    &mut rng,
+                )
+                .context("Could not initiate password change")?;
                 let req = registration::ClientRegistrationStartRequest {
                     username: self.username.as_ref().unwrap().into(),
                     registration_start_request: registration_start_request.message,
+                    upgrade_token: None,
                 };
-                self.opaque_data = Some(registration_start_request.state);
+                self.opaque_data = Some((registration_start_request.state, new_password));
                 self.common.call_backend(
                     ctx,
                     HostService::register_start(req),
@@ -84,11 +88,13 @@ impl CommonComponent<ResetPasswordStep2Form> for ResetPasswordStep2Form {
             }
             Msg::RegistrationStartResponse(res) => {
                 let res = res.context("Could not initiate password change")?;
-                let registration = self.opaque_data.take().expect("Missing registration data");
+                let (registration, password) =
+                    self.opaque_data.take().expect("Missing registration data");
                 let mut rng = rand::rngs::OsRng;
                 let registration_finish = opaque_registration::finish_registration(
                     registration,
                     res.registration_response,
+                    password.unsecure().as_bytes(),
                     &mut rng,
                 )
                 .context("Error during password change")?;

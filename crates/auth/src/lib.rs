@@ -1,13 +1,14 @@
 #![forbid(non_ascii_idents)]
 #![allow(clippy::nonstandard_macro_braces)]
 use chrono::prelude::*;
+use secstr::SecUtf8;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::fmt;
 use uuid::Uuid;
 
 pub mod access_control;
 pub mod opaque;
+pub mod v07;
 
 /// The messages for the 3-step OPAQUE and simple login process.
 pub mod login {
@@ -22,6 +23,8 @@ pub mod login {
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ClientLoginStartRequest {
         pub username: UserId,
+        /// Base64-encoded OPAQUE CredentialRequest bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub login_start_request: opaque::server::login::CredentialRequest,
     }
 
@@ -29,6 +32,8 @@ pub mod login {
     pub struct ServerLoginStartResponse {
         /// Base64, encrypted ServerData to be passed back to the server.
         pub server_data: String,
+        /// Base64-encoded OPAQUE CredentialResponse bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub credential_response: opaque::client::login::CredentialResponse,
     }
 
@@ -36,22 +41,16 @@ pub mod login {
     pub struct ClientLoginFinishRequest {
         /// Encrypted ServerData from the previous step.
         pub server_data: String,
+        /// Base64-encoded OPAQUE CredentialFinalization bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub credential_finalization: opaque::client::login::CredentialFinalization,
     }
 
-    #[derive(Serialize, Deserialize, Clone)]
+    #[derive(Serialize, Deserialize, Clone, Debug)]
     pub struct ClientSimpleLoginRequest {
         pub username: UserId,
-        pub password: String,
-    }
-
-    impl fmt::Debug for ClientSimpleLoginRequest {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.debug_struct("ClientSimpleLoginRequest")
-                .field("username", &self.username.as_str())
-                .field("password", &"***********")
-                .finish()
-        }
+        /// Zeroed on drop; `Debug` prints a placeholder.
+        pub password: SecUtf8,
     }
 
     #[derive(Serialize, Deserialize, Clone)]
@@ -59,6 +58,16 @@ pub mod login {
         pub token: String,
         #[serde(rename = "refreshToken", skip_serializing_if = "Option::is_none")]
         pub refresh_token: Option<String>,
+        /// Only set after a successful v0.7 login: a server-sealed grant the
+        /// client hands back in `ClientRegistrationStartRequest::upgrade_token`
+        /// so the follow-up re-registration only replaces the password that
+        /// was just validated (a concurrent reset wins).
+        #[serde(
+            rename = "upgradeToken",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        pub upgrade_token: Option<String>,
     }
 }
 
@@ -70,18 +79,29 @@ pub mod registration {
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ServerData {
         pub username: UserId,
+        /// When set, this registration is a v0.7 -> current upgrade and must
+        /// only replace this exact stored password file (compare-and-swap).
+        pub upgrade_from: Option<Vec<u8>>,
     }
 
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ClientRegistrationStartRequest {
         pub username: UserId,
+        /// Base64-encoded OPAQUE RegistrationRequest bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub registration_start_request: opaque::server::registration::RegistrationRequest,
+        /// Upgrade grant from a v0.7 login (`login::ServerLoginResponse::upgrade_token`).
+        /// Absent for ordinary registrations and password resets.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub upgrade_token: Option<String>,
     }
 
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ServerRegistrationStartResponse {
         /// Base64, encrypted ServerData to be passed back to the server.
         pub server_data: String,
+        /// Base64-encoded OPAQUE RegistrationResponse bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub registration_response: opaque::client::registration::RegistrationResponse,
     }
 
@@ -89,7 +109,52 @@ pub mod registration {
     pub struct ClientRegistrationFinishRequest {
         /// Encrypted ServerData from the previous step.
         pub server_data: String,
+        /// Base64-encoded OPAQUE RegistrationUpload bytes on the wire.
+        #[serde(with = "crate::opaque::base64_wire")]
         pub registration_upload: opaque::server::registration::RegistrationUpload,
+    }
+}
+
+/// Base64-encoded OPAQUE login messages.
+/// Used for opaque-ke 0.7 login during progressive migration.
+/// Clients encode their protocol messages as base64 strings instead of
+/// serde JSON, keeping the wire format decoupled from the opaque-ke
+/// Rust types. This avoids forcing other crates to depend on a specific
+/// opaque-ke version.
+pub mod login_base64 {
+    use super::types::UserId;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientLoginStartRequest {
+        pub username: UserId,
+        /// Base64-encoded CredentialRequest bytes.
+        pub login_start_request: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ServerLoginStartResponse {
+        /// Base64-encoded encrypted ServerData.
+        pub server_data: String,
+        /// Base64-encoded CredentialResponse bytes.
+        pub credential_response: String,
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct ClientLoginFinishRequest {
+        /// Encrypted ServerData from the previous step.
+        pub server_data: String,
+        /// Base64-encoded CredentialFinalization bytes.
+        pub credential_finalization: String,
+    }
+
+    /// Outcome of a successful v0.7 login.
+    #[derive(Clone, Debug)]
+    pub struct V07LoginSuccess {
+        pub username: UserId,
+        /// Server-sealed grant binding the follow-up re-registration to the
+        /// password file that was just validated.
+        pub upgrade_token: String,
     }
 }
 

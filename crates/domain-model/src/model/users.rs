@@ -23,6 +23,7 @@ pub struct Model {
     pub uuid: Uuid,
     pub modified_date: chrono::NaiveDateTime,
     pub password_modified_date: chrono::NaiveDateTime,
+    pub password_version: i32,
 }
 
 impl EntityName for Entity {
@@ -44,6 +45,7 @@ pub enum Column {
     Uuid,
     ModifiedDate,
     PasswordModifiedDate,
+    PasswordVersion,
 }
 
 impl ColumnTrait for Column {
@@ -62,6 +64,7 @@ impl ColumnTrait for Column {
             Column::Uuid => ColumnType::String(StringLen::N(36)),
             Column::ModifiedDate => ColumnType::DateTime,
             Column::PasswordModifiedDate => ColumnType::DateTime,
+            Column::PasswordVersion => ColumnType::Integer,
         }
         .def()
     }
@@ -118,6 +121,44 @@ impl Related<super::password_reset_tokens::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum OpaqueProtocolVersion {
+    /// opaque-ke 0.7 password file (pre-RFC-9807). Validated only when a
+    /// v0.7 `ServerSetup` is preserved in memory; auto-upgraded to
+    /// `Current` on the next successful login.
+    V07,
+    /// opaque-ke 4.0 password file (RFC 9807-compliant). The current format.
+    Current,
+}
+
+impl OpaqueProtocolVersion {
+    pub const V07_DB_VALUE: i32 = 0;
+    pub const CURRENT_DB_VALUE: i32 = 1;
+
+    pub fn from_db(value: i32) -> Self {
+        // Anything we don't recognise is conservatively treated as v0.7
+        // so we don't accidentally let an unknown future format slip past
+        // the validator. The startup migration warning will surface this,
+        // and such users are flagged as legacy in the admin UI (fail
+        // visible, not silent).
+        match value {
+            Self::CURRENT_DB_VALUE => Self::Current,
+            _ => Self::V07,
+        }
+    }
+
+    pub fn is_v07(self) -> bool {
+        matches!(self, Self::V07)
+    }
+
+    pub fn db_value(self) -> i32 {
+        match self {
+            Self::V07 => Self::V07_DB_VALUE,
+            Self::Current => Self::CURRENT_DB_VALUE,
+        }
+    }
+}
+
 impl From<Model> for lldap_domain::types::User {
     fn from(user: Model) -> Self {
         Self {
@@ -129,6 +170,8 @@ impl From<Model> for lldap_domain::types::User {
             attributes: Vec::new(),
             modified_date: user.modified_date,
             password_modified_date: user.password_modified_date,
+            has_legacy_password: user.password_hash.is_some()
+                && OpaqueProtocolVersion::from_db(user.password_version).is_v07(),
         }
     }
 }

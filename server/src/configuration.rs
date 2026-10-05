@@ -185,9 +185,72 @@ fn stable_hash(val: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
+/// Domain-separated variant of [`stable_hash`].
+fn stable_hash_labelled(label: &[u8], val: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(label);
+    hasher.update(val);
+    hasher.finalize().into()
+}
+
+/// Label mixed into the hash of a v0.7 key file before it seeds the 4.0 key,
+/// so the seed can never coincide with another value derived from the same
+/// bytes. In particular it must differ from the pre-4.0 `private_key_hash`
+/// stored in the database (`stable_hash(v0.7 private key)`): seeding from a
+/// value that sits in the database would let anyone with read access to it
+/// reconstruct the OPAQUE server key.
+const V07_KEY_FILE_DERIVATION_LABEL: &[u8] =
+    b"lldap:opaque-ke-4.0:server-key-derived-from-v0.7-key-file:v1";
+
+/// Deterministically build a 4.0 `ServerSetup` from a 32-byte seed. Shared by
+/// the `key_seed` path and the v0.7-key-file path.
+///
+/// The output is a function of opaque-ke's internal RNG consumption in
+/// `ServerSetup::new` (and of `rand_chacha`): a change there would silently
+/// change every derived key, which is why `derived_key_golden_vector` pins
+/// the exact bytes.
+fn server_setup_from_seed(seed: [u8; 32]) -> ServerSetup {
+    use rand::SeedableRng;
+    let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
+    ServerSetup::new(&mut rng)
+}
+
+/// The 4.0 seed derived from the raw bytes of a v0.7 key file. Deliberately
+/// hashes the file as is rather than the parsed v0.7 private key, so the
+/// derivation keeps working after opaque-ke 0.7 support is removed.
+fn seed_from_v07_key_file(key_file_bytes: &[u8]) -> [u8; 32] {
+    stable_hash_labelled(V07_KEY_FILE_DERIVATION_LABEL, key_file_bytes)
+}
+
 impl Configuration {
     pub fn get_server_setup(&self) -> &ServerSetup {
         &self.server_setup.as_ref().unwrap().server_setup
+    }
+
+    /// Returns the raw bytes of the v0.7 (opaque-ke 0.7) ServerSetup, if available.
+    /// Used for backward-compatible password validation during progressive migration.
+    pub fn get_v07_server_key_bytes(&self) -> Option<&[u8]> {
+        self.server_setup.as_ref()?.v07_server_key_bytes.as_deref()
+    }
+
+    /// Hash of the preserved v0.7 private key, computed exactly the way
+    /// pre-4.0 servers stored it in the database
+    /// (`stable_hash(&*keypair.private())`). Comparing it against the stored
+    /// hash proves that a detected v0.7 key is the one the server was using
+    /// at its last successful startup, which is what makes the opaque-ke
+    /// 0.7 → 4.0 upgrade safe to perform automatically.
+    pub fn get_v07_private_key_hash(&self) -> Option<PrivateKeyHash> {
+        let setup = lldap_auth::v07::V07ServerSetup::deserialize(self.get_v07_server_key_bytes()?)?;
+        Some(PrivateKeyHash(stable_hash(setup.private_key_bytes())))
+    }
+
+    /// Whether the 4.0 server key is derived from a v0.7 key file. The file
+    /// is never rewritten; the key is re-derived from it on every startup.
+    pub fn is_derived_from_v07_key_file(&self) -> bool {
+        self.server_setup
+            .as_ref()
+            .is_some_and(|setup| setup.derived_from_v07_key_file)
     }
 
     pub fn get_server_keys(&self) -> &KeyPair {
@@ -196,7 +259,9 @@ impl Configuration {
 
     pub fn get_private_key_info(&self) -> PrivateKeyInfo {
         PrivateKeyInfo {
-            private_key_hash: PrivateKeyHash(stable_hash(self.get_server_keys().private())),
+            private_key_hash: PrivateKeyHash(stable_hash(
+                self.get_server_keys().private().serialize().as_slice(),
+            )),
             private_key_location: self
                 .server_setup
                 .as_ref()
@@ -283,10 +348,39 @@ fn write_to_readonly_file(path: &std::path::Path, buffer: &[u8]) -> Result<()> {
     Ok(file.write_all(buffer)?)
 }
 
+/// Path of the `<keyfile>.v07` sidecar that pre-release builds of the
+/// opaque-ke 4.0 upgrade wrote when they rotated the key file in place.
+fn v07_sidecar_path(key_file: &std::path::Path) -> std::path::PathBuf {
+    let mut p = key_file.as_os_str().to_owned();
+    p.push(".v07");
+    std::path::PathBuf::from(p)
+}
+
+/// Released builds never write or read the sidecar: the 4.0 key is derived
+/// from the untouched v0.7 key file instead. Warn if one is lying around so
+/// the old key material does not linger unnoticed.
+fn warn_about_stale_v07_sidecar(key_file: &std::path::Path) {
+    let sidecar = v07_sidecar_path(key_file);
+    if sidecar.exists() {
+        eprintln!(
+            "WARNING: `{}` was written by a pre-release build and is no longer used. \
+             It holds an old server key: delete it.",
+            sidecar.display()
+        );
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ServerSetupConfig {
     server_setup: ServerSetup,
     private_key_location: PrivateKeyLocation,
+    /// Raw bytes of the v0.7 (opaque-ke 0.7) ServerSetup, if available.
+    /// Preserved when upgrading from an older opaque-ke version.
+    v07_server_key_bytes: Option<Vec<u8>>,
+    /// True when the on-disk key file is a v0.7 key: `server_setup` is
+    /// derived from it (see `seed_from_v07_key_file`) and the file stays
+    /// on disk unchanged.
+    derived_from_v07_key_file: bool,
 }
 
 #[derive(derive_more::From)]
@@ -383,20 +477,72 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
         } else {
             println!("Generating the private key from the key_seed");
         }
-        use rand::SeedableRng;
-        let mut rng = rand_chacha::ChaCha20Rng::from_seed(stable_hash(key_seed.as_bytes()));
+        let seed = stable_hash(key_seed.as_bytes());
         Ok(ServerSetupConfig {
-            server_setup: ServerSetup::new(&mut rng),
+            server_setup: server_setup_from_seed(seed),
             private_key_location: private_key_location.for_key_seed(),
+            // Reconstruct the pre-4.0 v0.7 key from the *same* seed so passwords
+            // registered under opaque-ke 0.7 can still be validated and
+            // progressively upgraded. Nothing is written to disk: the v0.7 key
+            // is re-derived from the seed on every startup. (Harmless for
+            // fresh installs — it is only consulted when a stored password is
+            // still in the v0.7 format.)
+            v07_server_key_bytes: Some(lldap_auth::v07::v07_server_setup_bytes_from_seed(seed)),
+            derived_from_v07_key_file: false,
         })
     } else if path.exists() {
         let bytes = read(file_path).context(format!("Could not read key file `{file_path}`"))?;
-        Ok(ServerSetupConfig {
-            server_setup: ServerSetup::deserialize(&bytes).context(format!(
-                "while parsing the contents of the `{file_path}` file"
-            ))?,
-            private_key_location: private_key_location.for_key_file(file_path),
-        })
+        match ServerSetup::deserialize(&bytes) {
+            Ok(server_setup) => {
+                warn_about_stale_v07_sidecar(path);
+                Ok(ServerSetupConfig {
+                    server_setup,
+                    private_key_location: private_key_location.for_key_file(file_path),
+                    v07_server_key_bytes: None,
+                    derived_from_v07_key_file: false,
+                })
+            }
+            Err(deserialize_err) => {
+                // The on-disk key file does not parse as the current opaque-ke
+                // version. This could be:
+                //   a) a legitimate version upgrade (opaque-ke 0.7 → 4.0), or
+                //   b) corruption (bit-rot, partial write, wrong file).
+                //
+                // The two cases are told apart by parsing the bytes as an
+                // opaque-ke 0.7 ServerSetup: a corrupted file won't parse as
+                // either version. On a positive v0.7 match the 4.0 key is
+                // *derived* from the file's bytes (re-hashed, then used as
+                // the RNG seed exactly like `key_seed`): every startup and
+                // every instance sharing the file gets the same key, nothing
+                // is ever written to disk, and the v0.7 key stays available
+                // to validate passwords that have not been upgraded yet.
+                // The database still has to confirm that this v0.7 key is the
+                // one from the last successful startup (see main.rs).
+                if lldap_auth::v07::V07ServerSetup::deserialize(&bytes).is_some() {
+                    println!(
+                        "Key file `{file_path}` holds an opaque-ke 0.7 (pre-upgrade) key. \
+                         The 4.0 server key is derived from it; the file is kept as is and \
+                         existing passwords are upgraded on each user's next login."
+                    );
+                    Ok(ServerSetupConfig {
+                        server_setup: server_setup_from_seed(seed_from_v07_key_file(&bytes)),
+                        private_key_location: private_key_location.for_key_file(file_path),
+                        v07_server_key_bytes: Some(bytes),
+                        derived_from_v07_key_file: true,
+                    })
+                } else {
+                    Err(anyhow::anyhow!(deserialize_err)).context(format!(
+                        "The contents of the key file `{file_path}` are not a valid \
+                         server key (neither the current opaque-ke 4.0 format nor the \
+                         pre-upgrade 0.7 format). The file is likely corrupted or not a \
+                         key file at all; restore it from a backup. Generating a new key \
+                         instead would unrecoverably invalidate every password. If you \
+                         have no backup, delete the file to generate a new key, then \
+                         follow the instructions printed on the next startup."
+                    ))
+                }
+            }
+        }
     } else {
         let server_setup = generate_random_private_key();
         write_to_readonly_file(path, &server_setup.serialize()).context(format!(
@@ -405,6 +551,8 @@ fn get_server_setup<L: Into<PrivateKeyLocationOrFigment>>(
         Ok(ServerSetupConfig {
             server_setup,
             private_key_location: private_key_location.for_key_file(file_path),
+            v07_server_key_bytes: None,
+            derived_from_v07_key_file: false,
         })
     }
 }
@@ -687,32 +835,170 @@ mod tests {
 
     #[test]
     fn check_generated_server_key() {
+        // Verify that seed-based key generation is deterministic: same seed → same key.
+        // (The exact byte representation depends on the opaque-ke version and is not
+        // asserted here, since the upgrade changes the binary format.)
+        let setup1 = get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests)
+            .unwrap()
+            .server_setup;
+        let setup2 = get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests)
+            .unwrap()
+            .server_setup;
         assert_eq!(
-            bincode::serialize(
-                &get_server_setup("/doesnt/exist", "key seed", PrivateKeyLocation::Tests)
-                    .unwrap()
-                    .server_setup
-            )
-            .unwrap(),
-            [
-                255, 206, 202, 50, 247, 13, 59, 191, 69, 244, 148, 187, 150, 227, 12, 250, 20, 207,
-                211, 151, 147, 33, 107, 132, 2, 252, 121, 94, 97, 6, 97, 232, 163, 168, 86, 246,
-                249, 186, 31, 204, 59, 75, 65, 134, 108, 159, 15, 70, 246, 250, 150, 195, 54, 197,
-                195, 176, 150, 200, 157, 119, 13, 173, 119, 8, 32, 0, 0, 0, 0, 0, 0, 0, 248, 123,
-                35, 91, 194, 51, 52, 57, 191, 210, 68, 227, 107, 166, 232, 37, 195, 244, 100, 84,
-                88, 212, 190, 12, 195, 57, 83, 72, 127, 189, 179, 16, 32, 0, 0, 0, 0, 0, 0, 0, 128,
-                112, 60, 207, 205, 69, 67, 73, 24, 175, 187, 62, 16, 45, 59, 136, 78, 40, 187, 54,
-                159, 94, 116, 33, 133, 119, 231, 43, 199, 164, 141, 7, 32, 0, 0, 0, 0, 0, 0, 0,
-                212, 134, 53, 203, 131, 24, 138, 211, 162, 28, 23, 233, 251, 82, 34, 66, 98, 12,
-                249, 205, 35, 208, 241, 50, 128, 131, 46, 189, 211, 51, 56, 109, 32, 0, 0, 0, 0, 0,
-                0, 0, 84, 20, 147, 25, 50, 5, 243, 203, 216, 180, 175, 121, 159, 96, 123, 183, 146,
-                251, 22, 44, 98, 168, 67, 224, 255, 139, 159, 25, 24, 254, 88, 3
-            ]
+            bincode::serialize(&setup1).unwrap(),
+            bincode::serialize(&setup2).unwrap(),
+            "Seed-based key generation must be deterministic"
         );
     }
 
     fn default_run_opts() -> RunOpts {
         RunOpts::parse_from::<_, std::ffi::OsString>([])
+    }
+
+    /// Valid opaque-ke 0.7 ServerSetup bytes, as a pre-upgrade server would
+    /// have written to its key file.
+    fn v07_key_bytes() -> Vec<u8> {
+        lldap_auth::v07::v07_server_setup_bytes_from_seed([42u8; 32])
+    }
+
+    /// Regression test for the silent-key-rotation issue.
+    ///
+    /// If `get_server_setup` encounters a key file that parses as neither
+    /// opaque-ke 4.0 nor 0.7 (corruption, partial write, wrong file), it MUST
+    /// fail without touching the file: rotating would unrecoverably
+    /// invalidate every password.
+    #[test]
+    fn unparseable_key_file_is_not_silently_rotated() {
+        Jail::expect_with(|jail| {
+            // Drop a deliberately bogus blob in place of a server_key file.
+            std::fs::write(
+                jail.directory().join("server_key"),
+                b"not a real opaque-ke key",
+            )
+            .unwrap();
+            let path_str = jail
+                .directory()
+                .join("server_key")
+                .to_string_lossy()
+                .into_owned();
+            let original_bytes = std::fs::read(jail.directory().join("server_key")).unwrap();
+
+            let err = get_server_setup(&path_str, "", PrivateKeyLocation::Tests)
+                .expect_err("Unparseable key file must not silently rotate");
+            // The error must identify the file as corrupted, not as a version
+            // upgrade.
+            let msg = format!("{:#}", err);
+            assert!(
+                msg.contains("not a valid"),
+                "Error message should call out the corrupted key file. Got: {msg}"
+            );
+
+            // The on-disk file MUST be untouched.
+            let after = std::fs::read(jail.directory().join("server_key")).unwrap();
+            assert_eq!(
+                after, original_bytes,
+                "Key file must not be touched on failure"
+            );
+            Ok(())
+        });
+    }
+
+    /// A key file holding a valid opaque-ke 0.7 key is detected as the
+    /// version upgrade: the v0.7 bytes are preserved in memory, the 4.0 key
+    /// is derived from the file, and the file itself is never touched (no
+    /// rotation, no sidecar), on this load or any later one.
+    #[test]
+    fn v07_key_file_is_detected_without_touching_disk() {
+        Jail::expect_with(|jail| {
+            let original = v07_key_bytes();
+            std::fs::write(jail.directory().join("server_key"), &original).unwrap();
+            let path_str = jail
+                .directory()
+                .join("server_key")
+                .to_string_lossy()
+                .into_owned();
+
+            let setup = get_server_setup(&path_str, "", PrivateKeyLocation::Tests)
+                .expect("A valid v0.7 key file must be accepted");
+
+            assert!(setup.derived_from_v07_key_file);
+            assert_eq!(
+                setup.v07_server_key_bytes.as_deref(),
+                Some(original.as_slice()),
+                "v0.7 bytes should be preserved for progressive migration"
+            );
+            assert_eq!(
+                setup.server_setup.serialize().to_vec(),
+                server_setup_from_seed(seed_from_v07_key_file(&original))
+                    .serialize()
+                    .to_vec(),
+                "the 4.0 key must be the one derived from the file bytes"
+            );
+
+            // Loading again (a restart, or a second instance sharing the
+            // file) derives the exact same key.
+            let again = get_server_setup(&path_str, "", PrivateKeyLocation::Tests).unwrap();
+            assert_eq!(
+                again.server_setup.serialize().to_vec(),
+                setup.server_setup.serialize().to_vec(),
+                "derivation must be deterministic"
+            );
+
+            let after = std::fs::read(jail.directory().join("server_key")).unwrap();
+            assert_eq!(after, original, "Key file must never be rewritten");
+            assert!(
+                !jail.directory().join("server_key.v07").exists(),
+                "No sidecar must ever be written"
+            );
+            Ok(())
+        });
+    }
+
+    /// The derivation must not depend on the seed-mode derivation or on any
+    /// value that is stored outside the key file.
+    #[test]
+    fn derived_seed_is_domain_separated() {
+        let bytes = v07_key_bytes();
+        let seed = seed_from_v07_key_file(&bytes);
+        let v07_setup = lldap_auth::v07::V07ServerSetup::deserialize(&bytes).unwrap();
+        assert_ne!(
+            seed,
+            stable_hash(v07_setup.private_key_bytes()),
+            "the seed must not be the pre-4.0 private_key_hash stored in the database"
+        );
+        assert_ne!(seed, stable_hash(&bytes), "the seed must be labelled");
+        assert_ne!(
+            server_setup_from_seed(seed).serialize().to_vec(),
+            server_setup_from_seed(stable_hash(&bytes))
+                .serialize()
+                .to_vec()
+        );
+    }
+
+    fn to_hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    /// Pins the exact bytes `server_setup_from_seed` produces. Both the
+    /// `key_seed` path and the v0.7-key-file path rely on this being stable
+    /// across releases: after the upgrade the key exists nowhere but in this
+    /// derivation, so a change in opaque-ke's or rand_chacha's RNG
+    /// consumption would silently invalidate every password. If this test
+    /// fails after a dependency bump, do not update the vector: pin the
+    /// dependency instead.
+    #[test]
+    fn derived_key_golden_vector() {
+        assert_eq!(
+            to_hex(&server_setup_from_seed([42u8; 32]).serialize()),
+            "36f00e57d42f871e3987e832d90f56c6940b5937688edf03c4fd3908aec402be\
+             a3942b06a601b78d94e37672e349eb2da2dd4fd0716819e07fc66190b2c16d8b\
+             96d22c254ae1f444e13c6d7fc6dec2cae2d1917af2948109f2746128c40f6d01\
+             f828faba47f148914bbcea9b82efa331284fdfaed9d275c1dde54a03b494b506"
+        );
+        assert_eq!(
+            to_hex(&seed_from_v07_key_file(&v07_key_bytes())),
+            "e6304b7db6ad5cd094e49993d4e222093c77d302af002cafa153372904eadc37"
+        );
     }
 
     fn write_random_key(jail: &Jail, file: &str) {
@@ -871,6 +1157,77 @@ mod tests {
             assert!(
                 error_message.contains("but it used to come from default key file",),
                 "{error_message}"
+            );
+            Ok(())
+        });
+    }
+
+    /// A stale `<keyfile>.v07` sidecar from a pre-release build is neither
+    /// loaded nor deleted: the 4.0 key file is authoritative on its own.
+    #[test]
+    fn stale_sidecar_is_ignored() {
+        Jail::expect_with(|jail| {
+            let key_path = jail.directory().join("server_key");
+            std::fs::write(&key_path, generate_random_private_key().serialize()).unwrap();
+            let sidecar = jail.directory().join("server_key.v07");
+            std::fs::write(&sidecar, v07_key_bytes()).unwrap();
+            let path_str = key_path.to_string_lossy().into_owned();
+
+            let setup = get_server_setup(&path_str, "", PrivateKeyLocation::Tests).unwrap();
+            assert!(!setup.derived_from_v07_key_file);
+            assert!(
+                setup.v07_server_key_bytes.is_none(),
+                "sidecar must not be loaded"
+            );
+            assert!(
+                sidecar.exists(),
+                "sidecar must not be deleted behind the admin's back"
+            );
+            Ok(())
+        });
+    }
+
+    /// `get_v07_server_key_bytes` / `get_v07_private_key_hash` /
+    /// `is_derived_from_v07_key_file` expose the preserved key through the
+    /// full `Configuration`, and the recorded key hash is stable across
+    /// startups (what makes the DB handshake idempotent).
+    #[test]
+    fn v07_accessors_and_stable_key_info() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("LLDAP_JWT_SECRET", "secret");
+            jail.create_file("lldap_config.toml", r#"key_file = "server_key""#)?;
+            let original = v07_key_bytes();
+            std::fs::write(jail.directory().join("server_key"), &original).unwrap();
+
+            let config = init(default_run_opts()).unwrap();
+            assert!(config.is_derived_from_v07_key_file());
+            assert_eq!(
+                config.get_v07_server_key_bytes(),
+                Some(original.as_slice()),
+                "accessor should expose the preserved v0.7 key bytes"
+            );
+            let v07_setup = lldap_auth::v07::V07ServerSetup::deserialize(&original).unwrap();
+            assert_eq!(
+                config.get_v07_private_key_hash(),
+                Some(PrivateKeyHash(stable_hash(v07_setup.private_key_bytes()))),
+                "the v0.7 key hash must match the pre-4.0 hash format"
+            );
+            assert_ne!(
+                Some(config.get_private_key_info().private_key_hash),
+                config.get_v07_private_key_hash(),
+                "the derived 4.0 key has its own hash"
+            );
+
+            let config2 = init(default_run_opts()).unwrap();
+            assert_eq!(
+                config.get_private_key_info().private_key_hash,
+                config2.get_private_key_info().private_key_hash,
+                "the recorded key hash must be identical on every startup"
+            );
+            assert_eq!(
+                std::fs::read(jail.directory().join("server_key")).unwrap(),
+                original
             );
             Ok(())
         });
