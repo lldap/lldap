@@ -226,8 +226,9 @@ async fn run_server_command(opts: RunOpts) -> Result<()> {
     let config = configuration::init(opts)?;
     logging::init(&config)?;
 
+    let connection_handler_threads = config.advanced.connection_handler_threads;
     let (server, sql_pool) = set_up_server(config).await?;
-    let server = server.workers(1);
+    let server = server.workers(connection_handler_threads);
 
     let result = server.run().await.context("while starting the server");
     if let Err(e) = sql_pool.close().await {

@@ -85,6 +85,21 @@ impl std::default::Default for LdapsOptions {
 
 #[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
 #[builder(pattern = "owned")]
+pub struct AdvancedOptions {
+    /// The number of threads that handle the HTTP, LDAP and LDAPS connections.
+    /// Each thread runs a single-threaded async runtime.
+    #[builder(default = "1")]
+    pub connection_handler_threads: usize,
+}
+
+impl std::default::Default for AdvancedOptions {
+    fn default() -> Self {
+        AdvancedOptionsBuilder::default().build().unwrap()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[builder(pattern = "owned")]
 pub struct HealthcheckOptions {
     #[builder(default = r#"String::from("localhost")"#)]
     pub http_host: String,
@@ -147,6 +162,8 @@ pub struct Configuration {
     pub smtp_options: MailOptions,
     #[builder(default)]
     pub ldaps_options: LdapsOptions,
+    #[builder(default)]
+    pub advanced: AdvancedOptions,
     #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
     pub http_url: HttpUrl,
     #[debug(skip)]
@@ -670,6 +687,9 @@ where
         .jwt_secret
         .as_ref()
         .ok_or_else(|| anyhow!("{}", generate_jwt_sample_error()))?;
+    if config.advanced.connection_handler_threads == 0 {
+        bail!("advanced.connection_handler_threads must be 1 or more");
+    }
     if config.smtp_options.tls_required.is_some() {
         println!(
             "DEPRECATED: smtp_options.tls_required field is deprecated, it never did anything. You can replace it with smtp_options.smtp_encryption."
