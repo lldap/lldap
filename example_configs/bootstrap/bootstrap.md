@@ -43,7 +43,7 @@ The script can:
 ## Config files
 
 There are two types of config files: [group](#group-config-file-example) and [user](#user-config-file-example) configs.
-Each config file can be as one JSON file with nested JSON top-level values as several JSON files.
+Each config file can be as one JSON file with nested JSON top-level values (JSONL/NDJSON) or split into several JSON files.
 
 ### Group config file example
 
@@ -53,7 +53,8 @@ Fields description:
 
 * `name`: name of the group (**MANDATORY**)
 
-```json
+`groups.jsonl`:  
+```jsonl
 {
   "name": "group-1"
 }
@@ -82,6 +83,7 @@ Fields description:
 * `weserv_avatar` (`false` by default): avatar file from `avatar_url` or `gravatar_avatar` would be converted to jpeg using [wsrv.nl](https://wsrv.nl) (useful when your avatar is png)
 * `groups`: an array of groups the user would be a member of (all the groups must be specified in group config files)
 
+`user-1.json`:  
 ```json
 {
   "id": "username",
@@ -114,6 +116,8 @@ Fields description:
 * `isEditable`: self-explanatory
 * `isVisible`: self-explanatory
 
+
+`user-attrs-1.json`:   
 ```json
 [
   {
@@ -183,6 +187,7 @@ Let's suppose you have the next file structure:
    │  ├─ ...
    │  └─ user-n.json
    └─ group-configs
+   |  ├─ groups.jsonl   
    |  ├─ group-1.json
    |  ├─ ...
    |  └─ group-n.json
