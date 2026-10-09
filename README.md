@@ -49,7 +49,7 @@
 This project is a lightweight authentication server that provides an
 opinionated, simplified LDAP interface for authentication. It integrates with
 many backends, from KeyCloak to Authelia to Nextcloud and
-[more](#compatible-services)!
+[more](#known-compatible-services)!
 
 <img
   src="https://raw.githubusercontent.com/lldap/lldap/master/screenshot.png"
