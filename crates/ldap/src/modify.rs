@@ -43,7 +43,7 @@ async fn handle_modify_change(
         });
     }
     if let [value] = &change.modification.vals.as_slice() {
-        password::change_password(opaque_handler, user_id, value)
+        password::change_password(opaque_handler, credentials, user_id, value)
             .await
             .map_err(|e| LdapError {
                 code: LdapResultCode::Other,

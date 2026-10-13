@@ -64,6 +64,7 @@ pub(crate) async fn do_bind(
 
 pub(crate) async fn change_password<B: OpaqueHandler>(
     backend_handler: &B,
+    credentials: &ValidationResults,
     user: UserId,
     password: &[u8],
 ) -> Result<()> {
@@ -85,7 +86,9 @@ pub(crate) async fn change_password<B: OpaqueHandler>(
         server_data: registration_start_response.server_data,
         registration_upload: registration_finish.message,
     };
-    backend_handler.registration_finish(req).await?;
+    backend_handler
+        .registration_finish(req, credentials)
+        .await?;
     Ok(())
 }
 
@@ -132,7 +135,7 @@ pub(crate) async fn do_password_modification<Handler: BackendHandler>(
                             ),
                         })
                     } else if let Err(e) =
-                        change_password(opaque_handler, uid, password.as_bytes()).await
+                        change_password(opaque_handler, credentials, uid, password.as_bytes()).await
                     {
                         Err(LdapError {
                             code: LdapResultCode::Other,
@@ -221,7 +224,7 @@ pub mod tests {
         });
         mock.expect_registration_finish()
             .times(1)
-            .return_once(|_| Ok(()));
+            .return_once(|_, _| Ok(()));
     }
 
     #[tokio::test]
@@ -398,7 +401,7 @@ pub mod tests {
         });
         mock.expect_registration_finish()
             .times(1)
-            .return_once(|_| Ok(()));
+            .return_once(|_, _| Ok(()));
         let mut ldap_handler = setup_bound_admin_handler(mock).await;
         let request = LdapOp::ModifyRequest(LdapModifyRequest {
             dn: "uid=bob,ou=people,dc=example,dc=com".to_string(),
@@ -448,7 +451,7 @@ pub mod tests {
         });
         mock.expect_registration_finish()
             .times(1)
-            .return_once(|_| Ok(()));
+            .return_once(|_, _| Ok(()));
         let mut ldap_handler = setup_bound_password_manager_handler(mock).await;
         let request = LdapOp::ExtendedRequest(
             LdapPasswordModifyRequest {

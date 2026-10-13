@@ -16,7 +16,7 @@ use lldap_domain_handlers::handler::{
     UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
 };
 use lldap_domain_model::error::Result;
-use lldap_opaque_handler::{OpaqueHandler, login, registration};
+use lldap_opaque_handler::{OpaqueHandler, ValidationResults, login, registration};
 use std::collections::HashSet;
 
 mockall::mock! {
@@ -83,7 +83,8 @@ mockall::mock! {
         ) -> Result<registration::ServerRegistrationStartResponse>;
         async fn registration_finish(
             &self,
-            request: registration::ClientRegistrationFinishRequest
+            request: registration::ClientRegistrationFinishRequest,
+            validation_results: &ValidationResults
         ) -> Result<()>;
     }
 }

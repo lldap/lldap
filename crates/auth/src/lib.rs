@@ -70,6 +70,14 @@ pub mod registration {
     #[derive(Serialize, Deserialize, Clone)]
     pub struct ServerData {
         pub username: UserId,
+        /// Unix timestamp (nanoseconds) after which the registration transaction is
+        /// no longer accepted.
+        pub expires_at: i64,
+        /// Snapshot of the target user's `password_modified_date` taken when the
+        /// transaction was started. The finish is only accepted while the password
+        /// is unchanged, which also makes the transaction one-time: a successful
+        /// finish bumps `password_modified_date` and invalidates the snapshot.
+        pub password_epoch: chrono::NaiveDateTime,
     }
 
     #[derive(Serialize, Deserialize, Clone)]
