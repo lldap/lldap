@@ -513,26 +513,46 @@ where
 
 #[instrument(skip_all, level = "debug")]
 async fn opaque_register_finish<Backend>(
+    request: actix_web::HttpRequest,
+    payload: actix_web::web::Payload,
     data: web::Data<AppState<Backend>>,
-    request: web::Json<registration::ClientRegistrationFinishRequest>,
 ) -> TcpResult<HttpResponse>
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
+    use actix_web::FromRequest;
+    let inner_payload = &mut payload.into_inner();
+    // The finish must carry the same authorization as the start: the registration
+    // transaction alone must not be a reusable password-replacement capability.
+    let validation_result = BearerAuth::from_request(&request, inner_payload)
+        .await
+        .ok()
+        .and_then(|bearer| check_if_token_is_valid(&data, bearer.token()).ok())
+        .ok_or_else(|| {
+            TcpError::UnauthorizedError("Not authorized to change the user's password".to_string())
+        })?;
+    let finish_request = web::Json::<registration::ClientRegistrationFinishRequest>::from_request(
+        &request,
+        inner_payload,
+    )
+    .await
+    .map_err(|e| TcpError::BadRequest(format!("{e:#?}")))?
+    .into_inner();
     data.get_opaque_handler()
-        .registration_finish(request.into_inner())
+        .registration_finish(finish_request, &validation_result)
         .await?;
     Ok(HttpResponse::Ok().finish())
 }
 
 async fn opaque_register_finish_handler<Backend>(
+    request: actix_web::HttpRequest,
+    payload: actix_web::web::Payload,
     data: web::Data<AppState<Backend>>,
-    request: web::Json<registration::ClientRegistrationFinishRequest>,
 ) -> HttpResponse
 where
     Backend: TcpBackendHandler + BackendHandler + OpaqueHandler + 'static,
 {
-    opaque_register_finish(data, request)
+    opaque_register_finish(request, payload, data)
         .await
         .unwrap_or_else(error_to_http_response)
 }
@@ -662,5 +682,291 @@ where
         cfg.service(
             web::resource("/reset/step1/{user_id}").route(web::post().to(HttpResponse::NotFound)),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::{App, http::StatusCode, test as actix_test, web};
+    use chrono::TimeZone;
+    use hmac::Mac;
+    use lldap_access_control::AccessControlledBackendHandler;
+    use lldap_domain::requests::CreateUserRequest;
+    use lldap_domain::types::{GroupDetails, GroupId, GroupName};
+    use lldap_domain::uuid;
+    use lldap_domain_handlers::handler::UserBackendHandler;
+    use lldap_opaque_handler::OpaqueHandler;
+    use lldap_sql_backend_handler::{SqlBackendHandler, sql_tables::init_table};
+    use sea_orm::{ConnectOptions, Database};
+    use std::path::PathBuf;
+    use std::sync::RwLock;
+
+    async fn setup_backend() -> (
+        SqlBackendHandler,
+        Hmac<Sha512>,
+        web::Data<AppState<SqlBackendHandler>>,
+    ) {
+        let mut sql_opt = ConnectOptions::new("sqlite::memory:".to_owned());
+        sql_opt.max_connections(1);
+        let sql_pool = Database::connect(sql_opt).await.unwrap();
+        init_table(&sql_pool).await.unwrap();
+        // The JWT tables live in their own server-side initializer (see main.rs).
+        crate::jwt_sql_tables::init_table(&sql_pool).await.unwrap();
+        let handler = SqlBackendHandler::new(
+            lldap_auth::opaque::server::generate_random_private_key(),
+            sql_pool,
+        );
+        let jwt_key: Hmac<Sha512> = Hmac::new_from_slice(b"test_jwt_secret_key").unwrap();
+        let state = web::Data::new(AppState::<SqlBackendHandler> {
+            backend_handler: AccessControlledBackendHandler::new(handler.clone()),
+            jwt_key: jwt_key.clone(),
+            jwt_blacklist: RwLock::new(HashSet::new()),
+            server_url: url::Url::parse("http://localhost/").unwrap(),
+            assets_path: PathBuf::from("."),
+            mail_options: crate::configuration::MailOptions::default(),
+        });
+        (handler, jwt_key, state)
+    }
+
+    async fn insert_user(handler: &SqlBackendHandler, name: &str) {
+        handler
+            .create_user(CreateUserRequest {
+                user_id: UserId::new(name),
+                email: format!("{name}@lldap.dev").into(),
+                display_name: Some(name.to_string()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+    }
+
+    async fn mint_jwt(
+        handler: &SqlBackendHandler,
+        jwt_key: &Hmac<Sha512>,
+        username: &str,
+        is_admin: bool,
+    ) -> String {
+        let mut groups = HashSet::new();
+        if is_admin {
+            groups.insert(GroupDetails {
+                group_id: GroupId(1),
+                display_name: GroupName::from("lldap_admin"),
+                creation_date: Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+                uuid: uuid!("04ac75e0-2900-3e21-926c-2f732c26b3fc"),
+                attributes: Vec::new(),
+                modified_date: Utc.timestamp_opt(0, 0).unwrap().naive_utc(),
+            });
+        }
+        create_jwt(handler, jwt_key, &UserId::new(username), groups)
+            .await
+            .as_str()
+            .to_owned()
+    }
+
+    /// Performs the client side of the registration protocol and returns the
+    /// not-yet-submitted finish request.
+    async fn stage_password_change(
+        handler: &SqlBackendHandler,
+        username: &str,
+        password: &str,
+    ) -> registration::ClientRegistrationFinishRequest {
+        let mut rng = rand::rngs::OsRng;
+        let client_start = lldap_auth::opaque::client::registration::start_registration(
+            password.as_bytes(),
+            &mut rng,
+        )
+        .unwrap();
+        let response = handler
+            .registration_start(registration::ClientRegistrationStartRequest {
+                username: username.into(),
+                registration_start_request: client_start.message,
+            })
+            .await
+            .unwrap();
+        let client_finish = lldap_auth::opaque::client::registration::finish_registration(
+            client_start.state,
+            response.registration_response,
+            &mut rng,
+        )
+        .unwrap();
+        registration::ClientRegistrationFinishRequest {
+            server_data: response.server_data,
+            registration_upload: client_finish.message,
+        }
+    }
+
+    fn post_finish(
+        finish_request: &registration::ClientRegistrationFinishRequest,
+        jwt: Option<String>,
+    ) -> actix_test::TestRequest {
+        let request = actix_test::TestRequest::post().uri("/auth/opaque/register/finish");
+        match jwt {
+            Some(jwt) => request
+                .insert_header(("Authorization", format!("Bearer {jwt}")))
+                .set_json(finish_request),
+            None => request.set_json(finish_request),
+        }
+    }
+
+    #[actix_web::test]
+    async fn test_register_finish_requires_authorization() {
+        let (handler, jwt_key, state) = setup_backend().await;
+        insert_user(&handler, "bob").await;
+        insert_user(&handler, "john").await;
+        let finish_request = stage_password_change(&handler, "bob", "bob00").await;
+
+        let app = actix_test::init_service(App::new().app_data(state.clone()).service(
+            web::scope("auth").configure(|cfg| configure_server::<SqlBackendHandler>(cfg, true)),
+        ))
+        .await;
+
+        // An anonymous finish request is rejected.
+        let response = post_finish(&finish_request, None).send_request(&app).await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        // A different user with a valid token cannot finish bob's transaction.
+        let john_jwt = mint_jwt(&handler, &jwt_key, "john", false).await;
+        let response = post_finish(&finish_request, Some(john_jwt))
+            .send_request(&app)
+            .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        // The owner can finish it; the rejections did not consume the transaction.
+        let bob_jwt = mint_jwt(&handler, &jwt_key, "bob", false).await;
+        let response = post_finish(&finish_request, Some(bob_jwt))
+            .send_request(&app)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        // The new password authenticates.
+        handler
+            .bind(BindRequest {
+                name: UserId::new("bob"),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap();
+    }
+
+    #[actix_web::test]
+    async fn test_register_finish_replay_rejected() {
+        let (handler, jwt_key, state) = setup_backend().await;
+        insert_user(&handler, "bob").await;
+        let finish_request = stage_password_change(&handler, "bob", "bob00").await;
+        let bob_jwt = mint_jwt(&handler, &jwt_key, "bob", false).await;
+
+        let app = actix_test::init_service(App::new().app_data(state.clone()).service(
+            web::scope("auth").configure(|cfg| configure_server::<SqlBackendHandler>(cfg, true)),
+        ))
+        .await;
+
+        let response = post_finish(&finish_request, Some(bob_jwt.clone()))
+            .send_request(&app)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        // Replaying the exact same finish request, even with valid credentials, must
+        // not succeed.
+        let response = post_finish(&finish_request, Some(bob_jwt))
+            .send_request(&app)
+            .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        // The password set by the first finish is the one that stays.
+        handler
+            .bind(BindRequest {
+                name: UserId::new("bob"),
+                password: "bob00".to_string(),
+            })
+            .await
+            .unwrap();
+    }
+
+    #[actix_web::test]
+    async fn test_register_finish_cross_user_rejected() {
+        let (handler, jwt_key, state) = setup_backend().await;
+        insert_user(&handler, "bob").await;
+        insert_user(&handler, "john").await;
+        insert_user(&handler, "admin").await;
+        let admin_jwt = mint_jwt(&handler, &jwt_key, "admin", true).await;
+        let bob_jwt = mint_jwt(&handler, &jwt_key, "bob", false).await;
+        let john_jwt = mint_jwt(&handler, &jwt_key, "john", false).await;
+
+        let app = actix_test::init_service(App::new().app_data(state.clone()).service(
+            web::scope("auth").configure(|cfg| configure_server::<SqlBackendHandler>(cfg, true)),
+        ))
+        .await;
+
+        // An admin can start a registration for john.
+        let mut rng = rand::rngs::OsRng;
+        let client_start = lldap_auth::opaque::client::registration::start_registration(
+            "john00".as_bytes(),
+            &mut rng,
+        )
+        .unwrap();
+        let response = actix_test::TestRequest::post()
+            .uri("/auth/opaque/register/start")
+            .insert_header(("Authorization", format!("Bearer {admin_jwt}")))
+            .set_json(&registration::ClientRegistrationStartRequest {
+                username: "john".into(),
+                registration_start_request: client_start.message,
+            })
+            .send_request(&app)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = actix_test::read_body(response).await;
+        let start_response: registration::ServerRegistrationStartResponse =
+            serde_json::from_str(std::str::from_utf8(&body).unwrap()).unwrap();
+        let client_finish = lldap_auth::opaque::client::registration::finish_registration(
+            client_start.state,
+            start_response.registration_response,
+            &mut rng,
+        )
+        .unwrap();
+        let finish_request = registration::ClientRegistrationFinishRequest {
+            server_data: start_response.server_data,
+            registration_upload: client_finish.message,
+        };
+
+        // Bob cannot hijack john's transaction, even with a valid token.
+        let response = post_finish(&finish_request, Some(bob_jwt))
+            .send_request(&app)
+            .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        // John can still finish it.
+        let response = post_finish(&finish_request, Some(john_jwt))
+            .send_request(&app)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        handler
+            .bind(BindRequest {
+                name: UserId::new("john"),
+                password: "john00".to_string(),
+            })
+            .await
+            .unwrap();
+    }
+
+    #[actix_web::test]
+    async fn test_register_start_requires_authorization() {
+        let (handler, _jwt_key, state) = setup_backend().await;
+        insert_user(&handler, "bob").await;
+        let mut rng = rand::rngs::OsRng;
+        let client_start = lldap_auth::opaque::client::registration::start_registration(
+            "bob00".as_bytes(),
+            &mut rng,
+        )
+        .unwrap();
+
+        let app = actix_test::init_service(App::new().app_data(state.clone()).service(
+            web::scope("auth").configure(|cfg| configure_server::<SqlBackendHandler>(cfg, true)),
+        ))
+        .await;
+
+        let response = actix_test::TestRequest::post()
+            .uri("/auth/opaque/register/start")
+            .set_json(&registration::ClientRegistrationStartRequest {
+                username: "bob".into(),
+                registration_start_request: client_start.message,
+            })
+            .send_request(&app)
+            .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

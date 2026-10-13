@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+ - OPAQUE registration finish requests now require current authorization, expire
+   shortly after the registration start, and are consumed on first use, so a
+   retained finish request can no longer be replayed anonymously, after logout or
+   after a password reset (#1517)
+
 ## [0.6.3] 2026-05-01
 
 Small release, focused on LDAP compatibility, TLS maintenance, dependency upgrades and documentation/examples.

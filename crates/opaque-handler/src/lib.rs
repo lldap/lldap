@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use lldap_domain::types::UserId;
 use lldap_domain_model::error::Result;
 
-pub use lldap_auth::{login, registration};
+pub use lldap_auth::{access_control::ValidationResults, login, registration};
 
 #[async_trait]
 pub trait OpaqueHandler: Send + Sync {
@@ -18,6 +18,7 @@ pub trait OpaqueHandler: Send + Sync {
     async fn registration_finish(
         &self,
         request: registration::ClientRegistrationFinishRequest,
+        validation_results: &ValidationResults,
     ) -> Result<()>;
 }
 
@@ -40,7 +41,8 @@ mockall::mock! {
         ) -> Result<registration::ServerRegistrationStartResponse>;
         async fn registration_finish(
             &self,
-            request: registration::ClientRegistrationFinishRequest
+            request: registration::ClientRegistrationFinishRequest,
+            validation_results: &ValidationResults
         ) -> Result<()>;
     }
 }

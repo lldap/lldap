@@ -26,9 +26,19 @@ use crate::{
     db_cleaner::Scheduler,
 };
 use actix::Actor;
+
+/// Credentials for the bootstrap/CLI password reset: it sets the password of the
+/// configured admin user, from the trusted local configuration.
+fn bootstrap_credentials(user_id: &lldap_domain::types::UserId) -> ValidationResults {
+    ValidationResults {
+        user: user_id.clone(),
+        permission: Permission::Regular,
+    }
+}
 use actix_server::ServerBuilder;
 use anyhow::{Context, Result, anyhow, bail};
 use futures_util::TryFutureExt;
+use lldap_auth::access_control::{Permission, ValidationResults};
 use lldap_sql_backend_handler::{
     SqlBackendHandler, register_password,
     sql_tables::{self, get_private_key_info, set_private_key_info},
@@ -66,11 +76,13 @@ async fn create_admin_user(handler: &SqlBackendHandler, config: &Configuration) 
             ..Default::default()
         })
         .and_then(|_| {
-            register_password(
-                handler,
-                config.ldap_user_dn.clone(),
-                config.ldap_user_pass.as_ref().unwrap(),
-            )
+            let credentials = bootstrap_credentials(&config.ldap_user_dn);
+            let user_id = config.ldap_user_dn.clone();
+            let password = config
+                .ldap_user_pass
+                .clone()
+                .expect(ADMIN_PASSWORD_MISSING_ERROR);
+            async move { register_password(handler, &credentials, user_id, &password).await }
         })
         .await
         .context("Error creating admin user")?;
@@ -185,8 +197,10 @@ async fn set_up_server(config: Configuration) -> Result<(ServerBuilder, Database
         } else {
             span!(Level::INFO, "Resetting admin password")
         };
+        let credentials = bootstrap_credentials(&config.ldap_user_dn);
         register_password(
             &backend_handler,
+            &credentials,
             config.ldap_user_dn.clone(),
             config
                 .ldap_user_pass

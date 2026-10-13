@@ -79,10 +79,16 @@ pub mod tests {
         )
         .unwrap();
         handler
-            .registration_finish(registration::ClientRegistrationFinishRequest {
-                server_data: response.server_data,
-                registration_upload: registration_upload.message,
-            })
+            .registration_finish(
+                registration::ClientRegistrationFinishRequest {
+                    server_data: response.server_data,
+                    registration_upload: registration_upload.message,
+                },
+                &lldap_auth::access_control::ValidationResults {
+                    user: UserId::new(name),
+                    permission: lldap_auth::access_control::Permission::Regular,
+                },
+            )
             .await
             .unwrap();
     }
