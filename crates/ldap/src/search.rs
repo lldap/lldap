@@ -835,6 +835,116 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_search_date_filters() {
+        let date = |s: &str| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").unwrap();
+        let start = date("2024-01-02 03:04:05");
+        let end = date("2024-01-02 03:04:06");
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_users()
+            .with(
+                eq(Some(UserRequestFilter::Or(vec![
+                    UserRequestFilter::Date(UserColumn::ModifiedDate, DateBound::AtOrAfter(start)),
+                    UserRequestFilter::Not(Box::new(UserRequestFilter::And(vec![
+                        UserRequestFilter::Date(
+                            UserColumn::ModifiedDate,
+                            DateBound::AtOrAfter(start),
+                        ),
+                        UserRequestFilter::Date(UserColumn::ModifiedDate, DateBound::Before(end)),
+                    ]))),
+                    UserRequestFilter::Date(
+                        UserColumn::PasswordModifiedDate,
+                        DateBound::Before(end),
+                    ),
+                ]))),
+                eq(false),
+            )
+            .times(1)
+            .return_once(|_, _| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_user_search_request(
+            LdapFilter::Or(vec![
+                LdapFilter::GreaterOrEqual(
+                    "modifyTimestamp".to_string(),
+                    "20240102030405Z".to_string(),
+                ),
+                LdapFilter::Not(Box::new(LdapFilter::Equality(
+                    "modifyTimestamp".to_string(),
+                    "20240102030405Z".to_string(),
+                ))),
+                LdapFilter::LessOrEqual(
+                    "pwdChangedTime".to_string(),
+                    "20240102030405Z".to_string(),
+                ),
+                LdapFilter::Equality("createTimestamp".to_string(), "not a date".to_string()),
+                LdapFilter::GreaterOrEqual("unknown".to_string(), "20240102030405Z".to_string()),
+            ]),
+            vec!["objectClass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()])
+        );
+
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_list_groups()
+            .with(eq(Some(GroupRequestFilter::Or(vec![
+                GroupRequestFilter::ModifiedDate(DateBound::AtOrAfter(start)),
+                GroupRequestFilter::And(vec![
+                    GroupRequestFilter::CreationDate(DateBound::AtOrAfter(start)),
+                    GroupRequestFilter::CreationDate(DateBound::Before(end)),
+                ]),
+            ]))))
+            .times(1)
+            .return_once(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+        let request = make_group_search_request(
+            LdapFilter::Or(vec![
+                LdapFilter::GreaterOrEqual(
+                    "modifyTimestamp".to_string(),
+                    "20240102030405Z".to_string(),
+                ),
+                LdapFilter::Equality(
+                    "createTimestamp".to_string(),
+                    "2024-01-02T03:04:05+00:00".to_string(),
+                ),
+                LdapFilter::LessOrEqual("unknown".to_string(), "20240102030405Z".to_string()),
+            ]),
+            vec!["cn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Ok(vec![make_search_success()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_unsupported_ordering_filter() {
+        let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
+        let request = make_user_search_request(
+            LdapFilter::GreaterOrEqual("uid".to_string(), "bob".to_string()),
+            vec!["objectClass"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Err(LdapError {
+                code: LdapResultCode::UnwillingToPerform,
+                message: r#"Unsupported user filter: GreaterOrEqual("uid", "bob")"#.to_string()
+            })
+        );
+        let request = make_group_search_request(
+            LdapFilter::LessOrEqual("member".to_string(), "bob".to_string()),
+            vec!["cn"],
+        );
+        assert_eq!(
+            ldap_handler.do_search_or_dse(&request).await,
+            Err(LdapError {
+                code: LdapResultCode::UnwillingToPerform,
+                message: r#"Unsupported group filter: LessOrEqual("member", "bob")"#.to_string()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn test_search_unsupported_substring_filter() {
         let ldap_handler = setup_bound_admin_handler(MockTestBackendHandler::new()).await;
         let request = make_user_search_request(

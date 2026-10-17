@@ -6,7 +6,7 @@ use lldap_domain::{
     types::{AttributeName, Group, GroupDetails, GroupId, Serialized, Uuid},
 };
 use lldap_domain_handlers::handler::{
-    GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
+    DateBound, GroupBackendHandler, GroupListerBackendHandler, GroupRequestFilter,
 };
 use lldap_domain_model::{
     error::{DomainError, Result},
@@ -34,6 +34,13 @@ fn attribute_condition(name: AttributeName, value: Option<Serialized>) -> Cond {
             .into_query(),
     )
     .into_condition()
+}
+
+fn date_condition(column: GroupColumn, bound: DateBound) -> Cond {
+    match bound {
+        DateBound::AtOrAfter(date) => column.gte(date).into_condition(),
+        DateBound::Before(date) => column.lt(date).into_condition(),
+    }
 }
 
 fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
@@ -84,6 +91,8 @@ fn get_group_filter_expr(filter: GroupRequestFilter) -> Cond {
         .into_condition(),
         AttributeEquality(name, value) => attribute_condition(name, Some(value.into())),
         CustomAttributePresent(name) => attribute_condition(name, None),
+        CreationDate(bound) => date_condition(GroupColumn::CreationDate, bound),
+        ModifiedDate(bound) => date_condition(GroupColumn::ModifiedDate, bound),
     }
 }
 
@@ -383,6 +392,64 @@ mod tests {
                 "Empty Group".into(),
                 "Worst Group".into()
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_groups_date_filter() {
+        let fixture = TestFixture::new().await;
+        let date =
+            |s: &str| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f").unwrap();
+        model::groups::ActiveModel {
+            group_id: Set(fixture.groups[0]),
+            modified_date: Set(date("2024-01-02 03:04:05.5")),
+            ..Default::default()
+        }
+        .update(&fixture.handler.sql_pool)
+        .await
+        .unwrap();
+        model::groups::ActiveModel {
+            group_id: Set(fixture.groups[1]),
+            creation_date: Set(date("2020-01-01 00:00:00")),
+            ..Default::default()
+        }
+        .update(&fixture.handler.sql_pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            get_group_names(
+                &fixture.handler,
+                Some(GroupRequestFilter::And(vec![
+                    GroupRequestFilter::ModifiedDate(DateBound::AtOrAfter(date(
+                        "2024-01-02 03:04:05"
+                    ))),
+                    GroupRequestFilter::ModifiedDate(DateBound::Before(date(
+                        "2024-01-02 03:04:06"
+                    ))),
+                ]))
+            )
+            .await,
+            vec!["Best Group".into()]
+        );
+        assert_eq!(
+            get_group_names(
+                &fixture.handler,
+                Some(GroupRequestFilter::CreationDate(DateBound::Before(date(
+                    "2021-01-01 00:00:00"
+                ))))
+            )
+            .await,
+            vec!["Worst Group".into()]
+        );
+        assert_eq!(
+            get_group_names(
+                &fixture.handler,
+                Some(GroupRequestFilter::CreationDate(DateBound::AtOrAfter(
+                    date("2021-01-01 00:00:00")
+                )))
+            )
+            .await,
+            vec!["Best Group".into(), "Empty Group".into()]
         );
     }
 
