@@ -102,6 +102,58 @@ fn admin_search() {
     ldap.unbind().expect("failed to unbind ldap connection");
 }
 
+#[test]
+#[file_serial]
+fn modify_timestamp_ordering_search() {
+    let mut fixture = LLDAPFixture::new();
+    let prefix = "ldap-modify_timestamp_ordering_search-";
+    let user_name = new_id(Some(prefix));
+    let group_name = new_id(Some(prefix));
+    fixture.load_state(&vec![User::new(&user_name, vec![&group_name])]);
+
+    let mut ldap =
+        LdapConn::new(env::ldap_url().as_str()).expect("failed to create ldap connection");
+    let base_dn = env::base_dn();
+    let bind_dn = format!("uid={},ou=people,{}", env::admin_dn(), base_dn);
+    ldap.simple_bind(bind_dn.as_str(), env::admin_password().as_str())
+        .expect("failed to bind to ldap");
+
+    let mut search = |base: &str, filter: &str| -> HashSet<String> {
+        ldap.search(base, Scope::Subtree, filter, vec!["uid"])
+            .expect("failed to search")
+            .success()
+            .expect("failed to get successful result")
+            .0
+            .into_iter()
+            .map(|entry| {
+                SearchEntry::construct(entry).attrs["uid"]
+                    .first()
+                    .unwrap()
+                    .clone()
+            })
+            .collect()
+    };
+    let users_dn = format!("ou=people,{base_dn}");
+    let groups_dn = format!("ou=groups,{base_dn}");
+    // The incremental enumeration filters that SSSD sends.
+    let found_users = search(
+        &users_dn,
+        "(&(objectClass=posixAccount)(uid=*)(modifyTimestamp>=20000101000000Z)(!(modifyTimestamp=20000101000000Z)))",
+    );
+    assert!(found_users.contains(&user_name));
+    let found_groups = search(
+        &groups_dn,
+        "(&(objectClass=groupOfUniqueNames)(cn=*)(modifyTimestamp>=20000101000000Z)(!(modifyTimestamp=20000101000000Z)))",
+    );
+    assert!(found_groups.contains(&group_name));
+    // Nothing was modified before 2000 or created after 2100.
+    assert!(search(&users_dn, "(modifyTimestamp<=20000101000000Z)").is_empty());
+    assert!(search(&users_dn, "(createTimestamp>=21000101000000Z)").is_empty());
+    assert!(search(&groups_dn, "(modifyTimestamp<=20000101000000Z)").is_empty());
+    assert!(search(&groups_dn, "(createTimestamp>=21000101000000Z)").is_empty());
+    ldap.unbind().expect("failed to unbind ldap connection");
+}
+
 fn get_users_and_groups(results: SearchResult) -> HashMap<String, HashSet<String>> {
     let results = results
         .success()

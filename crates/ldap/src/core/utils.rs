@@ -3,7 +3,7 @@ use crate::core::{
     group::{REQUIRED_GROUP_ATTRIBUTES, get_default_group_object_classes},
     user::{REQUIRED_USER_ATTRIBUTES, get_default_user_object_classes},
 };
-use chrono::{NaiveDateTime, TimeZone};
+use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, TimeZone};
 use itertools::join;
 use ldap3_proto::LdapResultCode;
 use lldap_domain::{
@@ -14,6 +14,7 @@ use lldap_domain::{
         LdapObjectClass, UserId,
     },
 };
+use lldap_domain_handlers::handler::DateBound;
 use lldap_domain_model::model::UserColumn;
 use std::collections::BTreeMap;
 use tracing::{debug, instrument, warn};
@@ -26,6 +27,104 @@ pub fn to_generalized_time(dt: &NaiveDateTime) -> Vec<u8> {
         .format("%Y%m%d%H%M%SZ")
         .to_string()
         .into_bytes()
+}
+
+/// Parses a GeneralizedTime (RFC 4517 3.3.13), e.g. `20240102030405Z`.
+///
+/// Returns the date and the precision it is written with: one hour, minute or second, or a
+/// fraction of the last unit when it has a fractional part.
+fn parse_generalized_time(value: &str) -> Option<(NaiveDateTime, i64)> {
+    const NANOS_PER_SECOND: i64 = 1_000_000_000;
+    let digits_len = value.bytes().take_while(u8::is_ascii_digit).count();
+    let (digits, rest) = value.split_at(digits_len);
+    let number = |start: usize, end: usize| digits.get(start..end)?.parse::<u32>().ok();
+    let (minute, second, mut precision) = match digits_len {
+        10 => (0, 0, 3600 * NANOS_PER_SECOND),
+        12 => (number(10, 12)?, 0, 60 * NANOS_PER_SECOND),
+        14 => (number(10, 12)?, number(12, 14)?, NANOS_PER_SECOND),
+        _ => return None,
+    };
+    let mut date =
+        NaiveDate::from_ymd_opt(number(0, 4)?.try_into().ok()?, number(4, 6)?, number(6, 8)?)?
+            .and_hms_opt(number(8, 10)?, minute, second)?;
+    let rest = match rest.strip_prefix(['.', ',']) {
+        Some(fraction) => {
+            let fraction_len = fraction.bytes().take_while(u8::is_ascii_digit).count();
+            if fraction_len == 0 {
+                return None;
+            }
+            let mut offset = 0;
+            // Digits finer than a nanosecond are ignored.
+            for digit in fraction[..fraction_len].bytes() {
+                if precision % 10 != 0 {
+                    break;
+                }
+                precision /= 10;
+                offset += i64::from(digit - b'0') * precision;
+            }
+            date += Duration::nanoseconds(offset);
+            &fraction[fraction_len..]
+        }
+        None => rest,
+    };
+    // The time zone: "Z" for UTC, or a "+hh[mm]" / "-hh[mm]" offset.
+    if rest != "Z" {
+        let (sign, offset) = match rest.split_at_checked(1)? {
+            ("+", offset) => (1, offset),
+            ("-", offset) => (-1, offset),
+            _ => return None,
+        };
+        if !matches!(offset.len(), 2 | 4) || !offset.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let hours: i64 = offset[..2].parse().ok()?;
+        let minutes: i64 = if offset.len() == 4 {
+            offset[2..].parse().ok()?
+        } else {
+            0
+        };
+        if hours > 23 || minutes > 59 {
+            return None;
+        }
+        date -= Duration::minutes(sign * (hours * 60 + minutes));
+    }
+    Some((date, precision))
+}
+
+/// Parses an RFC 3339 date, e.g. `2024-01-02T03:04:05.678+00:00`, the format of group
+/// timestamps.
+///
+/// Returns the date and the precision it is written with.
+fn parse_rfc3339_time(value: &str) -> Option<(NaiveDateTime, i64)> {
+    let date = DateTime::parse_from_rfc3339(value).ok()?.naive_utc();
+    let fraction_len = value.split_once('.').map_or(0, |(_, fraction)| {
+        fraction.bytes().take_while(u8::is_ascii_digit).count()
+    });
+    Some((date, 10_i64.pow(9 - fraction_len.min(9) as u32)))
+}
+
+/// A comparison of a date attribute to a value, in a search filter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DateComparison {
+    Equal,
+    GreaterOrEqual,
+    LessOrEqual,
+}
+
+/// Returns the bounds of the dates that match `comparison` with `value`, or `None` if `value` is
+/// not a valid date.
+///
+/// The value is compared at the precision it is written with: `20240102030405Z` stands for the
+/// whole second, so it is equal to every date within that second, like the dates that LLDAP
+/// returns as `20240102030405Z`.
+pub fn get_date_bounds(comparison: DateComparison, value: &str) -> Option<Vec<DateBound>> {
+    let (start, precision) = parse_generalized_time(value).or_else(|| parse_rfc3339_time(value))?;
+    let end = start + Duration::nanoseconds(precision);
+    Some(match comparison {
+        DateComparison::Equal => vec![DateBound::AtOrAfter(start), DateBound::Before(end)],
+        DateComparison::GreaterOrEqual => vec![DateBound::AtOrAfter(start)],
+        DateComparison::LessOrEqual => vec![DateBound::Before(end)],
+    })
 }
 
 fn make_dn_pair<I>(mut iter: I) -> LdapResult<(String, String)>
@@ -551,5 +650,86 @@ mod tests {
                 .base_dn_str,
             "ou=people,dc=example,dc=com"
         );
+    }
+
+    #[test]
+    fn test_get_date_bounds() {
+        use DateBound::{AtOrAfter, Before};
+        use DateComparison::{Equal, GreaterOrEqual, LessOrEqual};
+        let date = |s: &str| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f").unwrap();
+        let bounds = get_date_bounds;
+        // A whole second, like the timestamps returned by LLDAP.
+        assert_eq!(
+            bounds(Equal, "20240102030405Z"),
+            Some(vec![
+                AtOrAfter(date("2024-01-02 03:04:05")),
+                Before(date("2024-01-02 03:04:06"))
+            ])
+        );
+        assert_eq!(
+            bounds(GreaterOrEqual, "20240102030405Z"),
+            Some(vec![AtOrAfter(date("2024-01-02 03:04:05"))])
+        );
+        assert_eq!(
+            bounds(LessOrEqual, "20240102030405Z"),
+            Some(vec![Before(date("2024-01-02 03:04:06"))])
+        );
+        // Fractions, and the hour and minute precisions.
+        assert_eq!(
+            bounds(Equal, "20240102030405.25Z"),
+            Some(vec![
+                AtOrAfter(date("2024-01-02 03:04:05.25")),
+                Before(date("2024-01-02 03:04:05.26"))
+            ])
+        );
+        assert_eq!(
+            bounds(Equal, "202401020304,5Z"),
+            Some(vec![
+                AtOrAfter(date("2024-01-02 03:04:30")),
+                Before(date("2024-01-02 03:04:36"))
+            ])
+        );
+        assert_eq!(
+            bounds(LessOrEqual, "2024010203Z"),
+            Some(vec![Before(date("2024-01-02 04:00:00"))])
+        );
+        assert_eq!(
+            bounds(GreaterOrEqual, "20240102030405.1234567891234Z"),
+            Some(vec![AtOrAfter(date("2024-01-02 03:04:05.123456789"))])
+        );
+        // Time zone offsets are converted to UTC.
+        assert_eq!(
+            bounds(GreaterOrEqual, "20240102030405+0130"),
+            Some(vec![AtOrAfter(date("2024-01-02 01:34:05"))])
+        );
+        assert_eq!(
+            bounds(GreaterOrEqual, "20240102030405-02"),
+            Some(vec![AtOrAfter(date("2024-01-02 05:04:05"))])
+        );
+        // RFC 3339, the format of the group timestamps.
+        assert_eq!(
+            bounds(Equal, "2024-01-02T03:04:05.123456+00:00"),
+            Some(vec![
+                AtOrAfter(date("2024-01-02 03:04:05.123456")),
+                Before(date("2024-01-02 03:04:05.123457"))
+            ])
+        );
+        assert_eq!(
+            bounds(GreaterOrEqual, "2024-01-02T03:04:05Z"),
+            Some(vec![AtOrAfter(date("2024-01-02 03:04:05"))])
+        );
+        for invalid in [
+            "",
+            "garbage",
+            "20240102030405",
+            "202401020304056Z",
+            "20240102030405.Z",
+            "20241302030405Z",
+            "20240102030405+2400",
+            "20240102030405+013",
+            "20240102030405Zgarbage",
+        ] {
+            assert_eq!(bounds(Equal, invalid), None, "{invalid}");
+        }
     }
 }

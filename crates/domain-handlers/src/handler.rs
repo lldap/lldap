@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::NaiveDateTime;
 use ldap3_proto::proto::LdapSubstringFilter;
 use lldap_domain::{
     requests::{
@@ -68,6 +69,15 @@ impl From<LdapSubstringFilter> for SubStringFilter {
     }
 }
 
+/// A bound on one of the built-in dates (creation, modification, ...).
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum DateBound {
+    /// The date is equal to or later than the given one.
+    AtOrAfter(NaiveDateTime),
+    /// The date is strictly earlier than the given one.
+    Before(NaiveDateTime),
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub enum UserRequestFilter {
     True,
@@ -80,6 +90,8 @@ pub enum UserRequestFilter {
     Equality(UserColumn, String),
     AttributeEquality(AttributeName, AttributeValue),
     SubString(UserColumn, SubStringFilter),
+    // Compare one of the date columns to a date.
+    Date(UserColumn, DateBound),
     // Check if a user belongs to a group identified by name.
     MemberOf(GroupName),
     // Same, by id.
@@ -108,6 +120,8 @@ pub enum GroupRequestFilter {
     Member(UserId),
     AttributeEquality(AttributeName, AttributeValue),
     CustomAttributePresent(AttributeName),
+    CreationDate(DateBound),
+    ModifiedDate(DateBound),
 }
 
 impl From<bool> for GroupRequestFilter {

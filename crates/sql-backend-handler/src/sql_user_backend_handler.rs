@@ -9,7 +9,8 @@ use lldap_domain::{
     },
 };
 use lldap_domain_handlers::handler::{
-    ReadSchemaBackendHandler, UserBackendHandler, UserListerBackendHandler, UserRequestFilter,
+    DateBound, ReadSchemaBackendHandler, UserBackendHandler, UserListerBackendHandler,
+    UserRequestFilter,
 };
 use lldap_domain_model::{
     error::{DomainError, Result},
@@ -111,6 +112,8 @@ fn get_user_filter_expr(filter: UserRequestFilter) -> Cond {
                 .into_condition()
         }
         CustomAttributePresent(name) => attribute_condition(name, None),
+        Date(column, DateBound::AtOrAfter(date)) => column.gte(date).into_condition(),
+        Date(column, DateBound::Before(date)) => column.lt(date).into_condition(),
     }
 }
 
@@ -583,6 +586,59 @@ mod tests {
         )
         .await;
         assert_eq!(users, vec!["patrick"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_users_date_filter() {
+        let fixture = TestFixture::new().await;
+        let date =
+            |s: &str| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f").unwrap();
+        for (user_id, modified_date) in [
+            ("bob", "2024-01-02 03:04:05.5"),
+            ("patrick", "2024-01-02 03:04:06"),
+            ("john", "2024-01-02 03:04:04.999"),
+        ] {
+            model::users::ActiveModel {
+                user_id: Set(UserId::new(user_id)),
+                modified_date: Set(date(modified_date)),
+                ..Default::default()
+            }
+            .update(&fixture.handler.sql_pool)
+            .await
+            .unwrap();
+        }
+        let second_start = date("2024-01-02 03:04:05");
+        let second_end = date("2024-01-02 03:04:06");
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::And(vec![
+                UserRequestFilter::Date(
+                    UserColumn::ModifiedDate,
+                    DateBound::AtOrAfter(second_start),
+                ),
+                UserRequestFilter::Date(UserColumn::ModifiedDate, DateBound::Before(second_end)),
+            ])),
+        )
+        .await;
+        assert_eq!(users, vec!["bob"]);
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::Date(
+                UserColumn::ModifiedDate,
+                DateBound::AtOrAfter(second_start),
+            )),
+        )
+        .await;
+        assert_eq!(users, vec!["bob", "nogroup", "patrick"]);
+        let users = get_user_names(
+            &fixture.handler,
+            Some(UserRequestFilter::Date(
+                UserColumn::ModifiedDate,
+                DateBound::Before(second_start),
+            )),
+        )
+        .await;
+        assert_eq!(users, vec!["john"]);
     }
 
     #[tokio::test]

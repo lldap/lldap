@@ -1,8 +1,8 @@
 use crate::core::{
     error::{LdapError, LdapResult},
     utils::{
-        ExpandedAttributes, GroupFieldType, LdapInfo, expand_attribute_wildcards,
-        get_custom_attribute, get_group_id_from_distinguished_name_or_plain_name,
+        DateComparison, ExpandedAttributes, GroupFieldType, LdapInfo, expand_attribute_wildcards,
+        get_custom_attribute, get_date_bounds, get_group_id_from_distinguished_name_or_plain_name,
         get_user_id_from_distinguished_name_or_plain_name, map_group_field,
     },
 };
@@ -15,7 +15,7 @@ use lldap_domain::{
     public_schema::PublicSchema,
     types::{AttributeName, AttributeType, Group, GroupId, LdapObjectClass, UserId, Uuid},
 };
-use lldap_domain_handlers::handler::{GroupListerBackendHandler, GroupRequestFilter};
+use lldap_domain_handlers::handler::{DateBound, GroupListerBackendHandler, GroupRequestFilter};
 use tracing::{debug, instrument, warn};
 
 pub const REQUIRED_GROUP_ATTRIBUTES: &[&str] = &["display_name"];
@@ -202,6 +202,21 @@ fn get_group_attribute_equality_filter(
     }
 }
 
+fn get_group_date_filter(
+    make_filter: fn(DateBound) -> GroupRequestFilter,
+    comparison: DateComparison,
+    value: &str,
+) -> GroupRequestFilter {
+    match get_date_bounds(comparison, value).as_deref() {
+        Some([bound]) => make_filter(*bound),
+        Some(bounds) => GroupRequestFilter::And(bounds.iter().copied().map(make_filter).collect()),
+        None => {
+            warn!("Invalid date in group filter: {}", value);
+            GroupRequestFilter::False
+        }
+    }
+}
+
 fn convert_group_filter(
     ldap_info: &LdapInfo,
     filter: &LdapFilter,
@@ -271,14 +286,16 @@ fn convert_group_filter(
                 GroupFieldType::Attribute(field, typ, is_list) => {
                     get_group_attribute_equality_filter(&field, typ, is_list, value)
                 }
-                GroupFieldType::CreationDate => Err(LdapError {
-                    code: LdapResultCode::UnwillingToPerform,
-                    message: "Creation date filter for groups not supported".to_owned(),
-                }),
-                GroupFieldType::ModifiedDate => Err(LdapError {
-                    code: LdapResultCode::UnwillingToPerform,
-                    message: "Modified date filter for groups not supported".to_owned(),
-                }),
+                GroupFieldType::CreationDate => Ok(get_group_date_filter(
+                    GroupRequestFilter::CreationDate,
+                    DateComparison::Equal,
+                    value,
+                )),
+                GroupFieldType::ModifiedDate => Ok(get_group_date_filter(
+                    GroupRequestFilter::ModifiedDate,
+                    DateComparison::Equal,
+                    value,
+                )),
             }
         }
         LdapFilter::And(filters) => {
@@ -344,6 +361,30 @@ fn convert_group_filter(
                     message: format!(
                         "Unsupported group attribute for substring filter: \"{field}\""
                     ),
+                }),
+            }
+        }
+        LdapFilter::GreaterOrEqual(field, value) | LdapFilter::LessOrEqual(field, value) => {
+            let comparison = if matches!(filter, LdapFilter::GreaterOrEqual(..)) {
+                DateComparison::GreaterOrEqual
+            } else {
+                DateComparison::LessOrEqual
+            };
+            match map_group_field(&AttributeName::from(field.as_str()), schema) {
+                GroupFieldType::CreationDate => Ok(get_group_date_filter(
+                    GroupRequestFilter::CreationDate,
+                    comparison,
+                    value,
+                )),
+                GroupFieldType::ModifiedDate => Ok(get_group_date_filter(
+                    GroupRequestFilter::ModifiedDate,
+                    comparison,
+                    value,
+                )),
+                GroupFieldType::NoMatch => Ok(GroupRequestFilter::False),
+                _ => Err(LdapError {
+                    code: LdapResultCode::UnwillingToPerform,
+                    message: format!("Unsupported group filter: {filter:?}"),
                 }),
             }
         }

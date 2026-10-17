@@ -1,8 +1,8 @@
 use crate::core::{
     error::{LdapError, LdapResult},
     utils::{
-        ExpandedAttributes, LdapInfo, UserFieldType, expand_attribute_wildcards,
-        get_custom_attribute, get_group_id_from_distinguished_name_or_plain_name,
+        DateComparison, ExpandedAttributes, LdapInfo, UserFieldType, expand_attribute_wildcards,
+        get_custom_attribute, get_date_bounds, get_group_id_from_distinguished_name_or_plain_name,
         get_user_id_from_distinguished_name_or_plain_name, map_user_field, to_generalized_time,
     },
 };
@@ -211,6 +211,26 @@ fn get_user_attribute_equality_filter(
     }
 }
 
+fn get_user_date_filter(
+    column: UserColumn,
+    comparison: DateComparison,
+    value: &str,
+) -> UserRequestFilter {
+    match get_date_bounds(comparison, value).as_deref() {
+        Some([bound]) => UserRequestFilter::Date(column, *bound),
+        Some(bounds) => UserRequestFilter::And(
+            bounds
+                .iter()
+                .map(|bound| UserRequestFilter::Date(column, *bound))
+                .collect(),
+        ),
+        None => {
+            warn!("Invalid date in filter on {:?}: {}", column, value);
+            UserRequestFilter::False
+        }
+    }
+}
+
 fn convert_user_filter(
     ldap_info: &LdapInfo,
     filter: &LdapFilter,
@@ -285,6 +305,11 @@ fn convert_user_filter(
                         ]))
                     }
                 }
+                UserFieldType::PrimaryField(
+                    column @ (UserColumn::CreationDate
+                    | UserColumn::ModifiedDate
+                    | UserColumn::PasswordModifiedDate),
+                ) => Ok(get_user_date_filter(column, DateComparison::Equal, value)),
                 UserFieldType::PrimaryField(field) => {
                     Ok(UserRequestFilter::Equality(field, value_lc))
                 }
@@ -369,6 +394,25 @@ fn convert_user_filter(
                     field,
                     substring_filter.clone().into(),
                 )),
+            }
+        }
+        LdapFilter::GreaterOrEqual(field, value) | LdapFilter::LessOrEqual(field, value) => {
+            let comparison = if matches!(filter, LdapFilter::GreaterOrEqual(..)) {
+                DateComparison::GreaterOrEqual
+            } else {
+                DateComparison::LessOrEqual
+            };
+            match map_user_field(&AttributeName::from(field.as_str()), schema) {
+                UserFieldType::PrimaryField(
+                    column @ (UserColumn::CreationDate
+                    | UserColumn::ModifiedDate
+                    | UserColumn::PasswordModifiedDate),
+                ) => Ok(get_user_date_filter(column, comparison, value)),
+                UserFieldType::NoMatch => Ok(UserRequestFilter::False),
+                _ => Err(LdapError {
+                    code: LdapResultCode::UnwillingToPerform,
+                    message: format!("Unsupported user filter: {filter:?}"),
+                }),
             }
         }
         _ => Err(LdapError {
