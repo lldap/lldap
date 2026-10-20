@@ -96,16 +96,15 @@ pub fn get_group_attribute(
                 )
             }
             _ => {
-                if ignored_group_attributes.contains(attribute) {
-                    return None;
+                // Not in the schema this caller sees. A stored value is still
+                // not theirs to read: the attribute is hidden from them.
+                if !ignored_group_attributes.contains(attribute) {
+                    warn!(
+                        r#"Ignoring unrecognized group attribute: {}. To disable this warning, add it to "ignored_group_attributes" in the config."#,
+                        attribute
+                    );
                 }
-                get_custom_attribute(
-                        &group.attributes,
-                        attribute,
-                    ).or_else(||{warn!(
-                            r#"Ignoring unrecognized group attribute: {}. To disable this warning, add it to "ignored_group_attributes" in the config."#,
-                            attribute
-                        );None})?
+                return None;
             }
         },
     };
@@ -138,10 +137,12 @@ fn make_ldap_search_group_result_entry(
     schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
     if expanded_attributes.include_custom_attributes {
+        let group_attributes = &schema.get_schema().group_attributes;
         expanded_attributes.attribute_keys.extend(
             group
                 .attributes
                 .iter()
+                .filter(|a| group_attributes.get_attribute_type(&a.name).is_some())
                 .map(|a| (a.name.clone(), a.name.to_string())),
         );
     }
