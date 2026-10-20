@@ -230,8 +230,13 @@ async fn run_server_command(opts: RunOpts) -> Result<()> {
     let server = server.workers(1);
 
     let result = server.run().await.context("while starting the server");
-    if let Err(e) = sql_pool.close().await {
-        error!("Error closing database connection pool: {}", e);
+    // A connection that a worker opened is bound to the runtime of that
+    // worker, which is stopped now. Closing a TLS connection then waits
+    // forever for the socket, so limit the wait.
+    match tokio::time::timeout(Duration::from_secs(5), sql_pool.close()).await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => error!("Error closing database connection pool: {}", e),
+        Err(_) => warn!("Timed out closing database connection pool"),
     }
     result
 }
