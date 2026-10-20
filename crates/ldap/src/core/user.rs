@@ -107,16 +107,15 @@ pub fn get_user_attribute(
                 )
             }
             _ => {
-                if ignored_user_attributes.contains(attribute) {
-                    return None;
-                }
-                get_custom_attribute(&user.attributes, attribute).or_else(|| {
+                // Not in the schema this caller sees. A stored value is still
+                // not theirs to read: the attribute is hidden from them.
+                if !ignored_user_attributes.contains(attribute) {
                     warn!(
                         r#"Ignoring unrecognized user attribute: {}. To disable this warning, add it to "ignored_user_attributes" in the config."#,
                         attribute
                     );
-                    None
-                })?
+                }
+                return None;
             }
         },
     };
@@ -148,9 +147,11 @@ fn make_ldap_search_user_result_entry(
     schema: &PublicSchema,
 ) -> LdapSearchResultEntry {
     if expanded_attributes.include_custom_attributes {
+        let user_attributes = &schema.get_schema().user_attributes;
         expanded_attributes.attribute_keys.extend(
             user.attributes
                 .iter()
+                .filter(|a| user_attributes.get_attribute_type(&a.name).is_some())
                 .map(|a| (a.name.clone(), a.name.to_string())),
         );
     }
@@ -436,6 +437,7 @@ mod tests {
         search::{make_search_request, make_search_success},
     };
     use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
+    use ldap3_proto::proto::LdapCompareRequest;
     use lldap_domain::types::{Attribute, GroupDetails, JpegPhoto};
     use lldap_test_utils::MockTestBackendHandler;
     use mockall::predicate::eq;
@@ -912,6 +914,105 @@ mod tests {
             assert_eq!(entry.attributes[0].vals[0], b"TestAll");
         } else {
             panic!("Expected SearchResultEntry");
+        }
+    }
+
+    fn schema_with_hidden_note() -> lldap_domain::schema::Schema {
+        use lldap_domain::schema::{AttributeList, AttributeSchema, Schema};
+        Schema {
+            user_attributes: AttributeList {
+                attributes: vec![AttributeSchema {
+                    name: "restricted-note".into(),
+                    attribute_type: AttributeType::String,
+                    is_list: false,
+                    is_visible: false,
+                    is_editable: false,
+                    is_hardcoded: false,
+                    is_readonly: false,
+                }],
+            },
+            group_attributes: AttributeList {
+                attributes: Vec::new(),
+            },
+            extra_user_object_classes: Vec::new(),
+            extra_group_object_classes: Vec::new(),
+        }
+    }
+
+    fn user_with_hidden_note() -> UserAndGroups {
+        UserAndGroups {
+            user: User {
+                user_id: UserId::new("test"),
+                attributes: vec![Attribute {
+                    name: "restricted-note".into(),
+                    value: "secret".to_string().into(),
+                }],
+                ..Default::default()
+            },
+            groups: None,
+        }
+    }
+
+    fn has_note(ops: &[LdapOp]) -> bool {
+        match ops.first() {
+            Some(LdapOp::SearchResultEntry(entry)) => entry
+                .attributes
+                .iter()
+                .any(|a| a.atype == "restricted-note" && a.vals == vec![b"secret".to_vec()]),
+            other => panic!("Expected SearchResultEntry, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_regular_user_cannot_read_a_hidden_attribute_on_their_own_entry() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema()
+            .returning(|| Ok(schema_with_hidden_note()));
+        mock.expect_list_users()
+            .returning(|_, _| Ok(vec![user_with_hidden_note()]));
+        // Compare looks the DN up across users and groups.
+        mock.expect_list_groups().returning(|_| Ok(vec![]));
+        let ldap_handler = setup_bound_handler_with_group(mock, "regular").await;
+
+        for attributes in [vec!["restricted-note"], vec!["*"]] {
+            let request = make_user_search_request(LdapFilter::And(vec![]), attributes.clone());
+            let ops = ldap_handler.do_search_or_dse(&request).await.unwrap();
+            assert!(
+                !has_note(&ops),
+                "{attributes:?} returned the hidden attribute"
+            );
+        }
+
+        let compare = ldap_handler
+            .do_compare(LdapCompareRequest {
+                dn: "uid=test,ou=people,dc=example,dc=com".to_string(),
+                atype: "restricted-note".to_string(),
+                val: b"secret".to_vec(),
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            compare.first(),
+            Some(LdapOp::CompareResult(r)) if r.code == LdapResultCode::CompareFalse
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_admin_still_reads_a_hidden_attribute() {
+        let mut mock = MockTestBackendHandler::new();
+        mock.expect_get_schema()
+            .returning(|| Ok(schema_with_hidden_note()));
+        mock.expect_list_users()
+            .returning(|_, _| Ok(vec![user_with_hidden_note()]));
+        let ldap_handler = setup_bound_admin_handler(mock).await;
+
+        for attributes in [vec!["restricted-note"], vec!["*"]] {
+            let request = make_user_search_request(LdapFilter::And(vec![]), attributes.clone());
+            let ops = ldap_handler.do_search_or_dse(&request).await.unwrap();
+            assert!(
+                has_note(&ops),
+                "{attributes:?} lost the attribute for an admin"
+            );
         }
     }
 }
