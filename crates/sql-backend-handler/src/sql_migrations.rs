@@ -343,6 +343,11 @@ pub(crate) async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<()
                         .to(Groups::Table, Groups::GroupId)
                         .on_delete(ForeignKeyAction::Cascade)
                         .on_update(ForeignKeyAction::Cascade),
+                )
+                .primary_key(
+                    Index::create()
+                        .col(Memberships::UserId)
+                        .col(Memberships::GroupId),
                 ),
         ),
     )
@@ -373,10 +378,11 @@ pub(crate) async fn upgrade_to_v1(pool: &DbConnection) -> std::result::Result<()
 
     pool.execute(
         builder.build(
-            Table::create()
-                .table(Metadata::Table)
-                .if_not_exists()
-                .col(ColumnDef::new(Metadata::Version).small_integer()),
+            Table::create().table(Metadata::Table).if_not_exists().col(
+                ColumnDef::new(Metadata::Version)
+                    .small_integer()
+                    .primary_key(),
+            ),
         ),
     )
     .await?;
