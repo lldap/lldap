@@ -58,7 +58,7 @@ tracing-log = "0"
 tracing-subscriber = { workspace = true }
 urlencoding = { workspace = true }
 uuid = { workspace = true }
-webpki-roots = "1.0.10"
+webpki-roots = "1.0.11"
 
 [dependencies.actix-web]
 features = ["rustls-0_23"]
