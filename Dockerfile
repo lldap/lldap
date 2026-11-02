@@ -11,7 +11,7 @@ RUN set -x \
         --uid 10001 \
         app \
     # Install required packages
-    && apk add openssl-dev musl-dev make perl curl gzip
+    && apk add openssl-dev musl-dev make perl curl gzip 'ca-certificates>=20261020-r0'
 
 USER app
 WORKDIR /app
@@ -48,7 +48,7 @@ ENV GOSU_VERSION=1.14
 RUN set -eux; \
         \
         apk add --no-cache --virtual .gosu-deps \
-                ca-certificates \
+                'ca-certificates>=20261020-r0' \
                 dpkg \
                 gnupg \
         ; \
@@ -83,7 +83,7 @@ COPY docker-entrypoint.sh lldap_config.docker_template.toml ./
 COPY scripts/bootstrap.sh ./
 
 RUN set -x \
-    && apk add --no-cache bash tzdata \
+    && apk add --no-cache bash tzdata 'ca-certificates>=20261020-r0' \
     && for file in $(cat app/static/libraries.txt); do wget -P app/static "$file"; done \
     && for file in $(cat app/static/fonts/fonts.txt); do wget -P app/static/fonts "$file"; done \
     && chmod a+r -R .

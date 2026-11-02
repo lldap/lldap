@@ -25,7 +25,6 @@ features = ["opaque_client"]
 
 [dependencies.graphql_client]
 workspace = true
-features = ["graphql_query_derive", "reqwest-rustls"]
 
 [dependencies.reqwest]
 workspace = true

@@ -4,6 +4,7 @@ ARG TARGETPLATFORM
 RUN rm -rf /var/lib/apt/lists/* \
     && apt-get update \
     && apt-get install -y --no-install-recommends wget ca-certificates \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge '20250419+deb13u1' \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /dim
 COPY bin/ bin/
@@ -67,7 +68,7 @@ WORKDIR /app
 ENV UID=1000
 ENV GID=1000
 ENV USER=lldap
-RUN apk add --no-cache tini ca-certificates bash tzdata jq curl jo && \
+RUN apk add --no-cache tini 'ca-certificates>=20261020-r0' bash tzdata jq curl jo && \
     addgroup -g $GID $USER && \
     adduser \
     --disabled-password \

@@ -58,7 +58,7 @@ tracing-log = "0"
 tracing-subscriber = { workspace = true }
 urlencoding = { workspace = true }
 uuid = { workspace = true }
-webpki-roots = "1"
+webpki-roots = "1.0.11"
 
 [dependencies.actix-web]
 features = ["rustls-0_23"]
@@ -139,7 +139,7 @@ features = ["serde"]
 
 [dev-dependencies]
 assert_cmd = "2"
-graphql_client = { workspace = true, features = ["graphql_query_derive", "reqwest-rustls"] }
+graphql_client = { workspace = true }
 ldap3 = { workspace = true }
 mockall = { workspace = true }
 nix = { version = "0.31", features = ["process", "signal"] }
