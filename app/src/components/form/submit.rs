@@ -10,6 +10,9 @@ pub struct Props {
     pub children: Children,
     #[prop_or(AttrValue::from("Submit"))]
     pub text: AttrValue,
+    // Bootstrap icon class shown before the text
+    #[prop_or(AttrValue::from("bi-save"))]
+    pub icon: AttrValue,
 }
 
 #[function_component(Submit)]
@@ -21,7 +24,7 @@ pub fn submit(props: &Props) -> Html {
           type="submit"
           disabled={props.disabled}
           onclick={&props.onclick}>
-          <i class="bi-save me-2"></i>
+          <i class={format!("{} me-2", &*props.icon)}></i>
           {props.text.clone()}
         </button>
         {for props.children.iter()}
