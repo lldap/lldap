@@ -158,63 +158,71 @@ impl Component for LoginForm {
             }
         } else {
             html! {
-              <form class="form center-block col-sm-4 col-offset-4">
-                <div class="input-group">
-                  <div class="input-group-prepend">
+              <div class="row justify-content-center">
+                <form class="form py-3" style="max-width: 400px">
+                  <div class="input-group has-validation mb-3">
                     <span class="input-group-text">
                       <i class="bi-person-fill"/>
                     </span>
+                    <Field
+                      class="form-control"
+                      class_invalid="is-invalid has-error"
+                      class_valid="has-success"
+                      form={&self.form}
+                      field_name="username"
+                      placeholder="Username"
+                      autocomplete="username"
+                      oninput={link.callback(|_| Msg::Update)} />
+                    <div class="invalid-feedback">
+                      {&self.form.field_message("username")}
+                    </div>
                   </div>
-                  <Field
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    form={&self.form}
-                    field_name="username"
-                    placeholder="Username"
-                    autocomplete="username"
-                    oninput={link.callback(|_| Msg::Update)} />
-                </div>
-                <div class="input-group">
-                  <div class="input-group-prepend">
+                  <div class="input-group has-validation mb-3">
                     <span class="input-group-text">
                       <i class="bi-lock-fill"/>
                     </span>
+                    <Field
+                      class="form-control"
+                      class_invalid="is-invalid has-error"
+                      class_valid="has-success"
+                      form={&self.form}
+                      field_name="password"
+                      input_type="password"
+                      placeholder="Password"
+                      autocomplete="current-password"
+                      oninput={link.callback(|_| Msg::Update)} />
+                    <div class="invalid-feedback">
+                      {&self.form.field_message("password")}
+                    </div>
                   </div>
-                  <Field
-                    class="form-control"
-                    class_invalid="is-invalid has-error"
-                    class_valid="has-success"
-                    form={&self.form}
-                    field_name="password"
-                    input_type="password"
-                    placeholder="Password"
-                    autocomplete="current-password" />
-                </div>
-                <Submit
-                  text="Login"
-                  disabled={self.common.is_task_running()}
-                  onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
-                  { if password_reset_enabled {
-                    html! {
-                      <Link
-                        classes="btn-link btn"
-                        disabled={self.common.is_task_running()}
-                        to={AppRoute::StartResetPassword}>
-                        {"Forgot your password?"}
-                      </Link>
-                    }
-                  } else {
-                    html!{}
-                  }}
-                </Submit>
-                <div class="form-group">
+                  <Submit
+                    text="Login"
+                    icon="bi-box-arrow-in-right"
+                    disabled={self.common.is_task_running()}
+                    onclick={link.callback(|e: MouseEvent| {e.prevent_default(); Msg::Submit})}>
+                    { if password_reset_enabled {
+                      html! {
+                        <Link
+                          classes="btn btn-secondary ms-2 col-auto col-form-label"
+                          disabled={self.common.is_task_running()}
+                          to={AppRoute::StartResetPassword}>
+                          {"Forgot your password?"}
+                        </Link>
+                      }
+                    } else {
+                      html!{}
+                    }}
+                  </Submit>
+                </form>
                 { if let Some(e) = &self.common.error {
-                    html! { e.to_string() }
+                    html! {
+                      <div class="alert alert-danger">
+                        {e.to_string() }
+                      </div>
+                    }
                   } else { html! {} }
                 }
-                </div>
-              </form>
+              </div>
             }
         }
     }
