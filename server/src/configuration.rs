@@ -149,6 +149,12 @@ pub struct Configuration {
     pub ldaps_options: LdapsOptions,
     #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
     pub http_url: HttpUrl,
+    /// Name of a trusted header (e.g. `X-Forwarded-User` or `Remote-User`) set
+    /// by a reverse proxy's forward-auth. When set, requests to the API
+    /// carrying this header are authenticated as the named user without a
+    /// password (trusted-header SSO, issue #352). Leave unset to disable.
+    #[builder(default)]
+    pub trusted_auth_header: Option<String>,
     #[debug(skip)]
     #[serde(skip)]
     #[builder(field(private), default = "None")]

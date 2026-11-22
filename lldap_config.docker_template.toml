@@ -51,6 +51,14 @@
 ## LC_ALL=C tr -dc 'A-Za-z0-9!#%&'\''()*+,-./:;<=>?@[\]^_{|}~' </dev/urandom | head -c 32; echo ''
 #jwt_secret = "REPLACE_WITH_RANDOM"
 
+# Trusted-header SSO: when running behind a reverse proxy that performs its
+# own authentication (e.g. Authelia/Traefik forward-auth), set this to the
+# header carrying the authenticated username (e.g. "X-Forwarded-User" or
+# "Remote-User"). API requests carrying that header are then authenticated as
+# that user without a password login. Only enable when the proxy strips this
+# header from client requests. (issue #352)
+#trusted_auth_header = "X-Forwarded-User"
+
 ## Base DN for LDAP.
 ## This is usually your domain name, and is used as a
 ## namespace for your users. The choice is arbitrary, but will be needed

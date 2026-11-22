@@ -54,6 +54,23 @@ async fn create_jwt<Handler: TcpBackendHandler>(
     user: &UserId,
     groups: HashSet<GroupDetails>,
 ) -> SignedToken {
+    let token = mint_jwt(key, user, groups).await;
+    let expiry = token.claims().exp.naive_utc();
+    handler
+        .register_jwt(user, default_hash(token.as_str()), expiry)
+        .await
+        .unwrap();
+    token
+}
+
+/// Mint a signed JWT for `user` without registering it in the JWT blacklist
+/// table. Used by trusted-header SSO, where a fresh short-lived token is
+/// minted per request and registering each one would grow the table.
+pub(crate) async fn mint_jwt(
+    key: &Hmac<Sha512>,
+    user: &UserId,
+    groups: HashSet<GroupDetails>,
+) -> SignedToken {
     let claims = JWTClaims {
         exp: Utc::now() + chrono::Duration::days(1),
         iat: Utc::now(),
@@ -64,17 +81,11 @@ async fn create_jwt<Handler: TcpBackendHandler>(
             .map(|g| g.display_name.into_string())
             .collect(),
     };
-    let expiry = claims.exp.naive_utc();
     let header = jwt::Header {
         algorithm: jwt::AlgorithmType::Hs512,
         ..Default::default()
     };
-    let token = jwt::Token::new(header, claims).sign_with_key(key).unwrap();
-    handler
-        .register_jwt(user, default_hash(token.as_str()), expiry)
-        .await
-        .unwrap();
-    token
+    jwt::Token::new(header, claims).sign_with_key(key).unwrap()
 }
 
 fn parse_refresh_token(token: &str) -> TcpResult<(u64, UserId)> {

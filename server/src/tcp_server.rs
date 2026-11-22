@@ -112,6 +112,7 @@ async fn get_settings<Backend>(data: web::Data<AppState<Backend>>) -> HttpRespon
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn http_config<Backend>(
     cfg: &mut web::ServiceConfig,
     backend_handler: Backend,
@@ -120,6 +121,7 @@ fn http_config<Backend>(
     server_url: url::Url,
     assets_path: PathBuf,
     mail_options: MailOptions,
+    trusted_auth_header: Option<String>,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
@@ -141,9 +143,21 @@ fn http_config<Backend>(
         web::scope("/auth")
             .configure(|cfg| auth_service::configure_server::<Backend>(cfg, enable_password_reset)),
     )
-    // API endpoint.
+    // API endpoint. The cookie-to-header translator is registered last so it
+    // runs first: an explicit login cookie always wins over the trusted
+    // header injected by the trusted-header SSO middleware.
     .service(
         web::scope("/api")
+            .wrap(
+                trusted_auth_header
+                    .and_then(|h| {
+                        crate::trusted_header_auth::TrustedHeaderAuthFactory::<Backend>::new(&h)
+                            .ok()
+                    })
+                    .unwrap_or_else(
+                        crate::trusted_header_auth::TrustedHeaderAuthFactory::<Backend>::disabled,
+                    ),
+            )
             .wrap(auth_service::CookieToHeaderTranslatorFactory)
             .configure(crate::graphql_server::configure_endpoint::<Backend>),
     )
@@ -214,6 +228,7 @@ where
     let server_url = config.http_url.0.clone();
     let assets_path = config.assets_path.clone();
     let mail_options = config.smtp_options.clone();
+    let trusted_auth_header = config.trusted_auth_header.clone();
     let verbose = config.verbose;
     if !assets_path.join("index.html").exists() {
         warn!(
@@ -233,6 +248,7 @@ where
                 let server_url = server_url.clone();
                 let assets_path = assets_path.clone();
                 let mail_options = mail_options.clone();
+                let trusted_auth_header = trusted_auth_header.clone();
                 HttpServiceBuilder::default()
                     .finish(map_config(
                         App::new()
@@ -249,6 +265,7 @@ where
                                     server_url,
                                     assets_path,
                                     mail_options,
+                                    trusted_auth_header,
                                 )
                             }),
                         |_| AppConfig::default(),
