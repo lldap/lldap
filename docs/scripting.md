@@ -69,6 +69,26 @@ The JWT is valid for 1 day (unless you log out explicitly).
 You can use the refresh token to query `/auth/refresh` and get another JWT. The
 refresh token is valid for 30 days.
 
+### With trusted header authentication
+
+If [trusted header authentication](trusted_header.md) is enabled and your
+script runs from a trusted address (for instance, LLDAP trusts localhost and
+the script runs on the same host), you don't need a token. Send the header (by
+default "Remote-User") with the username in each request instead.
+
+In that case, `/auth/refresh` doesn't return a JWT. You'll receive a JSON
+response with:
+
+```
+{
+  "userId": "john",
+  "isAdmin": false,
+  "logoutUrl": "https://auth.example.com/logout"
+}
+```
+
+`logoutUrl` is only present if it is configured.
+
 ### Testing your GraphQL queries
 
 You can go to `/api/graphql/playground` to test your queries and explore the
