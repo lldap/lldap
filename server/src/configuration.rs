@@ -1,7 +1,7 @@
 use crate::{
     cli::{
         GeneralConfigOpts, HealthcheckOpts, LdapsOpts, RunOpts, SmtpEncryption, SmtpOpts,
-        TestEmailOpts, TrueFalseAlways,
+        TestEmailOpts, TrueFalseAlways, TrustedHeaderOpts,
     },
     database_string::DatabaseUrl,
 };
@@ -11,6 +11,7 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
 };
 use figment_file_provider_adapter::FileAdapter;
+use ipnet::IpNet;
 use lldap_auth::opaque::{
     KeyPair,
     server::{ServerSetup, generate_random_private_key},
@@ -98,6 +99,25 @@ impl std::default::Default for HealthcheckOptions {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, derive_builder::Builder)]
+#[builder(pattern = "owned")]
+pub struct TrustedHeaderOptions {
+    #[builder(default = "false")]
+    pub enabled: bool,
+    #[builder(default = r#"String::from("Remote-User")"#)]
+    pub header_name: String,
+    #[builder(default = "None")]
+    pub logout_url: Option<String>,
+    #[builder(default = r#"vec!["127.0.0.0/8".parse().unwrap(), "::1/128".parse().unwrap()]"#)]
+    pub trusted_proxies: Vec<IpNet>,
+}
+
+impl std::default::Default for TrustedHeaderOptions {
+    fn default() -> Self {
+        TrustedHeaderOptionsBuilder::default().build().unwrap()
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize, derive_more::Debug)]
 #[debug(r#""{_0}""#)]
 pub struct HttpUrl(pub Url);
@@ -147,6 +167,8 @@ pub struct Configuration {
     pub smtp_options: MailOptions,
     #[builder(default)]
     pub ldaps_options: LdapsOptions,
+    #[builder(default)]
+    pub trusted_header_options: TrustedHeaderOptions,
     #[builder(default = r#"HttpUrl(Url::parse("http://localhost").unwrap())"#)]
     pub http_url: HttpUrl,
     #[debug(skip)]
@@ -465,6 +487,7 @@ impl ConfigOverrider for RunOpts {
 
         self.smtp_opts.override_config(config);
         self.ldaps_opts.override_config(config);
+        self.trusted_header_opts.override_config(config);
     }
 }
 
@@ -490,6 +513,35 @@ impl ConfigOverrider for LdapsOpts {
         self.ldaps_key_file
             .as_ref()
             .inspect(|path| config.ldaps_options.key_file.clone_from(path));
+    }
+}
+
+impl ConfigOverrider for TrustedHeaderOpts {
+    fn override_config(&self, config: &mut Configuration) {
+        self.trusted_header_enabled
+            .inspect(|&enabled| config.trusted_header_options.enabled = enabled);
+
+        self.trusted_header_name.as_ref().inspect(|header_name| {
+            config
+                .trusted_header_options
+                .header_name
+                .clone_from(header_name)
+        });
+
+        self.trusted_header_logout_url
+            .as_ref()
+            .inspect(|logout_url| {
+                config.trusted_header_options.logout_url = Some(logout_url.to_string())
+            });
+
+        self.trusted_header_trusted_proxies
+            .as_ref()
+            .inspect(|trusted_proxies| {
+                config
+                    .trusted_header_options
+                    .trusted_proxies
+                    .clone_from(trusted_proxies);
+            });
     }
 }
 
@@ -872,6 +924,58 @@ mod tests {
                 error_message.contains("but it used to come from default key file",),
                 "{error_message}"
             );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn trusted_proxies_env_uses_array_syntax() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("LLDAP_KEY_SEED", "test-key-seed");
+            jail.set_env("LLDAP_JWT_SECRET", "test-jwt-secret");
+            jail.create_file("lldap_config.toml", "")?;
+            jail.set_env(
+                "LLDAP_TRUSTED_HEADER_OPTIONS__TRUSTED_PROXIES",
+                r#"["127.0.0.1/32", "::1/128"]"#,
+            );
+            assert_eq!(
+                init(default_run_opts())
+                    .unwrap()
+                    .trusted_header_options
+                    .trusted_proxies,
+                vec![
+                    "127.0.0.1/32".parse::<IpNet>().unwrap(),
+                    "::1/128".parse::<IpNet>().unwrap()
+                ]
+            );
+            jail.set_env(
+                "LLDAP_TRUSTED_HEADER_OPTIONS__TRUSTED_PROXIES",
+                "127.0.0.1/32,::1/128",
+            );
+            assert!(init(default_run_opts()).is_err());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn trusted_proxies_cli_validates_cidrs() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            let parse = |value| {
+                RunOpts::try_parse_from(["lldap", "--trusted-header-trusted-proxies", value])
+            };
+            assert_eq!(
+                parse("127.0.0.1/32, ::1/128")
+                    .unwrap()
+                    .trusted_header_opts
+                    .trusted_header_trusted_proxies,
+                Some(vec![
+                    "127.0.0.1/32".parse::<IpNet>().unwrap(),
+                    "::1/128".parse::<IpNet>().unwrap()
+                ])
+            );
+            assert!(parse("not-a-cidr").is_err());
             Ok(())
         });
     }

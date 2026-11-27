@@ -1,9 +1,9 @@
 use crate::infra::{
     api::HostService,
     common_component::{CommonComponent, CommonComponentParts},
-    cookies::delete_cookie,
+    cookies::{delete_cookie, get_cookie},
 };
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use yew::prelude::*;
 
 pub struct LogoutButton {
@@ -28,12 +28,26 @@ impl CommonComponent<LogoutButton> for LogoutButton {
     ) -> Result<bool> {
         match msg {
             Msg::LogoutRequested => {
-                self.common
-                    .call_backend(ctx, HostService::logout(), Msg::LogoutCompleted);
+                if let Some(redirect_url) = get_cookie("trusted_header_logout_url")? {
+                    delete_cookie("user_id")?;
+                    delete_cookie("is_admin")?;
+                    let _ = delete_cookie("trusted_header_logout_url");
+
+                    web_sys::window()
+                        .ok_or_else(|| anyhow!("Could not access browser window"))?
+                        .location()
+                        .set_href(&redirect_url)
+                        .map_err(|_| anyhow!("Could not redirect to logout URL"))?;
+                } else {
+                    self.common
+                        .call_backend(ctx, HostService::logout(), Msg::LogoutCompleted);
+                }
             }
             Msg::LogoutCompleted(res) => {
                 res?;
                 delete_cookie("user_id")?;
+                delete_cookie("is_admin")?;
+                let _ = delete_cookie("trusted_header_logout_url");
                 ctx.props().on_logged_out.emit(());
             }
         }

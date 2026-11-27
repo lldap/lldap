@@ -177,6 +177,9 @@ pub struct RunOpts {
 
     #[clap(flatten)]
     pub healthcheck_opts: HealthcheckOpts,
+
+    #[clap(flatten)]
+    pub trusted_header_opts: TrustedHeaderOpts,
 }
 
 #[derive(Debug, Parser, Clone)]
@@ -210,6 +213,27 @@ pub struct LdapsOpts {
     /// Ldaps certificate key file. Default: key.pem
     #[clap(long, env = "LLDAP_LDAPS_OPTIONS__KEY_FILE")]
     pub ldaps_key_file: Option<String>,
+}
+
+#[derive(Debug, Parser, Clone)]
+#[clap(next_help_heading = Some("Trusted Header Authentication"))]
+pub struct TrustedHeaderOpts {
+    /// Enable trusted header authentication. Default: false.
+    #[clap(long, env = "LLDAP_TRUSTED_HEADER_OPTIONS__ENABLED")]
+    pub trusted_header_enabled: Option<bool>,
+
+    /// Header name containing the username. Default: Remote-User
+    #[clap(long, env = "LLDAP_TRUSTED_HEADER_OPTIONS__HEADER_NAME")]
+    pub trusted_header_name: Option<String>,
+
+    /// Logout URL to redirect to when using trusted headers
+    #[clap(long, env = "LLDAP_TRUSTED_HEADER_OPTIONS__LOGOUT_URL")]
+    pub trusted_header_logout_url: Option<String>,
+
+    /// Trusted proxy CIDR ranges (comma-separated). Use /32 for a single IPv4 and /128 for a single IPv6.
+    // Environment values are handled by Figment.
+    #[clap(long, value_delimiter = ',', value_parser = |value: &str| value.trim().parse::<ipnet::IpNet>())]
+    pub trusted_header_trusted_proxies: Option<Vec<ipnet::IpNet>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, clap::ValueEnum)]
